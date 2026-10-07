@@ -14,13 +14,15 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     { href: "/admin/bank-accounts", label: "Bank accounts", show: can(Permission.BANK_ACCOUNT_VERIFY) },
     { href: "/admin/containers", label: "Containers", show: can(Permission.INVESTMENT_VIEW) },
     { href: "/admin/products", label: "Offerings", show: can(Permission.INVESTMENT_VIEW) },
+    { href: "/admin/orders", label: "Orders", show: can(Permission.ORDER_VIEW) },
+    { href: "/admin/payments", label: "Payments", show: can(Permission.FINANCE_VIEW) },
   ].filter((item) => item.show);
 
   return (
     <>
       <AppHeader session={session} />
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-10 sm:px-6">
-        <SubNav items={items} label="Administration" />
+        <div className="print:hidden"><SubNav items={items} label="Administration" /></div>
         {children}
       </main>
     </>

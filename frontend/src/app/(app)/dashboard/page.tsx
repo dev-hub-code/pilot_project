@@ -5,14 +5,15 @@ import { Card } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
+import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import type { CurrentUser } from "@/types/auth";
+import type { Portfolio } from "@/types/order";
 import type { Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
+import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-const KPIS = ["Total invested", "Rental income", "Available balance"] as const;
 
 export default async function DashboardPage() {
   const [me, profile] = await Promise.all([
@@ -20,6 +21,17 @@ export default async function DashboardPage() {
     authFetch<Profile>("/api/v1/users/me"),
   ]);
   const needsVerification = profile.kycStatus !== "APPROVED";
+  const portfolio = hasPermission(me.permissions, Permission.INVESTOR_PORTAL)
+    ? await authFetch<Portfolio>("/api/v1/portfolio")
+    : null;
+  const invested = portfolio && portfolio.totalsByCurrency.length > 0
+    ? portfolio.totalsByCurrency.map((m) => formatMoney(m, { compact: true })).join(" · ")
+    : "—";
+  const kpis = [
+    { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} active investment(s)` : "Investor accounts only" },
+    { label: "Rental income", value: "—", note: "Paid out from the first rental period" },
+    { label: "Available balance", value: "—", note: "Available once rental income is paid" },
+  ];
 
   return (
     <div className="space-y-8">
@@ -48,11 +60,11 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Portfolio summary">
-        {KPIS.map((label) => (
-          <div key={label} className="space-y-3 bg-surface p-6">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">{label}</p>
-            <p className="font-display text-4xl font-semibold tabular-nums">—</p>
-            <p className="text-xs text-muted">Available once investing opens</p>
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="space-y-3 bg-surface p-6">
+            <p className="text-xs uppercase tracking-[0.1em] text-muted">{kpi.label}</p>
+            <p className="font-display text-4xl font-semibold tabular-nums">{kpi.value}</p>
+            <p className="text-xs text-muted">{kpi.note}</p>
           </div>
         ))}
       </section>

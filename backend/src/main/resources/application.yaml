@@ -157,6 +157,26 @@ app:
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+  orders:
+    payment-window: ${APP_ORDER_PAYMENT_WINDOW:30m}
+    expiry-sweep-interval: 60s
+  outbox:
+    poll-interval: ${APP_OUTBOX_POLL_INTERVAL:1s}
+  payments:
+    # Shown to investors paying by bank transfer. Required: startup fails when unset.
+    bank-transfer:
+      beneficiary-name: ${PAYMENT_BANK_BENEFICIARY_NAME:}
+      iban: ${PAYMENT_BANK_IBAN:}
+      bic: ${PAYMENT_BANK_BIC:}
+      bank-name: ${PAYMENT_BANK_NAME:}
+    simulator:
+      enabled: false
+  invoice:
+    # Printed on (and copied into) every invoice. Required: startup fails when unset.
+    issuer-name: ${INVOICE_ISSUER_NAME:}
+    issuer-address: ${INVOICE_ISSUER_ADDRESS:}
+    issuer-tax-id: ${INVOICE_ISSUER_TAX_ID:}
+    notes: ${INVOICE_NOTES:}
   kafka:
     create-topics: false
     partitions: ${KAFKA_TOPIC_PARTITIONS:3}

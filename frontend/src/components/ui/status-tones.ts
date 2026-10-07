@@ -14,6 +14,8 @@ const TONES: Record<string, StatusTone> = {
   REMOVED: "neutral",
   RETAIL: "neutral",
   HNI: "success",
+  MATURED: "neutral",
+  CLOSED: "neutral",
 };
 
 export function toneFor(status: string): StatusTone {

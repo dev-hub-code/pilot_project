@@ -11,10 +11,13 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TextField } from "@/components/ui/text-field";
 import { CONDITION_LABEL, CONTAINER_TYPE_LABEL, RISK_LABEL, RISK_TONE } from "@/features/marketplace/labels";
+import { AddToCartForm } from "@/features/orders/add-to-cart-form";
+import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
-import { authFetch } from "@/lib/server/auth/session";
+import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { MarketplaceDetail, ReturnProjection } from "@/types/marketplace";
+import type { Cart } from "@/types/order";
 import { formatDate, formatDateTime, humanize } from "@/utils/format";
 import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
 
@@ -26,6 +29,8 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const query = await searchParams;
+  const session = await requireSession();
+  const investor = hasPermission(session.permissions, Permission.INVESTOR_PORTAL);
 
   let detail: MarketplaceDetail;
   try {
@@ -36,7 +41,11 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   }
   const { listing } = detail;
   const requested = typeof query.amount === "string" && AMOUNT.test(query.amount) ? query.amount : listing.minimumInvestment.amount;
-  const projection = await authFetch<ReturnProjection>(`/api/v1/marketplace/${id}/projection?amount=${encodeURIComponent(requested)}`);
+  const [projection, cart] = await Promise.all([
+    authFetch<ReturnProjection>(`/api/v1/marketplace/${id}/projection?amount=${encodeURIComponent(requested)}`),
+    investor ? authFetch<Cart>("/api/v1/cart") : Promise.resolve(null),
+  ]);
+  const inCart = cart?.items.find((line) => line.productId === id);
 
   const photos = detail.documents.filter((d) => d.purpose === "CONTAINER_PHOTO");
   const files = detail.documents.filter((d) => d.purpose !== "CONTAINER_PHOTO");
@@ -188,11 +197,16 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
           </section>
 
           <Card title="Invest">
-            {detail.eligibility.eligible ? (
+            {!investor ? (
+              <Notice tone="info">Staff preview: this is what investors see. Investing needs an investor account.</Notice>
+            ) : detail.eligibility.eligible ? (
               <div className="space-y-4">
-                <Notice tone="success">You are eligible to invest in this offering.</Notice>
-                <Button disabled className="w-full">Investing opens soon</Button>
-                <p className="text-xs text-muted">Checkout will be available shortly. We will notify you.</p>
+                <Notice tone="success">
+                  {inCart ? `${formatMoney(inCart.amount)} of this offering is in your cart.` : "You are eligible to invest in this offering."}
+                </Notice>
+                <AddToCartForm productId={id} currency={listing.price.currency} defaultAmount={inCart?.amount.amount ?? requested}
+                  inCart={Boolean(inCart)} />
+                {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
               </div>
             ) : (
               <div className="space-y-4">

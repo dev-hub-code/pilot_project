@@ -27,3 +27,19 @@ app:
   kafka:
     create-topics: true
     partitions: 1
+  # Tests run background jobs (outbox relay, order expiry) explicitly.
+  scheduling:
+    enabled: false
+  payments:
+    bank-transfer:
+      beneficiary-name: SeaLease Client Money (Test)
+      iban: DE89370400440532013000
+      bic: COBADEFFXXX
+      bank-name: Test Bank
+    simulator:
+      enabled: true
+      webhook-secret: test-only-simulator-webhook-secret-00001
+  invoice:
+    issuer-name: SeaLease Test Ltd
+    issuer-address: 1 Test Street, Rotterdam, NL
+    issuer-tax-id: NL000000000B01

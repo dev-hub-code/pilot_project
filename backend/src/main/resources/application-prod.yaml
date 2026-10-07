@@ -9,3 +9,7 @@ logging:
 app:
   kafka:
     create-topics: false
+  payments:
+    # Never in production: the simulator lets investors mark card payments as paid.
+    simulator:
+      enabled: false

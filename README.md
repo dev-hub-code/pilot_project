@@ -100,7 +100,19 @@ Modules (Phase 4):
 | `investment`  | Offerings (`CONT-10001`…): terms, DRAFT → OPEN → FUNDED lifecycle, investor eligibility, amount policy, capacity accounting |
 | `marketplace` | Investor read side: listings, filters/sorting, detail with eligibility verdict, return projection, investor-visible documents |
 
-Dependency direction is one-way (`marketplace` → `investment` → `container`; `kyc`, `bankaccount` → `user` → `audit`/`common`). Where a lower
+Modules (Phase 5):
+
+| Module    | Responsibility                                                                     |
+|-----------|------------------------------------------------------------------------------------|
+| `cart`    | Soft basket, one line per offering; re-validated on every read, holds no capacity  |
+| `order`   | Checkout (idempotent), terms acceptance, capacity reservation, expiry, confirmation |
+| `payment` | Provider abstraction (bank transfer, card via signed webhooks), settlement, refunds |
+| `invoice` | Immutable, sequentially numbered invoices with seller/buyer snapshots              |
+| `investment` | + holdings (confirmed investments) and the investor portfolio                   |
+| `outbox`  | Transactional outbox → Kafka relay; consumer de-duplication (`processed_events`)   |
+
+Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
+`marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
 
@@ -234,13 +246,63 @@ Seed demo containers and offerings into a **local** API (runs as the bootstrap a
 python3 scripts/seed-demo-data.py
 ```
 
+### Orders, payments & the outbox
+
+```text
+cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──▶ CONFIRMED
+ (no capacity)      capacity RESERVED          (one transaction)   capacity COMMITTED, holdings,
+                    pay within 30 min                              invoice, outbox events
+                          └──expired / cancelled──▶ capacity RELEASED, pending payments cancelled
+```
+
+- **Checkout** needs an `Idempotency-Key` header: a retry returns the original order, and reusing
+  the key for a different request is a 409. The investor accepts each offering's current terms
+  version, or checkout fails. The cart is locked, so concurrent checkouts of one cart place one
+  order. Item terms (amount, ownership, rental share, terms version) are frozen in `order_items`.
+- **Payments.** One attempt in flight per order. Starting another method cancels it, and money
+  is taken at most once (partial unique indexes). *Bank transfer*: the investor quotes a generated
+  reference, and finance records receipt (`PAYMENT_CONFIRM`); the amount must match exactly and
+  nobody may confirm their own order. *Card*: a `WebhookPaymentProvider` reports outcomes by
+  HMAC-signed webhook (`POST /api/v1/payments/webhooks/{provider}`, public, signature required).
+  Redeliveries are ignored (`payment_events` unique on provider event id). Locally, a simulator
+  stands in for the gateway and goes through the same signed-webhook path; it is disabled in
+  production.
+- **Money is never silently kept.** A payment arriving for an expired, cancelled or already paid
+  order becomes `REFUND_REQUIRED`, and finance records the refund (`FINANCE_ADJUST`).
+- **Locking.** Order row, then payment row, then offering rows (in id order). Payment settlement,
+  cancellation and the expiry sweep therefore serialise without deadlocks.
+- **Outbox.** Events are inserted in the business transaction. A relay (every 1 s, `FOR UPDATE
+  SKIP LOCKED`, safe on several instances) publishes them with `eventId`/`eventType` headers, keyed
+  by aggregate. Delivery is at-least-once: consumers call `ProcessedEvents.markProcessed` in their
+  transaction. Topics: `investment.created` (order placed), `payment.success`, `payment.failed`,
+  `investment.confirmed`, `invoice.generated`.
+- **Invoices** (`INV-2026-000042`) are append-only; corrections will be credit notes. The portal
+  renders them for print / PDF; JasperReports PDFs arrive with reporting (Phase 11).
+
+### Cart, orders & payments API
+
+| Method & path                                         | Access              | Purpose                                     |
+|-------------------------------------------------------|---------------------|---------------------------------------------|
+| `GET /api/v1/cart`, `PUT·DELETE /api/v1/cart/items/{productId}` | `INVESTOR_PORTAL` | View (with per-line problems) / set / remove |
+| `POST /api/v1/orders` (`Idempotency-Key`)             | `INVESTOR_PORTAL`   | Check out the cart with accepted terms      |
+| `GET /api/v1/orders[/{id}]`, `POST /…/{id}/cancel`    | `INVESTOR_PORTAL`   | Own orders; cancel while awaiting payment   |
+| `GET·POST /api/v1/orders/{id}/payments` (`Idempotency-Key`) | `INVESTOR_PORTAL` | Payment attempts / start (`BANK_TRANSFER`, `CARD`) |
+| `POST /api/v1/payments/{id}/simulate`                 | `INVESTOR_PORTAL`   | Simulator only: approve or decline a card   |
+| `GET /api/v1/orders/{id}/invoice`                     | `INVESTOR_PORTAL`   | Invoice of a confirmed order                |
+| `GET /api/v1/portfolio`                               | `INVESTOR_PORTAL`   | Holdings and totals per currency            |
+| `POST /api/v1/payments/webhooks/{provider}`           | public, signed      | Gateway callbacks                           |
+| `GET /api/v1/admin/orders[/{id}[/holdings·/invoice]]` | `ORDER_VIEW`        | Search, detail, holdings, invoice           |
+| `GET /api/v1/admin/payments`, `/admin/orders/{id}/payments` | `FINANCE_VIEW` (or `ORDER_VIEW`) | Payment queue / per order |
+| `POST /api/v1/admin/payments/{id}/confirm`            | `PAYMENT_CONFIRM`   | Record a received bank transfer             |
+| `POST /api/v1/admin/payments/{id}/refund`             | `FINANCE_ADJUST`    | Record a refund                             |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
 2. ✅ Authentication — registration, login, RS256 JWT, refresh-token rotation, roles & permissions
 3. ✅ Users — profile, KYC, bank details, investor classification
 4. ✅ Marketplace — containers, investment products, availability
-5. Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
+5. ✅ Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
 6. Earnings — rental income, ownership distribution, ledger
 7. Referrals — four-level hierarchy, configuration, earnings, downline tree
 8. Withdrawals — validation, approval, batch processing, reconciliation
