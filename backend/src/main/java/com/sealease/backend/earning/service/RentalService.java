@@ -16,6 +16,7 @@ import com.sealease.backend.earning.dto.RentalSearchCriteria;
 import com.sealease.backend.earning.entity.Earning;
 import com.sealease.backend.earning.entity.ReceiptStatus;
 import com.sealease.backend.earning.entity.RentalReceipt;
+import com.sealease.backend.earning.event.RentalDistributedEvent;
 import com.sealease.backend.earning.repository.EarningRepository;
 import com.sealease.backend.earning.repository.RentalReceiptRepository;
 import com.sealease.backend.investment.dto.Lease;
@@ -29,6 +30,7 @@ import com.sealease.backend.ledger.service.TransactionType;
 import com.sealease.backend.outbox.DomainEvent;
 import com.sealease.backend.outbox.OutboxPublisher;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -56,7 +58,8 @@ import java.util.stream.Collectors;
  * <p>Lock order is <em>receipt, then offering</em>. Recording locks only the offering (there is no
  * receipt yet), so a period can never be recorded twice and distributions of one lease serialise.
  * Distribution writes the earnings, the balanced ledger transaction and the outbox events in one
- * transaction.
+ * transaction, and announces itself in-process ({@link RentalDistributedEvent}) so referral
+ * commissions are paid in that same transaction.
  */
 @Service
 public class RentalService {
@@ -68,16 +71,19 @@ public class RentalService {
 	private final LeaseService leases;
 	private final LedgerService ledger;
 	private final OutboxPublisher outbox;
+	private final ApplicationEventPublisher events;
 	private final AuditService audit;
 	private final Clock clock;
 
 	public RentalService(RentalReceiptRepository receipts, EarningRepository earnings, LeaseService leases,
-			LedgerService ledger, OutboxPublisher outbox, AuditService audit, Clock clock) {
+			LedgerService ledger, OutboxPublisher outbox, ApplicationEventPublisher events, AuditService audit,
+			Clock clock) {
 		this.receipts = receipts;
 		this.earnings = earnings;
 		this.leases = leases;
 		this.ledger = ledger;
 		this.outbox = outbox;
+		this.events = events;
 		this.audit = audit;
 		this.clock = clock;
 	}
@@ -172,6 +178,11 @@ public class RentalService {
 							"periodNumber", earning.getPeriodNumber(), "net", earning.net().amount().toPlainString(),
 							"currency", lease.currency().getCurrencyCode())));
 		}
+
+		events.publishEvent(new RentalDistributedEvent(receiptId, lease.productId(), lease.code(),
+				receipt.getPeriodNumber(), actorId, credited.stream()
+					.map(e -> new RentalDistributedEvent.Share(e.getId(), e.getUserId(), e.gross()))
+					.toList()));
 
 		if (receipts.countByProductIdAndStatus(lease.productId(), ReceiptStatus.DISTRIBUTED) == lease.periodCount()) {
 			leases.mature(lease.productId());

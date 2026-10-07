@@ -15,6 +15,7 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.ratelimit.FixedWindowRateLimiter;
 import com.sealease.backend.common.web.ClientInfo;
+import com.sealease.backend.referral.service.ReferralService;
 import com.sealease.backend.role.dto.UserAuthorities;
 import com.sealease.backend.role.service.UserRoleService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -47,6 +48,7 @@ public class AuthService {
 
 	private final UserAccountService accounts;
 	private final UserRoleService userRoles;
+	private final ReferralService referrals;
 	private final SessionService sessions;
 	private final AccessTokenService accessTokens;
 	private final AuditService audit;
@@ -59,11 +61,12 @@ public class AuthService {
 	private final FixedWindowRateLimiter refreshPerIp;
 	private final FixedWindowRateLimiter passwordChangePerUser;
 
-	public AuthService(UserAccountService accounts, UserRoleService userRoles, SessionService sessions,
-			AccessTokenService accessTokens, AuditService audit, AuthProperties properties,
+	public AuthService(UserAccountService accounts, UserRoleService userRoles, ReferralService referrals,
+			SessionService sessions, AccessTokenService accessTokens, AuditService audit, AuthProperties properties,
 			PlatformTransactionManager transactionManager, Clock clock) {
 		this.accounts = accounts;
 		this.userRoles = userRoles;
+		this.referrals = referrals;
 		this.sessions = sessions;
 		this.accessTokens = accessTokens;
 		this.audit = audit;
@@ -84,6 +87,9 @@ public class AuthService {
 			UserAccount account = accounts.register(request.email(), request.password(), request.firstName(),
 					request.lastName());
 			userRoles.grantSystemRole(account.id(), properties.defaultRole());
+			if (request.referralCode() != null && !request.referralCode().isBlank()) {
+				referrals.link(account.id(), request.referralCode());
+			}
 			return openSession(account.id(), client);
 		});
 	}

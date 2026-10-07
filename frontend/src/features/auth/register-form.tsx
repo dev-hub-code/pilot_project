@@ -8,7 +8,7 @@ import { TextField } from "@/components/ui/text-field";
 import { type FormState, PASSWORD_MIN } from "@/validators/auth";
 import { registerAction } from "./actions";
 
-export function RegisterForm() {
+export function RegisterForm({ referralCode }: { referralCode?: string }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(registerAction, {});
   const errors = state.fieldErrors ?? {};
 
@@ -62,6 +62,15 @@ export function RegisterForm() {
       <p className="text-xs text-muted">
         At least {PASSWORD_MIN} characters. A memorable passphrase works well.
       </p>
+      <TextField
+        label="Referral code (optional)"
+        name="referralCode"
+        autoComplete="off"
+        autoCapitalize="characters"
+        maxLength={8}
+        defaultValue={state.values?.referralCode ?? referralCode}
+        error={errors.referralCode}
+      />
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Creating account…" : "Create account"}
       </Button>

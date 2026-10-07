@@ -16,7 +16,9 @@ import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Ledger" };
 
-const TYPES: readonly AccountType[] = ["RENTAL_CASH", "INVESTOR_EARNINGS", "PLATFORM_FEE_REVENUE", "PLATFORM_RETAINED", "PLATFORM_ADJUSTMENTS"];
+const TYPES: readonly AccountType[] = [
+  "RENTAL_CASH", "INVESTOR_EARNINGS", "PLATFORM_FEE_REVENUE", "PLATFORM_RETAINED", "PLATFORM_ADJUSTMENTS", "PLATFORM_REFERRAL_EXPENSE",
+];
 
 export default async function LedgerPage({ searchParams }: PageProps<"/admin/ledger">) {
   const session = await requireStaff();

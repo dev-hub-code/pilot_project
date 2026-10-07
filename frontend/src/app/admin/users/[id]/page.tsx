@@ -15,6 +15,8 @@ import { ClassifyForm, ConfirmForm, ReasonForm } from "@/features/admin/decision
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import type { AdminReferralView } from "@/types/referral";
+import { formatMoney } from "@/utils/money";
 import type { AdminBankAccount, AdminUserDetail, KycSubmission } from "@/types/user";
 import { formatDate, formatDateTime, humanize } from "@/utils/format";
 
@@ -35,11 +37,12 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
     if (error instanceof BackendError && error.status === 404) notFound();
     throw error;
   }
-  const [kyc, banks] = await Promise.all([
+  const [kyc, banks, referral] = await Promise.all([
     can(Permission.KYC_REVIEW) ? authFetch<KycSubmission[]>(`/api/v1/admin/users/${id}/kyc`) : null,
     can(Permission.BANK_ACCOUNT_VERIFY) || can(Permission.FINANCE_VIEW)
       ? authFetch<AdminBankAccount[]>(`/api/v1/admin/users/${id}/bank-accounts`)
       : null,
+    authFetch<AdminReferralView>(`/api/v1/admin/users/${id}/referrals`),
   ]);
   const { summary, profile } = user;
   const isSelf = session.userId === id;
@@ -131,6 +134,28 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
               )}
             </Card>
           )}
+
+          <Card title="Referrals" description={referral.code ? `Referral code ${referral.code}` : "Has not opened their referral page yet."}>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <Item label="Referred by">
+                {referral.uplines.length === 0 ? "—" : (
+                  <ol className="space-y-1">
+                    {referral.uplines.map((u) => (
+                      <li key={u.userId}>
+                        <span className="text-muted">L{u.level}</span>{" "}
+                        <Link href={`/admin/users/${u.userId}`} className="text-gold-text hover:underline">{u.name}</Link>
+                        <span className="block text-xs text-muted">{u.email}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </Item>
+              <Item label="Downline (levels 1–4)">{referral.downlineSize.join(" / ")}</Item>
+              <Item label="Commission earned">
+                {referral.totalEarned.length === 0 ? "—" : referral.totalEarned.map((m) => formatMoney(m)).join(" · ")}
+              </Item>
+            </dl>
+          </Card>
         </div>
 
         <div className="space-y-6">

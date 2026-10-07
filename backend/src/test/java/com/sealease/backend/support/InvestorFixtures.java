@@ -29,14 +29,21 @@ public final class InvestorFixtures {
 
 	/** A registered investor whose identity verification is approved. */
 	public Account approvedInvestor() throws Exception {
-		Account investor = api.register();
+		return approve(api.register());
+	}
+
+	/** Marks the account's identity verification as approved. */
+	public Account approve(Account investor) {
 		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
 		return investor;
 	}
 
 	/** An approved investor classified as high-net-worth, who may buy standalone (HNI) containers. */
 	public Account hniInvestor() throws Exception {
-		Account investor = approvedInvestor();
+		return hni(approvedInvestor());
+	}
+
+	public Account hni(Account investor) {
 		jdbc.update("UPDATE user_profiles SET investor_type = 'HNI' WHERE user_id = ?", investor.id());
 		return investor;
 	}

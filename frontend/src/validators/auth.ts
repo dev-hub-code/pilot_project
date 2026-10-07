@@ -19,6 +19,8 @@ export const registerSchema = z
       .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
       .max(PASSWORD_MAX, `Use at most ${PASSWORD_MAX} characters`),
     confirmPassword: z.string(),
+    referralCode: z.string().trim().toUpperCase()
+      .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 letters and digits"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],

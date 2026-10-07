@@ -37,13 +37,23 @@ public final class TestApi {
 	}
 
 	public Account register() throws Exception {
+		return register(null);
+	}
+
+	/** Registers with a referral code ({@code null} for none). */
+	public Account register(String referralCode) throws Exception {
 		String email = "user-" + UUID.randomUUID() + "@example.com";
-		MvcResult result = mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
-						+ "\",\"firstName\":\"Test\",\"lastName\":\"Investor\"}"))
-			.andReturn();
+		MvcResult result = registerResult(email, referralCode);
 		assertThat(result.getResponse().getStatus()).isEqualTo(201);
 		return new Account(userIdByEmail(email), email, JsonPath.read(result.getResponse().getContentAsString(), "$.accessToken"));
+	}
+
+	public MvcResult registerResult(String email, String referralCode) throws Exception {
+		return mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
+						+ "\",\"firstName\":\"Test\",\"lastName\":\"Investor\""
+						+ (referralCode == null ? "" : ",\"referralCode\":\"" + referralCode + "\"") + "}"))
+			.andReturn();
 	}
 
 	public Account login(String email, String password) throws Exception {

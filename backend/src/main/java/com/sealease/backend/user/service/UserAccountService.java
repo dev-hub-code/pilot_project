@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Account lifecycle and credential checks. The {@link User} entity never leaves this module;
@@ -131,6 +133,12 @@ public class UserAccountService {
 	public UserAccount getAccount(UUID userId) {
 		return users.findById(userId).map(UserAccount::from)
 			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
+	}
+
+	@Transactional(readOnly = true)
+	public Map<UUID, UserAccount> getAccounts(Collection<UUID> userIds) {
+		return users.findAllById(userIds).stream()
+			.collect(Collectors.toMap(User::getId, UserAccount::from));
 	}
 
 	@Transactional(readOnly = true)

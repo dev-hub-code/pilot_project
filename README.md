@@ -119,8 +119,14 @@ Modules (Phase 6):
 | `earning`    | Rental receipts per period (record → four-eyes approval), distribution by ownership, investor earnings |
 | `ledger`     | Append-only double-entry ledger: accounts per investor/platform and currency, balanced transactions, adjustments |
 
+Modules (Phase 7):
+
+| Module     | Responsibility                                                                     |
+|------------|------------------------------------------------------------------------------------|
+| `referral` | Referral codes, permanent referrer links made at sign-up, effective-dated rates for four levels, commissions on rental income, downline views |
+
 Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
-`earning` → `investment`, `ledger`;
+`earning` → `investment`, `ledger`; `referral` → `earning` (event), `ledger`, `user`; `auth` → `referral`;
 `marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
@@ -348,6 +354,36 @@ offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──�
 | `POST /api/v1/admin/ledger/adjustments` (`Idempotency-Key`) | `FINANCE_ADJUST` | Correct an investor's balance        |
 | `GET /api/v1/earnings`, `/earnings/summary`           | `INVESTOR_PORTAL`   | Own rental income history, balance, per-holding totals |
 
+### Referrals
+
+- **Linking.** Every investor has an 8-character code (no 0/O/1/I/L), created the first time they open their
+  referral page and shared as `/register?ref=CODE`. A code entered at sign-up permanently records the
+  referrer, in the registration transaction. An unknown code, or the code of an inactive account, fails registration.
+  Links are append-only and always point to an existing account, so the hierarchy has no cycles.
+- **Rates.** Levels 1–4 each take 0–10%, and at most 20% together. The seeded rates are 2 / 1 / 0.5 / 0.25%. A change is a
+  new version starting now or later (`REFERRAL_CONFIG_MANAGE`). Versions in force are never edited, and a scheduled
+  version can be cancelled before it starts. Each commission records the version and rate that produced it.
+- **Commissions.** When rent is distributed, the earnings module publishes `RentalDistributedEvent` in-process,
+  and commissions are paid in the same database transaction. Each referred investor's *gross* share earns
+  their uplines, nearest first, up to four levels: share × rate, rounded down to the minor unit. The platform pays
+  (*Referral commissions* expense → each upline's *Investor earnings* account, one `REFERRAL_COMMISSION` ledger
+  transaction per receipt). The referred investor's own income is unchanged. An upline whose account is not
+  active, or whose identity is not verified, forfeits that level; it is not passed further up.
+- **Privacy.** Investors see their downline by first name and last initial, with opaque node ids. Staff
+  see full names and account links.
+- **Events.** `referral.earning.created` per commission, via the outbox.
+
+### Referrals API
+
+| Method & path                                         | Access                   | Purpose                                     |
+|-------------------------------------------------------|--------------------------|---------------------------------------------|
+| `POST /api/v1/auth/register` (`referralCode`)         | public                   | Sign up with an optional referral code      |
+| `GET /api/v1/referrals/me`, `/downline`, `/earnings`  | `INVESTOR_PORTAL`        | Code, levels & rates, network tree, commission history |
+| `GET /api/v1/admin/referral-rates`                    | `REFERRAL_CONFIG_MANAGE` or `FINANCE_VIEW` | Rate versions (in force, scheduled, …) |
+| `POST /api/v1/admin/referral-rates`, `/{id}/cancel`   | `REFERRAL_CONFIG_MANAGE` | Schedule new rates / cancel scheduled ones  |
+| `GET /api/v1/admin/referral-earnings`                 | `FINANCE_VIEW`           | Commissions paid, by beneficiary or source  |
+| `GET /api/v1/admin/users/{id}/referrals`              | `USER_VIEW`              | Upline chain, downline size per level, totals |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -356,6 +392,6 @@ offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──�
 4. ✅ Marketplace — containers, investment products, availability
 5. ✅ Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
 6. ✅ Earnings — leases, rental income, ownership distribution, double-entry ledger
-7. Referrals — four-level hierarchy, configuration, earnings, downline tree
+7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rental income, downline tree
 8. Withdrawals — validation, approval, batch processing, reconciliation
 9. Sales CRM · 10. Support · 11. Reporting · 12. Production hardening

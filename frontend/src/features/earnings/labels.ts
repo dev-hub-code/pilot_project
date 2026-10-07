@@ -20,6 +20,7 @@ export const ACCOUNT_LABEL: Record<AccountType, string> = {
   PLATFORM_FEE_REVENUE: "Management fee revenue",
   PLATFORM_RETAINED: "Retained (unsold share & rounding)",
   PLATFORM_ADJUSTMENTS: "Adjustments",
+  PLATFORM_REFERRAL_EXPENSE: "Referral commissions",
 };
 
 /** Adds whole months to an ISO date the way java.time does: the day is clamped to the month's end. */

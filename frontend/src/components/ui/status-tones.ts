@@ -17,6 +17,10 @@ const TONES: Record<string, StatusTone> = {
   MATURED: "neutral",
   RECORDED: "warning",
   DISTRIBUTED: "success",
+  IN_FORCE: "success",
+  SCHEDULED: "warning",
+  SUPERSEDED: "neutral",
+  CANCELLED: "neutral",
   CLOSED: "neutral",
 };
 

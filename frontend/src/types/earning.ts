@@ -80,7 +80,13 @@ export interface EarningsSummary {
   holdings: { holdingId: string; productId: string; earned: Money; payments: number; lastPaidAt: string }[];
 }
 
-export type AccountType = "RENTAL_CASH" | "INVESTOR_EARNINGS" | "PLATFORM_FEE_REVENUE" | "PLATFORM_RETAINED" | "PLATFORM_ADJUSTMENTS";
+export type AccountType =
+  | "RENTAL_CASH"
+  | "INVESTOR_EARNINGS"
+  | "PLATFORM_FEE_REVENUE"
+  | "PLATFORM_RETAINED"
+  | "PLATFORM_ADJUSTMENTS"
+  | "PLATFORM_REFERRAL_EXPENSE";
 export type Direction = "DEBIT" | "CREDIT";
 
 export interface LedgerAccount {
@@ -95,7 +101,7 @@ export interface LedgerAccount {
 export interface LedgerEntry {
   id: string;
   transactionId: string;
-  transactionType: "RENTAL_DISTRIBUTION" | "ADJUSTMENT";
+  transactionType: "RENTAL_DISTRIBUTION" | "ADJUSTMENT" | "REFERRAL_COMMISSION";
   reference: string;
   description: string;
   direction: Direction;

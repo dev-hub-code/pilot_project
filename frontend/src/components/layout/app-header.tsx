@@ -13,6 +13,7 @@ export function AppHeader({ session }: { session: Session }) {
       ? [
         { href: "/portfolio", label: "Portfolio" },
         { href: "/earnings", label: "Earnings" },
+        { href: "/referrals", label: "Referrals" },
         { href: "/orders", label: "Orders" },
         { href: "/cart", label: "Cart" },
       ]

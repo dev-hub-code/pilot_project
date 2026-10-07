@@ -16,7 +16,9 @@ public enum AccountType {
 	/** Income: rental on the unsold share of an offering, and rounding left over from distributions. */
 	PLATFORM_RETAINED(Direction.CREDIT, false),
 	/** Expense: manual corrections credited to (or recovered from) investors. */
-	PLATFORM_ADJUSTMENTS(Direction.DEBIT, false);
+	PLATFORM_ADJUSTMENTS(Direction.DEBIT, false),
+	/** Expense: referral commissions paid to uplines on their downline's rental income. */
+	PLATFORM_REFERRAL_EXPENSE(Direction.DEBIT, false);
 
 	private final Direction normalBalance;
 	private final boolean perInvestor;
