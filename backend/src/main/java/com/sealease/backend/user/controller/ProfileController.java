@@ -1,6 +1,7 @@
 package com.sealease.backend.user.controller;
 
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.user.dto.NotificationPreferencesRequest;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.dto.UpdateProfileRequest;
 import com.sealease.backend.user.dto.UpdateTaxInfoRequest;
@@ -31,6 +32,12 @@ public class ProfileController {
 	@PutMapping
 	public ProfileResponse update(AuthenticatedUser user, @Valid @RequestBody UpdateProfileRequest request) {
 		return profiles.update(user.userId(), request);
+	}
+
+	@PutMapping("/notification-preferences")
+	public ProfileResponse updateNotificationPreferences(AuthenticatedUser user,
+			@Valid @RequestBody NotificationPreferencesRequest request) {
+		return profiles.updateNotificationPreferences(user.userId(), request);
 	}
 
 	@PutMapping("/tax")

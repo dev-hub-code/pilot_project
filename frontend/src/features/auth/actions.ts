@@ -149,6 +149,9 @@ export async function changePasswordAction(_previous: FormState, formData: FormD
       writeSessionCookies(jar, tokens);
       const claims = await verifyAccessToken(tokens.accessToken);
       if (claims && hasStaffAccess(claims.permissions)) destination = "/admin";
+      // Only a path in Settings: never an open redirect.
+      const returnTo = String(formData.get("returnTo") ?? "");
+      if (returnTo.startsWith("/settings/")) destination = returnTo;
     } catch {
       destination = "/login";
     }

@@ -7,6 +7,7 @@ import com.sealease.backend.common.crypto.FieldEncryptor;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.user.dto.NotificationPreferencesRequest;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.dto.UpdateProfileRequest;
 import com.sealease.backend.user.dto.UpdateTaxInfoRequest;
@@ -87,7 +88,6 @@ public class UserProfileService {
 		profile.updatePersonal(blankToNull(request.phone()), request.dateOfBirth(), request.nationality());
 		profile.updateAddress(trim(address.line1()), trim(address.line2()), trim(address.city()),
 				trim(address.stateRegion()), trim(address.postalCode()), address.country());
-		profile.updateNotificationPreferences(request.emailNotifications(), request.smsNotifications());
 
 		ProfileResponse after = ProfileResponse.from(profile);
 		if (!Objects.equals(before.phone(), after.phone())) {
@@ -100,16 +100,26 @@ public class UserProfileService {
 		if (!Objects.equals(before.address(), after.address())) {
 			changed.add("address");
 		}
-		if (before.emailNotifications() != after.emailNotifications()
-				|| before.smsNotifications() != after.smsNotifications()) {
-			changed.add("notificationPreferences");
-		}
 		if (!changed.isEmpty()) {
 			// Field names only: personal data does not belong in the audit log.
 			audit.record(AuditRecord.of(userId, AuditAction.PROFILE_UPDATED, "USER", userId)
 				.withNewValue(Map.of("changed", changed)));
 		}
 		return after;
+	}
+
+	@Transactional
+	public ProfileResponse updateNotificationPreferences(UUID userId, NotificationPreferencesRequest request) {
+		UserProfile profile = profiles.findByUserIdForUpdate(userId)
+			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
+		boolean changed = profile.isEmailNotifications() != request.emailNotifications()
+				|| profile.isSmsNotifications() != request.smsNotifications();
+		profile.updateNotificationPreferences(request.emailNotifications(), request.smsNotifications());
+		if (changed) {
+			audit.record(AuditRecord.of(userId, AuditAction.PROFILE_UPDATED, "USER", userId)
+				.withNewValue(Map.of("changed", List.of("notificationPreferences"))));
+		}
+		return ProfileResponse.from(profile);
 	}
 
 	@Transactional

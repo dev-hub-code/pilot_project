@@ -17,8 +17,6 @@ export const profileSchema = z.object({
   stateRegion: optional(z.string().max(100)),
   postalCode: optional(z.string().max(20)),
   country: optional(country),
-  emailNotifications: z.boolean(),
-  smsNotifications: z.boolean(),
 });
 
 export const taxSchema = z.object({

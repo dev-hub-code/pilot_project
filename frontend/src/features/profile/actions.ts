@@ -13,11 +13,7 @@ function text(formData: FormData, ...names: string[]): Record<string, string> {
 export async function updateProfileAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const values = text(formData, "firstName", "lastName", "phone", "dateOfBirth", "nationality", "line1", "line2",
     "city", "stateRegion", "postalCode", "country");
-  const parsed = profileSchema.safeParse({
-    ...values,
-    emailNotifications: formData.get("emailNotifications") === "on",
-    smsNotifications: formData.get("smsNotifications") === "on",
-  });
+  const parsed = profileSchema.safeParse(values);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
 
   const p = parsed.data;
@@ -38,8 +34,6 @@ export async function updateProfileAction(_previous: FormState, formData: FormDa
           postalCode: p.postalCode ?? null,
           country: p.country ?? null,
         },
-        emailNotifications: p.emailNotifications,
-        smsNotifications: p.smsNotifications,
       },
     });
   } catch (error) {

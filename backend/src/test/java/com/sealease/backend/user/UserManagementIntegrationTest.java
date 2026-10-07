@@ -69,12 +69,27 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.firstName").value("Ada"))
 			.andExpect(jsonPath("$.address.city").value("London"))
+			.andExpect(jsonPath("$.emailNotifications").value(true))
+			.andExpect(jsonPath("$.smsNotifications").value(false));
+
+		// Notification preferences are settings of their own; saving the profile leaves them alone.
+		mvc.perform(put("/api/v1/users/me/notification-preferences").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"emailNotifications\":false,\"smsNotifications\":true}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.emailNotifications").value(false))
 			.andExpect(jsonPath("$.smsNotifications").value(true));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", "+447700900123", "1990-04-01")))
+			.andExpect(jsonPath("$.emailNotifications").value(false))
+			.andExpect(jsonPath("$.smsNotifications").value(true));
+		mvc.perform(put("/api/v1/users/me/notification-preferences").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"emailNotifications\":true}"))
+			.andExpect(status().isBadRequest());
 
 		String changes = jdbc.queryForObject("""
-				SELECT new_value::text FROM audit_logs WHERE action = 'PROFILE_UPDATED' AND entity_id = ?
+				SELECT string_agg(new_value::text, ' ') FROM audit_logs WHERE action = 'PROFILE_UPDATED' AND entity_id = ?
 				""", String.class, investor.id().toString());
-		assertThat(changes).contains("address", "phone").doesNotContain("+447700900123", "London");
+		assertThat(changes).contains("address", "phone", "notificationPreferences").doesNotContain("+447700900123", "London");
 	}
 
 	@Test
@@ -417,8 +432,7 @@ class UserManagementIntegrationTest {
 	private static String profileBody(String firstName, String phone, String dateOfBirth) {
 		return """
 				{"firstName":"%s","lastName":"Investor",%s"dateOfBirth":%s,"nationality":"GB",
-				 "address":{"line1":"1 Dock Road","city":"London","postalCode":"E14 5AB","country":"GB"},
-				 "emailNotifications":true,"smsNotifications":true}
+				 "address":{"line1":"1 Dock Road","city":"London","postalCode":"E14 5AB","country":"GB"}}
 				""".formatted(firstName, phone == null ? "" : "\"phone\":\"" + phone + "\",",
 				dateOfBirth == null ? "null" : "\"" + dateOfBirth + "\"");
 	}

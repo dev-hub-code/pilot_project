@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { LogoutButton } from "@/features/auth/logout-button";
+import { AccountMenu } from "@/components/layout/account-menu";
 import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 import { authFetch, type Session } from "@/lib/server/auth/session";
+import type { Profile } from "@/types/user";
 
 export async function AppHeader({ session }: { session: Session }) {
   // The badge is a convenience: a failure here must never break the page.
-  const unread = await authFetch<{ unread: number }>("/api/v1/notifications/unread-count").then((r) => r.unread, () => 0);
+  const [unread, me] = await Promise.all([
+    authFetch<{ unread: number }>("/api/v1/notifications/unread-count").then((r) => r.unread, () => 0),
+    authFetch<Profile>("/api/v1/users/me").then((p) => p, () => null),
+  ]);
+  const name = me ? `${me.firstName} ${me.lastName}`.trim() || me.email : "Account";
   // An account is either an investor or staff; staff only see their profile and the admin area.
   const investor = isInvestor(session.permissions);
   const links = investor
@@ -21,27 +26,19 @@ export async function AppHeader({ session }: { session: Session }) {
       { href: "/orders", label: "Orders" },
       { href: "/cart", label: "Cart" },
       { href: "/profile", label: "Profile" },
+      { href: "/settings", label: "Settings" },
     ]
     : [
       ...(hasStaffAccess(session.permissions) ? [{ href: "/admin", label: "Admin" }] : []),
       { href: "/profile", label: "Profile" },
+      { href: "/settings", label: "Settings" },
     ];
-  const items = links.map((link) => (
-    <li key={link.href}>
-      <Link href={link.href} className="whitespace-nowrap text-muted transition-colors hover:text-foreground">
-        {link.label}
-      </Link>
-    </li>
-  ));
 
   return (
     <header className="border-b border-border bg-surface print:hidden">
       <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <Logo href={investor ? "/dashboard" : "/admin"} compact />
-        <div className="flex items-center gap-8">
-          <nav aria-label="Main" className="hidden md:block">
-            <ul className="flex items-center gap-6 text-sm">{items}</ul>
-          </nav>
+        <div className="flex items-center gap-6">
           <Link href="/notifications" className="relative text-muted transition-colors hover:text-foreground"
             aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}>
             <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="size-5">
@@ -53,13 +50,9 @@ export async function AppHeader({ session }: { session: Session }) {
               </span>
             )}
           </Link>
-          <LogoutButton />
+          <AccountMenu links={links} name={name} email={me?.email ?? null} />
         </div>
       </div>
-      {/* Narrow screens: links move to their own scrollable row instead of overflowing the header. */}
-      <nav aria-label="Main" className="overflow-x-auto border-t border-border md:hidden">
-        <ul className="flex gap-6 px-4 py-3 text-sm">{items}</ul>
-      </nav>
     </header>
   );
 }

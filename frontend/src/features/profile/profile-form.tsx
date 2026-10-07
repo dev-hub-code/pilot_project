@@ -53,18 +53,6 @@ export function ProfileForm({ profile }: { profile: Profile }) {
           defaultValue={v("country", profile.address.country)} error={e["address.country"] ?? e.country} />
       </fieldset>
 
-      <fieldset className="space-y-2">
-        <legend className="mb-1 text-sm font-medium text-muted">Notifications</legend>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="emailNotifications" defaultChecked={profile.emailNotifications} className="size-4" />
-          Email me about investments, earnings and withdrawals
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="smsNotifications" defaultChecked={profile.smsNotifications} className="size-4" />
-          Send me SMS alerts
-        </label>
-      </fieldset>
-
       <SubmitButton>Save profile</SubmitButton>
     </form>
   );

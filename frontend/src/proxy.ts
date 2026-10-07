@@ -8,7 +8,7 @@ import { forwardedClientHeaders } from "@/lib/server/request-context";
 /** Refresh this long before expiry so bursts of requests rarely race on an expired token. */
 const REFRESH_AHEAD_MS = 60_000;
 
-const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/admin"];
+const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/settings", "/admin"];
 const STAFF_PREFIXES = ["/admin"];
 /** The investor portal; staff accounts are never investors and are sent to the admin area instead. */
 const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/orders", "/cart", "/statements", "/profile/verification", "/profile/bank-accounts"];
