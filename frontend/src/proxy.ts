@@ -50,6 +50,11 @@ export async function proxy(request: NextRequest) {
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname + search);
     response = NextResponse.redirect(login);
+  } else if (session?.passwordChangeRequired && matches(pathname, PROTECTED_PREFIXES)) {
+    // UX only: the API itself refuses everything but the password change for such a session.
+    response = NextResponse.redirect(new URL("/change-password", request.url));
+  } else if (!session && pathname === "/change-password") {
+    response = NextResponse.redirect(new URL("/login", request.url));
   } else if (session && matches(pathname, STAFF_PREFIXES) && !hasStaffAccess(session.permissions)) {
     response = NextResponse.redirect(new URL("/dashboard", request.url));
   } else if (session && matches(pathname, GUEST_ONLY)) {

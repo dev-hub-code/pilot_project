@@ -112,6 +112,9 @@ public class AuthService {
 					"Account temporarily locked after repeated failed sign-in attempts; try again later");
 			case CredentialVerification.Inactive ignored ->
 				throw new BusinessException(ErrorCode.ACCOUNT_DISABLED, "This account is not active");
+			case CredentialVerification.TemporaryPasswordExpired ignored ->
+				throw new BusinessException(ErrorCode.TEMPORARY_PASSWORD_EXPIRED,
+						"Your temporary password has expired; ask an administrator for a new one");
 		};
 	}
 
@@ -136,7 +139,7 @@ public class AuthService {
 					}
 					UserAuthorities authorities = userRoles.authoritiesOf(account.id());
 					AccessTokenService.IssuedAccessToken access = accessTokens.issue(account.id(),
-							rotated.sessionId(), authorities);
+							rotated.sessionId(), authorities, account.mustChangePassword());
 					yield toResponse(access, rotated.refreshToken());
 				}
 			};
@@ -177,14 +180,15 @@ public class AuthService {
 		UserAccount account = accounts.getAccount(user.userId());
 		UserAuthorities authorities = userRoles.authoritiesOf(user.userId());
 		return new CurrentUserResponse(account.id(), account.email(), account.firstName(), account.lastName(),
-				account.status().name(), authorities.roles(), authorities.permissions());
+				account.status().name(), authorities.roles(), authorities.permissions(), account.mustChangePassword());
 	}
 
 	private AuthTokensResponse openSession(UUID userId, ClientInfo client) {
 		SessionService.OpenedSession session = sessions.open(userId, client);
 		audit.record(AuditRecord.of(userId, AuditAction.LOGIN, ENTITY_SESSION, session.sessionId()));
 		UserAuthorities authorities = userRoles.authoritiesOf(userId);
-		AccessTokenService.IssuedAccessToken access = accessTokens.issue(userId, session.sessionId(), authorities);
+		AccessTokenService.IssuedAccessToken access = accessTokens.issue(userId, session.sessionId(), authorities,
+				accounts.getAccount(userId).mustChangePassword());
 		return toResponse(access, session.refreshToken());
 	}
 

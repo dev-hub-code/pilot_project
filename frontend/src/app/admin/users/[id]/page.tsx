@@ -15,7 +15,11 @@ import { ClassifyForm, ConfirmForm, ReasonForm } from "@/features/admin/decision
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { ResetPasswordForm, RolesForm } from "@/features/admin/staff-forms";
+import type { PageResponse } from "@/types/api";
+import type { Role } from "@/types/auth";
 import type { AdminReferralView } from "@/types/referral";
+import type { UserAuthorities } from "@/types/staff";
 import { formatMoney } from "@/utils/money";
 import type { AdminBankAccount, AdminUserDetail, KycSubmission } from "@/types/user";
 import { formatDate, formatDateTime, humanize } from "@/utils/format";
@@ -44,6 +48,13 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
       : null,
     authFetch<AdminReferralView>(`/api/v1/admin/users/${id}/referrals`),
   ]);
+  const [authorities, allRoles] = can(Permission.ROLE_VIEW)
+    ? await Promise.all([
+      authFetch<UserAuthorities>(`/api/v1/admin/users/${id}/roles`),
+      authFetch<PageResponse<Role>>("/api/v1/admin/roles?size=100"),
+    ])
+    : [null, null];
+  const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
   const { summary, profile } = user;
   const isSelf = session.userId === id;
 
@@ -135,6 +146,16 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             </Card>
           )}
 
+          {authorities && (
+            <Card title="Roles" description={authorities.roles.length === 0 ? "No roles." : authorities.roles.join(", ")}>
+              {can(Permission.USER_ROLE_ASSIGN) && !isSelf && allRoles ? (
+                <RolesForm userId={id} roles={allRoles.content} current={authorities.roles} />
+              ) : (
+                <p className="text-sm text-muted">{authorities.permissions.length} permission(s).</p>
+              )}
+            </Card>
+          )}
+
           <Card title="Referrals" description={referral.code ? `Referral code ${referral.code}` : "Has not opened their referral page yet."}>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Item label="Referred by">
@@ -159,6 +180,11 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
         </div>
 
         <div className="space-y-6">
+          {isStaffAccount && can(Permission.USER_ROLE_ASSIGN) && !isSelf && (
+            <Card title="Password" description="For a staff member who forgot their password or whose temporary one expired.">
+              <ResetPasswordForm userId={id} />
+            </Card>
+          )}
           {can(Permission.USER_SUSPEND) && !isSelf && summary.status !== "DISABLED" && (
             <Card title={summary.status === "ACTIVE" ? "Suspend account" : "Reactivate account"}
               description={summary.status === "ACTIVE" ? "Signs the user out everywhere immediately." : undefined}>

@@ -8,6 +8,8 @@ export interface AccessTokenClaims {
   sessionId: string;
   roles: string[];
   permissions: string[];
+  /** Signed in with a temporary password: only the password change is allowed until it is replaced. */
+  passwordChangeRequired: boolean;
   expiresAt: number;
 }
 
@@ -37,6 +39,7 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenClaim
       sessionId: String(payload.sid),
       roles: stringArray(payload.roles),
       permissions: stringArray(payload.permissions),
+      passwordChangeRequired: payload.pwd_change === true,
       expiresAt: (payload.exp ?? 0) * 1000,
     };
   } catch {

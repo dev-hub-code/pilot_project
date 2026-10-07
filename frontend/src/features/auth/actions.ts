@@ -11,13 +11,17 @@ import {
 } from "@/lib/server/auth/cookies";
 import { forwardedClientHeaders } from "@/lib/server/request-context";
 import { safeRedirectPath } from "@/utils/redirect";
-import { type FormState, firstErrors, loginSchema, registerSchema } from "@/validators/auth";
+import { hasStaffAccess } from "@/lib/permissions";
+import { authFetch } from "@/lib/server/auth/session";
+import { verifyAccessToken } from "@/lib/server/auth/tokens";
+import { changePasswordSchema, type FormState, firstErrors, loginSchema, registerSchema } from "@/validators/auth";
 
 /** Messages for backend error codes; anything unexpected gets a generic message. */
 const MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: "Invalid email or password.",
   ACCOUNT_LOCKED: "Too many failed attempts. Your account is temporarily locked; try again later.",
   ACCOUNT_DISABLED: "This account is not active. Please contact support.",
+  TEMPORARY_PASSWORD_EXPIRED: "Your temporary password has expired. Ask an administrator for a new one.",
   EMAIL_ALREADY_REGISTERED: "An account with this email already exists.",
   TOO_MANY_REQUESTS: "Too many attempts. Please wait a moment and try again.",
 };
@@ -97,4 +101,52 @@ function describe(error: unknown): string {
   }
   console.error("Backend unreachable", error);
   return "The service is temporarily unavailable. Please try again.";
+}
+
+/**
+ * Replaces the password (a temporary one, or any time from the profile). The backend ends the user's
+ * other sessions; this one is renewed so its token no longer requires a password change.
+ */
+export async function changePasswordAction(_previous: FormState, formData: FormData): Promise<FormState> {
+  const parsed = changePasswordSchema.safeParse({
+    currentPassword: formData.get("currentPassword") ?? "",
+    newPassword: formData.get("newPassword") ?? "",
+    confirmPassword: formData.get("confirmPassword") ?? "",
+  });
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+  try {
+    await authFetch("/api/v1/auth/password", {
+      method: "POST",
+      json: { currentPassword: parsed.data.currentPassword, newPassword: parsed.data.newPassword },
+    });
+  } catch (error) {
+    if (error instanceof BackendError && error.apiError?.code === "INVALID_CREDENTIALS") {
+      return { fieldErrors: { currentPassword: "Current password is incorrect" } };
+    }
+    if (error instanceof BackendError && error.apiError?.fieldErrors?.length) {
+      return { fieldErrors: Object.fromEntries(error.apiError.fieldErrors.map((f) => [f.field, f.message])) };
+    }
+    if (error instanceof BackendError && error.status < 500 && error.apiError?.message) {
+      return { error: error.apiError.message };
+    }
+    return { error: describe(error) };
+  }
+  const jar = await cookies();
+  const refreshToken = jar.get(cookieNames().refresh)?.value;
+  let destination = "/dashboard";
+  if (refreshToken) {
+    try {
+      const tokens = await backendFetch<AuthTokens>("/api/v1/auth/refresh", {
+        method: "POST",
+        json: { refreshToken },
+        headers: forwardedClientHeaders(await headers()),
+      });
+      writeSessionCookies(jar, tokens);
+      const claims = await verifyAccessToken(tokens.accessToken);
+      if (claims && hasStaffAccess(claims.permissions)) destination = "/admin";
+    } catch {
+      destination = "/login";
+    }
+  }
+  redirect(destination);
 }

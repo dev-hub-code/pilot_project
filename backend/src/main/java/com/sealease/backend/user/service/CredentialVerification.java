@@ -19,4 +19,8 @@ public sealed interface CredentialVerification {
 	record Inactive() implements CredentialVerification {
 	}
 
+	/** The right temporary password, but past its expiry: an administrator must issue a new one. */
+	record TemporaryPasswordExpired() implements CredentialVerification {
+	}
+
 }

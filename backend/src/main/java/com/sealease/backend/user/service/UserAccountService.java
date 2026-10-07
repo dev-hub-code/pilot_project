@@ -15,6 +15,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -40,6 +41,7 @@ public class UserAccountService {
 	private final PasswordEncoder passwordEncoder;
 	private final PasswordPolicy passwordPolicy;
 	private final LockoutProperties lockout;
+	private final StaffAccountProperties staffAccounts;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
@@ -51,13 +53,14 @@ public class UserAccountService {
 	private final String dummyHash;
 
 	public UserAccountService(UserRepository users, UserProfileService profiles, PasswordEncoder passwordEncoder,
-			PasswordPolicy passwordPolicy, LockoutProperties lockout, AuditService audit, ApplicationEventPublisher events,
+			PasswordPolicy passwordPolicy, LockoutProperties lockout, StaffAccountProperties staffAccounts, AuditService audit, ApplicationEventPublisher events,
 			Clock clock) {
 		this.users = users;
 		this.profiles = profiles;
 		this.passwordEncoder = passwordEncoder;
 		this.passwordPolicy = passwordPolicy;
 		this.lockout = lockout;
+		this.staffAccounts = staffAccounts;
 		this.audit = audit;
 		this.events = events;
 		this.clock = clock;
@@ -111,6 +114,9 @@ public class UserAccountService {
 		if (user.getStatus() != UserStatus.ACTIVE) {
 			return new CredentialVerification.Inactive();
 		}
+		if (user.temporaryPasswordExpiredAt(now)) {
+			return new CredentialVerification.TemporaryPasswordExpired();
+		}
 		if (passwordEncoder.upgradeEncoding(user.getPasswordHash())) {
 			user.upgradePasswordHash(passwordEncoder.encode(rawPassword));
 		}
@@ -150,6 +156,57 @@ public class UserAccountService {
 	@Transactional(readOnly = true)
 	public Optional<UserAccount> findByEmail(String email) {
 		return users.findByEmail(EmailNormalizer.normalize(email)).map(UserAccount::from);
+	}
+
+	/**
+	 * Creates a staff account with a temporary password that must be replaced at first sign-in.
+	 * Roles are granted by the caller (role module), in the same transaction.
+	 *
+	 * @return the account and the temporary password, which is returned exactly once and never stored in clear
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public IssuedCredentials createStaffAccount(String email, String firstName, String lastName, UUID actorId) {
+		String normalizedEmail = EmailNormalizer.normalize(email);
+		if (users.existsByEmail(normalizedEmail)) {
+			throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, "An account with this email already exists");
+		}
+		Instant now = clock.instant();
+		String temporary = TemporaryPasswords.generate();
+		User user = new User(normalizedEmail, passwordEncoder.encode(temporary), firstName.strip(), lastName.strip(), now);
+		user.issueTemporaryPassword(user.getPasswordHash(), now.plus(staffAccounts.temporaryPasswordValidity()), now);
+		users.saveAndFlush(user);
+		profiles.createFor(user);
+		audit.record(AuditRecord.of(actorId, AuditAction.STAFF_ACCOUNT_CREATED, ENTITY, user.getId())
+			.withNewValue(Map.of("email", normalizedEmail, "temporaryPasswordExpiresAt",
+					now.plus(staffAccounts.temporaryPasswordValidity()).toString())));
+		return new IssuedCredentials(UserAccount.from(user), temporary, now.plus(staffAccounts.temporaryPasswordValidity()));
+	}
+
+	/**
+	 * Replaces a password with a new temporary one (the holder forgot it, or it expired). The caller
+	 * checks the actor may do this and ends the account's sessions.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public IssuedCredentials issueTemporaryPassword(UUID userId, UUID actorId) {
+		User user = users.findByIdForUpdate(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+		Instant now = clock.instant();
+		String temporary = TemporaryPasswords.generate();
+		Instant expiresAt = now.plus(staffAccounts.temporaryPasswordValidity());
+		user.issueTemporaryPassword(passwordEncoder.encode(temporary), expiresAt, now);
+		users.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.TEMPORARY_PASSWORD_ISSUED, ENTITY, userId)
+			.withNewValue(Map.of("expiresAt", expiresAt.toString())));
+		return new IssuedCredentials(UserAccount.from(user), temporary, expiresAt);
+	}
+
+	/** A newly issued temporary password; {@link #toString()} never reveals it. */
+	public record IssuedCredentials(UserAccount account, String temporaryPassword, Instant expiresAt) {
+
+		@Override
+		public String toString() {
+			return "IssuedCredentials[userId=" + account.id() + ", expiresAt=" + expiresAt + "]";
+		}
+
 	}
 
 	/** Creates an account without self-registration checks; used by system bootstrap only. */

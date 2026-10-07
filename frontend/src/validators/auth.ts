@@ -27,5 +27,17 @@ export const registerSchema = z
     message: "Passwords do not match",
   });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password").max(PASSWORD_MAX),
+    newPassword: z
+      .string()
+      .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
+      .max(PASSWORD_MAX, `Use at most ${PASSWORD_MAX} characters`),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match" })
+  .refine((d) => d.newPassword !== d.currentPassword, { path: ["newPassword"], message: "Choose a different password" });
+
 export type { FieldErrors, FormState } from "./form-state";
 export { firstErrors } from "./form-state";

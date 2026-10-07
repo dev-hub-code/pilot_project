@@ -10,5 +10,6 @@ public record CurrentUserResponse(
 		String lastName,
 		String status,
 		Set<String> roles,
-		Set<String> permissions) {
+		Set<String> permissions,
+		boolean passwordChangeRequired) {
 }

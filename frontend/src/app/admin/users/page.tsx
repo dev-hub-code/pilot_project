@@ -9,7 +9,9 @@ import { SelectField } from "@/components/ui/select-field";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import { TextField } from "@/components/ui/text-field";
-import { authFetch } from "@/lib/server/auth/session";
+import { LinkButton } from "@/components/ui/link-button";
+import { Permission, hasPermission } from "@/lib/permissions";
+import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AdminUserSummary } from "@/types/user";
 import { formatDate, humanize } from "@/utils/format";
@@ -26,6 +28,7 @@ function pick<T extends string>(value: unknown, allowed: readonly T[]): T | unde
 }
 
 export default async function UsersPage({ searchParams }: PageProps<"/admin/users">) {
+  const session = await requireStaff();
   const params = await searchParams;
   const filters = {
     q: typeof params.q === "string" ? params.q.slice(0, 100) : undefined,
@@ -40,7 +43,9 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" description="Investors and staff accounts." />
+      <PageHeader title="Users" description="Investors and staff accounts."
+        actions={hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
+          ? <LinkButton href="/admin/users/new">New staff member</LinkButton> : undefined} />
       <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-5" role="search">
         <div className="sm:col-span-2">
           <TextField label="Search" name="q" type="search" placeholder="Email or name" defaultValue={filters.q} />

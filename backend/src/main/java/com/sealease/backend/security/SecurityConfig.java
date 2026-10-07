@@ -1,5 +1,6 @@
 package com.sealease.backend.security;
 
+import com.sealease.backend.common.api.ApiErrorFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +12,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -48,7 +50,7 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain apiSecurityFilterChain(HttpSecurity http,
 			RestAuthenticationEntryPoint authenticationEntryPoint,
-			RestAccessDeniedHandler accessDeniedHandler,
+			RestAccessDeniedHandler accessDeniedHandler, ApiErrorFactory errors,
 			@Value("${springdoc.api-docs.enabled:false}") boolean apiDocsEnabled) throws Exception {
 		http
 			.csrf(AbstractHttpConfigurer::disable)
@@ -78,7 +80,8 @@ public class SecurityConfig {
 					auth.requestMatchers(API_DOCS).permitAll();
 				}
 				auth.anyRequest().authenticated();
-			});
+			})
+			.addFilterAfter(new PasswordChangeEnforcementFilter(errors), BearerTokenAuthenticationFilter.class);
 		return http.build();
 	}
 

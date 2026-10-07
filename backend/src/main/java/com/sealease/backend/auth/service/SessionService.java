@@ -9,6 +9,7 @@ import com.sealease.backend.auth.repository.RefreshTokenRepository;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.role.event.UserAuthoritiesChangedEvent;
 import com.sealease.backend.user.entity.UserStatus;
+import com.sealease.backend.user.event.CredentialsResetEvent;
 import com.sealease.backend.user.event.UserStatusChangedEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.event.EventListener;
@@ -133,6 +134,13 @@ public class SessionService {
 		if (event.newStatus() != UserStatus.ACTIVE) {
 			sessions.revokeAllForUsers(Set.of(event.userId()), SessionRevocationReason.ACCOUNT_INACTIVE, clock.instant());
 		}
+	}
+
+	/** A temporary password issued by an administrator ends every existing session. */
+	@EventListener
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void onCredentialsReset(CredentialsResetEvent event) {
+		sessions.revokeAllForUsers(Set.of(event.userId()), SessionRevocationReason.PASSWORD_RESET, clock.instant());
 	}
 
 	@Transactional(readOnly = true)

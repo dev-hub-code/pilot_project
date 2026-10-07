@@ -46,6 +46,13 @@ public class User extends BaseEntity {
 	@Column(name = "password_changed_at", nullable = false)
 	private Instant passwordChangedAt;
 
+	/** Set while the account has a temporary password issued by an administrator. */
+	@Column(name = "must_change_password", nullable = false)
+	private boolean mustChangePassword;
+
+	@Column(name = "temporary_password_expires_at")
+	private Instant temporaryPasswordExpiresAt;
+
 	@Column(name = "email_verified_at")
 	private Instant emailVerifiedAt;
 
@@ -112,6 +119,26 @@ public class User extends BaseEntity {
 	public void changePasswordHash(String newHash, Instant now) {
 		this.passwordHash = newHash;
 		this.passwordChangedAt = now;
+		this.mustChangePassword = false;
+		this.temporaryPasswordExpiresAt = null;
+	}
+
+	/** An administrator issued a temporary password: it must be replaced at sign-in, before it expires. */
+	public void issueTemporaryPassword(String hash, Instant expiresAt, Instant now) {
+		this.passwordHash = hash;
+		this.passwordChangedAt = now;
+		this.mustChangePassword = true;
+		this.temporaryPasswordExpiresAt = expiresAt;
+		this.failedLoginAttempts = 0;
+		this.lockedUntil = null;
+	}
+
+	public boolean temporaryPasswordExpiredAt(Instant now) {
+		return mustChangePassword && temporaryPasswordExpiresAt != null && !now.isBefore(temporaryPasswordExpiresAt);
+	}
+
+	public boolean isMustChangePassword() {
+		return mustChangePassword;
 	}
 
 	/** Transparent re-hash when the encoding algorithm or its parameters are upgraded. */

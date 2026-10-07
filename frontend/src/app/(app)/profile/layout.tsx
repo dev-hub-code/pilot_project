@@ -5,6 +5,7 @@ const TABS = [
   { href: "/profile", label: "Personal details" },
   { href: "/profile/verification", label: "Identity verification" },
   { href: "/profile/bank-accounts", label: "Bank accounts" },
+  { href: "/change-password", label: "Password" },
 ] as const;
 
 export default function ProfileLayout({ children }: LayoutProps<"/profile">) {

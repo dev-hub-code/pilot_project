@@ -503,6 +503,24 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 | `POST /…/tickets/{id}/messages` (multipart, `internal`), `/status`, `/priority`, `/assign`; `GET /…/agents` | `SUPPORT_TICKET_MANAGE` | Handle tickets |
 | `GET /api/v1/notifications`, `/unread-count`; `POST /{id}/read`, `/read-all` | signed in       | Own notifications                    |
 
+### Staff accounts
+
+- **Creating staff.** Holders of `USER_ROLE_ASSIGN` create staff accounts with name, work email and roles
+  (`POST /api/v1/admin/staff`). Account and roles are created in one transaction, under the same escalation guard as
+  role changes (you can only grant permissions you hold). Investor roles are refused, because investors register themselves.
+- **Temporary password.** The response carries a random temporary password (`XXXX-XXXX-XXXX-XXXX`, 80 bits) exactly once,
+  with `Cache-Control: no-store`. Only its hash is stored. It must be replaced at first sign-in, before it expires
+  (`app.users.staff.temporary-password-validity`, default 72h). After expiry, sign-in fails with
+  `TEMPORARY_PASSWORD_EXPIRED`.
+- **Enforcement.** Tokens issued for such a sign-in carry `pwd_change`. A security filter then answers
+  `403 PASSWORD_CHANGE_REQUIRED` to every API call except `POST /auth/password`, `GET /auth/me`, refresh and sign-out.
+  The web app redirects to `/change-password`. Changing the password clears the flag, and the next token no longer carries it.
+- **Resets.** `POST /api/v1/admin/users/{id}/temporary-password` (`USER_ROLE_ASSIGN`, staff accounts only, never your
+  own, and only if you hold every permission the target holds) issues a new temporary password and ends all of the
+  person's sessions. Both actions are audited (`STAFF_ACCOUNT_CREATED`, `TEMPORARY_PASSWORD_ISSUED`).
+- **UI.** *Users → New staff member*. The user page shows roles, lets `USER_ROLE_ASSIGN` holders edit them, and offers
+  *Issue temporary password* for staff. Everyone can change their password from *Profile → Password*.
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture

@@ -33,6 +33,12 @@ public class AccessTokenService {
 	}
 
 	public IssuedAccessToken issue(UUID userId, UUID sessionId, UserAuthorities authorities) {
+		return issue(userId, sessionId, authorities, false);
+	}
+
+	/** @param passwordChangeRequired the token then only works for changing the password (and /me, sign-out) */
+	public IssuedAccessToken issue(UUID userId, UUID sessionId, UserAuthorities authorities,
+			boolean passwordChangeRequired) {
 		Instant now = clock.instant();
 		Instant expiresAt = now.plus(properties.accessTokenTtl());
 		JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -47,6 +53,11 @@ public class AccessTokenService {
 			.claim(PlatformClaims.SESSION_ID, sessionId.toString())
 			.claim(PlatformClaims.ROLES, List.copyOf(authorities.roles()))
 			.claim(PlatformClaims.PERMISSIONS, List.copyOf(authorities.permissions()))
+			.claims(c -> {
+				if (passwordChangeRequired) {
+					c.put(PlatformClaims.PASSWORD_CHANGE_REQUIRED, true);
+				}
+			})
 			.build();
 		JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(keyId).type("JWT").build();
 		String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
