@@ -31,6 +31,9 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
     authFetch<PageResponse<Withdrawal>>(`/api/v1/withdrawals?page=${page}&size=20`),
   ]);
   const verified = accounts.filter((a) => a.status === "VERIFIED");
+  // Withdrawals are paid in the bank account's currency, from the balance in that currency.
+  const fundedCurrencies = new Set(summary.balances.filter((m) => Number(m.amount) > 0).map((m) => m.currency));
+  const payable = verified.filter((a) => fundedCurrencies.has(a.currency));
   const balances = summary.balances.length === 0 ? "—" : summary.balances.map((m) => formatMoney(m)).join(" · ");
 
   return (
@@ -51,9 +54,16 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
           <Notice tone="warning">
             Add a bank account and wait for it to be verified. <Link href="/profile/bank-accounts" className="underline">Bank accounts</Link>
           </Notice>
+        ) : fundedCurrencies.size === 0 ? (
+          <Notice tone="info">There is nothing to withdraw yet.</Notice>
+        ) : payable.length === 0 ? (
+          <Notice tone="warning">
+            Your balance is in {[...fundedCurrencies].join(", ")}, but none of your verified bank accounts is.
+            Add an account in that currency. <Link href="/profile/bank-accounts" className="underline">Bank accounts</Link>
+          </Notice>
         ) : (
           <WithdrawalRequestForm idempotencyKey={crypto.randomUUID()}
-            accounts={verified.map((a) => ({
+            accounts={payable.map((a) => ({
               value: a.id,
               label: `${a.bankName} ${a.accountNumberMasked} (${a.currency})${a.primary ? " · primary" : ""}`,
             }))} />

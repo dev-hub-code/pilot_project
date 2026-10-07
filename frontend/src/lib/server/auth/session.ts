@@ -31,14 +31,15 @@ export async function requireStaff(): Promise<Session> {
 
 /**
  * Calls the backend as the signed-in user. A 401 means the session was revoked server-side
- * (logout elsewhere, password change, role change), so the user is sent to sign in again.
+ * (logout elsewhere, password change, role change), so the user is sent to sign in again -
+ * except INVALID_CREDENTIALS, which is a wrong password re-entered by a signed-in user.
  */
 export async function authFetch<T>(path: string, init: BackendRequestInit = {}): Promise<T> {
   const headersWithAuth = await authorizedHeaders(init.headers);
   try {
     return await backendFetch<T>(path, { ...init, headers: headersWithAuth });
   } catch (error) {
-    if (error instanceof BackendError && error.status === 401) redirect("/session-expired");
+    if (sessionEnded(error)) redirect("/session-expired");
     throw error;
   }
 }
@@ -49,9 +50,13 @@ export async function authRequest(path: string, init: BackendRequestInit = {}): 
   try {
     return await backendRequest(path, { ...init, headers: headersWithAuth });
   } catch (error) {
-    if (error instanceof BackendError && error.status === 401) redirect("/session-expired");
+    if (sessionEnded(error)) redirect("/session-expired");
     throw error;
   }
+}
+
+function sessionEnded(error: unknown): boolean {
+  return error instanceof BackendError && error.status === 401 && error.apiError?.code !== "INVALID_CREDENTIALS";
 }
 
 async function authorizedHeaders(base: HeadersInit | undefined): Promise<Headers> {

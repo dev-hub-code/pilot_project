@@ -34,7 +34,9 @@ export async function backendFetch<T>(path: string, init: BackendRequestInit = {
   if (response.status === 204) {
     return undefined as T;
   }
-  return (await response.json()) as T;
+  // Some endpoints answer 201/202 with no body (e.g. the public interest form).
+  const body = await response.text();
+  return (body ? JSON.parse(body) : undefined) as T;
 }
 
 /** Like {@link backendFetch} but returns the raw response, e.g. for streaming files. */

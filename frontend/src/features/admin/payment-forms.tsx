@@ -19,7 +19,10 @@ export function ConfirmTransferForm({ paymentId, amountDue, currency }: { paymen
         <TextField id={`amt-${paymentId}`} label={`Amount received (${currency})`} name="amountReceived" inputMode="decimal"
           defaultValue={state.values?.amountReceived} placeholder={amountDue} error={e.amountReceived} />
       </div>
-      <SubmitButton variant="quiet" confirm={`Record that ${amountDue} ${currency} arrived? This confirms the order.`}>
+      <SubmitButton variant="quiet" confirm={(form) => {
+        const entered = String(new FormData(form).get("amountReceived") ?? "").trim();
+        return `Record that ${entered || amountDue} ${currency} arrived? This confirms the order.`;
+      }}>
         Record transfer
       </SubmitButton>
     </form>

@@ -55,6 +55,8 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
     ])
     : [null, null];
   const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
+  // Classification only means something for investors; unknown (no ROLE_VIEW) keeps the form.
+  const isInvestorAccount = authorities?.permissions.includes(Permission.INVESTOR_PORTAL) ?? true;
   const { summary, profile } = user;
   const isSelf = session.userId === id;
 
@@ -198,7 +200,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             </Card>
           )}
 
-          {can(Permission.INVESTOR_CLASSIFY) && !isSelf && (
+          {can(Permission.INVESTOR_CLASSIFY) && !isSelf && isInvestorAccount && (
             <Card title="Investor classification" description="HNI requires approved KYC.">
               <ClassifyForm action={classifyInvestorAction.bind(null, id)} current={summary.investorType} />
               {user.classificationHistory.length > 0 && (

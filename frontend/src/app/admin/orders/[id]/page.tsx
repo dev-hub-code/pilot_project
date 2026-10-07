@@ -12,6 +12,7 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
+import type { AdminUserDetail } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 
@@ -34,6 +35,9 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
     throw error;
   }
   const ownOrder = order.userId === session.userId;
+  const investor = can(Permission.USER_VIEW)
+    ? await authFetch<AdminUserDetail>(`/api/v1/admin/users/${order.userId}`).then((u) => u.summary).catch(() => null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -42,8 +46,10 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <h1 className="font-mono text-3xl font-semibold tracking-tight">{order.orderNumber}</h1>
           <p className="text-sm text-muted">
             Placed {formatDateTime(order.createdAt)} by{" "}
-            {can(Permission.USER_VIEW)
-              ? <Link href={`/admin/users/${order.userId}`} className="font-mono text-gold-text hover:underline">{order.userId}</Link>
+            {investor
+              ? <Link href={`/admin/users/${order.userId}`} className="text-gold-text hover:underline">
+                {investor.firstName} {investor.lastName} ({investor.email})
+              </Link>
               : <span className="font-mono">{order.userId}</span>}
           </p>
         </div>

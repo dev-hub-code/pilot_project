@@ -35,15 +35,18 @@ export const bankAccountSchema = z.object({
   routingCode: z.string().trim().regex(/^[A-Za-z0-9 -]{4,20}$/, "Enter the SWIFT/BIC, IFSC, routing or sort code"),
 });
 
+/** Today as YYYY-MM-DD (UTC), comparable with ISO date strings. */
+const today = () => new Date().toISOString().slice(0, 10);
+
 export const kycSchema = z.object({
   legalFirstName: z.string().trim().min(1, "As shown on your document").max(100),
   legalLastName: z.string().trim().min(1, "As shown on your document").max(100),
-  dateOfBirth: z.iso.date("Enter a valid date"),
+  dateOfBirth: z.iso.date("Enter a valid date").refine((d) => d < today(), "Must be in the past"),
   nationality: country,
   documentType: z.enum(["PASSPORT", "NATIONAL_ID", "DRIVING_LICENSE"], "Select a document type"),
   documentNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{4,30}$/, "4–30 letters, digits, spaces or dashes"),
   documentIssuingCountry: country,
-  documentExpiryDate: z.iso.date("Enter a valid date"),
+  documentExpiryDate: z.iso.date("Enter a valid date").refine((d) => d > today(), "This document has expired"),
 });
 
 export const reasonSchema = z.object({

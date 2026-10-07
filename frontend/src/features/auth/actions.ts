@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { BackendError, backendFetch } from "@/lib/server/backend-client";
 import {
   type AuthTokens,
@@ -32,6 +32,7 @@ export async function loginAction(_previous: FormState, formData: FormData): Pro
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
 
+  let home = "/dashboard";
   try {
     const tokens = await backendFetch<AuthTokens>("/api/v1/auth/login", {
       method: "POST",
@@ -39,10 +40,12 @@ export async function loginAction(_previous: FormState, formData: FormData): Pro
       headers: forwardedClientHeaders(await headers()),
     });
     writeSessionCookies(await cookies(), tokens);
+    const claims = await verifyAccessToken(tokens.accessToken);
+    if (claims && hasStaffAccess(claims.permissions)) home = "/admin";
   } catch (error) {
     return { error: describe(error), values };
   }
-  redirect(safeRedirectPath(formData.get("next")));
+  redirect(safeRedirectPath(formData.get("next"), home));
 }
 
 export async function registerAction(_previous: FormState, formData: FormData): Promise<FormState> {
@@ -99,6 +102,8 @@ function describe(error: unknown): string {
     if (code === "VALIDATION_FAILED" && error.apiError?.message) return error.apiError.message;
     return `Something went wrong (reference ${error.correlationId}).`;
   }
+  // Next.js navigation (e.g. a redirect for an ended session) is signalled by throwing; never swallow it.
+  unstable_rethrow(error);
   console.error("Backend unreachable", error);
   return "The service is temporarily unavailable. Please try again.";
 }
