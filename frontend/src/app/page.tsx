@@ -5,6 +5,7 @@ import { Eyebrow } from "@/components/brand/eyebrow";
 import { Logo } from "@/components/brand/logo";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { InterestForm } from "@/features/leads/interest-form";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
 
 const stateTone: Record<ServiceState, StatusTone> = {
@@ -17,6 +18,7 @@ const NAV = [
   { href: "#about", label: "About" },
   { href: "#how-it-works", label: "How It Works" },
   { href: "#investors", label: "Investors" },
+  { href: "#contact", label: "Contact" },
   { href: "/login", label: "Sign In" },
 ];
 
@@ -140,6 +142,19 @@ export default async function Home() {
               asset and 100% of its rental income.
             </p>
           </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- contact */}
+        <section id="contact" className="relative grid scroll-mt-8 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14">
+          <div className="space-y-5">
+            <Eyebrow>Talk To Us</Eyebrow>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>
+            <p className="max-w-md text-sm leading-relaxed text-muted">
+              Tell us a little about what you are looking for and an investment specialist will get back to you,
+              whether you are considering a shared container or owning one outright.
+            </p>
+          </div>
+          <InterestForm />
         </section>
 
         {/* ----------------------------------------------------------------- footer */}

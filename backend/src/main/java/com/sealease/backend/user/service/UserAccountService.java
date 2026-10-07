@@ -9,8 +9,10 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.User;
 import com.sealease.backend.user.entity.UserStatus;
+import com.sealease.backend.user.event.UserRegisteredEvent;
 import com.sealease.backend.user.repository.UserRepository;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +41,7 @@ public class UserAccountService {
 	private final PasswordPolicy passwordPolicy;
 	private final LockoutProperties lockout;
 	private final AuditService audit;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
 	/**
@@ -48,13 +51,15 @@ public class UserAccountService {
 	private final String dummyHash;
 
 	public UserAccountService(UserRepository users, UserProfileService profiles, PasswordEncoder passwordEncoder,
-			PasswordPolicy passwordPolicy, LockoutProperties lockout, AuditService audit, Clock clock) {
+			PasswordPolicy passwordPolicy, LockoutProperties lockout, AuditService audit, ApplicationEventPublisher events,
+			Clock clock) {
 		this.users = users;
 		this.profiles = profiles;
 		this.passwordEncoder = passwordEncoder;
 		this.passwordPolicy = passwordPolicy;
 		this.lockout = lockout;
 		this.audit = audit;
+		this.events = events;
 		this.clock = clock;
 		this.dummyHash = passwordEncoder.encode(UUID.randomUUID().toString());
 	}
@@ -71,6 +76,7 @@ public class UserAccountService {
 		profiles.createFor(user);
 		audit.record(AuditRecord.of(user.getId(), AuditAction.USER_REGISTERED, ENTITY, user.getId())
 			.withNewValue(Map.of("email", normalizedEmail, "status", user.getStatus())));
+		events.publishEvent(new UserRegisteredEvent(user.getId(), normalizedEmail));
 		return UserAccount.from(user);
 	}
 

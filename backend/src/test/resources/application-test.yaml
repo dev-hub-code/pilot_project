@@ -24,6 +24,9 @@ app:
       login-per-ip: { requests: 10000, window: 1m }
       register-per-ip: { requests: 10000, window: 1m }
       refresh-per-ip: { requests: 10000, window: 1m }
+  crm:
+    # Integration tests submit the interest form from one address.
+    public-form-per-ip: { requests: 10000, window: 1m }
   kafka:
     create-topics: true
     partitions: 1

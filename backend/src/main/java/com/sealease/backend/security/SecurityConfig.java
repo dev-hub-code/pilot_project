@@ -42,6 +42,7 @@ public class SecurityConfig {
 			"/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/jwks" };
 	/** Gateways cannot sign in; webhook deliveries are authenticated by their signature instead. */
 	private static final String PAYMENT_WEBHOOKS = "/api/v1/payments/webhooks/*";
+	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 
 	@Bean
@@ -72,6 +73,7 @@ public class SecurityConfig {
 				auth.requestMatchers(PUBLIC_ACTUATOR).permitAll();
 				auth.requestMatchers(PUBLIC_AUTH).permitAll();
 				auth.requestMatchers(HttpMethod.POST, PAYMENT_WEBHOOKS).permitAll();
+				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
 				if (apiDocsEnabled) {
 					auth.requestMatchers(API_DOCS).permitAll();
 				}

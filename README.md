@@ -131,9 +131,15 @@ Modules (Phase 8):
 |--------------|----------------------------------------------------------------------------------|
 | `withdrawal` | Requests that reserve the balance, single/dual approval, payout batches per currency, bank file export, reconciliation |
 
+Modules (Phase 9):
+
+| Module | Responsibility                                                                         |
+|--------|----------------------------------------------------------------------------------------|
+| `crm`  | Leads from staff and the public interest form, fixed pipeline, activity log, assignment, conversion to investors |
+
 Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
 `earning` → `investment`, `ledger`; `referral` → `earning` (event), `ledger`, `user`; `auth` → `referral`;
-`withdrawal` → `ledger`, `bankaccount`, `user`;
+`withdrawal` → `ledger`, `bankaccount`, `user`; `crm` → `user`, `role`, `order` (event);
 `marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
@@ -431,6 +437,36 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 | `GET /api/v1/admin/withdrawal-batches/{id}/file`               | `WITHDRAWAL_PROCESS` | Bank payment file (CSV, audited)            |
 | `POST /…/withdrawal-batches/{id}/items/{wid}/paid` · `/failed`, `/{id}/settle` | `WITHDRAWAL_PROCESS` | Reconcile             |
 
+### Sales CRM
+
+- **Leads.** Staff enter leads (`LEAD_CREATE`), with an email or a phone number. The landing page's *Talk to us* form
+  posts through a Next.js server action to `POST /api/v1/public/leads`. That endpoint is unauthenticated and requires consent. It is
+  rate-limited per client IP (`app.crm.public-form-per-ip`, default 5/hour) and protected by a honeypot field, and it always answers
+  `202`, so it reveals nothing. There is one open lead per email (partial unique index). A repeat enquiry is logged on the existing lead.
+- **Pipeline.** `NEW → CONTACTED → QUALIFIED → PROPOSAL → WON / LOST`. Lost needs a reason and can be reopened; won is
+  final. Every stage change, assignment, note, call, email and meeting goes to an append-only activity log. Reps set
+  follow-up dates, and *Follow-up due* lists the overdue ones.
+- **Visibility.** Holders of `LEAD_ASSIGN` (managers) see and change everything, and assign leads to anyone holding
+  `LEAD_UPDATE`. Other `LEAD_VIEW` holders see their own and unassigned leads, change only their own, and claim
+  unassigned ones. Leads outside a viewer's scope answer 404.
+- **Conversion.** A lead is linked to an account when its email registers (`UserRegisteredEvent`) or when
+  it is created for an existing account. That account's first confirmed investment (`OrderConfirmedEvent`) marks the lead
+  WON with the amount. Both listeners run *after* commit, in their own transaction, and log rather than throw, so the
+  CRM can never fail a sign-up or a payment.
+- **Events.** `lead.created` and `lead.updated` (stage, assignment, registration, won). Payloads carry ids and stages,
+  never contact details.
+
+### Sales CRM API
+
+| Method & path                                         | Access         | Purpose                                        |
+|-------------------------------------------------------|----------------|------------------------------------------------|
+| `POST /api/v1/public/leads`                           | public         | Website interest form (consent, honeypot, rate-limited) |
+| `GET /api/v1/admin/leads` (`q`, `stage`, `source`, `owner=me·unassigned·{id}`, `due`) | `LEAD_VIEW` | Leads in the viewer's scope |
+| `GET /api/v1/admin/leads/pipeline`, `/{id}`           | `LEAD_VIEW`    | Counts and value per stage; detail with activity |
+| `POST /api/v1/admin/leads`                            | `LEAD_CREATE`  | Create (owned by the creator, or assigned by a manager) |
+| `PUT /…/leads/{id}`, `POST /…/{id}/stage`, `/activities`, `/claim` | `LEAD_UPDATE` | Edit, move, log, claim        |
+| `GET /…/leads/assignees`, `POST /…/{id}/assign`       | `LEAD_ASSIGN`  | Staff who can work leads; (re)assign           |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -441,4 +477,5 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 6. ✅ Earnings — leases, rental income, ownership distribution, double-entry ledger
 7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rental income, downline tree
 8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
-9. Sales CRM · 10. Support · 11. Reporting · 12. Production hardening
+9. ✅ Sales CRM — leads from staff and the website, pipeline, activity log, assignment, conversion to investors
+10. Support · 11. Reporting · 12. Production hardening

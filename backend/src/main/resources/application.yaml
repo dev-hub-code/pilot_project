@@ -157,6 +157,9 @@ app:
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+  crm:
+    # Public interest form: submissions accepted per client IP.
+    public-form-per-ip: { requests: 5, window: 1h }
   withdrawals:
     # In the withdrawal's own currency. Above the threshold a second, different approver is needed.
     minimum-amount: ${APP_WITHDRAWAL_MINIMUM:50}

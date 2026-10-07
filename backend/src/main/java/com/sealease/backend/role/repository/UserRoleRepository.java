@@ -18,6 +18,14 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> 
 	@Query("select distinct ur.id.userId from UserRole ur where ur.id.roleId = :roleId")
 	List<UUID> findUserIdsByRoleId(@Param("roleId") UUID roleId);
 
+	@Query(value = """
+			SELECT DISTINCT ur.user_id FROM user_roles ur
+			JOIN role_permissions rp ON rp.role_id = ur.role_id
+			JOIN permissions p ON p.id = rp.permission_id
+			WHERE p.code = :code
+			""", nativeQuery = true)
+	List<UUID> findUserIdsWithPermission(@Param("code") String permissionCode);
+
 	boolean existsByIdRoleId(UUID roleId);
 
 	@Query("select count(ur) > 0 from UserRole ur where ur.role.name = :roleName")

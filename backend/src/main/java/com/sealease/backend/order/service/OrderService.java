@@ -27,6 +27,7 @@ import com.sealease.backend.order.entity.InvestmentOrder;
 import com.sealease.backend.order.entity.OrderItem;
 import com.sealease.backend.order.entity.OrderStatus;
 import com.sealease.backend.order.event.OrderClosedEvent;
+import com.sealease.backend.order.event.OrderConfirmedEvent;
 import com.sealease.backend.order.repository.OrderItemRepository;
 import com.sealease.backend.order.repository.OrderRepository;
 import com.sealease.backend.outbox.DomainEvent;
@@ -278,6 +279,7 @@ public class OrderService {
 		audit.record(AuditRecord.of(null, AuditAction.ORDER_CONFIRMED, ENTITY, orderId)
 			.withNewValue(Map.of("paymentId", paymentId.toString(), "holdings", confirmed.size())));
 		Money total = order.total();
+		events.publishEvent(new OrderConfirmedEvent(orderId, order.getOrderNumber(), order.getUserId(), total));
 		outbox.publish(DomainEvent.of(KafkaTopics.INVESTMENT_CONFIRMED, "InvestmentConfirmed", ENTITY, orderId,
 				Map.of("orderId", orderId.toString(), "orderNumber", order.getOrderNumber(),
 						"userId", order.getUserId().toString(), "paymentId", paymentId.toString(),
