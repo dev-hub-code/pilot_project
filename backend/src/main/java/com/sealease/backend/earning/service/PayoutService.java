@@ -163,7 +163,7 @@ public class PayoutService {
 						"capital", installment.capital().amount().toPlainString(),
 						"currency", installment.rent().currency().getCurrencyCode())));
 		events.publishEvent(new PayoutPaidEvent(installmentId, installment.getUserId(), installment.getProductId(),
-				label.productCode(), installment.getInstallmentNumber(), installment.rent()));
+				label.productCode(), installment.getInstallmentNumber(), label.amount()));
 
 		if (!installments.existsByHoldingIdAndStatus(installment.getHoldingId(), PayoutStatus.SCHEDULED)) {
 			holdings.mature(installment.getHoldingId(), now);

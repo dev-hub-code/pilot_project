@@ -111,7 +111,7 @@ public class HoldingService {
 		for (Holding h : found) {
 			OfferingTerms plan = plans.get(h.getProductId());
 			labels.put(h.getId(), new HoldingLabel(h.getId(), plan.code(), plan.terms().title(),
-					boxes.get(h.getContainerId()).containerNumber(), h.getTenureMonths()));
+					boxes.get(h.getContainerId()).containerNumber(), h.getTenureMonths(), h.amount()));
 		}
 		return labels;
 	}

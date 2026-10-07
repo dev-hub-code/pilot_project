@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.Currency;
 import java.util.UUID;
 
-/** One upline's commission on the rent part of one monthly payout to a referred investor. Append-only. */
+/** One upline's monthly commission on a referred investor's investment, paid with one of their payouts. Append-only. */
 @Entity
 @Immutable
 @Table(name = "referral_earnings")

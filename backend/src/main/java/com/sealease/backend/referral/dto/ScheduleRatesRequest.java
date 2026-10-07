@@ -12,7 +12,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * New commission rates for levels 1-4, in percent of the referred investor's gross rental share.
+ * New commission rates for levels 1-4, in percent of the referred investor's investment,
+ * paid every month of the tenure.
  *
  * @param effectiveFrom when they take effect; omitted means immediately. Never in the past.
  */

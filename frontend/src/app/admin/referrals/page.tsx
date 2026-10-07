@@ -35,7 +35,7 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
   return (
     <div className="space-y-6">
       <PageHeader title="Referrals"
-        description="Commission rates for four referral levels, as a percentage of each referred investor's gross rental share." />
+        description="Commission rates for four referral levels, as a percentage of each referred investor's investment, paid every month of its tenure." />
 
       <section className="space-y-3" aria-label="Rate versions">
         <h2 className="text-lg font-semibold tracking-tight">Rates</h2>
@@ -59,7 +59,7 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
 
       {canManage && (
         <Card title="Schedule new rates"
-          description="Rates in force are never edited: new rates start now or later and apply to rent distributed from then on.">
+          description="Rates in force are never edited: new rates start now or later and apply to payouts made from then on.">
           <ScheduleRatesForm current={current?.percents ?? []} />
         </Card>
       )}
@@ -68,10 +68,10 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
         <section className="space-y-3" aria-label="Commissions">
           <h2 className="text-lg font-semibold tracking-tight">Commissions paid</h2>
           {commissions.content.length === 0 ? (
-            <EmptyState title="No commissions yet" description="They are paid when rent from referred investors is distributed." />
+            <EmptyState title="No commissions yet" description="They are paid monthly, alongside each payout to a referred investor." />
           ) : (
             <>
-              <DataTable columns={["Paid", "To", "From", "Level", "Rental", "Base", "Rate", "Commission"]}>
+              <DataTable columns={["Paid", "To", "From", "Level", "Plan", "Investment", "Rate", "Commission"]}>
                 {commissions.content.map((c) => (
                   <tr key={c.id}>
                     <Cell className="text-muted">{formatDateTime(c.paidAt)}</Cell>

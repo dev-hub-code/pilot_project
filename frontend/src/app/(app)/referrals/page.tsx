@@ -11,6 +11,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Downline, ReferralEarning, ReferralMonth, ReferralOverview } from "@/types/referral";
 import { formatDate, formatMonth } from "@/utils/format";
+import { CURRENCY } from "@/lib/currency";
 import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Referrals" };
@@ -23,12 +24,17 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
     authFetch<ReferralMonth[]>("/api/v1/referrals/monthly"),
     authFetch<PageResponse<ReferralEarning>>(`/api/v1/referrals/earnings?page=${page}&size=20`),
   ]);
+  // Worked example from the level-1 rate in force, which admins set.
+  const level1 = overview.levels.find((l) => l.level === 1);
+  const example = level1 && level1.ratePercent > 0
+    ? `${formatPercent(level1.ratePercent, level1.ratePercent % 1 === 0 ? 0 : 2)} of ${formatMoney({ amount: "100000", currency: CURRENCY })} is ${formatMoney({ amount: (1000 * level1.ratePercent).toFixed(2), currency: CURRENCY })} a month at level 1`
+    : null;
   const earned = overview.totalEarned.length === 0 ? "—" : overview.totalEarned.map((m) => formatMoney(m)).join(" · ");
 
   return (
     <div className="space-y-6">
       <PageHeader title="Referrals"
-        description="Invite investors. You earn a share of the rent paid to them, and to the people they invite, four levels deep." />
+        description="Invite investors. Every month of their lease you earn a percentage of what they invested, and of what the people they invite invest, four levels deep." />
       {!overview.eligible && overview.ineligibleReason && (
         <Notice tone="warning">{overview.ineligibleReason}. Until then, commissions on your referrals are not paid to you.</Notice>
       )}
@@ -54,7 +60,7 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
         ))}
       </section>
       <p className="text-xs text-muted">
-        Rates are a percentage of each referred investor&apos;s rental share before fees, paid by SeaLease. Your referrals&apos;
+        Each level&apos;s rate is a percentage of the referred investor&apos;s investment, paid to you every month of its tenure by SeaLease{example ? ` (e.g. ${example})` : ""}. Your referrals&apos;
         own income is never reduced. Rates in force since {formatDate(overview.ratesEffectiveFrom)}.
       </p>
 
@@ -92,10 +98,10 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Commission history</h2>
         {history.content.length === 0 ? (
-          <p className="text-sm text-muted">Commission is paid each time rent from your referrals&apos; containers is distributed.</p>
+          <p className="text-sm text-muted">Commission is paid every month, alongside each payout on your referrals&apos; containers.</p>
         ) : (
           <>
-            <DataTable columns={["Paid", "From", "Level", "Rental", "Their share", "Rate", "Commission"]}>
+            <DataTable columns={["Paid", "From", "Level", "Plan", "Their investment", "Rate", "Commission"]}>
               {history.content.map((e) => (
                 <tr key={e.id} className="hover:bg-background">
                   <Cell className="text-muted">{formatDate(e.paidAt)}</Cell>

@@ -30,9 +30,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Pays referral commissions when a monthly payout is credited, in the payout's transaction: the rent
- * part of a referred investor's payout earns their uplines (levels 1-4) the rates in force (the
- * capital part, being the investor's own money, earns nothing). The platform
+ * Pays referral commissions when a monthly payout is credited, in the payout's transaction: each
+ * month of the tenure, a referred investor's investment in the container earns their uplines
+ * (levels 1-4) the rates in force, which admins set - e.g. at a 2% level-1 rate, ₹1,00,000 earns ₹2,000 a month. The platform
  * pays (referral expense); the investor's own earnings are untouched. An upline who is not active
  * or not verified forfeits that level's commission - it is not passed further up.
  */
@@ -64,7 +64,7 @@ public class ReferralCommissionService {
 	@EventListener
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void onPayoutPaid(PayoutPaidEvent event) {
-		if (!event.rent().isPositive()) {
+		if (!event.invested().isPositive()) {
 			return;
 		}
 		Instant now = clock.instant();
@@ -72,7 +72,7 @@ public class ReferralCommissionService {
 		List<ReferralEarning> commissions = new ArrayList<>();
 		int forfeited = 0;
 		for (Upline upline : referrals.uplines(event.userId())) {
-			Money amount = version.commission(upline.level(), event.rent());
+			Money amount = version.commission(upline.level(), event.invested());
 			if (!amount.isPositive()) {
 				continue;
 			}
@@ -81,7 +81,7 @@ public class ReferralCommissionService {
 				continue;
 			}
 			commissions.add(new ReferralEarning(event.installmentId(), event.userId(), upline.userId(), event.productId(),
-					event.installmentNumber(), upline.level(), event.rent(), version.percentFor(upline.level()), amount,
+					event.installmentNumber(), upline.level(), event.invested(), version.percentFor(upline.level()), amount,
 					version.getId(), now));
 		}
 		if (commissions.isEmpty()) {
@@ -95,7 +95,7 @@ public class ReferralCommissionService {
 		postings.add(Posting.debit(AccountType.PLATFORM_REFERRAL_EXPENSE, null, total));
 		perBeneficiary.forEach((userId, amount) -> postings.add(Posting.credit(AccountType.INVESTOR_EARNINGS, userId, amount)));
 		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.installmentId().toString(),
-				"Referral commissions on rent %s payout %d".formatted(event.productCode(), event.installmentNumber()),
+				"Referral commissions on %s payout %d".formatted(event.productCode(), event.installmentNumber()),
 				null, postings);
 
 		List<ReferralEarning> saved = earnings.saveAll(commissions);

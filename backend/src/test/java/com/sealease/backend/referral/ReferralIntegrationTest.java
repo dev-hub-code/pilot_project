@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Referral codes, the four-level hierarchy, commissions on the rent paid to referred investors, and rate versions. */
+/** Referral codes, the four-level hierarchy, monthly commissions on referred investors' investments, and rate versions. */
 @IntegrationTest
 class ReferralIntegrationTest {
 
@@ -90,7 +90,7 @@ class ReferralIntegrationTest {
 	// ------------------------------------------------------------------------ commissions
 
 	@Test
-	void rentEarnsFourLevelsOfUplinesAndIneligibleUplinesForfeit() throws Exception {
+	void investmentsEarnFourLevelsOfUplinesMonthlyAndIneligibleUplinesForfeit() throws Exception {
 		// top → l4 → l3 → l2 → l1 → investor: "top" is five levels up and earns nothing.
 		Account top = investors.approvedInvestor();
 		Account l4 = investors.approve(api.register(codeOf(top)));
@@ -103,14 +103,14 @@ class ReferralIntegrationTest {
 		String orderId = investors.invest(investor, offerings.plan(1), 1);
 		String receipt = payFirstPayout(orderId);
 
-		// Commission is on the rent (₹1,000.00), not the capital, paid by the platform: 2% / 1% / – / 0.25%.
-		earned(l1).andExpect(jsonPath("$.totalEarned[0].amount").value("20.00"));
-		earned(l2).andExpect(jsonPath("$.totalEarned[0].amount").value("10.00"));
+		// Commission is on the investment (₹50,000.00), every month, paid by the platform: 2% / 1% / – / 0.25%.
+		earned(l1).andExpect(jsonPath("$.totalEarned[0].amount").value("1000.00"));
+		earned(l2).andExpect(jsonPath("$.totalEarned[0].amount").value("500.00"));
 		earned(l3).andExpect(jsonPath("$.totalEarned.length()").value(0));
-		earned(l4).andExpect(jsonPath("$.totalEarned[0].amount").value("2.50"));
+		earned(l4).andExpect(jsonPath("$.totalEarned[0].amount").value("125.00"));
 		earned(top).andExpect(jsonPath("$.totalEarned.length()").value(0));
-		balance(l1).andExpect(jsonPath("$.balances[0].amount").value("20.00"))
-			.andExpect(jsonPath("$.referralEarned[0].amount").value("20.00"));
+		balance(l1).andExpect(jsonPath("$.balances[0].amount").value("1000.00"))
+			.andExpect(jsonPath("$.referralEarned[0].amount").value("1000.00"));
 		// The referred investor keeps their full payout.
 		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("4125.00"));
 
@@ -118,8 +118,8 @@ class ReferralIntegrationTest {
 			.andExpect(jsonPath("$.content[0].level").value(2))
 			.andExpect(jsonPath("$.content[0].sourceName").value("Test I."))
 			.andExpect(jsonPath("$.content[0].sourceUserId").doesNotExist())
-			.andExpect(jsonPath("$.content[0].base.amount").value("1000.00"))
-			.andExpect(jsonPath("$.content[0].amount.amount").value("10.00"));
+			.andExpect(jsonPath("$.content[0].base.amount").value("50000.00"))
+			.andExpect(jsonPath("$.content[0].amount.amount").value("500.00"));
 
 		// Each month's commission, split by level.
 		mvc.perform(get("/api/v1/referrals/monthly").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
@@ -127,8 +127,8 @@ class ReferralIntegrationTest {
 			.andExpect(jsonPath("$[0].month").value(matchesPattern("\\d{4}-\\d{2}")))
 			.andExpect(jsonPath("$[0].levels.length()").value(4))
 			.andExpect(jsonPath("$[0].levels[0].amount").value("0.00"))
-			.andExpect(jsonPath("$[0].levels[3].amount").value("2.50"))
-			.andExpect(jsonPath("$[0].total.amount").value("2.50"));
+			.andExpect(jsonPath("$[0].levels[3].amount").value("125.00"))
+			.andExpect(jsonPath("$[0].total.amount").value("125.00"));
 		mvc.perform(get("/api/v1/referrals/monthly").header(HttpHeaders.AUTHORIZATION, l3.bearer()))
 			.andExpect(jsonPath("$.length()").value(0));
 
@@ -141,7 +141,7 @@ class ReferralIntegrationTest {
 		List<Integer> levels = JsonPath.read(downline, "$.members[*].level");
 		assertThat(levels).containsExactly(1, 2, 3, 4);
 		List<String> earnedFromInvestor = JsonPath.read(downline, "$.members[?(@.level == 4)].earned[0].amount");
-		assertThat(earnedFromInvestor).containsExactly("2.50");
+		assertThat(earnedFromInvestor).containsExactly("125.00");
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'referral.earning.created' "
 				+ "AND payload ->> 'installmentId' = ?", Integer.class, receipt)).isEqualTo(3);
