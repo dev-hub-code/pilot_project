@@ -5,13 +5,12 @@ import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import {
-  classifyInvestorAction,
   reactivateUserAction,
   rejectBankAccountAction,
   suspendUserAction,
   verifyBankAccountAction,
 } from "@/features/admin/actions";
-import { ClassifyForm, ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
+import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -55,8 +54,6 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
     ])
     : [null, null];
   const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
-  // Classification only means something for investors; unknown (no ROLE_VIEW) keeps the form.
-  const isInvestorAccount = authorities?.permissions.includes(Permission.INVESTOR_PORTAL) ?? true;
   const { summary, profile } = user;
   const isSelf = session.userId === id;
 
@@ -66,7 +63,6 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
         <h1 className="text-2xl font-semibold tracking-tight">{summary.firstName} {summary.lastName}</h1>
         <StatusBadge tone={toneFor(summary.status)}>{humanize(summary.status)}</StatusBadge>
         <StatusBadge tone={toneFor(summary.kycStatus)}>KYC {humanize(summary.kycStatus).toLowerCase()}</StatusBadge>
-        <StatusBadge tone={toneFor(summary.investorType)}>{summary.investorType}</StatusBadge>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -121,7 +117,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="font-medium">
                           {account.bankName} <span className="font-mono">{account.accountNumberMasked}</span> ·{" "}
-                          {account.accountHolderName} · {account.currency}
+                          {account.accountHolderName}
                         </span>
                         <span className="flex gap-2">
                           {account.primary && <StatusBadge tone="success">Primary</StatusBadge>}
@@ -200,20 +196,6 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             </Card>
           )}
 
-          {can(Permission.INVESTOR_CLASSIFY) && !isSelf && isInvestorAccount && (
-            <Card title="Investor classification" description="HNI requires approved KYC.">
-              <ClassifyForm action={classifyInvestorAction.bind(null, id)} current={summary.investorType} />
-              {user.classificationHistory.length > 0 && (
-                <ul className="mt-4 space-y-2 border-t border-border pt-4 text-xs text-muted">
-                  {user.classificationHistory.map((c) => (
-                    <li key={c.decidedAt}>
-                      {formatDateTime(c.decidedAt)}: {c.previousType} → {c.newType} — {c.reason}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          )}
         </div>
       </div>
     </div>

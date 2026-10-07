@@ -4,21 +4,17 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Offering lifecycle: DRAFT → OPEN → FUNDED → ACTIVE → MATURED → CLOSED, or CANCELLED before any
- * capacity is taken. ACTIVE starts the lease (no more sales); MATURED follows the last rental
- * distribution. CLOSED is reserved for later phases.
+ * Plan lifecycle: DRAFT → OPEN (investors buy containers) → CLOSED (no more sales), or CANCELLED
+ * while still a draft. Containers already sold keep their lease and payout schedule either way.
  */
 public enum ProductStatus {
 	DRAFT,
 	OPEN,
-	FUNDED,
-	ACTIVE,
-	MATURED,
 	CLOSED,
 	CANCELLED;
 
 	/** Statuses investors can see in the marketplace. */
-	public static final Set<ProductStatus> LISTED = EnumSet.of(OPEN, FUNDED, ACTIVE, MATURED);
+	public static final Set<ProductStatus> LISTED = EnumSet.of(OPEN, CLOSED);
 
 	public boolean isListed() {
 		return LISTED.contains(this);

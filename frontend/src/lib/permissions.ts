@@ -7,13 +7,12 @@ export const Permission = {
   USER_VIEW: "USER_VIEW",
   USER_SUSPEND: "USER_SUSPEND",
   KYC_REVIEW: "KYC_REVIEW",
-  INVESTOR_CLASSIFY: "INVESTOR_CLASSIFY",
   BANK_ACCOUNT_VERIFY: "BANK_ACCOUNT_VERIFY",
   FINANCE_VIEW: "FINANCE_VIEW",
   FINANCE_ADJUST: "FINANCE_ADJUST",
   PAYMENT_CONFIRM: "PAYMENT_CONFIRM",
-  RENTAL_RECORD: "RENTAL_RECORD",
-  RENTAL_APPROVE: "RENTAL_APPROVE",
+  COMPANY_BANK_ACCOUNT_MANAGE: "COMPANY_BANK_ACCOUNT_MANAGE",
+  PAYOUT_PROCESS: "PAYOUT_PROCESS",
   REFERRAL_CONFIG_MANAGE: "REFERRAL_CONFIG_MANAGE",
   WITHDRAWAL_VIEW: "WITHDRAWAL_VIEW",
   WITHDRAWAL_APPROVE: "WITHDRAWAL_APPROVE",
@@ -37,6 +36,11 @@ export const Permission = {
 /** Any permission beyond the investor portal grants access to the staff console. */
 export function hasStaffAccess(permissions: readonly string[]): boolean {
   return permissions.some((p) => p !== Permission.INVESTOR_PORTAL);
+}
+
+/** An investor account (staff never hold the investor portal). */
+export function isInvestor(permissions: readonly string[]): boolean {
+  return permissions.includes(Permission.INVESTOR_PORTAL);
 }
 
 export function hasPermission(permissions: readonly string[], permission: string): boolean {

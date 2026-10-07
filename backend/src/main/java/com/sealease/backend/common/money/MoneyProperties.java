@@ -6,8 +6,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import java.util.Currency;
 
 /**
- * @param defaultCurrency platform settlement currency, used where a request does not carry one
+ * @param defaultCurrency the platform's single currency (INR): every amount on the platform is in it
  */
 @ConfigurationProperties(prefix = "app.money")
-public record MoneyProperties(@DefaultValue("USD") Currency defaultCurrency) {
+public record MoneyProperties(@DefaultValue("INR") Currency defaultCurrency) {
 }

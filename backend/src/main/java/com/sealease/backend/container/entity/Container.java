@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/** A physical shipping container that can back an investment offering. */
+/** A physical shipping container, which investors buy under a plan and lease out for its tenure. */
 @Entity
 @Table(name = "containers")
 public class Container extends BaseEntity {
@@ -63,6 +63,9 @@ public class Container extends BaseEntity {
 	@Column(name = "status_reason", length = 500)
 	private String statusReason;
 
+	@Column(name = "reserved_order_id")
+	private UUID reservedOrderId;
+
 	@Column(name = "created_by", nullable = false, updatable = false)
 	private UUID createdBy;
 
@@ -95,6 +98,43 @@ public class Container extends BaseEntity {
 	public void changeStatus(ContainerStatus status, String reason) {
 		this.status = status;
 		this.statusReason = reason;
+	}
+
+	/** Held for an order awaiting payment. */
+	public void reserve(UUID orderId) {
+		requireStatus(ContainerStatus.AVAILABLE);
+		this.status = ContainerStatus.RESERVED;
+		this.reservedOrderId = orderId;
+	}
+
+	/** The order lapsed or was cancelled: back to inventory. */
+	public void releaseReservation() {
+		requireStatus(ContainerStatus.RESERVED);
+		this.status = ContainerStatus.AVAILABLE;
+		this.reservedOrderId = null;
+	}
+
+	/** The order was paid: the container is allocated to the investor and leased. */
+	public void lease() {
+		requireStatus(ContainerStatus.RESERVED);
+		this.status = ContainerStatus.ON_LEASE;
+		this.reservedOrderId = null;
+	}
+
+	/** The lease ran its tenure: back to inventory. */
+	public void endLease() {
+		requireStatus(ContainerStatus.ON_LEASE);
+		this.status = ContainerStatus.AVAILABLE;
+	}
+
+	private void requireStatus(ContainerStatus expected) {
+		if (status != expected) {
+			throw new IllegalStateException("Container " + containerNumber + " is " + status + ", expected " + expected);
+		}
+	}
+
+	public UUID getReservedOrderId() {
+		return reservedOrderId;
 	}
 
 	public String getContainerNumber() {

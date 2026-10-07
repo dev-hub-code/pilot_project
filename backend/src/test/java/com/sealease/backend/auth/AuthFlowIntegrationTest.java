@@ -221,7 +221,7 @@ class AuthFlowIntegrationTest {
 		UUID investorId = userIdByEmail(email);
 		mvc.perform(put("/api/v1/admin/users/{id}/roles", investorId).header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"roles\":[\"INVESTOR\",\"" + roleName + "\"]}"))
+				.content("{\"roles\":[\"" + roleName + "\"]}"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.permissions").value(org.hamcrest.Matchers.hasItem("AUDIT_VIEW")));
 
@@ -248,7 +248,7 @@ class AuthFlowIntegrationTest {
 		UUID victimId = userIdByEmail(victimEmail);
 
 		// ADMIN lacks SYSTEM_SETTINGS_MANAGE etc., so cannot hand out SUPER_ADMIN...
-		assignRoles(admin, victimId, "[\"INVESTOR\",\"SUPER_ADMIN\"]")
+		assignRoles(admin, victimId, "[\"SUPER_ADMIN\"]")
 			.andExpect(status().isForbidden());
 		// ...nor change their own roles...
 		assignRoles(admin, adminId, "[\"SUPER_ADMIN\"]").andExpect(status().isForbidden());
@@ -258,7 +258,7 @@ class AuthFlowIntegrationTest {
 				.content("{\"name\":\"SNEAKY\",\"description\":\"x\",\"permissions\":[\"SYSTEM_SETTINGS_MANAGE\"]}"))
 			.andExpect(status().isForbidden());
 		// ...but can grant roles within their own authority.
-		assignRoles(admin, victimId, "[\"INVESTOR\",\"SUPPORT\"]").andExpect(status().isOk());
+		assignRoles(admin, victimId, "[\"SUPPORT\"]").andExpect(status().isOk());
 	}
 
 	@Test

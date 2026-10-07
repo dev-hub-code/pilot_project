@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Phase 3: profiles, KYC, bank accounts, suspension and classification against PostgreSQL. */
+/** Phase 3: profiles, KYC, bank accounts and suspension against PostgreSQL. */
 @IntegrationTest
 class UserManagementIntegrationTest {
 
@@ -62,7 +62,6 @@ class UserManagementIntegrationTest {
 		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"))
-			.andExpect(jsonPath("$.investorType").value("RETAIL"))
 			.andExpect(jsonPath("$.twoFactorEnabled").value(false));
 
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
@@ -215,8 +214,10 @@ class UserManagementIntegrationTest {
 
 	@Test
 	void reviewersCannotApproveTheirOwnKyc() throws Exception {
-		Account reviewer = api.staff("INVESTOR", "ADMINISTRATION");
-		String submissionId = JsonPath.read(submitValidKyc(reviewer).andReturn().getResponse().getContentAsString(), "$.id");
+		// An investor who submitted their own KYC and was later hired as a reviewer.
+		Account investor = api.register();
+		String submissionId = JsonPath.read(submitValidKyc(investor).andReturn().getResponse().getContentAsString(), "$.id");
+		Account reviewer = api.becomeStaff(investor, "ADMINISTRATION");
 		mvc.perform(post("/api/v1/admin/kyc/{id}/approve", submissionId).header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
 			.andExpect(status().isForbidden());
 	}
@@ -301,7 +302,7 @@ class UserManagementIntegrationTest {
 		addBank(finance, VALID_IBAN, "NWBKGB2L").andExpect(status().isForbidden());
 	}
 
-	// ------------------------------------------------------------ suspension & classification
+	// --------------------------------------------------------------------------- suspension
 
 	@Test
 	void suspensionEndsSessionsImmediatelyAndBlocksSignIn() throws Exception {
@@ -340,25 +341,6 @@ class UserManagementIntegrationTest {
 	}
 
 	@Test
-	void hniClassificationRequiresApprovedKycAndIsRecordedImmutably() throws Exception {
-		Account investor = api.register();
-		Account administration = api.staff("ADMINISTRATION");
-
-		classify(administration, investor, "HNI").andExpect(status().isUnprocessableContent());
-		approveKyc(investor);
-		classify(administration, investor, "HNI")
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.summary.investorType").value("HNI"))
-			.andExpect(jsonPath("$.classificationHistory[0].newType").value("HNI"))
-			.andExpect(jsonPath("$.classificationHistory[0].reason").value("Net worth verified"));
-		classify(administration, investor, "HNI").andExpect(status().isUnprocessableContent());
-
-		assertThatThrownBy(() -> jdbc.update("UPDATE investor_classifications SET new_type = 'RETAIL' WHERE user_id = ?",
-				investor.id()))
-			.hasMessageContaining("append-only");
-	}
-
-	@Test
 	void userDirectorySearchAndFilters() throws Exception {
 		Account investor = api.register();
 		Account support = api.staff("SUPPORT");
@@ -386,18 +368,11 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isOk());
 	}
 
-	private ResultActions classify(Account actor, Account target, String type) throws Exception {
-		return mvc.perform(post("/api/v1/admin/users/{id}/classification", target.id())
-			.header(HttpHeaders.AUTHORIZATION, actor.bearer())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"investorType\":\"" + type + "\",\"reason\":\"Net worth verified\"}"));
-	}
-
 	private ResultActions addBank(Account owner, String accountNumber, String routingCode) throws Exception {
 		return mvc.perform(post("/api/v1/users/me/bank-accounts").header(HttpHeaders.AUTHORIZATION, owner.bearer())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
-					{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"GB","currency":"GBP",
+					{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"GB","currency":"INR",
 					 "accountNumber":"%s","routingCode":"%s"}
 					""".formatted(accountNumber, routingCode)));
 	}

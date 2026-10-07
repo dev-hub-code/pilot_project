@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { hasStaffAccess } from "@/lib/permissions";
+import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 import { BackendError, backendFetch } from "@/lib/server/backend-client";
 import { type AuthTokens, cookieNames, writeSessionCookies } from "@/lib/server/auth/cookies";
 import { expiresWithin, verifyAccessToken } from "@/lib/server/auth/tokens";
@@ -10,6 +10,8 @@ const REFRESH_AHEAD_MS = 60_000;
 
 const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/admin"];
 const STAFF_PREFIXES = ["/admin"];
+/** The investor portal; staff accounts are never investors and are sent to the admin area instead. */
+const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/orders", "/cart", "/statements", "/profile/verification", "/profile/bank-accounts"];
 const GUEST_ONLY = ["/login", "/register"];
 /** Route handlers that send their own, stricter CSP (sandboxed file downloads). */
 const OWN_CSP = [
@@ -59,8 +61,11 @@ export async function proxy(request: NextRequest) {
     response = NextResponse.redirect(new URL("/login", request.url));
   } else if (session && matches(pathname, STAFF_PREFIXES) && !hasStaffAccess(session.permissions)) {
     response = NextResponse.redirect(new URL("/dashboard", request.url));
+  } else if (session && !isInvestor(session.permissions) && hasStaffAccess(session.permissions)
+    && matches(pathname, INVESTOR_PREFIXES)) {
+    response = NextResponse.redirect(new URL("/admin", request.url));
   } else if (session && matches(pathname, GUEST_ONLY)) {
-    response = NextResponse.redirect(new URL("/dashboard", request.url));
+    response = NextResponse.redirect(new URL(isInvestor(session.permissions) ? "/dashboard" : "/admin", request.url));
   } else if (OWN_CSP.some((pattern) => pattern.test(pathname))) {
     response = NextResponse.next({ request: { headers: new Headers(request.headers) } });
   } else {

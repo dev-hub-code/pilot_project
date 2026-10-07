@@ -1,30 +1,31 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { LogoutButton } from "@/features/auth/logout-button";
-import { Permission, hasPermission, hasStaffAccess } from "@/lib/permissions";
+import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 import { authFetch, type Session } from "@/lib/server/auth/session";
 
 export async function AppHeader({ session }: { session: Session }) {
   // The badge is a convenience: a failure here must never break the page.
   const unread = await authFetch<{ unread: number }>("/api/v1/notifications/unread-count").then((r) => r.unread, () => 0);
-  const investor = hasPermission(session.permissions, Permission.INVESTOR_PORTAL);
-  const links = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/marketplace", label: "Marketplace" },
-    ...(investor
-      ? [
-        { href: "/portfolio", label: "Portfolio" },
-        { href: "/earnings", label: "Earnings" },
-        { href: "/referrals", label: "Referrals" },
-        { href: "/withdrawals", label: "Withdrawals" },
-        { href: "/support", label: "Support" },
-        { href: "/orders", label: "Orders" },
-        { href: "/cart", label: "Cart" },
-      ]
-      : []),
-    { href: "/profile", label: "Profile" },
-    ...(hasStaffAccess(session.permissions) ? [{ href: "/admin", label: "Admin" }] : []),
-  ];
+  // An account is either an investor or staff; staff only see their profile and the admin area.
+  const investor = isInvestor(session.permissions);
+  const links = investor
+    ? [
+      { href: "/dashboard", label: "Dashboard" },
+      { href: "/marketplace", label: "Marketplace" },
+      { href: "/portfolio", label: "Portfolio" },
+      { href: "/earnings", label: "Earnings" },
+      { href: "/referrals", label: "Referrals" },
+      { href: "/withdrawals", label: "Withdrawals" },
+      { href: "/support", label: "Support" },
+      { href: "/orders", label: "Orders" },
+      { href: "/cart", label: "Cart" },
+      { href: "/profile", label: "Profile" },
+    ]
+    : [
+      ...(hasStaffAccess(session.permissions) ? [{ href: "/admin", label: "Admin" }] : []),
+      { href: "/profile", label: "Profile" },
+    ];
   const items = links.map((link) => (
     <li key={link.href}>
       <Link href={link.href} className="whitespace-nowrap text-muted transition-colors hover:text-foreground">
@@ -36,7 +37,7 @@ export async function AppHeader({ session }: { session: Session }) {
   return (
     <header className="border-b border-border bg-surface print:hidden">
       <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Logo href="/dashboard" compact />
+        <Logo href={investor ? "/dashboard" : "/admin"} compact />
         <div className="flex items-center gap-8">
           <nav aria-label="Main" className="hidden md:block">
             <ul className="flex items-center gap-6 text-sm">{items}</ul>

@@ -1,93 +1,65 @@
-/** Mirrors of the backend's Phase 6 DTOs (rental receipts, earnings and the ledger). */
+/** Mirrors of the backend's payout, earnings and ledger DTOs. */
 import type { Money } from "./marketplace";
 
-export type ReceiptStatus = "RECORDED" | "DISTRIBUTED" | "REJECTED";
+export type PayoutStatus = "SCHEDULED" | "PAID";
 
-export interface RentalReceipt {
+/** One monthly payout of one container: rent plus capital returned. */
+export interface Payout {
   id: string;
-  productId: string;
-  productCode: string;
-  productTitle: string;
-  periodNumber: number;
-  periodCount: number;
-  periodStartsOn: string;
-  /** Exclusive: the first day of the next period, when this period's rent fell due. */
-  periodEndsOn: string;
-  amount: Money;
-  expectedAmount: Money;
-  receivedOn: string;
-  externalReference: string;
-  note: string | null;
-  status: ReceiptStatus;
-  recordedBy: string;
-  decidedBy: string | null;
-  decidedAt: string | null;
-  rejectionReason: string | null;
-  managementFeePercent: number;
-  createdAt: string;
-}
-
-export interface DistributionLine {
   holdingId: string;
-  userId: string;
-  ownershipPercent: number;
-  gross: Money;
-  fee: Money;
-  net: Money;
-}
-
-/** toInvestors + fees + retained = the amount received. Empty for rejected receipts. */
-export interface RentalReceiptDetail {
-  receipt: RentalReceipt;
-  preview: boolean;
-  distribution: DistributionLine[];
-  toInvestors: Money | null;
-  fees: Money | null;
-  retained: Money | null;
-}
-
-export interface DuePeriod {
+  /** Staff views only. */
+  userId: string | null;
   productId: string;
   productCode: string;
   productTitle: string;
-  periodNumber: number;
-  periodCount: number;
-  periodStartsOn: string;
+  containerNumber: string;
+  installmentNumber: number;
+  installmentCount: number;
   dueOn: string;
-  expectedAmount: Money;
-  daysOverdue: number;
+  rent: Money;
+  capital: Money;
+  total: Money;
+  status: PayoutStatus;
+  paidAt: string | null;
 }
 
-export interface Earning {
-  id: string;
+export interface HoldingPayouts {
   holdingId: string;
   productId: string;
-  productCode: string;
-  productTitle: string;
-  periodNumber: number;
-  periodStartsOn: string;
-  periodEndsOn: string;
-  ownershipPercent: number;
-  gross: Money;
-  fee: Money;
-  net: Money;
-  paidAt: string;
+  containerNumber: string | null;
+  paid: number;
+  installments: number;
+  received: Money;
+  nextDueOn: string | null;
+  nextAmount: Money | null;
+  lastPaidAt: string | null;
 }
 
 export interface EarningsSummary {
+  /** The investor's wallet: what the platform owes them now. */
   balances: Money[];
-  totalEarned: Money[];
-  holdings: { holdingId: string; productId: string; earned: Money; payments: number; lastPaidAt: string }[];
+  rentPaid: Money[];
+  capitalReturned: Money[];
+  /** Commission on referrals' rent, already included in the wallet balance. */
+  referralEarned: Money[];
+  nextPayout: { dueOn: string; total: Money } | null;
+  holdings: HoldingPayouts[];
+}
+
+/** Scheduled payouts that have fallen due and are not paid yet, in one currency. */
+export interface DuePayouts {
+  count: number;
+  total: Money;
 }
 
 export type AccountType =
   | "RENTAL_CASH"
   | "INVESTOR_EARNINGS"
-  | "PLATFORM_FEE_REVENUE"
-  | "PLATFORM_RETAINED"
   | "PLATFORM_ADJUSTMENTS"
   | "PLATFORM_REFERRAL_EXPENSE"
-  | "WITHDRAWALS_IN_TRANSIT";
+  | "WITHDRAWALS_IN_TRANSIT"
+  | "PLATFORM_RENT_EXPENSE"
+  | "PLATFORM_CAPITAL_RETURNS";
 export type Direction = "DEBIT" | "CREDIT";
 
 export interface LedgerAccount {
@@ -103,7 +75,7 @@ export interface LedgerEntry {
   id: string;
   transactionId: string;
   transactionType:
-    | "RENTAL_DISTRIBUTION"
+    | "INVESTOR_PAYOUT"
     | "ADJUSTMENT"
     | "REFERRAL_COMMISSION"
     | "WITHDRAWAL_RESERVE"

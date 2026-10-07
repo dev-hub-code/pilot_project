@@ -3,6 +3,7 @@ package com.sealease.backend.referral.controller;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.referral.dto.Downline;
 import com.sealease.backend.referral.dto.ReferralEarningResponse;
+import com.sealease.backend.referral.dto.ReferralMonth;
 import com.sealease.backend.referral.dto.ReferralOverview;
 import com.sealease.backend.referral.service.ReferralEarningService;
 import com.sealease.backend.referral.service.ReferralService;
@@ -13,6 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/referrals")
@@ -36,6 +39,12 @@ public class ReferralController {
 	@GetMapping("/downline")
 	public Downline downline(AuthenticatedUser investor) {
 		return referrals.downline(investor.userId());
+	}
+
+	/** Commission per calendar month (UTC) and level, latest month first. */
+	@GetMapping("/monthly")
+	public List<ReferralMonth> monthly(AuthenticatedUser investor) {
+		return earnings.monthly(investor.userId());
 	}
 
 	@GetMapping("/earnings")

@@ -1,5 +1,7 @@
 package com.sealease.backend.permission;
 
+import java.util.Collection;
+
 /**
  * Every permission the code checks. Each constant must have a matching row in the
  * {@code permissions} table (seeded by migrations); {@link com.sealease.backend.permission.service.PermissionCatalogVerifier}
@@ -12,13 +14,13 @@ public enum PermissionCode {
 
 	INVESTOR_PORTAL,
 
-	USER_VIEW, USER_UPDATE, USER_SUSPEND, KYC_REVIEW, INVESTOR_CLASSIFY,
+	USER_VIEW, USER_UPDATE, USER_SUSPEND, KYC_REVIEW,
 
 	ROLE_VIEW, ROLE_MANAGE, USER_ROLE_ASSIGN,
 
 	INVESTMENT_VIEW, INVESTMENT_CREATE, INVESTMENT_UPDATE, INVESTMENT_APPROVE, ORDER_VIEW,
 
-	FINANCE_VIEW, FINANCE_ADJUST, PAYMENT_CONFIRM, BANK_ACCOUNT_VERIFY, RENTAL_RECORD, RENTAL_APPROVE,
+	FINANCE_VIEW, FINANCE_ADJUST, PAYMENT_CONFIRM, COMPANY_BANK_ACCOUNT_MANAGE, BANK_ACCOUNT_VERIFY, PAYOUT_PROCESS,
 	WITHDRAWAL_VIEW, WITHDRAWAL_APPROVE, WITHDRAWAL_REJECT, WITHDRAWAL_PROCESS,
 	REFERRAL_CONFIG_MANAGE,
 
@@ -37,6 +39,14 @@ public enum PermissionCode {
 	 */
 	public static boolean isAdministrative(String code) {
 		return !INVESTOR_PORTAL.name().equals(code);
+	}
+
+	/**
+	 * An account is either an investor or staff, never both: a set of permissions may not combine
+	 * the investor portal with administrative permissions.
+	 */
+	public static boolean mixesInvestorAndStaff(Collection<String> codes) {
+		return codes.contains(INVESTOR_PORTAL.name()) && codes.stream().anyMatch(PermissionCode::isAdministrative);
 	}
 
 }

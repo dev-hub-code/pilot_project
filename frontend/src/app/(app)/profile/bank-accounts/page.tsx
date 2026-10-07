@@ -42,7 +42,7 @@ export default async function BankAccountsPage() {
                       {account.bankName} <span className="font-mono text-sm">{account.accountNumberMasked}</span>
                     </p>
                     <p className="text-sm text-muted">
-                      {account.accountHolderName} · {account.country} · {account.currency}
+                      {account.accountHolderName} · {account.country}
                     </p>
                     {account.rejectionReason && (
                       <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">Rejected: {account.rejectionReason}</p>

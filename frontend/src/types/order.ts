@@ -1,18 +1,21 @@
-/** Mirrors of the backend's Phase 5 DTOs (cart, order, payment, invoice and portfolio). */
-import type { InvestmentType, Money, ProductStatus, RentalFrequency } from "./marketplace";
+/** Mirrors of the backend's cart, order, payment, invoice and portfolio DTOs. */
+import type { ContainerSummary, ContainerType, Money, ProductStatus } from "./marketplace";
 
+/** Containers of one plan in the cart. Payout figures cover all {@link quantity} containers. */
 export interface CartLine {
   productId: string;
   productCode: string | null;
   productTitle: string;
-  investmentType: InvestmentType | null;
+  containerType: ContainerType | null;
   productStatus: ProductStatus | null;
-  amount: Money;
-  ownershipPercent: number;
-  rentalPerPayment: Money | null;
-  rentalFrequency: RentalFrequency | null;
-  durationMonths: number;
-  termsVersion: string | null;
+  quantity: number;
+  pricePerContainer: Money | null;
+  amount: Money | null;
+  monthlyRentPercent: number;
+  monthlyCapitalReturnPercent: number;
+  monthlyPayout: Money | null;
+  tenureMonths: number;
+  totalPayout: Money | null;
   problems: string[];
 }
 
@@ -24,17 +27,19 @@ export interface Cart {
 
 export type OrderStatus = "PENDING_PAYMENT" | "CONFIRMED" | "EXPIRED" | "CANCELLED";
 
+/** One container of an order. Its number is shown once the order is paid. */
 export interface OrderItem {
+  id: string;
   productId: string;
   productCode: string;
   productTitle: string;
-  investmentType: InvestmentType;
+  containerType: ContainerType;
+  containerNumber: string | null;
   amount: Money;
-  ownershipPercent: number;
-  rentalPerPayment: Money;
-  rentalFrequency: RentalFrequency;
-  durationMonths: number;
-  termsVersion: string;
+  monthlyRentPercent: number;
+  monthlyCapitalReturnPercent: number;
+  monthlyPayout: Money;
+  tenureMonths: number;
 }
 
 export interface Order {
@@ -51,16 +56,41 @@ export interface Order {
   items: OrderItem[];
 }
 
+/** Only bank payment is offered; CARD appears on payments made before card payments were withdrawn. */
 export type PaymentMethod = "BANK_TRANSFER" | "CARD";
 export type PaymentStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "REFUND_REQUIRED" | "REFUNDED";
 
-export interface BankTransferInstructions {
-  beneficiaryName: string;
-  iban: string;
-  bic: string;
+/** An account the company collects investors' money in. */
+export interface CompanyBankAccount {
+  id: string;
+  accountName: string;
   bankName: string;
+  branch: string | null;
+  accountNumber: string;
+  ifscCode: string;
+  upiId: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface BankTransferInstructions {
+  /** Quoted on the payment so finance can match it to the order. */
   reference: string;
   amount: Money;
+  /** The accounts the investor may pay into. */
+  accounts: CompanyBankAccount[];
+}
+
+export type DepositMode = "ONLINE" | "CHEQUE" | "CASH_DEPOSIT";
+
+/** How the investor says they paid a bank payment. */
+export interface DepositDetails {
+  mode: DepositMode;
+  reference: string;
+  submittedAt: string;
+  companyBankAccountId: string;
+  bankName: string | null;
+  accountNumber: string | null;
 }
 
 export interface Payment {
@@ -81,7 +111,7 @@ export interface Payment {
   refundReason: string | null;
   createdAt: string;
   bankTransfer: BankTransferInstructions | null;
-  simulated: boolean;
+  deposit: DepositDetails | null;
 }
 
 export interface InvoiceParty {
@@ -104,24 +134,30 @@ export interface Invoice {
   notes: string | null;
 }
 
-export type HoldingStatus = "ACTIVE" | "MATURED" | "CLOSED";
+export type HoldingStatus = "ACTIVE" | "MATURED";
 
+/** One container the investor owns under a plan, with its lease. */
 export interface Holding {
   id: string;
   productId: string;
   productCode: string;
   productTitle: string;
-  investmentType: InvestmentType;
-  productStatus: ProductStatus;
+  container: ContainerSummary;
   orderId: string;
   amount: Money;
-  ownershipPercent: number;
-  expectedRentalPerPayment: Money;
-  rentalFrequency: RentalFrequency;
-  durationMonths: number;
-  termsVersion: string;
+  monthlyRentPercent: number;
+  monthlyCapitalReturnPercent: number;
+  monthlyRent: Money;
+  monthlyCapitalReturn: Money;
+  monthlyPayout: Money;
+  tenureMonths: number;
+  totalPayout: Money;
+  /** ISO dates; the lease ends on leaseEndsOn (exclusive). */
+  leaseStartsOn: string;
+  leaseEndsOn: string;
   status: HoldingStatus;
   confirmedAt: string;
+  maturedAt: string | null;
 }
 
 export interface Portfolio {

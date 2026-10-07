@@ -5,7 +5,7 @@ import com.sealease.backend.crm.dto.PipelineStage;
 import com.sealease.backend.crm.entity.LeadStage;
 import com.sealease.backend.crm.service.LeadService;
 import com.sealease.backend.helpdesk.service.SupportService;
-import com.sealease.backend.investment.service.ProductService;
+import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.ledger.dto.PeriodTotal;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.Direction;
@@ -35,17 +35,17 @@ import java.util.TreeMap;
 public class DashboardService {
 
 	private final UserRoleService roles;
-	private final ProductService products;
+	private final HoldingService holdings;
 	private final LedgerService ledger;
 	private final WithdrawalService withdrawals;
 	private final SupportService support;
 	private final LeadService leads;
 	private final Clock clock;
 
-	public DashboardService(UserRoleService roles, ProductService products, LedgerService ledger,
+	public DashboardService(UserRoleService roles, HoldingService holdings, LedgerService ledger,
 			WithdrawalService withdrawals, SupportService support, LeadService leads, Clock clock) {
 		this.roles = roles;
-		this.products = products;
+		this.holdings = holdings;
 		this.ledger = ledger;
 		this.withdrawals = withdrawals;
 		this.support = support;
@@ -61,20 +61,20 @@ public class DashboardService {
 					"Registered investor accounts", "/admin/users"));
 		}
 		if (viewer.hasPermission("INVESTMENT_VIEW")) {
-			tiles.add(new KpiTile("capital", "Capital invested", money(products.committedCapital().values()),
-					"Confirmed across published offerings", "/admin/products"));
+			tiles.add(new KpiTile("capital", "Capital invested", money(holdings.totalInvested().values()),
+					"Containers bought by investors", "/admin/products"));
 		}
 		if (viewer.hasPermission("FINANCE_VIEW")) {
 			LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
 			ReportService.Period month = new ReportService.Period(today.withDayOfMonth(1), today);
-			Map<String, Money> rent = new TreeMap<>();
+			Map<String, Money> paid = new TreeMap<>();
 			ledger.periodTotals(month.start(), month.end()).forEach((currency, totals) -> totals.stream()
-				.filter(t -> t.transactionType() == TransactionType.RENTAL_DISTRIBUTION
-						&& t.accountType() == AccountType.RENTAL_CASH && t.direction() == Direction.DEBIT)
+				.filter(t -> t.transactionType() == TransactionType.INVESTOR_PAYOUT
+						&& t.accountType() == AccountType.INVESTOR_EARNINGS && t.direction() == Direction.CREDIT)
 				.map(PeriodTotal::amount)
-				.forEach(m -> rent.merge(currency, m, Money::plus)));
-			tiles.add(new KpiTile("rent", "Rent collected this month", money(rent.values()), "Distributed to investors",
-					"/admin/rentals?view=DISTRIBUTED"));
+				.forEach(m -> paid.merge(currency, m, Money::plus)));
+			tiles.add(new KpiTile("payouts", "Paid to investors this month", money(paid.values()),
+					"Monthly rent plus capital returned", "/admin/payouts?status=PAID"));
 			tiles.add(new KpiTile("owed", "Owed to investors",
 					money(ledger.balancesAt(AccountType.INVESTOR_EARNINGS, clock.instant()).values()),
 					"Earnings balances not yet withdrawn", "/admin/ledger?type=INVESTOR_EARNINGS"));

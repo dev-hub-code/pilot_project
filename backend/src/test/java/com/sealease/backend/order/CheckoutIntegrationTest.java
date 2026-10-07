@@ -1,13 +1,9 @@
 package com.sealease.backend.order;
 
 import com.jayway.jsonpath.JsonPath;
-import com.sealease.backend.common.money.Money;
-import com.sealease.backend.investment.service.CapacityService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.outbox.OutboxRelay;
 import com.sealease.backend.outbox.ProcessedEvents;
-import com.sealease.backend.payment.provider.ProviderEvent;
-import com.sealease.backend.payment.provider.SimulatedCardProvider;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.OfferingFixtures;
 import com.sealease.backend.support.TestApi;
@@ -26,8 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +35,7 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -47,7 +45,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Phase 5: cart, checkout, payments, confirmation, invoices and the outbox. */
+/** Cart, checkout, container reservation, payment, allocation, invoices and the outbox. */
 @IntegrationTest
 class CheckoutIntegrationTest {
 
@@ -56,9 +54,6 @@ class CheckoutIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
-
-	@Autowired
-	private CapacityService capacity;
 
 	@Autowired
 	private OrderService orderService;
@@ -73,55 +68,56 @@ class CheckoutIntegrationTest {
 	private TransactionTemplate transactions;
 
 	@Autowired
-	private SimulatedCardProvider gateway;
-
-	@Autowired
 	private ConsumerFactory<String, String> consumers;
 
 	private TestApi api;
 	private OfferingFixtures offerings;
+	private UUID companyAccount;
 
 	@BeforeEach
 	void setUp() throws Exception {
 		api = new TestApi(mvc, jdbc);
 		offerings = new OfferingFixtures(mvc, api.admin());
+		companyAccount = api.companyBankAccount();
 	}
 
 	// --------------------------------------------------------------------------------- cart
 
 	@Test
-	void cartValidatesEveryLineAndShowsTheInvestorsShare() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void cartHoldsContainersOfAPlanAndShowsThePayout() throws Exception {
+		UUID product = offerings.plan(2);
 		Account investor = approvedInvestor();
 
-		setCartItem(investor, product, "1250").andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("multiples of 500.00 USD")));
-		setCartItem(investor, product, "10000").andExpect(status().isOk())
-			.andExpect(jsonPath("$.items[0].ownershipPercent").value(20.0))
-			.andExpect(jsonPath("$.items[0].rentalPerPayment.amount").value("300.00"))
-			.andExpect(jsonPath("$.total.amount").value("10000.00"))
+		setCartItem(investor, product, 0).andExpect(status().isBadRequest());
+		// ₹50,000 a container; 2% rent + 100/16 = 6.25% capital a month = ₹4,125 a month for 16 months.
+		setCartItem(investor, product, 2).andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].quantity").value(2))
+			.andExpect(jsonPath("$.items[0].pricePerContainer.amount").value("50000.00"))
+			.andExpect(jsonPath("$.items[0].monthlyPayout.amount").value("8250.00"))
+			.andExpect(jsonPath("$.items[0].tenureMonths").value(16))
+			.andExpect(jsonPath("$.items[0].totalPayout.amount").value("132000.00"))
+			.andExpect(jsonPath("$.total.amount").value("100000.00"))
 			.andExpect(jsonPath("$.checkoutReady").value(true));
-		// Setting the same offering again changes the line instead of adding one.
-		setCartItem(investor, product, "5000").andExpect(jsonPath("$.items.length()").value(1))
-			.andExpect(jsonPath("$.total.amount").value("5000.00"));
+		// Setting the same plan again changes the line instead of adding one.
+		setCartItem(investor, product, 1).andExpect(jsonPath("$.items.length()").value(1))
+			.andExpect(jsonPath("$.total.amount").value("50000.00"));
 
 		Account unverified = api.register();
-		setCartItem(unverified, product, "1000").andExpect(status().isUnprocessableContent())
+		setCartItem(unverified, product, 1).andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("Verify your identity")));
 
 		mvc.perform(delete("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.items.length()").value(0))
 			.andExpect(jsonPath("$.checkoutReady").value(false));
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("0.00");
 	}
 
 	// ----------------------------------------------------------------------------- checkout
 
 	@Test
-	void checkoutReservesCapacityAndIsIdempotent() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void checkoutReservesContainersAndIsIdempotent() throws Exception {
+		UUID product = offerings.plan(2);
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, "10000").andExpect(status().isOk());
+		setCartItem(investor, product, 2).andExpect(status().isOk());
 
 		mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content(acceptance(product)))
@@ -132,17 +128,20 @@ class CheckoutIntegrationTest {
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("PENDING_PAYMENT"))
 			.andExpect(jsonPath("$.orderNumber").value(matchesPattern("ORD-\\d{6,}")))
-			.andExpect(jsonPath("$.items[0].ownershipPercent").value(20.0))
-			.andExpect(jsonPath("$.items[0].termsVersion").value(OfferingFixtures.TERMS_VERSION))
+			.andExpect(jsonPath("$.total.amount").value("100000.00"))
+			.andExpect(jsonPath("$.items.length()").value(2))
+			.andExpect(jsonPath("$.items[0].containerType").value(OfferingFixtures.TYPE))
+			// The container number is revealed only once the order is paid.
+			.andExpect(jsonPath("$.items[0].containerNumber").doesNotExist())
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("10000.00");
+		assertThat(containerStatuses(orderId)).containsExactly("RESERVED", "RESERVED");
 		mvc.perform(get("/api/v1/cart").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.items.length()").value(0));
 
 		// A retry (lost response) returns the same order; nothing is reserved twice.
 		checkout(investor, key, acceptance(product)).andExpect(jsonPath("$.id").value(orderId));
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("10000.00");
+		assertThat(containerStatuses(orderId)).hasSize(2);
 		checkout(investor, key, acceptance(UUID.randomUUID())).andExpect(status().isConflict());
 
 		assertThat(api.auditCount("ORDER_PLACED", orderId)).isEqualTo(1);
@@ -150,25 +149,63 @@ class CheckoutIntegrationTest {
 	}
 
 	@Test
-	void checkoutRequiresTheCurrentTermsOfEveryOffering() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void checkoutRequiresTheTermsOfEveryPlanToBeAccepted() throws Exception {
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, "1000").andExpect(status().isOk());
+		setCartItem(investor, product, 1).andExpect(status().isOk());
 
-		checkout(investor, UUID.randomUUID().toString(), """
-				{"acceptedTerms":[{"productId":"%s","termsVersion":"2025.9"}]}""".formatted(product))
-			.andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("now version 2026.1")));
 		checkout(investor, UUID.randomUUID().toString(), acceptance(UUID.randomUUID()))
 			.andExpect(status().isUnprocessableContent());
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("0.00");
+		assertThat(ordersOf(investor)).isZero();
+	}
+
+	@Test
+	void checkoutNeedsEnoughContainersInStock() throws Exception {
+		// The only test using tank containers, so their stock is known.
+		UUID product = offerings.published("TANK_20FT", "80000", "1.5");
+		Account investor = approvedInvestor();
+		setCartItem(investor, product, 1).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("No containers are available")));
+
+		List<UUID> stock = offerings.containers("TANK_20FT", 1);
+		setCartItem(investor, product, 2).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("Only 1 container(s)")));
+		setCartItem(investor, product, 1).andExpect(status().isOk());
+
+		// Sent for repair after it went into the cart: checkout fails and reserves nothing.
+		jdbc.update("UPDATE containers SET status = 'MAINTENANCE' WHERE id = ?", stock.getFirst());
+		checkout(investor, UUID.randomUUID().toString(), acceptance(product)).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("No containers are available")));
+		assertThat(ordersOf(investor)).isZero();
+	}
+
+	@Test
+	void twoInvestorsCannotBuyTheSameLastContainer() throws Exception {
+		// The only test using 40ft reefers: exactly one is in stock.
+		offerings.containers("REEFER_40FT", 1);
+		UUID product = offerings.published("REEFER_40FT", "120000", "2.5");
+		Account first = approvedInvestor();
+		Account second = approvedInvestor();
+		setCartItem(first, product, 1).andExpect(status().isOk());
+		setCartItem(second, product, 1).andExpect(status().isOk());
+
+		List<Callable<Integer>> attempts = List.of(
+				() -> checkout(first, UUID.randomUUID().toString(), acceptance(product)).andReturn().getResponse().getStatus(),
+				() -> checkout(second, UUID.randomUUID().toString(), acceptance(product)).andReturn().getResponse().getStatus());
+		List<Integer> statuses = new ArrayList<>();
+		try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+			for (Future<Integer> result : pool.invokeAll(attempts)) {
+				statuses.add(result.get());
+			}
+		}
+		assertThat(statuses).containsExactlyInAnyOrder(201, 422);
 	}
 
 	@Test
 	void concurrentCheckoutsOfOneCartPlaceOneOrder() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, "2000").andExpect(status().isOk());
+		setCartItem(investor, product, 1).andExpect(status().isOk());
 
 		List<Callable<Integer>> attempts = new ArrayList<>();
 		for (int i = 0; i < 5; i++) {
@@ -182,14 +219,14 @@ class CheckoutIntegrationTest {
 			}
 		}
 		assertThat(statuses).containsOnlyOnce(201);
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("2000.00");
+		assertThat(ordersOf(investor)).isEqualTo(1);
 	}
 
 	@Test
-	void cancellingAnOrderReleasesItsCapacity() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void cancellingAnOrderReturnsItsContainersToStock() throws Exception {
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
-		String orderId = placeOrder(investor, product, "3000");
+		String orderId = placeOrder(investor, product, 1);
 
 		Account other = approvedInvestor();
 		mvc.perform(post("/api/v1/orders/{id}/cancel", orderId).header(HttpHeaders.AUTHORIZATION, other.bearer()))
@@ -197,44 +234,73 @@ class CheckoutIntegrationTest {
 		mvc.perform(post("/api/v1/orders/{id}/cancel", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("CANCELLED"));
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("0.00");
-		startPayment(investor, orderId, "CARD").andExpect(status().isUnprocessableContent());
+		assertThat(containerStatuses(orderId)).containsExactly("AVAILABLE");
+		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isUnprocessableContent());
 	}
 
-	// ---------------------------------------------------------------------- card payments
+	// ---------------------------------------------------------------------- bank payments
 
 	@Test
-	void cardPaymentConfirmsTheOrderCreatesHoldingsAndIssuesTheInvoice() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void paymentAllocatesTheContainersLeasesThemAndSchedulesMonthlyPayouts() throws Exception {
+		UUID product = offerings.plan(2);
 		Account investor = approvedInvestor();
-		String orderId = placeOrder(investor, product, "10000");
+		Account finance = api.staff("FINANCE");
+		String orderId = placeOrder(investor, product, 2);
 
-		String paymentId = JsonPath.read(startPayment(investor, orderId, "CARD")
+		String paymentId = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("PENDING"))
-			.andExpect(jsonPath("$.simulated").value(true))
+			.andExpect(jsonPath("$.bankTransfer.reference").value(matchesPattern("SL-[A-Z2-9]{10}")))
+			.andExpect(jsonPath("$.bankTransfer.amount.amount").value("100000.00"))
+			.andExpect(jsonPath("$.bankTransfer.accounts[?(@.id == '%s')].ifscCode".formatted(companyAccount))
+				.value("HDFC0001234"))
 			.andReturn().getResponse().getContentAsString(), "$.id");
-		simulate(investor, paymentId, "SUCCEEDED").andExpect(status().isOk())
-			.andExpect(jsonPath("$.status").value("SUCCEEDED"));
+		submitDeposit(investor, paymentId).andExpect(status().isOk());
 
+		confirmTransfer(investor, paymentId, "100000").andExpect(status().isForbidden());
+		confirmTransfer(finance, paymentId, "99999.99").andExpect(status().isUnprocessableContent());
+		confirmTransfer(finance, paymentId, "100000").andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("SUCCEEDED"))
+			.andExpect(jsonPath("$.externalReference").value("BANK-REF-1"));
+		confirmTransfer(finance, paymentId, "100000").andExpect(status().isConflict());
+
+		// Each container is now the investor's, by number, and on lease.
+		List<String> numbers = jdbc.queryForList("""
+				SELECT c.container_number FROM order_items i JOIN containers c ON c.id = i.container_id
+				WHERE i.order_id = ?::uuid ORDER BY c.container_number""", String.class, orderId);
+		assertThat(containerStatuses(orderId)).containsExactly("ON_LEASE", "ON_LEASE");
 		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.status").value("CONFIRMED"));
-		assertThat(capacity.snapshot(product).committed().amount()).isEqualTo("10000.00");
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("0.00");
+			.andExpect(jsonPath("$.status").value("CONFIRMED"))
+			.andExpect(jsonPath("$.items[*].containerNumber", containsInAnyOrder(numbers.toArray())));
 
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.activeHoldings").value(1))
-			.andExpect(jsonPath("$.totalsByCurrency[0].amount").value("10000.00"))
-			.andExpect(jsonPath("$.holdings[0].ownershipPercent").value(20.0))
-			.andExpect(jsonPath("$.holdings[0].expectedRentalPerPayment.amount").value("300.00"));
+			.andExpect(jsonPath("$.activeHoldings").value(2))
+			.andExpect(jsonPath("$.totalsByCurrency[0].amount").value("100000.00"))
+			.andExpect(jsonPath("$.holdings[*].container.containerNumber", containsInAnyOrder(numbers.toArray())))
+			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("1000.00"))
+			.andExpect(jsonPath("$.holdings[0].monthlyCapitalReturn.amount").value("3125.00"))
+			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("4125.00"))
+			.andExpect(jsonPath("$.holdings[0].tenureMonths").value(16))
+			.andExpect(jsonPath("$.holdings[0].totalPayout.amount").value("66000.00"))
+			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").value(today.toString()))
+			.andExpect(jsonPath("$.holdings[0].leaseEndsOn").value(today.plusMonths(16).toString()));
+
+		List<LocalDate> schedule = jdbc.queryForList("""
+				SELECT p.due_on FROM payout_installments p JOIN holdings h ON h.id = p.holding_id
+				WHERE h.order_id = ?::uuid AND p.status = 'SCHEDULED' ORDER BY p.due_on""", LocalDate.class, orderId);
+		assertThat(schedule).hasSize(32);
+		assertThat(schedule.getFirst()).isEqualTo(today.plusMonths(1));
+		assertThat(schedule.getLast()).isEqualTo(today.plusMonths(16));
 
 		String invoice = mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.invoiceNumber").value(matchesPattern("INV-\\d{4}-\\d{6}")))
-			.andExpect(jsonPath("$.total.amount").value("10000.00"))
+			.andExpect(jsonPath("$.total.amount").value("100000.00"))
 			.andExpect(jsonPath("$.issuer.name").value("SeaLease Test Ltd"))
 			.andExpect(jsonPath("$.buyer.email").value(investor.email()))
-			.andExpect(jsonPath("$.lines[0].description").value(containsString("20% ownership")))
+			.andExpect(jsonPath("$.lines.length()").value(2))
+			.andExpect(jsonPath("$.lines[0].description").value(containsString("16-month lease")))
 			.andReturn().getResponse().getContentAsString();
 		Account stranger = approvedInvestor();
 		mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, stranger.bearer()))
@@ -250,134 +316,68 @@ class CheckoutIntegrationTest {
 	}
 
 	@Test
-	void webhooksMustBeSignedAndRedeliveryChangesNothing() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void cardPaymentsAreNotAccepted() throws Exception {
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
-		String orderId = placeOrder(investor, product, "2000");
-		String paymentId = JsonPath.read(startPayment(investor, orderId, "CARD")
-			.andReturn().getResponse().getContentAsString(), "$.id");
-		String reference = jdbc.queryForObject("SELECT provider_reference FROM payments WHERE id = ?::uuid", String.class, paymentId);
+		String orderId = placeOrder(investor, product, 1);
 
-		SimulatedCardProvider.SignedEvent delivery = gateway.signedEvent(reference, Money.of("2000", "USD"),
-				ProviderEvent.Outcome.SUCCEEDED);
-		byte[] tampered = new String(delivery.body(), StandardCharsets.UTF_8).replace("2000", "1").getBytes(StandardCharsets.UTF_8);
-		webhook(tampered, delivery.signature()).andExpect(status().isUnauthorized());
-		webhook(delivery.body(), null).andExpect(status().isUnauthorized());
-		mvc.perform(post("/api/v1/payments/webhooks/unknown").content(delivery.body()))
-			.andExpect(status().isNotFound());
-
-		webhook(delivery.body(), delivery.signature()).andExpect(status().isNoContent());
-		webhook(delivery.body(), delivery.signature()).andExpect(status().isNoContent());
-
-		Integer holdings = jdbc.queryForObject("SELECT count(*) FROM holdings WHERE order_id = ?::uuid", Integer.class, orderId);
-		assertThat(holdings).isEqualTo(1);
-		assertThat(capacity.snapshot(product).committed().amount()).isEqualTo("2000.00");
-		Integer events = jdbc.queryForObject("SELECT count(*) FROM payment_events WHERE payment_id = ?::uuid", Integer.class, paymentId);
-		assertThat(events).isEqualTo(1);
-	}
-
-	@Test
-	void aDeclinedCardLeavesTheOrderPayable() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
-		Account investor = approvedInvestor();
-		String orderId = placeOrder(investor, product, "2000");
-		String first = JsonPath.read(startPayment(investor, orderId, "CARD").andReturn().getResponse().getContentAsString(), "$.id");
-
-		simulate(investor, first, "FAILED").andExpect(jsonPath("$.status").value("FAILED"))
-			.andExpect(jsonPath("$.failureReason").value(containsString("declined")));
-		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.status").value("PENDING_PAYMENT"));
-
-		String second = JsonPath.read(startPayment(investor, orderId, "CARD")
-			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
-		assertThat(second).isNotEqualTo(first);
-		simulate(investor, second, "SUCCEEDED").andExpect(jsonPath("$.status").value("SUCCEEDED"));
-		assertThat(outboxCount("payment.failed", first)).isEqualTo(1);
-	}
-
-	// ---------------------------------------------------------------------- bank transfers
-
-	@Test
-	void financeConfirmsBankTransfersAndLateCardMoneyIsFlaggedForRefund() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
-		Account investor = approvedInvestor();
-		Account finance = api.staff("FINANCE");
-		String orderId = placeOrder(investor, product, "5000");
-
-		String card = JsonPath.read(startPayment(investor, orderId, "CARD").andReturn().getResponse().getContentAsString(), "$.id");
-		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.bankTransfer.reference").value(matchesPattern("SL-[A-Z2-9]{10}")))
-			.andExpect(jsonPath("$.bankTransfer.amount.amount").value("5000.00"))
-			.andReturn().getResponse().getContentAsString(), "$.id");
-		assertThat(paymentStatus(card)).isEqualTo("CANCELLED");
-
-		confirmTransfer(investor, bank, "5000").andExpect(status().isForbidden());
-		confirmTransfer(finance, bank, "4999.99").andExpect(status().isUnprocessableContent());
-		confirmTransfer(finance, bank, "5000").andExpect(status().isOk())
-			.andExpect(jsonPath("$.status").value("SUCCEEDED"))
-			.andExpect(jsonPath("$.externalReference").value("BANK-REF-1"));
-		confirmTransfer(finance, bank, "5000").andExpect(status().isConflict());
-		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.status").value("CONFIRMED"));
-
-		// The abandoned card payment completes after all: the money is flagged, never kept silently.
-		String reference = jdbc.queryForObject("SELECT provider_reference FROM payments WHERE id = ?::uuid", String.class, card);
-		SimulatedCardProvider.SignedEvent late = gateway.signedEvent(reference, Money.of("5000", "USD"),
-				ProviderEvent.Outcome.SUCCEEDED);
-		webhook(late.body(), late.signature()).andExpect(status().isNoContent());
-		assertThat(paymentStatus(card)).isEqualTo("REFUND_REQUIRED");
-		assertThat(capacity.snapshot(product).committed().amount()).isEqualTo("5000.00");
-
-		refund(investor, card).andExpect(status().isForbidden());
-		refund(finance, card).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+		startPayment(investor, orderId, "CARD").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("pay by bank")));
+		// The former card gateway callback is gone, and not public.
+		mvc.perform(post("/api/v1/payments/webhooks/SIMULATOR").contentType(MediaType.APPLICATION_JSON).content("{}"))
+			.andExpect(status().isUnauthorized());
 	}
 
 	@Test
 	void staffCannotConfirmPaymentsForTheirOwnOrders() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
-		Account financeInvestor = api.staff("FINANCE", "INVESTOR");
-		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", financeInvestor.id());
-		String orderId = placeOrder(financeInvestor, product, "1000");
-		String bank = JsonPath.read(startPayment(financeInvestor, orderId, "BANK_TRANSFER")
+		UUID product = offerings.plan(1);
+		// An investor with an unpaid order who is then hired into finance.
+		Account investor = api.register();
+		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
+		String orderId = placeOrder(investor, product, 1);
+		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andReturn().getResponse().getContentAsString(), "$.id");
+		Account finance = api.becomeStaff(investor, "FINANCE");
 
-		confirmTransfer(financeInvestor, bank, "1000").andExpect(status().isForbidden())
+		confirmTransfer(finance, bank, "50000").andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.message").value(containsString("own order")));
 	}
 
 	@Test
-	void unpaidOrdersExpireAndReleaseCapacity() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+	void unpaidOrdersExpireAndReturnTheirContainers() throws Exception {
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
 		Account finance = api.staff("FINANCE");
-		String orderId = placeOrder(investor, product, "4000");
+		String orderId = placeOrder(investor, product, 1);
 		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
 		jdbc.update("UPDATE orders SET expires_at = now() - interval '1 minute' WHERE id = ?::uuid", orderId);
-		startPayment(investor, orderId, "CARD").andExpect(status().isUnprocessableContent())
+		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("payment window")));
 		assertThat(orderService.expireDue()).isGreaterThanOrEqualTo(1);
 
 		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.status").value("EXPIRED"));
-		assertThat(capacity.snapshot(product).reserved().amount()).isEqualTo("0.00");
+		assertThat(containerStatuses(orderId)).containsExactly("AVAILABLE");
 		assertThat(paymentStatus(bank)).isEqualTo("CANCELLED");
 
-		// The transfer arrives anyway: recorded, but the money must go back.
-		confirmTransfer(finance, bank, "4000").andExpect(status().isOk())
+		// The transfer arrives anyway: recorded, but the money must go back and nothing is allocated.
+		confirmTransfer(finance, bank, "50000").andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("REFUND_REQUIRED"));
-		assertThat(capacity.snapshot(product).committed().amount()).isEqualTo("0.00");
+		assertThat(containerStatuses(orderId)).containsExactly("AVAILABLE");
+
+		refund(investor, bank).andExpect(status().isForbidden());
+		refund(finance, bank).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
 	}
 
 	// ------------------------------------------------------------------------------- outbox
 
 	@Test
 	void outboxRelayPublishesCommittedEventsToKafka() throws Exception {
-		UUID product = offerings.retail("50000", "1000", "500");
+		UUID product = offerings.plan(1);
 		Account investor = approvedInvestor();
-		String orderId = placeOrder(investor, product, "1000");
+		String orderId = placeOrder(investor, product, 1);
 
 		while (relay.publishPending() > 0) {
 			// drain everything earlier tests left behind as well
@@ -426,20 +426,32 @@ class CheckoutIntegrationTest {
 		return investor;
 	}
 
-	private String placeOrder(Account investor, UUID product, String amount) throws Exception {
-		setCartItem(investor, product, amount).andExpect(status().isOk());
+	private String placeOrder(Account investor, UUID product, int containers) throws Exception {
+		setCartItem(investor, product, containers).andExpect(status().isOk());
 		return JsonPath.read(checkout(investor, UUID.randomUUID().toString(), acceptance(product))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 
-	private ResultActions setCartItem(Account investor, UUID product, String amount) throws Exception {
+	private ResultActions setCartItem(Account investor, UUID product, int containers) throws Exception {
 		return mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"amount\":\"" + amount + "\"}"));
+			.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":" + containers + "}"));
+	}
+
+	/** Statuses of the containers of the order, in a stable order. */
+	private List<String> containerStatuses(String orderId) {
+		return jdbc.queryForList("""
+				SELECT c.status FROM order_items i JOIN containers c ON c.id = i.container_id
+				WHERE i.order_id = ?::uuid ORDER BY c.id""", String.class, orderId);
+	}
+
+	private int ordersOf(Account investor) {
+		Integer count = jdbc.queryForObject("SELECT count(*) FROM orders WHERE user_id = ?", Integer.class, investor.id());
+		return count == null ? 0 : count;
 	}
 
 	private static String acceptance(UUID product) {
 		return """
-				{"acceptedTerms":[{"productId":"%s","termsVersion":"%s"}]}""".formatted(product, OfferingFixtures.TERMS_VERSION);
+				{"acceptedTerms":["%s"]}""".formatted(product);
 	}
 
 	private ResultActions checkout(Account investor, String key, String body) throws Exception {
@@ -453,14 +465,11 @@ class CheckoutIntegrationTest {
 			.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"" + method + "\"}"));
 	}
 
-	private ResultActions simulate(Account investor, String paymentId, String outcome) throws Exception {
-		return mvc.perform(post("/api/v1/payments/{id}/simulate", paymentId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"" + outcome + "\"}"));
-	}
-
-	private ResultActions webhook(byte[] body, String signature) throws Exception {
-		var request = post("/api/v1/payments/webhooks/SIMULATOR").contentType(MediaType.APPLICATION_JSON).content(body);
-		return mvc.perform(signature == null ? request : request.header("X-Signature", signature));
+	private ResultActions submitDeposit(Account investor, String paymentId) throws Exception {
+		return mvc.perform(post("/api/v1/payments/{id}/deposit", paymentId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content("""
+					{"companyBankAccountId":"%s","mode":"ONLINE","reference":"UTR1234567890"}""".formatted(companyAccount)));
 	}
 
 	private ResultActions confirmTransfer(Account actor, String paymentId, String amount) throws Exception {

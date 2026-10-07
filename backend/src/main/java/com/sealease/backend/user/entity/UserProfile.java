@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDate;
 
-/** Personal, contact, tax and classification data of an account (1:1 with {@link User}). */
+/** Personal, contact and tax data of an account (1:1 with {@link User}). */
 @Entity
 @Table(name = "user_profiles")
 public class UserProfile extends BaseEntity {
@@ -58,10 +58,6 @@ public class UserProfile extends BaseEntity {
 	private String taxIdLast4;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "investor_type", nullable = false, length = 10)
-	private InvestorType investorType = InvestorType.RETAIL;
-
-	@Enumerated(EnumType.STRING)
 	@Column(name = "kyc_status", nullable = false, length = 20)
 	private KycStatus kycStatus = KycStatus.NOT_SUBMITTED;
 
@@ -103,10 +99,6 @@ public class UserProfile extends BaseEntity {
 		this.taxResidencyCountry = residencyCountry;
 		this.taxIdEncrypted = taxIdEncrypted;
 		this.taxIdLast4 = taxIdLast4;
-	}
-
-	public void classify(InvestorType type) {
-		this.investorType = type;
 	}
 
 	public void markKyc(KycStatus status) {
@@ -159,10 +151,6 @@ public class UserProfile extends BaseEntity {
 
 	public String getTaxIdLast4() {
 		return taxIdLast4;
-	}
-
-	public InvestorType getInvestorType() {
-		return investorType;
 	}
 
 	public KycStatus getKycStatus() {

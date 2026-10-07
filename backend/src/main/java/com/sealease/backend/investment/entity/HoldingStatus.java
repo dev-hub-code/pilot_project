@@ -1,8 +1,8 @@
 package com.sealease.backend.investment.entity;
 
-/** ACTIVE once confirmed; MATURED when the offering's lease has been paid out; CLOSED from later phases. */
 public enum HoldingStatus {
+	/** The container is on lease and payouts are running. */
 	ACTIVE,
-	MATURED,
-	CLOSED
+	/** Every payout of the tenure has been paid; the container went back to inventory. */
+	MATURED
 }

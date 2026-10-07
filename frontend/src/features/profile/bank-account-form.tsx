@@ -5,7 +5,8 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
-import { COUNTRY_OPTIONS, CURRENCY_OPTIONS } from "@/lib/countries";
+import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { CURRENCY } from "@/lib/currency";
 import type { FormState } from "@/validators/form-state";
 import { addBankAccountAction } from "./actions";
 
@@ -23,8 +24,7 @@ export function BankAccountForm({ defaultHolder }: { defaultHolder: string }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Bank country" name="country" options={COUNTRY_OPTIONS} placeholder="Select…"
           defaultValue={v("country")} error={e.country} />
-        <SelectField label="Currency" name="currency" options={CURRENCY_OPTIONS} placeholder="Select…"
-          defaultValue={v("currency")} error={e.currency} />
+        <input type="hidden" name="currency" value={CURRENCY} />
       </div>
       <TextField label="Account number or IBAN" name="accountNumber" autoComplete="off" error={e.accountNumber} />
       <TextField label="SWIFT/BIC, IFSC, routing or sort code" name="routingCode" defaultValue={v("routingCode")}

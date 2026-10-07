@@ -6,14 +6,14 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { Order, Payment, PaymentMethod } from "@/types/order";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { cartItemSchema, idempotencyKeySchema } from "@/validators/order";
+import { cartItemSchema, depositSchema, idempotencyKeySchema } from "@/validators/order";
 
 const id = (value: string) => encodeURIComponent(value);
 
 // ---------------------------------------------------------------------------------- cart
 
 export async function setCartItemAction(productId: string, then: "cart" | "stay", _p: FormState, formData: FormData): Promise<FormState> {
-  const input = { amount: String(formData.get("amount") ?? "") };
+  const input = { quantity: String(formData.get("quantity") ?? "") };
   const parsed = cartItemSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
@@ -23,7 +23,7 @@ export async function setCartItemAction(productId: string, then: "cart" | "stay"
   }
   revalidatePath("/cart");
   if (then === "cart") redirect("/cart");
-  return { success: "Amount updated." };
+  return { success: "Containers updated." };
 }
 
 export async function removeCartItemAction(productId: string): Promise<void> {
@@ -37,13 +37,10 @@ export async function removeCartItemAction(productId: string): Promise<void> {
  */
 export async function checkoutAction(idempotencyKey: string, _p: FormState, formData: FormData): Promise<FormState> {
   if (!idempotencyKeySchema.safeParse(idempotencyKey).success) return { error: "Reload the page and try again." };
-  const acceptedTerms = formData.getAll("accept").map(String).map((value) => {
-    const [productId, termsVersion] = value.split("|");
-    return { productId, termsVersion };
-  });
+  const acceptedTerms = formData.getAll("accept").map(String);
   const expected = Number(formData.get("lineCount") ?? 0);
   if (acceptedTerms.length === 0 || acceptedTerms.length !== expected) {
-    return { error: "Read and accept the terms of every offering in your cart." };
+    return { error: "Read and accept the terms of every plan in your cart." };
   }
   let order: Order;
   try {
@@ -80,14 +77,20 @@ export async function startPaymentAction(orderId: string, method: PaymentMethod,
   return {};
 }
 
-/** Development only: the backend rejects this unless its card simulator is enabled. */
-export async function simulatePaymentAction(orderId: string, paymentId: string, outcome: "SUCCEEDED" | "FAILED"): Promise<FormState> {
+/** The investor tells us how they paid a bank payment, for finance to verify. */
+export async function submitDepositAction(orderId: string, paymentId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  const input = {
+    companyBankAccountId: String(formData.get("companyBankAccountId") ?? ""),
+    mode: String(formData.get("mode") ?? ""),
+    reference: String(formData.get("reference") ?? ""),
+  };
+  const parsed = depositSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
-    await authFetch<Payment>(`/api/v1/payments/${id(paymentId)}/simulate`, { method: "POST", json: { outcome } });
+    await authFetch<Payment>(`/api/v1/payments/${id(paymentId)}/deposit`, { method: "POST", json: parsed.data });
   } catch (error) {
-    return failureState(error);
+    return failureState(error, input);
   }
   revalidatePath(`/orders/${orderId}`);
-  revalidatePath("/portfolio");
-  return outcome === "SUCCEEDED" ? { success: "Payment received. Your investment is confirmed." } : { error: "The card was declined." };
+  return { success: "Thank you. We will confirm your order once the payment is verified.", values: input };
 }

@@ -35,7 +35,7 @@ public class CartController {
 	@PutMapping("/items/{productId}")
 	public CartResponse setItem(AuthenticatedUser investor, @PathVariable UUID productId,
 			@Valid @RequestBody SetCartItemRequest request) {
-		return cart.setItem(investor.userId(), productId, request.amount());
+		return cart.setItem(investor.userId(), productId, request.quantity());
 	}
 
 	@DeleteMapping("/items/{productId}")

@@ -5,7 +5,7 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { FormState } from "@/validators/form-state";
 
-/** A one-click action (pay, cancel, simulate) that reports its outcome inline. */
+/** A one-click action (pay, cancel) that reports its outcome inline. */
 export function ActionButton({ action, label, pendingLabel, variant = "primary", confirm, className }: {
   action: (state: FormState) => Promise<FormState>;
   label: string;

@@ -9,14 +9,11 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
 import com.sealease.backend.user.dto.UserSearchCriteria;
-import com.sealease.backend.user.entity.InvestorClassification;
-import com.sealease.backend.user.entity.InvestorType;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.User;
 import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.event.UserStatusChangedEvent;
-import com.sealease.backend.user.repository.InvestorClassificationRepository;
 import com.sealease.backend.user.repository.UserProfileRepository;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
@@ -34,21 +31,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-/** Staff operations on accounts: directory search, suspension and investor classification. */
+/** Staff operations on accounts: directory search and suspension. */
 @Service
 public class UserAdministrationService {
 
 	private final UserProfileRepository profiles;
-	private final InvestorClassificationRepository classifications;
 	private final AuthorityGuard authorityGuard;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
-	public UserAdministrationService(UserProfileRepository profiles, InvestorClassificationRepository classifications,
+	public UserAdministrationService(UserProfileRepository profiles,
 			AuthorityGuard authorityGuard, AuditService audit, ApplicationEventPublisher events, Clock clock) {
 		this.profiles = profiles;
-		this.classifications = classifications;
 		this.authorityGuard = authorityGuard;
 		this.audit = audit;
 		this.events = events;
@@ -63,7 +58,7 @@ public class UserAdministrationService {
 	@Transactional(readOnly = true)
 	public AdminUserDetail detail(UUID userId) {
 		UserProfile profile = profiles.findByUserId(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-		return AdminUserDetail.from(profile, classifications.findByUserIdOrderByDecidedAtDesc(userId));
+		return AdminUserDetail.from(profile);
 	}
 
 	@Transactional
@@ -75,30 +70,6 @@ public class UserAdministrationService {
 	public AdminUserDetail reactivate(UUID actorId, UUID userId, String reason) {
 		return changeStatus(actorId, userId, UserStatus.SUSPENDED, UserStatus.ACTIVE, reason,
 				AuditAction.USER_REACTIVATED);
-	}
-
-	/** HNI status unlocks standalone containers, so it requires approved KYC and is recorded permanently. */
-	@Transactional
-	public AdminUserDetail classify(UUID actorId, UUID userId, InvestorType newType, String reason) {
-		requireNotSelf(actorId, userId);
-		UserProfile profile = profiles.findByUserIdForUpdate(userId)
-			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
-		InvestorType previous = profile.getInvestorType();
-		if (previous == newType) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Investor is already classified as " + newType);
-		}
-		if (newType == InvestorType.HNI && profile.getKycStatus() != KycStatus.APPROVED) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Only investors with approved KYC can be classified as HNI");
-		}
-		profile.classify(newType);
-		classifications.save(new InvestorClassification(userId, previous, newType, reason.strip(), actorId,
-				clock.instant()));
-		audit.record(AuditRecord.of(actorId, AuditAction.INVESTOR_CLASSIFIED, "USER", userId)
-			.withOldValue(Map.of("investorType", previous))
-			.withNewValue(Map.of("investorType", newType, "reason", reason.strip())));
-		profiles.flush();
-		return detail(userId);
 	}
 
 	private AdminUserDetail changeStatus(UUID actorId, UUID userId, UserStatus from, UserStatus to, String reason,
@@ -147,9 +118,6 @@ public class UserAdministrationService {
 			}
 			if (criteria.kycStatus() != null) {
 				predicates.add(cb.equal(root.get("kycStatus"), criteria.kycStatus()));
-			}
-			if (criteria.investorType() != null) {
-				predicates.add(cb.equal(root.get("investorType"), criteria.investorType()));
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};

@@ -2,23 +2,25 @@ package com.sealease.backend.marketplace.dto;
 
 import com.sealease.backend.common.money.MoneyResponse;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Indicative figures for a proposed amount, computed with exact decimal arithmetic. Expected
- * income is not guaranteed: it depends on the lessee paying rent as forecast.
+ * What buying {@code containers} containers under a plan costs and pays, with exact decimal
+ * arithmetic.
  *
- * @param paymentsOverTerm number of rental payments within the offering's duration
- * @param problems         why the amount cannot be invested as entered (empty when valid)
+ * @param payouts  number of monthly payouts (the tenure in months)
+ * @param problems why the purchase cannot be made as entered (empty when it can)
  */
 public record ReturnProjection(
+		int containers,
 		MoneyResponse amount,
-		BigDecimal ownershipPercent,
-		MoneyResponse rentalPerPayment,
-		MoneyResponse expectedAnnualIncome,
-		int paymentsOverTerm,
-		MoneyResponse expectedIncomeOverTerm,
+		MoneyResponse monthlyRent,
+		MoneyResponse monthlyCapitalReturn,
+		MoneyResponse monthlyPayout,
+		int payouts,
+		MoneyResponse totalRent,
+		MoneyResponse totalCapitalReturned,
+		MoneyResponse totalPayout,
 		boolean valid,
 		List<String> problems) {
 }

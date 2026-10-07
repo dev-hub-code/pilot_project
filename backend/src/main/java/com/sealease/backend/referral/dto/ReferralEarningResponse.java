@@ -17,7 +17,7 @@ public record ReferralEarningResponse(
 		UUID sourceUserId,
 		UUID beneficiaryUserId,
 		String productCode,
-		int periodNumber,
+		int installmentNumber,
 		MoneyResponse base,
 		BigDecimal ratePercent,
 		MoneyResponse amount,

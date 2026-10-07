@@ -9,17 +9,18 @@ import { DownlineTree } from "@/features/referrals/downline-tree";
 import { ShareLink } from "@/features/referrals/share-link";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
-import type { Downline, ReferralEarning, ReferralOverview } from "@/types/referral";
-import { formatDate } from "@/utils/format";
+import type { Downline, ReferralEarning, ReferralMonth, ReferralOverview } from "@/types/referral";
+import { formatDate, formatMonth } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Referrals" };
 
 export default async function ReferralsPage({ searchParams }: PageProps<"/referrals">) {
   const page = Math.max(0, Number.parseInt(String((await searchParams).page ?? "0"), 10) || 0);
-  const [overview, downline, history] = await Promise.all([
+  const [overview, downline, monthly, history] = await Promise.all([
     authFetch<ReferralOverview>("/api/v1/referrals/me"),
     authFetch<Downline>("/api/v1/referrals/downline"),
+    authFetch<ReferralMonth[]>("/api/v1/referrals/monthly"),
     authFetch<PageResponse<ReferralEarning>>(`/api/v1/referrals/earnings?page=${page}&size=20`),
   ]);
   const earned = overview.totalEarned.length === 0 ? "—" : overview.totalEarned.map((m) => formatMoney(m)).join(" · ");
@@ -27,7 +28,7 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
   return (
     <div className="space-y-6">
       <PageHeader title="Referrals"
-        description="Invite investors. You earn a share of their rental income, and of the people they invite, four levels deep." />
+        description="Invite investors. You earn a share of the rent paid to them, and to the people they invite, four levels deep." />
       {!overview.eligible && overview.ineligibleReason && (
         <Notice tone="warning">{overview.ineligibleReason}. Until then, commissions on your referrals are not paid to you.</Notice>
       )}
@@ -70,6 +71,25 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Monthly earnings by level</h2>
+        {monthly.length === 0 ? (
+          <p className="text-sm text-muted">Each month&apos;s commission appears here, split by level, and is added to your wallet as it is paid.</p>
+        ) : (
+          <DataTable columns={["Month", ...overview.levels.map((l) => `Level ${l.level}`), "Total"]}>
+            {monthly.map((m) => (
+              <tr key={`${m.month}-${m.total.currency}`} className="hover:bg-background">
+                <Cell>{formatMonth(m.month)}</Cell>
+                {m.levels.map((amount, i) => (
+                  <Cell key={i} className={`tabular-nums ${Number(amount.amount) === 0 ? "text-muted" : ""}`}>{formatMoney(amount)}</Cell>
+                ))}
+                <Cell className="tabular-nums font-medium">{formatMoney(m.total)}</Cell>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Commission history</h2>
         {history.content.length === 0 ? (
           <p className="text-sm text-muted">Commission is paid each time rent from your referrals&apos; containers is distributed.</p>
@@ -81,7 +101,7 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
                   <Cell className="text-muted">{formatDate(e.paidAt)}</Cell>
                   <Cell>{e.sourceName}</Cell>
                   <Cell className="tabular-nums">{e.level}</Cell>
-                  <Cell><span className="font-mono">{e.productCode}</span> <span className="text-xs text-muted">period {e.periodNumber}</span></Cell>
+                  <Cell><span className="font-mono">{e.productCode}</span> <span className="text-xs text-muted">payout {e.installmentNumber}</span></Cell>
                   <Cell className="tabular-nums">{formatMoney(e.base)}</Cell>
                   <Cell className="tabular-nums text-muted">{formatPercent(e.ratePercent, 3)}</Cell>
                   <Cell className="tabular-nums font-medium">{formatMoney(e.amount)}</Cell>

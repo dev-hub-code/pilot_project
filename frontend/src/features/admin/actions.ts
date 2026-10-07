@@ -32,13 +32,6 @@ export async function reactivateUserAction(userId: string, _p: FormState, formDa
     "Account reactivated.");
 }
 
-export async function classifyInvestorAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const investorType = formData.get("investorType");
-  if (investorType !== "RETAIL" && investorType !== "HNI") return { error: "Select a classification" };
-  return withReason(`/api/v1/admin/users/${id(userId)}/classification`, formData, [`/admin/users/${userId}`],
-    `Investor classified as ${investorType}.`, { investorType });
-}
-
 export async function approveKycAction(submissionId: string): Promise<FormState> {
   try {
     await authFetch(`/api/v1/admin/kyc/${id(submissionId)}/approve`, { method: "POST" });

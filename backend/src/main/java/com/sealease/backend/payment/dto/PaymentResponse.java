@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * @param bankTransfer how to pay, while a bank transfer is pending
- * @param simulated    paid through the development card simulator
+ * @param deposit      how the investor says they paid a bank payment, once submitted
  */
 public record PaymentResponse(
 		UUID id,
@@ -30,14 +30,14 @@ public record PaymentResponse(
 		String refundReason,
 		Instant createdAt,
 		BankTransferInstructions bankTransfer,
-		boolean simulated) {
+		DepositDetails deposit) {
 
 	public static PaymentResponse from(Payment p, String orderNumber, BankTransferInstructions bankTransfer,
-			boolean simulated) {
+			DepositDetails deposit) {
 		return new PaymentResponse(p.getId(), p.getOrderId(), orderNumber, p.getUserId(), p.getMethod(), p.getProvider(),
 				p.getProviderReference(), MoneyResponse.from(p.amount()), p.getStatus(), p.getFailureReason(),
 				p.getExternalReference(), p.getSettledAt(), p.getRefundedAt(), p.getRefundReference(), p.getRefundReason(),
-				p.getCreatedAt(), bankTransfer, simulated);
+				p.getCreatedAt(), bankTransfer, deposit);
 	}
 
 }

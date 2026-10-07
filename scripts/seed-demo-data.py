@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Seeds LOCAL development data through the public admin API: containers with generated photos and
-a survey report, plus published investment offerings for the marketplace.
+Seeds LOCAL development data through the public admin API: company bank accounts, container
+stock with generated photos and survey reports, and published investment plans for the marketplace.
 
-All names (lessees, etc.) are fictional. Uses only the Python standard library.
+All names are fictional. Uses only the Python standard library.
 
     python3 scripts/seed-demo-data.py            # reads BOOTSTRAP_ADMIN_* from .env
     API_URL=http://localhost:8080 python3 scripts/seed-demo-data.py
 
-Re-running is safe: containers that already exist are skipped.
+Re-running is safe: accounts, containers and plans that already exist are skipped.
 """
 import json
 import os
@@ -16,7 +16,6 @@ import struct
 import sys
 import uuid
 import zlib
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib import error, parse, request
 
@@ -129,43 +128,60 @@ SURVEY_PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</
 
 # ------------------------------------------------------------------------------- data
 
-CLOSES = (datetime.now(timezone.utc) + timedelta(days=90)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-RISK = ("Rental income depends on the lessee continuing to pay. Containers can be damaged, lost or off-hire between "
-        "leases, and resale values vary with the shipping market. You may receive less than expected.")
-TERMS = ("1. Your ownership is proportional to the amount you invest.\n2. Rental income is distributed after costs.\n"
-         "3. Investments are held until the end of the term.\n(Demo terms for local development.)")
+RISK = ("Payouts depend on the platform leasing out its containers. Containers can be damaged, lost or off-hire, "
+        "and the value of a container at the end of its lease varies with the shipping market.")
+TERMS = ("1. You buy whole containers at the plan's price per container.\n"
+         "2. Each container is assigned to you by number once your payment is confirmed and leased for the plan's tenure.\n"
+         "3. Every month you receive the plan's rent plus 100 / tenure % of the price back, into your SeaLease wallet,\n"
+         "   so the whole price is returned by the end of the lease.\n"
+         "(Demo terms for local development.)")
 
-OFFERINGS = [
-    dict(serial="SLSU100101", type="HIGH_CUBE_40FT", condition="NEW", cbm=76.3, gross=30480, tare=3940, year=2025,
-         location="Port of Rotterdam, Maasvlakte", country="NL", colour=(22, 22, 24), investment="RETAIL",
-         title="40ft High Cube on a 3-year lease", lessee="Northsea Container Lines (fictional)", currency="USD",
-         price="50000", minimum="1000", increment="500", maximum=None, rental="520", frequency="MONTHLY", months=36,
-         risk="MEDIUM", summary="A new 40ft high cube on long-term lease with a European carrier."),
-    dict(serial="SLSU100202", type="REEFER_20FT", condition="CARGO_WORTHY", cbm=28.3, gross=30480, tare=3080, year=2022,
-         location="Port of Singapore, Pasir Panjang", country="SG", colour=(206, 206, 200), investment="RETAIL",
-         title="20ft refrigerated container, Asia trade lanes", lessee="Straits Cold Chain (fictional)", currency="USD",
-         price="38000", minimum="500", increment="250", maximum=None, rental="410", frequency="MONTHLY", months=24,
-         risk="MEDIUM", summary="A reefer serving perishable cargo on intra-Asia routes."),
-    dict(serial="SLSU100303", type="DRY_40FT", condition="CARGO_WORTHY", cbm=67.7, gross=30480, tare=3750, year=2023,
-         location="Jebel Ali Port", country="AE", colour=(112, 50, 34), investment="HNI",
-         title="Standalone 40ft dry container, Gulf routes", lessee="Gulf Freight Partners (fictional)", currency="USD",
-         price="46000", minimum=None, increment=None, maximum=None, rental="1350", frequency="QUARTERLY", months=48,
-         risk="LOW", summary="Own a whole container outright on a 4-year quarterly-paid lease."),
-    dict(serial="SLSU100404", type="DRY_40FT", condition="CARGO_WORTHY", cbm=67.7, gross=30480, tare=3750, year=2021,
-         location="Nhava Sheva (JNPT)", country="IN", colour=(28, 58, 108), investment="RETAIL",
-         title="40ft dry container, India export lanes", lessee="Western Ghats Logistics (fictional)", currency="USD",
-         price="30000", minimum="1000", increment="1000", maximum="10000", rental="330", frequency="MONTHLY", months=36,
-         risk="HIGH", summary="Higher yield on an older container serving fast-growing export routes."),
-    dict(serial="SLSU100505", type="DRY_20FT", condition="NEW", cbm=33.2, gross=30480, tare=2200, year=2025,
-         location="Port of Hamburg, Altenwerder", country="DE", colour=(46, 90, 60), investment="RETAIL",
-         title="20ft dry container, European short-sea", lessee="Elbe Shortsea (fictional)", currency="EUR",
-         price="18000", minimum="500", increment="100", maximum=None, rental="175", frequency="MONTHLY", months=24,
-         risk="LOW", summary="An accessible entry point: a new 20ft container from 500 EUR."),
-    dict(serial="SLSU100606", type="HIGH_CUBE_45FT", condition="NEW", cbm=86.0, gross=32500, tare=4800, year=2025,
-         location="Port of Los Angeles", country="US", colour=(30, 30, 33), investment="HNI",
-         title="Standalone 45ft High Cube, transpacific", lessee="Pacific Rim Carriers (fictional)", currency="USD",
-         price="62000", minimum=None, increment=None, maximum=None, rental="640", frequency="MONTHLY", months=60,
-         risk="MEDIUM", summary="A large-volume 45ft container on a 5-year transpacific lease."),
+
+def rupees(amount):
+    """Indian digit grouping: 250000 -> 2,50,000."""
+    digits = str(int(amount))
+    head, tail = digits[:-3], digits[-3:]
+    groups = []
+    while len(head) > 2:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    return "₹" + ",".join(([head] if head else []) + groups + [tail])
+
+
+def box(serial, condition, year, location, country, colour, cbm, gross, tare):
+    return dict(serial=serial, condition=condition, year=year, location=location, country=country, colour=colour,
+                cbm=cbm, gross=gross, tare=tare)
+
+
+# Investment plans and the containers in stock for each (by type). Prices in rupees.
+PLANS = [
+    dict(type="DRY_20FT", months=16, price="250000", rent="2", title="20ft dry container plan",
+         summary="The entry point: a 20ft dry container leased for 16 months.",
+         stock=[box(f"SLSU1005{n:02d}", "NEW", 2025, "Nhava Sheva (JNPT), Mumbai", "IN", (46, 90, 60), 33.2, 30480, 2200)
+                for n in range(1, 6)]),
+    dict(type="DRY_40FT", months=18, price="400000", rent="2.25", title="40ft dry container plan",
+         summary="A cargo-worthy 40ft dry container serving India's export lanes, on an 18-month lease.",
+         stock=[box(f"SLSU1004{n:02d}", "CARGO_WORTHY", 2022, "Mundra Port, Gujarat", "IN", (28, 58, 108), 67.7, 30480, 3750)
+                for n in range(1, 6)]),
+    dict(type="HIGH_CUBE_40FT", months=16, price="450000", rent="2.25", title="40ft high cube plan",
+         summary="A new 40ft high cube for high-volume cargo.",
+         stock=[box(f"SLSU1001{n:02d}", "NEW", 2025, "Chennai Port", "IN", (22, 22, 24), 76.3, 30480, 3940)
+                for n in range(1, 5)]),
+    dict(type="REEFER_20FT", months=12, price="1200000", rent="2.5", title="20ft refrigerated container plan",
+         summary="A reefer for perishable cargo: a higher rent over a shorter 12-month lease.",
+         stock=[box(f"SLSU1002{n:02d}", "CARGO_WORTHY", 2023, "Visakhapatnam Port", "IN", (206, 206, 200), 28.3, 30480, 3080)
+                for n in range(1, 4)]),
+]
+
+
+# Demo collection accounts investors can choose when paying by bank. Not real accounts.
+COMPANY_BANK_ACCOUNTS = [
+    {"accountName": "SeaLease Investments Pvt Ltd - Client Collections", "bankName": "HDFC Bank",
+     "branch": "Fort, Mumbai", "accountNumber": "50200012345678", "ifscCode": "HDFC0000060",
+     "upiId": "sealease@hdfcbank"},
+    {"accountName": "SeaLease Investments Pvt Ltd - Client Collections", "bankName": "ICICI Bank",
+     "branch": "Bandra Kurla Complex, Mumbai", "accountNumber": "000405123456", "ifscCode": "ICIC0000004",
+     "upiId": None},
 ]
 
 
@@ -177,51 +193,68 @@ def main():
     token = login["accessToken"]
     created = 0
 
-    for spec in OFFERINGS:
-        number = container_number(spec["serial"])
-        status, container = call("POST", "/api/v1/admin/containers", token, {
-            "containerNumber": number, "containerType": spec["type"], "condition": spec["condition"],
-            "capacityCbm": spec["cbm"], "maxGrossKg": spec["gross"], "tareKg": spec["tare"],
-            "manufactureYear": spec["year"], "manufacturer": "CIMC", "currentLocation": spec["location"],
-            "locationCountry": spec["country"], "notes": "Seeded demo data"})
+    for account in COMPANY_BANK_ACCOUNTS:
+        status, result = call("POST", "/api/v1/admin/company-bank-accounts", token, account)
         if status == 409:
-            print(f"skip  {number} (already seeded)")
-            continue
-        if status != 201:
-            sys.exit(f"Container {number} failed ({status}): {container}")
-        container_id = container["container"]["id"]
+            print(f"skip  {account['bankName']} {account['accountNumber']} (already seeded)")
+        elif status != 201:
+            sys.exit(f"Company bank account {account['bankName']} failed ({status}): {result}")
+        else:
+            print(f"ok    {account['bankName']} {account['accountNumber']}  (company bank account)")
 
-        uploads = [("CONTAINER_PHOTO", "Yard view", "photo-1.png", "image/png", container_photo(spec["colour"], 0)),
-                   ("CONTAINER_PHOTO", "Side view", "photo-2.png", "image/png", container_photo(spec["colour"], 1)),
-                   ("CONTAINER_SURVEY_REPORT", "Pre-lease survey", "survey.pdf", "application/pdf", SURVEY_PDF)]
-        for purpose, title, filename, ctype, data in uploads:
-            body, ctype_header = multipart({}, {"file": (filename, ctype, data)})
-            query = parse.urlencode({"purpose": purpose, "title": title, "visibleToInvestors": "true"})
-            status, result = call("POST", f"/api/v1/admin/containers/{container_id}/documents?{query}", token,
-                                  raw=body, content_type=ctype_header)
+    status, existing = call("GET", "/api/v1/admin/investment-products?size=100", token)
+    if status != 200:
+        sys.exit(f"Listing plans failed ({status}): {existing}")
+    titles = {p["title"] for p in existing["content"] if p["status"] in ("DRAFT", "OPEN")}
+
+    for spec in PLANS:
+        for index, c in enumerate(spec["stock"]):
+            number = container_number(c["serial"])
+            status, container = call("POST", "/api/v1/admin/containers", token, {
+                "containerNumber": number, "containerType": spec["type"], "condition": c["condition"],
+                "capacityCbm": c["cbm"], "maxGrossKg": c["gross"], "tareKg": c["tare"],
+                "manufactureYear": c["year"], "manufacturer": "CIMC", "currentLocation": c["location"],
+                "locationCountry": c["country"], "notes": "Seeded demo data"})
+            if status == 409:
+                print(f"skip  {number} (already registered)")
+                continue
             if status != 201:
-                sys.exit(f"Upload {title} for {number} failed ({status}): {result}")
+                sys.exit(f"Container {number} failed ({status}): {container}")
+            container_id = container["container"]["id"]
+            uploads = [("CONTAINER_SURVEY_REPORT", "Pre-lease survey", "survey.pdf", "application/pdf", SURVEY_PDF, "false")]
+            if index < 2:
+                uploads.append(("CONTAINER_PHOTO", "Yard view" if index == 0 else "Side view", f"photo-{index}.png",
+                                "image/png", container_photo(c["colour"], index), "true"))
+            for purpose, title, filename, ctype, data, visible in uploads:
+                body, ctype_header = multipart({}, {"file": (filename, ctype, data)})
+                query = parse.urlencode({"purpose": purpose, "title": title, "visibleToInvestors": visible})
+                status, result = call("POST", f"/api/v1/admin/containers/{container_id}/documents?{query}", token,
+                                      raw=body, content_type=ctype_header)
+                if status != 201:
+                    sys.exit(f"Upload {title} for {number} failed ({status}): {result}")
+            print(f"ok    {number}  {spec['type']}")
 
+        if spec["title"] in titles:
+            print(f"skip  plan '{spec['title']}' (already exists)")
+            continue
         status, product = call("POST", "/api/v1/admin/investment-products", token, {
-            "containerId": container_id, "investmentType": spec["investment"], "title": spec["title"],
-            "summary": spec["summary"],
-            "description": f"{spec['summary']}\n\nThe container is located at {spec['location']} and leased to "
-                           f"{spec['lessee']}. Rental is paid {spec['frequency'].lower()} and distributed to "
-                           f"investors in proportion to their ownership.",
-            "currency": spec["currency"], "totalAmount": spec["price"], "minimumInvestment": spec["minimum"],
-            "investmentIncrement": spec["increment"], "maximumPerInvestor": spec["maximum"],
-            "expectedRentalAmount": spec["rental"], "rentalFrequency": spec["frequency"],
-            "durationMonths": spec["months"], "lesseeName": spec["lessee"], "riskLevel": spec["risk"],
-            "riskDisclosure": RISK, "termsAndConditions": TERMS, "termsVersion": "2026.1", "offerClosesAt": CLOSES})
+            "containerType": spec["type"], "title": spec["title"], "summary": spec["summary"],
+            "description": f"{spec['summary']}\n\nBuy one or more containers at {rupees(spec['price'])} each. Each container "
+                           f"is assigned to you by its container number once your payment is confirmed and leased "
+                           f"for {spec['months']} months. Every month you receive {spec['rent']}% of the price as rent "
+                           f"plus {100 / spec['months']:.2f}% of it back, so the whole price is returned by the end.",
+            "currency": "INR", "price": spec["price"], "monthlyRentPercent": spec["rent"],
+            "tenureMonths": spec["months"],
+            "riskDisclosure": RISK, "termsAndConditions": TERMS})
         if status != 201:
-            sys.exit(f"Offering for {number} failed ({status}): {product}")
+            sys.exit(f"Plan {spec['title']} failed ({status}): {product}")
         status, published = call("POST", f"/api/v1/admin/investment-products/{product['id']}/publish", token)
         if status != 200:
             sys.exit(f"Publishing {product['code']} failed ({status}): {published}")
         created += 1
-        print(f"ok    {product['code']}  {number}  {spec['investment']:<6} {spec['title']}")
+        print(f"ok    {product['code']}  {spec['type']:<15} {spec['title']}")
 
-    print(f"\nSeeded {created} offering(s). Open http://localhost:3000/marketplace")
+    print(f"\nSeeded {created} plan(s). Open http://localhost:3000/marketplace")
 
 
 if __name__ == "__main__":

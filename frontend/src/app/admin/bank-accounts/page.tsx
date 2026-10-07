@@ -36,7 +36,7 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                     {account.bankName} <span className="font-mono">{account.accountNumberMasked}</span>
                   </p>
                   <p className="text-muted">
-                    {account.accountHolderName} · {account.country} · {account.currency} · added {formatDateTime(account.createdAt)}
+                    {account.accountHolderName} · {account.country} · added {formatDateTime(account.createdAt)}
                   </p>
                   <Link href={`/admin/users/${userId}`} className="text-brand hover:underline">View account owner</Link>
                 </div>

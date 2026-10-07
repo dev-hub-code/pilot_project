@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ORDER_STATUS_LABEL, ORDER_TONE } from "@/features/orders/labels";
+import { ORDER_STATUS_LABEL, ORDER_TONE, containersSummary } from "@/features/orders/labels";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Order, OrderStatus } from "@/types/order";
@@ -48,12 +48,12 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
       {orders.content.length === 0 ? (
         <EmptyState title="No orders" />
       ) : (
-        <DataTable columns={["Order", "Placed", "Offerings", "Total", "Status"]}>
+        <DataTable columns={["Order", "Placed", "Containers", "Total", "Status"]}>
           {orders.content.map((o) => (
             <tr key={o.id} className="hover:bg-background">
               <Cell><Link href={`/admin/orders/${o.id}`} className="font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
               <Cell className="text-muted">{formatDateTime(o.createdAt)}</Cell>
-              <Cell className="max-w-xs truncate">{o.items.map((i) => i.productCode).join(", ")}</Cell>
+              <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
               <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>
               <Cell><StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge></Cell>
             </tr>

@@ -5,12 +5,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { toneFor } from "@/components/ui/status-tones";
+import { formatPeriod } from "@/features/earnings/labels";
+import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { EarningsSummary } from "@/types/earning";
 import type { Portfolio } from "@/types/order";
-import { formatDate, humanize } from "@/utils/format";
-import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
+import { formatDate } from "@/utils/format";
+import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Portfolio" };
 
@@ -19,12 +20,12 @@ export default async function PortfolioPage() {
     authFetch<Portfolio>("/api/v1/portfolio"),
     authFetch<EarningsSummary>("/api/v1/earnings/summary"),
   ]);
-  const earned = new Map(earnings.holdings.map((h) => [h.holdingId, h]));
+  const progress = new Map(earnings.holdings.map((h) => [h.holdingId, h]));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Portfolio" description="Your confirmed container investments." />
-      <section className="grid gap-px bg-border sm:grid-cols-2" aria-label="Portfolio summary">
+      <PageHeader title="Portfolio" description="The containers you own, their leases and their monthly payouts." />
+      <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Portfolio summary">
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Total invested</p>
           <p className="font-display text-4xl font-semibold tabular-nums">
@@ -32,40 +33,59 @@ export default async function PortfolioPage() {
           </p>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Active investments</p>
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Containers on lease</p>
           <p className="font-display text-4xl font-semibold tabular-nums">{portfolio.activeHoldings}</p>
+        </div>
+        <div className="space-y-2 bg-surface p-6">
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Next payout</p>
+          <p className="font-display text-4xl font-semibold tabular-nums">{earnings.nextPayout ? formatMoney(earnings.nextPayout.total) : "—"}</p>
+          {earnings.nextPayout && <p className="text-xs text-muted">on {formatDate(earnings.nextPayout.dueOn)}</p>}
         </div>
       </section>
 
       {portfolio.holdings.length === 0 ? (
         <div className="space-y-4">
-          <EmptyState title="No investments yet" description="Confirmed investments appear here once their payment arrives." />
+          <EmptyState title="No containers yet" description="Containers are assigned to you here once your payment is confirmed." />
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
-        <DataTable columns={["Offering", "Invested", "Ownership", "Expected rental", "Earned", "Term", "Since", "Status"]}>
-          {portfolio.holdings.map((h) => (
-            <tr key={h.id} className="hover:bg-background">
-              <Cell>
-                <Link href={`/marketplace/${h.productId}`} className="font-mono text-gold-text hover:underline">{h.productCode}</Link>
-                <span className="block max-w-xs truncate text-xs text-muted">{h.productTitle}</span>
-              </Cell>
-              <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
-              <Cell className="tabular-nums">{formatPercent(h.ownershipPercent, 4)}</Cell>
-              <Cell className="tabular-nums">{formatMoney(h.expectedRentalPerPayment)}/{FREQUENCY_LABEL[h.rentalFrequency]}</Cell>
-              <Cell className="tabular-nums">
-                {formatMoney(earned.get(h.id)?.earned)}
-                {earned.has(h.id) && <span className="block text-xs text-muted">{earned.get(h.id)?.payments} payment(s)</span>}
-              </Cell>
-              <Cell>{h.durationMonths} months</Cell>
-              <Cell className="text-muted">{formatDate(h.confirmedAt)}</Cell>
-              <Cell><StatusBadge tone={toneFor(h.status)}>{humanize(h.status)}</StatusBadge></Cell>
-            </tr>
-          ))}
+        <DataTable columns={["Container", "Plan", "Invested", "Paid monthly", "Lease", "Payouts received", "Status"]}>
+          {portfolio.holdings.map((h) => {
+            const p = progress.get(h.id);
+            return (
+              <tr key={h.id} className="hover:bg-background">
+                <Cell>
+                  <span className="font-mono font-medium">{h.container.containerNumber}</span>
+                  <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[h.container.containerType]} · {h.container.currentLocation}</span>
+                </Cell>
+                <Cell>
+                  <Link href={`/marketplace/${h.productId}`} className="font-mono text-gold-text hover:underline">{h.productCode}</Link>
+                  <span className="block max-w-xs truncate text-xs text-muted">{h.productTitle}</span>
+                </Cell>
+                <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
+                <Cell className="tabular-nums">
+                  {formatMoney(h.monthlyPayout)}
+                  <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
+                </Cell>
+                <Cell>
+                  {h.tenureMonths} months
+                  <span className="block text-xs text-muted">{formatPeriod(h.leaseStartsOn, h.leaseEndsOn)}</span>
+                </Cell>
+                <Cell className="tabular-nums">
+                  {p ? `${p.paid} of ${p.installments}` : "—"}
+                  {p && <span className="block text-xs text-muted">{formatMoney(p.received)} received</span>}
+                </Cell>
+                <Cell>
+                  <StatusBadge tone={h.status === "ACTIVE" ? "success" : "neutral"}>{h.status === "ACTIVE" ? "On lease" : "Lease completed"}</StatusBadge>
+                </Cell>
+              </tr>
+            );
+          })}
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Expected rental is net of the management fee and assumes the lessee pays as forecast. See <Link href="/earnings" className="underline">Earnings</Link> for what has been paid.
+        Payouts are credited to your wallet every month, starting one month after your payment was confirmed. See{" "}
+        <Link href="/earnings" className="underline">Earnings</Link> for the full schedule.
       </p>
     </div>
   );

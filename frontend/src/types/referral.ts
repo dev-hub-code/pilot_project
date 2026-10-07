@@ -33,11 +33,18 @@ export interface ReferralEarning {
   sourceUserId: string | null;
   beneficiaryUserId: string | null;
   productCode: string | null;
-  periodNumber: number;
+  installmentNumber: number;
   base: Money;
   ratePercent: number;
   amount: Money;
   paidAt: string;
+}
+
+/** Commission earned in one calendar month (UTC); levels holds levels 1-4 in order. */
+export interface ReferralMonth {
+  month: string;
+  levels: Money[];
+  total: Money;
 }
 
 export type RateState = "IN_FORCE" | "SCHEDULED" | "SUPERSEDED" | "CANCELLED";

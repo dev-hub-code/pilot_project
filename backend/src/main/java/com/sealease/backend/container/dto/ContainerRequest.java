@@ -1,7 +1,7 @@
 package com.sealease.backend.container.dto;
 
 import com.sealease.backend.common.validation.IsoCountry;
-import com.sealease.backend.common.validation.IsoCurrency;
+import com.sealease.backend.common.validation.PlatformCurrency;
 import com.sealease.backend.container.entity.ContainerCondition;
 import com.sealease.backend.container.entity.ContainerType;
 import jakarta.validation.constraints.DecimalMin;
@@ -31,6 +31,6 @@ public record ContainerRequest(
 		@NotBlank @Size(max = 120) String currentLocation,
 		@NotBlank @IsoCountry String locationCountry,
 		@DecimalMin("0") @Digits(integer = 15, fraction = 2) BigDecimal acquisitionCost,
-		@IsoCurrency String acquisitionCurrency,
+		@PlatformCurrency String acquisitionCurrency,
 		@Size(max = 1000) String notes) {
 }

@@ -1,8 +1,8 @@
 package com.sealease.backend.crm.entity;
 
-/** What the prospect is interested in: shared (retail) or standalone (HNI) containers. */
+/** What the prospect is interested in. */
 public enum LeadInterest {
-	RETAIL,
-	HNI,
+	/** Buying containers under an investment plan. */
+	STANDALONE,
 	UNSURE
 }

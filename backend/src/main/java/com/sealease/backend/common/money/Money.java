@@ -85,9 +85,9 @@ public record Money(BigDecimal amount, Currency currency) implements Comparable<
 		return amount.setScale(digits, ROUNDING);
 	}
 
-	/** For messages shown to people: minor-unit scale, e.g. "1000.00 USD". */
+	/** For messages shown to people: symbol and grouped digits at minor-unit scale, e.g. "₹1,00,000.00". */
 	public String display() {
-		return toMinorUnitScale().toPlainString() + " " + currency.getCurrencyCode();
+		return MoneyFormat.format(this);
 	}
 
 	@Override

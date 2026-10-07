@@ -10,10 +10,9 @@ export interface TermsToAccept {
   productId: string;
   code: string;
   title: string;
-  termsVersion: string;
 }
 
-/** The investor accepts each offering's terms (by version) and places the order. */
+/** The investor accepts each plan's terms and places the order. */
 export function CheckoutForm({ idempotencyKey, terms, total, disabled }: {
   idempotencyKey: string;
   terms: TermsToAccept[];
@@ -29,10 +28,10 @@ export function CheckoutForm({ idempotencyKey, terms, total, disabled }: {
         <legend className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Terms</legend>
         {terms.map((t) => (
           <label key={t.productId} className="flex items-start gap-3 text-sm">
-            <input type="checkbox" name="accept" value={`${t.productId}|${t.termsVersion}`} required
+            <input type="checkbox" name="accept" value={t.productId} required
               className="mt-0.5 size-4 accent-gold" />
             <span>
-              I have read and accept the terms (version {t.termsVersion}) and risk disclosure of{" "}
+              I have read and accept the terms and risk disclosure of{" "}
               <a href={`/marketplace/${t.productId}`} target="_blank" rel="noopener noreferrer" className="font-medium text-gold-text hover:underline">
                 {t.code}
               </a>.
@@ -44,7 +43,7 @@ export function CheckoutForm({ idempotencyKey, terms, total, disabled }: {
         {disabled ? "Resolve the issues above" : `Place order · ${total}`}
       </SubmitButton>
       <p className="text-xs text-muted">
-        Placing the order reserves your share for 30 minutes while you pay. Your investment is confirmed once payment arrives.
+        Placing the order reserves your containers for 30 minutes while you pay. Each container&apos;s number is assigned to you once payment is confirmed.
       </p>
     </form>
   );

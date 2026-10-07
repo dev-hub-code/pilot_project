@@ -1,8 +1,7 @@
 package com.sealease.backend.order.entity;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.investment.entity.InvestmentType;
-import com.sealease.backend.investment.entity.RentalFrequency;
+import com.sealease.backend.container.entity.ContainerType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,7 +16,10 @@ import java.time.Instant;
 import java.util.Currency;
 import java.util.UUID;
 
-/** One offering in an order, with the terms the investor accepted - frozen at checkout. */
+/**
+ * One container in an order, with the plan terms the investor accepted - frozen at checkout. The
+ * container is reserved for the order and allocated to the investor once it is paid.
+ */
 @Entity
 @Immutable
 @Table(name = "order_items")
@@ -40,8 +42,11 @@ public class OrderItem {
 	private String productTitle;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "investment_type", nullable = false, length = 10)
-	private InvestmentType investmentType;
+	@Column(name = "container_type", nullable = false, length = 30)
+	private ContainerType containerType;
+
+	@Column(name = "container_id", nullable = false)
+	private UUID containerId;
 
 	@Column(name = "amount", nullable = false, precision = 19, scale = 4)
 	private BigDecimal amount;
@@ -49,24 +54,14 @@ public class OrderItem {
 	@Column(name = "currency", nullable = false, length = 3)
 	private String currency;
 
-	@Column(name = "ownership_percent", nullable = false, precision = 9, scale = 4)
-	private BigDecimal ownershipPercent;
+	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal monthlyRentPercent;
 
-	@Column(name = "terms_version", nullable = false, length = 20)
-	private String termsVersion;
+	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal monthlyCapitalReturnPercent;
 
-	@Column(name = "rental_per_payment", nullable = false, precision = 19, scale = 4)
-	private BigDecimal rentalPerPayment;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "rental_frequency", nullable = false, length = 10)
-	private RentalFrequency rentalFrequency;
-
-	@Column(name = "duration_months", nullable = false)
-	private int durationMonths;
-
-	@Column(name = "capacity_reference", nullable = false, length = 100)
-	private String capacityReference;
+	@Column(name = "tenure_months", nullable = false)
+	private int tenureMonths;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -74,36 +69,25 @@ public class OrderItem {
 	protected OrderItem() {
 	}
 
-	public OrderItem(UUID orderId, UUID productId, String productCode, String productTitle,
-			InvestmentType investmentType, Money amount, BigDecimal ownershipPercent, String termsVersion,
-			Money rentalPerPayment, RentalFrequency rentalFrequency, int durationMonths, Instant createdAt) {
+	public OrderItem(UUID orderId, UUID productId, String productCode, String productTitle, ContainerType containerType,
+			UUID containerId, Money amount, BigDecimal monthlyRentPercent, BigDecimal monthlyCapitalReturnPercent,
+			int tenureMonths, Instant createdAt) {
 		this.orderId = orderId;
 		this.productId = productId;
 		this.productCode = productCode;
 		this.productTitle = productTitle;
-		this.investmentType = investmentType;
+		this.containerType = containerType;
+		this.containerId = containerId;
 		this.amount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
-		this.ownershipPercent = ownershipPercent;
-		this.termsVersion = termsVersion;
-		this.rentalPerPayment = rentalPerPayment.amount();
-		this.rentalFrequency = rentalFrequency;
-		this.durationMonths = durationMonths;
-		this.capacityReference = capacityReference(orderId, productId);
+		this.monthlyRentPercent = monthlyRentPercent;
+		this.monthlyCapitalReturnPercent = monthlyCapitalReturnPercent;
+		this.tenureMonths = tenureMonths;
 		this.createdAt = createdAt;
-	}
-
-	/** The reservation key in the capacity ledger; unique because an order lists each offering once. */
-	public static String capacityReference(UUID orderId, UUID productId) {
-		return "order-" + orderId + ":" + productId;
 	}
 
 	public Money amount() {
 		return Money.of(amount, Currency.getInstance(currency));
-	}
-
-	public Money rentalPerPayment() {
-		return Money.of(rentalPerPayment, Currency.getInstance(currency));
 	}
 
 	public UUID getId() {
@@ -126,28 +110,24 @@ public class OrderItem {
 		return productTitle;
 	}
 
-	public InvestmentType getInvestmentType() {
-		return investmentType;
+	public ContainerType getContainerType() {
+		return containerType;
 	}
 
-	public BigDecimal getOwnershipPercent() {
-		return ownershipPercent;
+	public UUID getContainerId() {
+		return containerId;
 	}
 
-	public String getTermsVersion() {
-		return termsVersion;
+	public BigDecimal getMonthlyRentPercent() {
+		return monthlyRentPercent;
 	}
 
-	public RentalFrequency getRentalFrequency() {
-		return rentalFrequency;
+	public BigDecimal getMonthlyCapitalReturnPercent() {
+		return monthlyCapitalReturnPercent;
 	}
 
-	public int getDurationMonths() {
-		return durationMonths;
-	}
-
-	public String getCapacityReference() {
-		return capacityReference;
+	public int getTenureMonths() {
+		return tenureMonths;
 	}
 
 }

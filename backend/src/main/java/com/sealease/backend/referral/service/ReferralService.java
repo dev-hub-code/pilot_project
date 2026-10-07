@@ -266,7 +266,7 @@ public class ReferralService {
 		return account.firstName().strip() + last;
 	}
 
-	private static List<MoneyResponse> totals(List<ReferralTotal> rows) {
+	static List<MoneyResponse> totals(List<ReferralTotal> rows) {
 		Map<String, Money> byCurrency = new TreeMap<>();
 		for (ReferralTotal t : rows) {
 			byCurrency.merge(t.currency(), Money.of(t.amount(), Currency.getInstance(t.currency())), Money::plus);

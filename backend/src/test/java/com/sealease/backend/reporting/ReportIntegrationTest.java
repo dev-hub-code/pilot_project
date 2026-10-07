@@ -58,17 +58,17 @@ class ReportIntegrationTest {
 	@Test
 	void anInvestorsStatementMatchesTheirLedger() throws Exception {
 		Account investor = investors.approvedInvestor();
-		credit(investor, "USD", "500");
+		credit(investor, "INR", "500");
 
 		String today = today().toString();
 		statement(investor, today, today, null).andExpect(status().isOk())
 			.andExpect(jsonPath("$.title").value("Investor statement"))
 			.andExpect(jsonPath("$.subtitle").value(containsString(investor.email())))
-			.andExpect(jsonPath("$.sections[0].name").value("Summary (USD)"))
-			.andExpect(jsonPath("$.sections[0].rows[0].c4").value("0.00 USD"))
-			.andExpect(jsonPath("$.sections[0].rows[3].c4").value("500.00 USD"))
+			.andExpect(jsonPath("$.sections[0].name").value("Summary (₹)"))
+			.andExpect(jsonPath("$.sections[0].rows[0].c4").value("₹0.00"))
+			.andExpect(jsonPath("$.sections[0].rows[3].c4").value("₹500.00"))
 			.andExpect(jsonPath("$.sections[0].rows[5].c1").value("Closing balance"))
-			.andExpect(jsonPath("$.sections[0].rows[5].c4").value("500.00 USD"))
+			.andExpect(jsonPath("$.sections[0].rows[5].c4").value("₹500.00"))
 			.andExpect(jsonPath("$.sections[0].rows[5].emphasis").value(true))
 			.andExpect(jsonPath("$.sections[1].rows.length()").value(1))
 			.andExpect(jsonPath("$.sections[1].rows[0].c3").value("Adjustment"));
@@ -81,7 +81,7 @@ class ReportIntegrationTest {
 		assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
 		String csv = statement(investor, today, today, "csv").andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-		assertThat(csv).contains("\"Summary (USD)\",\"Closing balance\",\"\",\"\",\"500.00 USD\"");
+		assertThat(csv).contains("\"Summary (₹)\",\"Closing balance\",\"\",\"\",\"₹500.00\"");
 
 		statement(investor, today, today().minusDays(1).toString(), null).andExpect(status().isBadRequest());
 		statement(investor, today().minusDays(400).toString(), today, null).andExpect(status().isBadRequest())
@@ -93,16 +93,13 @@ class ReportIntegrationTest {
 	@Test
 	void staffReportsNeedReportPermissionsAndDownloadsAreAudited() throws Exception {
 		Account investor = investors.approvedInvestor();
-		credit(investor, "CHF", "250");
 		String today = today().toString();
-
-		String summary = mvc.perform(get("/api/v1/admin/reports/financial-summary").param("from", today).param("to", today)
-				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-		List<String> chf = JsonPath.read(summary, "$.sections[?(@.name == 'CHF')].rows[*].c4");
-		List<String> labels = JsonPath.read(summary, "$.sections[?(@.name == 'CHF')].rows[*].c1");
-		assertThat(chf.get(labels.indexOf("Adjustments to investors"))).isEqualTo("250.00 CHF");
-		assertThat(chf.get(labels.indexOf("Owed to investors"))).isEqualTo("250.00 CHF");
+		// Other tests post in the same currency on the same day, so compare totals before and after.
+		java.math.BigDecimal adjustmentsBefore = summaryFigure(today, "Adjustments to investors");
+		java.math.BigDecimal owedBefore = summaryFigure(today, "Owed to investors");
+		credit(investor, "INR", "250");
+		assertThat(summaryFigure(today, "Adjustments to investors").subtract(adjustmentsBefore)).isEqualByComparingTo("250");
+		assertThat(summaryFigure(today, "Owed to investors").subtract(owedBefore)).isEqualByComparingTo("250");
 
 		Account viewer = api.staff("REPORT_VIEWER");
 		mvc.perform(get("/api/v1/admin/reports/offerings").param("format", "pdf").header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
@@ -111,13 +108,13 @@ class ReportIntegrationTest {
 				Integer.class, viewer.id())).isEqualTo(1);
 		List<String> sections = JsonPath.read(mvc.perform(get("/api/v1/admin/reports/offerings")
 				.header(HttpHeaders.AUTHORIZATION, viewer.bearer())).andReturn().getResponse().getContentAsString(), "$.sections[*].name");
-		assertThat(sections).containsExactly("Funding", "Leases", "Rent due and not recorded");
+		assertThat(sections).containsExactly("Plans", "Payouts due and not yet paid");
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'REPORT_GENERATED' AND actor_user_id = ?",
 				Integer.class, viewer.id())).isEqualTo(1);
 
 		mvc.perform(get("/api/v1/admin/reports/statement").param("userId", investor.id().toString()).param("from", today)
 				.param("to", today).param("format", "csv").header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
-			.andExpect(status().isOk()).andExpect(content().string(containsString("250.00 CHF")));
+			.andExpect(status().isOk()).andExpect(content().string(containsString("₹250.00")));
 		mvc.perform(get("/api/v1/admin/reports/offerings").header(HttpHeaders.AUTHORIZATION, api.staff("SUPPORT").bearer()))
 			.andExpect(status().isForbidden());
 		mvc.perform(get("/api/v1/admin/reports/offerings").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
@@ -131,8 +128,8 @@ class ReportIntegrationTest {
 	@Test
 	void investorsDownloadTheirOwnInvoicesAsPdf() throws Exception {
 		Account investor = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, admin).retail("50000", "1000", "500");
-		String orderId = investors.invest(investor, product, "1500");
+		UUID product = new OfferingFixtures(mvc, admin).plan(1);
+		String orderId = investors.invest(investor, product, 1);
 
 		byte[] pdf = mvc.perform(get("/api/v1/reports/invoices/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
@@ -141,7 +138,7 @@ class ReportIntegrationTest {
 		assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
 		mvc.perform(get("/api/v1/reports/invoices/{id}", orderId).param("format", "json").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.sections[1].rows[1].c2").value("Total"))
-			.andExpect(jsonPath("$.sections[1].rows[1].c4").value("1,500.00 USD"));
+			.andExpect(jsonPath("$.sections[1].rows[1].c4").value("₹50,000.00"));
 
 		mvc.perform(get("/api/v1/reports/invoices/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investors.approvedInvestor().bearer()))
 			.andExpect(status().isNotFound());
@@ -155,7 +152,7 @@ class ReportIntegrationTest {
 	void theDashboardShowsOnlyWhatTheViewerMaySee() throws Exception {
 		List<String> all = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$[*].key");
-		assertThat(all).containsExactly("investors", "capital", "rent", "owed", "withdrawals", "support", "leads");
+		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "support", "leads");
 
 		List<String> sales = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString(), "$[*].key");
@@ -163,6 +160,18 @@ class ReportIntegrationTest {
 	}
 
 	// ----------------------------------------------------------------------------- helpers
+
+	/** One INR figure of today's financial summary, e.g. "₹1,23,450.00" → 123450.00. */
+	private java.math.BigDecimal summaryFigure(String day, String label) throws Exception {
+		String summary = mvc.perform(get("/api/v1/admin/reports/financial-summary").param("from", day).param("to", day)
+				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		List<String> values = JsonPath.read(summary, "$.sections[?(@.name == 'Totals (₹)')].rows[*].c4");
+		List<String> labels = JsonPath.read(summary, "$.sections[?(@.name == 'Totals (₹)')].rows[*].c1");
+		return labels.contains(label)
+				? new java.math.BigDecimal(values.get(labels.indexOf(label)).replace("₹", "").replace(",", ""))
+				: java.math.BigDecimal.ZERO;
+	}
 
 	private ResultActions credit(Account investor, String currency, String amount) throws Exception {
 		return mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, finance.bearer())

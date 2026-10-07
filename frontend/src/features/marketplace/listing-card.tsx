@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { ContainerScene } from "@/components/brand/container-scene";
-import { ProgressBar } from "@/components/ui/progress-bar";
-import { StatusBadge } from "@/components/ui/status-badge";
 import type { MarketplaceListing } from "@/types/marketplace";
-import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
-import { CONTAINER_TYPE_LABEL, RISK_LABEL, RISK_TONE } from "./labels";
+import { formatMoney, formatPercent } from "@/utils/money";
+import { CONTAINER_TYPE_LABEL } from "./labels";
 
 export function ListingCard({ listing }: { listing: MarketplaceListing }) {
   const href = `/marketplace/${listing.id}`;
@@ -23,7 +21,7 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
           <ContainerScene focus="side" className="size-full" />
         )}
         <span className="absolute top-3 left-3 bg-ink/80 px-2.5 py-1 text-[11px] tracking-[0.12em] text-on-ink uppercase">
-          {listing.investmentType === "HNI" ? "Standalone · HNI" : "Shared · Retail"}
+          {CONTAINER_TYPE_LABEL[listing.containerType]}
         </span>
       </Link>
 
@@ -33,27 +31,24 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
           <h3 className="text-lg leading-snug font-semibold tracking-tight">
             <Link href={href} className="hover:text-gold-text">{listing.title}</Link>
           </h3>
-          <p className="text-sm text-muted">
-            {CONTAINER_TYPE_LABEL[listing.container.containerType]} · {listing.container.currentLocation}
-          </p>
+          <p className="text-sm text-muted">{listing.summary}</p>
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <Stat label="Expected yield" value={formatPercent(listing.expectedAnnualReturnPercent)} emphasis />
-          <Stat label="Rental" value={`${formatMoney(listing.expectedRentalAmount)}/${FREQUENCY_LABEL[listing.rentalFrequency]}`} />
-          <Stat label="Minimum" value={formatMoney(listing.minimumInvestment)} />
-          <Stat label="Term" value={`${listing.durationMonths} months`} />
+          <Stat label="Monthly payout" value={formatPercent(listing.monthlyPayoutPercent)} emphasis />
+          <Stat label="Price per container" value={formatMoney(listing.price)} />
+          <Stat label="Paid monthly" value={formatMoney(listing.monthlyPayout)} />
+          <Stat label="Tenure" value={`${listing.tenureMonths} months`} />
         </dl>
+        <p className="text-xs text-muted">
+          {formatPercent(listing.monthlyRentPercent)} rent + {formatPercent(listing.monthlyCapitalReturnPercent)} of your capital back, every month.
+        </p>
 
-        <div className="mt-auto space-y-2">
-          <ProgressBar percent={listing.capacity.fundedPercent} label={`${listing.code} funding progress`} />
-          <div className="flex items-center justify-between text-xs text-muted">
-            <span>
-              <span className="font-medium text-foreground">{formatMoney(listing.capacity.available, { compact: true })}</span>{" "}
-              available of {formatMoney(listing.price, { compact: true })}
-            </span>
-            <StatusBadge tone={RISK_TONE[listing.riskLevel]}>{RISK_LABEL[listing.riskLevel]}</StatusBadge>
-          </div>
+        <div className="mt-auto flex items-center justify-between text-xs text-muted">
+          <span>
+            <span className="font-medium text-foreground">{listing.availableContainers}</span>{" "}
+            container{listing.availableContainers === 1 ? "" : "s"} available
+          </span>
         </div>
       </div>
     </article>

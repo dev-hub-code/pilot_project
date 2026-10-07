@@ -74,7 +74,14 @@ public final class TestApi {
 
 	/** A new account holding exactly the given roles, signed in again so its token carries them. */
 	public Account staff(String... roles) throws Exception {
-		Account account = register();
+		return becomeStaff(register(), roles);
+	}
+
+	/**
+	 * Turns an existing (investor) account into a staff account holding exactly the given roles, e.g.
+	 * an investor hired by the platform; whatever they did as an investor remains theirs.
+	 */
+	public Account becomeStaff(Account account, String... roles) throws Exception {
 		String json = "[\"" + String.join("\",\"", roles) + "\"]";
 		int status = mvc.perform(put("/api/v1/admin/users/{id}/roles", account.id())
 				.header(HttpHeaders.AUTHORIZATION, admin().bearer())
@@ -85,6 +92,20 @@ public final class TestApi {
 			.getStatus();
 		assertThat(status).isEqualTo(200);
 		return login(account.email(), PASSWORD);
+	}
+
+	/** A new, active company bank account investors can pay into, created by the admin. */
+	public UUID companyBankAccount() throws Exception {
+		String accountNumber = String.valueOf(1_000_000_000L + (long) (Math.random() * 8_999_999_999L));
+		MvcResult result = mvc.perform(post("/api/v1/admin/company-bank-accounts")
+				.header(HttpHeaders.AUTHORIZATION, admin().bearer())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"accountName":"SeaLease Collections","bankName":"Test Bank","branch":"Fort, Mumbai",
+						 "accountNumber":"%s","ifscCode":"HDFC0001234","upiId":"sealease@hdfcbank"}""".formatted(accountNumber)))
+			.andReturn();
+		assertThat(result.getResponse().getStatus()).isEqualTo(201);
+		return UUID.fromString(JsonPath.read(result.getResponse().getContentAsString(), "$.id"));
 	}
 
 	public UUID userIdByEmail(String email) {

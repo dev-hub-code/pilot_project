@@ -24,16 +24,16 @@ const NAV = [
 
 const STEPS = [
   {
-    title: "Choose a container",
-    body: "Browse vetted shipping containers on lease to logistics operators, with the price, expected rental yield and term shown up front.",
+    title: "Choose a plan",
+    body: "Each plan shows the container type, the price per container, the monthly rent and the length of the lease up front.",
   },
   {
-    title: "Invest your share",
-    body: "Retail investors co-own a container from a small minimum. Ownership is recorded transaction by transaction, never just as a percentage.",
+    title: "Buy your containers",
+    body: "Buy one or more whole containers and pay by bank. Once your payment is confirmed, each container is assigned to you by its unique container number.",
   },
   {
-    title: "Earn rental income",
-    body: "Rental income is distributed in proportion to ownership, credited to an auditable ledger and withdrawable to your verified bank account.",
+    title: "Get paid every month",
+    body: "Every month of the lease you receive rent plus an equal part of your investment back, so it is all returned by the end. Payouts are credited to an auditable ledger and withdrawable to your verified bank account.",
   },
 ];
 
@@ -77,8 +77,8 @@ export default async function Home() {
             </h1>
             <div className="max-w-lg space-y-7 lg:justify-self-end">
               <p className="text-base leading-relaxed text-on-ink/90">
-                From Shared Retail Holdings To Standalone High-Net-Worth Assets, SeaLease Lets You Own Leased
-                Shipping Containers And Earn Transparent, Ledger-Backed Rental Income Every Month.
+                Buy Whole Shipping Containers, Each Assigned To You By Its Own Number, And Receive
+                Rent Plus Part Of Your Capital Back Every Month Of The Lease.
               </p>
               <div className="flex flex-wrap gap-3">
                 <LinkButton href="/register">Start Investing</LinkButton>
@@ -108,7 +108,7 @@ export default async function Home() {
             <div className="space-y-5">
               <Eyebrow>How It Works</Eyebrow>
               <h2 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Three Steps From Sign-Up To Rental Income
+                Three Steps From Sign-Up To Monthly Payouts
               </h2>
             </div>
             <LinkButton href="/register" variant="secondary">Create Your Account</LinkButton>
@@ -127,19 +127,20 @@ export default async function Home() {
         {/* -------------------------------------------------------------- investors */}
         <section id="investors" className="grid scroll-mt-8 md:grid-cols-2">
           <div className="space-y-5 bg-background px-5 py-16 sm:px-10 lg:px-14">
-            <Eyebrow>Retail Investors</Eyebrow>
-            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Co-Own A Container</h3>
+            <Eyebrow>Your Own Containers</Eyebrow>
+            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">A Container With Your Name On It</h3>
             <p className="max-w-md text-sm leading-relaxed text-muted">
-              Invest alongside others in a shared container. Your ownership is proportional to your
-              contribution, and so is your share of every rental payment.
+              Every container you buy is a specific, identified container: you see its ISO number, type and
+              location in your portfolio as soon as your payment is confirmed.
             </p>
           </div>
           <div className="space-y-5 bg-ink px-5 py-16 text-on-ink sm:px-10 lg:px-14">
-            <Eyebrow tone="light">HNI Investors</Eyebrow>
-            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Own Containers Outright</h3>
+            <Eyebrow tone="light">Monthly Payouts</Eyebrow>
+            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent Plus Capital, Every Month</h3>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
-              Verified high-net-worth investors can hold standalone containers exclusively — 100% of the
-              asset and 100% of its rental income.
+              Each container is leased for the plan&apos;s tenure. Every month you receive the plan&apos;s rent plus
+              100 ÷ tenure % of the price back, so your whole investment is returned by the end of the lease.
+              Open to every verified investor.
             </p>
           </div>
         </section>
@@ -151,7 +152,7 @@ export default async function Home() {
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>
             <p className="max-w-md text-sm leading-relaxed text-muted">
               Tell us a little about what you are looking for and an investment specialist will get back to you,
-              whether you are considering a shared container or owning one outright.
+              whether you are buying your first container or adding to your fleet.
             </p>
           </div>
           <InterestForm />

@@ -8,7 +8,8 @@ import { CartLineForm } from "@/features/orders/cart-line-form";
 import { CheckoutForm } from "@/features/orders/checkout-form";
 import { authFetch } from "@/lib/server/auth/session";
 import type { Cart } from "@/types/order";
-import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
+import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 
 export const metadata: Metadata = { title: "Cart" };
 
@@ -21,22 +22,21 @@ export default async function CartPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Cart" />
-        <EmptyState title="Your cart is empty" description="Choose an offering in the marketplace and add an amount." />
+        <EmptyState title="Your cart is empty" description="Choose a plan in the marketplace and add containers." />
         <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
       </div>
     );
   }
 
-  const terms = cart.items.filter((line) => line.termsVersion && line.productCode).map((line) => ({
+  const terms = cart.items.filter((line) => line.productCode).map((line) => ({
     productId: line.productId,
     code: line.productCode as string,
     title: line.productTitle,
-    termsVersion: line.termsVersion as string,
   }));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Cart" description="Review amounts and accept the terms. Availability is checked again when you place the order." />
+      <PageHeader title="Cart" description="Review your containers and accept the terms. Availability is checked again when you place the order." />
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <ul className="space-y-4">
           {cart.items.map((line) => (
@@ -47,17 +47,19 @@ export default async function CartPage() {
                   <h2 className="text-lg font-semibold tracking-tight">
                     <Link href={`/marketplace/${line.productId}`} className="hover:underline">{line.productTitle}</Link>
                   </h2>
-                  {line.investmentType && (
-                    <p className="text-xs text-muted">{line.investmentType === "HNI" ? "Standalone · HNI" : "Shared · Retail"}</p>
+                  {line.containerType && (
+                    <p className="text-xs text-muted">
+                      {line.quantity} × {CONTAINER_TYPE_LABEL[line.containerType]} container{line.quantity === 1 ? "" : "s"} at {formatMoney(line.pricePerContainer)}
+                    </p>
                   )}
                 </div>
                 <p className="font-display text-2xl font-semibold tabular-nums">{formatMoney(line.amount)}</p>
               </div>
-              {line.rentalFrequency && (
+              {line.monthlyPayout && (
                 <dl className="grid gap-4 text-sm sm:grid-cols-3">
-                  <Fact label="Your ownership" value={formatPercent(line.ownershipPercent, 4)} />
-                  <Fact label={`Expected per ${FREQUENCY_LABEL[line.rentalFrequency]}`} value={formatMoney(line.rentalPerPayment)} />
-                  <Fact label="Term" value={`${line.durationMonths} months`} />
+                  <Fact label="Paid to you monthly" value={formatMoney(line.monthlyPayout)} />
+                  <Fact label="Rent + capital back" value={`${formatPercent(line.monthlyRentPercent)} + ${formatPercent(line.monthlyCapitalReturnPercent)} a month`} />
+                  <Fact label={`Total over ${line.tenureMonths} months`} value={formatMoney(line.totalPayout)} />
                 </dl>
               )}
               {line.problems.length > 0 && (
@@ -65,7 +67,7 @@ export default async function CartPage() {
                   {line.problems.map((problem) => <li key={problem}>{problem}</li>)}
                 </ul>
               )}
-              <CartLineForm productId={line.productId} amount={line.amount.amount} currency={line.amount.currency} />
+              <CartLineForm productId={line.productId} quantity={line.quantity} />
             </li>
           ))}
         </ul>

@@ -40,7 +40,7 @@ public class InvestmentOrder extends BaseEntity {
 	@Column(name = "request_hash", nullable = false, updatable = false, length = 64)
 	private String requestHash;
 
-	@Column(name = "expires_at", nullable = false, updatable = false)
+	@Column(name = "expires_at", nullable = false)
 	private Instant expiresAt;
 
 	@Column(name = "confirmed_at")
@@ -81,6 +81,14 @@ public class InvestmentOrder extends BaseEntity {
 		this.status = outcome;
 		this.closeReason = reason;
 		this.closedAt = now;
+	}
+
+	/** Keeps the reservation until {@code until} (never shortens it), while a payment is being verified. */
+	public void holdUntil(Instant until) {
+		requirePending();
+		if (until.isAfter(expiresAt)) {
+			this.expiresAt = until;
+		}
 	}
 
 	public boolean isPendingPayment() {

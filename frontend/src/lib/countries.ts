@@ -210,6 +210,3 @@ export const COUNTRY_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "ZW", label: "Zimbabwe" },
 ];
 
-export const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "INR", "AED", "SGD", "CHF", "JPY", "AUD", "CAD", "HKD"].map(
-  (code) => ({ value: code, label: code }),
-);

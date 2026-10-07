@@ -12,7 +12,7 @@ import type { EarningsSummary } from "@/types/earning";
 import type { Money } from "@/types/marketplace";
 import type { Portfolio } from "@/types/order";
 import type { Profile } from "@/types/user";
-import { humanize } from "@/utils/format";
+import { formatDate, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -34,8 +34,9 @@ export default async function DashboardPage() {
     ? portfolio.totalsByCurrency.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—";
   const kpis = [
-    { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} active investment(s)` : "Investor accounts only" },
-    { label: "Rental income", value: list(earnings?.totalEarned), note: earnings ? "Net of management fees, to date" : "Investor accounts only" },
+    { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} container(s) on lease` : "Investor accounts only" },
+    { label: "Next payout", value: earnings?.nextPayout ? formatMoney(earnings.nextPayout.total, { compact: true }) : "—",
+      note: earnings?.nextPayout ? `Due ${formatDate(earnings.nextPayout.dueOn)}: rent plus capital back` : earnings ? "Buy a container to start earning" : "Investor accounts only" },
     { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Ready to withdraw to your bank account" : "Investor accounts only" },
   ];
 
@@ -82,9 +83,6 @@ export default async function DashboardPage() {
           </Item>
           <Item label="Identity verification">
             <StatusBadge tone={toneFor(profile.kycStatus)}>{humanize(profile.kycStatus)}</StatusBadge>
-          </Item>
-          <Item label="Investor type">
-            <StatusBadge tone={toneFor(profile.investorType)}>{profile.investorType}</StatusBadge>
           </Item>
           <Item label="Roles">{me.roles.join(", ") || "—"}</Item>
         </dl>

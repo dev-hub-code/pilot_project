@@ -7,14 +7,16 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
-import { cancelOrderAction, simulatePaymentAction, startPaymentAction } from "@/features/orders/actions";
-import { METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
+import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
+import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
+import { DepositForm } from "@/features/orders/deposit-form";
+import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
-import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -33,6 +35,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
     throw error;
   }
   const pending = payments.find((p) => p.status === "PENDING");
+  const awaitingVerification = pending?.deposit != null;
+  const rejected = payments.find((p) => p.method === "BANK_TRANSFER" && p.status === "FAILED" && p.deposit);
   const refunds = payments.filter((p) => p.status === "REFUND_REQUIRED" || p.status === "REFUNDED");
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
@@ -55,11 +59,23 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       {order.status === "CONFIRMED" && (
         <Notice tone="success">
-          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). It now appears in your <Link href="/portfolio" className="underline">portfolio</Link>.
+          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; their leases and monthly payouts have started.
         </Notice>
       )}
       {(order.status === "EXPIRED" || order.status === "CANCELLED") && (
-        <Notice tone="warning">{order.closeReason ?? ORDER_STATUS_LABEL[order.status]}. The reserved capacity was released.</Notice>
+        <Notice tone="warning">{order.closeReason ?? ORDER_STATUS_LABEL[order.status]}. The reserved containers were released.</Notice>
+      )}
+      {order.status === "PENDING_PAYMENT" && awaitingVerification && pending?.deposit && (
+        <Notice tone="info">
+          We received your payment details ({DEPOSIT_MODE_LABEL[pending.deposit.mode]},{" "}
+          {DEPOSIT_REFERENCE_LABEL[pending.deposit.mode]}: <span className="font-mono">{pending.deposit.reference}</span>).
+          Your order is confirmed once our finance team has verified the payment. Your containers stay reserved until {formatDateTime(order.expiresAt)}.
+        </Notice>
+      )}
+      {order.status === "PENDING_PAYMENT" && !pending && rejected && (
+        <Notice tone="warning">
+          We could not verify your payment <span className="font-mono">{rejected.deposit?.reference}</span>: {rejected.failureReason}. Please pay again below.
+        </Notice>
       )}
       {refunds.map((p) => (
         <Notice key={p.id} tone="warning">
@@ -70,17 +86,22 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <DataTable columns={["Offering", "Amount", "Ownership", "Expected rental", "Terms"]}>
+          <DataTable columns={["Plan", "Container", "Price", "Paid monthly", "Tenure"]}>
             {order.items.map((item) => (
-              <tr key={item.productId}>
+              <tr key={item.id}>
                 <Cell>
                   <Link href={`/marketplace/${item.productId}`} className="font-mono text-gold-text hover:underline">{item.productCode}</Link>
                   <span className="block max-w-xs truncate text-xs text-muted">{item.productTitle}</span>
                 </Cell>
+                <Cell>
+                  {item.containerNumber
+                    ? <span className="font-mono font-medium">{item.containerNumber}</span>
+                    : <span className="text-muted">Assigned once paid</span>}
+                  <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</span>
+                </Cell>
                 <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
-                <Cell className="tabular-nums">{formatPercent(item.ownershipPercent, 4)}</Cell>
-                <Cell className="tabular-nums">{formatMoney(item.rentalPerPayment)}/{FREQUENCY_LABEL[item.rentalFrequency]}</Cell>
-                <Cell>v{item.termsVersion}</Cell>
+                <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
+                <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
               </tr>
             ))}
           </DataTable>
@@ -92,7 +113,14 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <Cell className="text-muted">{formatDateTime(p.createdAt)}</Cell>
-                    <Cell>{METHOD_LABEL[p.method]}</Cell>
+                    <Cell>
+                      {METHOD_LABEL[p.method]}
+                      {p.deposit && (
+                        <span className="block text-xs text-muted">
+                          {DEPOSIT_MODE_LABEL[p.deposit.mode]} · <span className="font-mono">{p.deposit.reference}</span>
+                        </span>
+                      )}
+                    </Cell>
                     <Cell className="font-mono text-xs">{p.providerReference}</Cell>
                     <Cell className="tabular-nums">{formatMoney(p.amount)}</Cell>
                     <Cell>
@@ -110,66 +138,33 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
           <Card title="Total">
             <p className="font-display text-3xl font-semibold tabular-nums">{formatMoney(order.total)}</p>
             {order.status === "PENDING_PAYMENT" && (
-              <p className="mt-2 text-sm text-muted">Pay by {formatDateTime(order.expiresAt)}, or the reservation lapses.</p>
+              <p className="mt-2 text-sm text-muted">
+                {awaitingVerification
+                  ? `Payment being verified. Reserved until ${formatDateTime(order.expiresAt)}.`
+                  : `Pay by ${formatDateTime(order.expiresAt)}, or the reservation lapses.`}
+              </p>
             )}
           </Card>
 
           {order.status === "PENDING_PAYMENT" && (
             <Card title="Pay">
               <div className="space-y-6">
-                {pending?.bankTransfer && (
-                  <div className="space-y-3">
-                    <p className="text-sm">Transfer exactly <strong>{formatMoney(pending.bankTransfer.amount)}</strong> to:</p>
-                    <dl className="grid gap-2 text-sm">
-                      <Row label="Beneficiary" value={pending.bankTransfer.beneficiaryName} />
-                      <Row label="IBAN" value={pending.bankTransfer.iban} mono />
-                      <Row label="BIC" value={pending.bankTransfer.bic} mono />
-                      <Row label="Bank" value={pending.bankTransfer.bankName} />
-                      <Row label="Reference" value={pending.bankTransfer.reference} mono />
-                    </dl>
-                    <Notice tone="info">Quote the reference exactly. We confirm your order when the money arrives.</Notice>
-                  </div>
+                {pending?.bankTransfer && <DepositForm key={pending.id} orderId={order.id} payment={pending} />}
+                {pending?.method !== "BANK_TRANSFER" && (
+                  <ActionButton action={startPaymentAction.bind(null, order.id, "BANK_TRANSFER", key())}
+                    label="Pay by bank (online transfer, cheque or cash deposit)" className="w-full" />
                 )}
-                {pending?.method === "CARD" && (
-                  <div className="space-y-3">
-                    <p className="text-sm">Card payment <span className="font-mono text-xs">{pending.providerReference}</span> is waiting for the card issuer.</p>
-                    {pending.simulated && (
-                      <div className="space-y-3 border border-dashed border-border p-4">
-                        <p className="text-xs uppercase tracking-[0.08em] text-muted">Development: simulated card gateway</p>
-                        <ActionButton action={simulatePaymentAction.bind(null, order.id, pending.id, "SUCCEEDED")} label="Simulate approved card" className="w-full" />
-                        <ActionButton action={simulatePaymentAction.bind(null, order.id, pending.id, "FAILED")} label="Simulate declined card" variant="quiet" className="w-full" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="space-y-3">
-                  {pending?.method !== "BANK_TRANSFER" && (
-                    <ActionButton action={startPaymentAction.bind(null, order.id, "BANK_TRANSFER", key())} label="Pay by bank transfer"
-                      variant={pending ? "quiet" : "primary"} className="w-full" />
-                  )}
-                  {pending?.method !== "CARD" && (
-                    <ActionButton action={startPaymentAction.bind(null, order.id, "CARD", key())} label="Pay by card"
-                      variant="quiet" className="w-full" />
-                  )}
-                </div>
                 <div className="border-t border-border pt-4">
                   <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"
-                    confirm={`Cancel ${order.orderNumber}? Your reserved share is released.`} className="w-full" />
+                    confirm={awaitingVerification
+                      ? `Cancel ${order.orderNumber}? Your reserved containers are released, and money you already paid is refunded once it arrives.`
+                      : `Cancel ${order.orderNumber}? Your reserved containers are released.`} className="w-full" />
                 </div>
               </div>
             </Card>
           )}
         </aside>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-muted">{label}</dt>
-      <dd className={`text-right font-medium ${mono ? "font-mono" : ""}`}>{value}</dd>
     </div>
   );
 }

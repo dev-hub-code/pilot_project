@@ -2,7 +2,6 @@
 
 export type UserStatus = "ACTIVE" | "SUSPENDED" | "DISABLED";
 export type KycStatus = "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "REJECTED";
-export type InvestorType = "RETAIL" | "HNI";
 
 export interface Address {
   line1: string | null;
@@ -25,7 +24,6 @@ export interface Profile {
   address: Address;
   taxResidencyCountry: string | null;
   taxIdMasked: string | null;
-  investorType: InvestorType;
   kycStatus: KycStatus;
   emailNotifications: boolean;
   smsNotifications: boolean;
@@ -98,7 +96,6 @@ export interface AdminUserSummary {
   lastName: string;
   status: UserStatus;
   kycStatus: KycStatus;
-  investorType: InvestorType;
   createdAt: string;
   lastLoginAt: string | null;
 }
@@ -108,11 +105,4 @@ export interface AdminUserDetail {
   profile: Profile;
   statusReason: string | null;
   statusChangedAt: string | null;
-  classificationHistory: {
-    previousType: InvestorType;
-    newType: InvestorType;
-    reason: string;
-    decidedBy: string;
-    decidedAt: string;
-  }[];
 }

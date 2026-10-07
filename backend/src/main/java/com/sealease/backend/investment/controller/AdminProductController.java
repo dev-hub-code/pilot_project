@@ -2,12 +2,10 @@ package com.sealease.backend.investment.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
-import com.sealease.backend.investment.dto.ActivateLeaseRequest;
-import com.sealease.backend.investment.dto.CapacityMovementResponse;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.dto.ProductSearchCriteria;
-import com.sealease.backend.investment.entity.InvestmentType;
+import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.investment.entity.ProductStatus;
 import com.sealease.backend.investment.service.ProductService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -45,21 +43,15 @@ public class AdminProductController {
 	@PreAuthorize("hasAuthority('INVESTMENT_VIEW')")
 	public PageResponse<ProductResponse> search(@RequestParam(required = false) @Size(max = 50) String q,
 			@RequestParam(required = false) ProductStatus status,
-			@RequestParam(required = false) InvestmentType investmentType,
+			@RequestParam(required = false) ContainerType containerType,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(products.search(new ProductSearchCriteria(q, status, investmentType), pageable));
+		return PageResponse.from(products.search(new ProductSearchCriteria(q, status, containerType), pageable));
 	}
 
 	@GetMapping("/{productId}")
 	@PreAuthorize("hasAuthority('INVESTMENT_VIEW')")
 	public ProductResponse detail(@PathVariable UUID productId) {
 		return products.detail(productId);
-	}
-
-	@GetMapping("/{productId}/capacity-movements")
-	@PreAuthorize("hasAuthority('INVESTMENT_VIEW')")
-	public List<CapacityMovementResponse> movements(@PathVariable UUID productId) {
-		return products.recentMovements(productId);
 	}
 
 	@PostMapping
@@ -83,11 +75,11 @@ public class AdminProductController {
 		return products.publish(actor.userId(), productId);
 	}
 
-	@PostMapping("/{productId}/activate")
+	/** Stops selling containers under the plan; sold containers keep their lease and payouts. */
+	@PostMapping("/{productId}/close")
 	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
-	public ProductResponse activate(AuthenticatedUser actor, @PathVariable UUID productId,
-			@Valid @RequestBody ActivateLeaseRequest request) {
-		return products.activateLease(actor.userId(), productId, request.leaseStartsOn());
+	public ProductResponse close(AuthenticatedUser actor, @PathVariable UUID productId) {
+		return products.close(actor.userId(), productId);
 	}
 
 	@PostMapping("/{productId}/cancel")

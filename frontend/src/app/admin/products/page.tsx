@@ -6,17 +6,16 @@ import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PRODUCT_TONE } from "@/features/marketplace/labels";
+import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL, PRODUCT_TONE } from "@/features/marketplace/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Product, ProductStatus } from "@/types/marketplace";
-import { humanize } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Offerings" };
+export const metadata: Metadata = { title: "Plans" };
 
-const STATUSES: ProductStatus[] = ["DRAFT", "OPEN", "FUNDED", "ACTIVE", "CANCELLED"];
+const STATUSES: ProductStatus[] = ["DRAFT", "OPEN", "CLOSED", "CANCELLED"];
 
 export default async function ProductsPage({ searchParams }: PageProps<"/admin/products">) {
   const session = await requireStaff();
@@ -29,29 +28,33 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Offerings" description="Investment products backed by containers."
-        actions={hasPermission(session.permissions, Permission.INVESTMENT_CREATE) ? <LinkButton href="/admin/products/new">New offering</LinkButton> : undefined} />
+      <PageHeader title="Investment plans" description="Investors buy whole containers under a plan and are paid rent plus capital back every month."
+        actions={hasPermission(session.permissions, Permission.INVESTMENT_CREATE) ? <LinkButton href="/admin/products/new">New plan</LinkButton> : undefined} />
       <nav aria-label="Filter by status" className="flex flex-wrap gap-2 text-sm">
         {[undefined, ...STATUSES].map((s) => (
           <Link key={s ?? "all"} href={s ? `/admin/products?status=${s}` : "/admin/products"} aria-current={s === status ? "page" : undefined}
             className={`rounded-full border px-3 py-1 ${s === status ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {s ? humanize(s) : "All"}
+            {s ? PRODUCT_STATUS_LABEL[s] : "All"}
           </Link>
         ))}
       </nav>
       {products.content.length === 0 ? (
-        <EmptyState title="No offerings" />
+        <EmptyState title="No plans" />
       ) : (
-        <DataTable columns={["Code", "Title", "Type", "Price", "Yield", "Funded", "Status"]}>
+        <DataTable columns={["Code", "Title", "Container", "Price", "Monthly payout", "Sold", "In stock", "Status"]}>
           {products.content.map((p) => (
             <tr key={p.id} className="hover:bg-background">
               <Cell><Link href={`/admin/products/${p.id}`} className="font-mono font-medium text-gold-text hover:underline">{p.code}</Link></Cell>
               <Cell className="max-w-xs truncate">{p.title}</Cell>
-              <Cell>{p.investmentType}</Cell>
-              <Cell>{formatMoney(p.price)}</Cell>
-              <Cell>{formatPercent(p.expectedAnnualReturnPercent)}</Cell>
-              <Cell>{formatPercent(p.capacity.fundedPercent, 0)}</Cell>
-              <Cell><StatusBadge tone={PRODUCT_TONE[p.status]}>{humanize(p.status)}</StatusBadge></Cell>
+              <Cell>{CONTAINER_TYPE_LABEL[p.containerType]}</Cell>
+              <Cell className="tabular-nums">{formatMoney(p.price)}</Cell>
+              <Cell className="tabular-nums">
+                {formatMoney(p.monthlyPayout)}
+                <span className="block text-xs text-muted">{formatPercent(p.monthlyRentPercent)} rent + {formatPercent(p.monthlyCapitalReturnPercent)} capital</span>
+              </Cell>
+              <Cell className="tabular-nums">{p.containersSold}</Cell>
+              <Cell className="tabular-nums">{p.availableContainers}</Cell>
+              <Cell><StatusBadge tone={PRODUCT_TONE[p.status]}>{PRODUCT_STATUS_LABEL[p.status]}</StatusBadge></Cell>
             </tr>
           ))}
         </DataTable>

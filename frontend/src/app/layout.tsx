@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: "SeaLease",
     template: "%s · SeaLease",
   },
-  description: "Invest in shipping container rental assets and track your rental income.",
+  description: "Buy shipping containers on lease and receive rent plus your capital back every month.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

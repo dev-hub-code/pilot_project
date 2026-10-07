@@ -23,6 +23,7 @@ import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -120,6 +121,25 @@ class StaffAccountIntegrationTest {
 		reset(admin, api.register().id()).andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("only issued to staff")));
 		reset(admin, api.userIdByEmail(TestApi.ADMIN_EMAIL)).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void anAccountIsEitherAnInvestorOrStaff() throws Exception {
+		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(jsonPath("$.permissions").value(not(hasItem("INVESTOR_PORTAL"))));
+
+		Account investor = api.register();
+		mvc.perform(put("/api/v1/admin/users/{id}/roles", investor.id()).header(HttpHeaders.AUTHORIZATION, admin.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"roles\":[\"INVESTOR\",\"FINANCE\"]}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value(containsString("either an investor or staff")));
+
+		mvc.perform(post("/api/v1/admin/roles").header(HttpHeaders.AUTHORIZATION, admin.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"name":"INVESTING_AUDITOR","description":"Mixed","permissions":["INVESTOR_PORTAL","AUDIT_VIEW"]}
+						"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value(containsString("cannot combine")));
 	}
 
 	@Test

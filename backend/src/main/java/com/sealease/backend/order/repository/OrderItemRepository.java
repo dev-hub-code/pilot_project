@@ -10,7 +10,7 @@ import java.util.UUID;
 public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
 	/** Ordered by offering id: the lock order used for capacity changes, which prevents deadlocks. */
-	List<OrderItem> findByOrderIdOrderByProductId(UUID orderId);
+	List<OrderItem> findByOrderIdOrderByProductIdAscIdAsc(UUID orderId);
 
 	List<OrderItem> findByOrderIdIn(Collection<UUID> orderIds);
 

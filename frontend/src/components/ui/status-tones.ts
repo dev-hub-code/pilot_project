@@ -12,8 +12,6 @@ const TONES: Record<string, StatusTone> = {
   DISABLED: "danger",
   REJECTED: "danger",
   REMOVED: "neutral",
-  RETAIL: "neutral",
-  HNI: "success",
   MATURED: "neutral",
   RECORDED: "warning",
   DISTRIBUTED: "success",

@@ -21,7 +21,6 @@ export const metadata: Metadata = { title: "Users" };
 const options = (values: readonly string[]) => values.map((value) => ({ value, label: humanize(value) }));
 const STATUS = ["ACTIVE", "SUSPENDED", "DISABLED"] as const;
 const KYC = ["NOT_SUBMITTED", "PENDING", "APPROVED", "REJECTED"] as const;
-const TYPES = ["RETAIL", "HNI"] as const;
 
 function pick<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
@@ -34,7 +33,6 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
     q: typeof params.q === "string" ? params.q.slice(0, 100) : undefined,
     status: pick(params.status, STATUS),
     kycStatus: pick(params.kycStatus, KYC),
-    investorType: pick(params.investorType, TYPES),
   };
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   const query = new URLSearchParams({ page: String(page), size: "25" });
@@ -54,8 +52,6 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
         <SelectField label="KYC" name="kycStatus" options={options(KYC)} placeholder="Any" defaultValue={filters.kycStatus ?? ""} />
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <SelectField label="Type" name="investorType" options={options(TYPES)} placeholder="Any"
-              defaultValue={filters.investorType ?? ""} />
           </div>
           <Button type="submit">Filter</Button>
         </div>
@@ -75,7 +71,6 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
               <Cell className="text-muted">{user.email}</Cell>
               <Cell><StatusBadge tone={toneFor(user.status)}>{humanize(user.status)}</StatusBadge></Cell>
               <Cell><StatusBadge tone={toneFor(user.kycStatus)}>{humanize(user.kycStatus)}</StatusBadge></Cell>
-              <Cell>{user.investorType}</Cell>
               <Cell className="text-muted">{formatDate(user.createdAt)}</Cell>
               <Cell className="text-muted">{formatDate(user.lastLoginAt)}</Cell>
             </tr>

@@ -19,16 +19,6 @@ app:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
   kafka:
     create-topics: true
-  payments:
-    bank-transfer:
-      beneficiary-name: ${PAYMENT_BANK_BENEFICIARY_NAME:SeaLease Client Money (Demo)}
-      iban: ${PAYMENT_BANK_IBAN:DE89370400440532013000}
-      bic: ${PAYMENT_BANK_BIC:COBADEFFXXX}
-      bank-name: ${PAYMENT_BANK_NAME:Demo Bank}
-    # Card payments are simulated locally: the portal can trigger success or failure.
-    simulator:
-      enabled: true
-      webhook-secret: ${PAYMENT_SIMULATOR_WEBHOOK_SECRET:local-only-simulator-webhook-secret-0001}
   invoice:
     issuer-name: ${INVOICE_ISSUER_NAME:SeaLease Demo Ltd}
     issuer-address: ${INVOICE_ISSUER_ADDRESS:1 Harbour Street, Rotterdam, NL}

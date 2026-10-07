@@ -105,6 +105,15 @@ public class UserRoleService implements AuthorityGuard {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Unknown roles: " + unknown);
 		}
 
+		Set<String> resulting = requested.values().stream()
+			.flatMap(r -> r.getPermissions().stream())
+			.map(Permission::getCode)
+			.collect(Collectors.toSet());
+		if (PermissionCode.mixesInvestorAndStaff(resulting)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"An account is either an investor or staff: investor and staff roles cannot be combined");
+		}
+
 		List<UserRole> current = userRoles.findByIdUserId(targetUserId);
 		Set<String> currentNames = current.stream().map(g -> g.getRole().getName()).collect(Collectors.toSet());
 

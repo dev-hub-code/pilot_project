@@ -1,7 +1,7 @@
 package com.sealease.backend.investment.entity;
 
-import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.persistence.BaseEntity;
+import com.sealease.backend.container.entity.ContainerType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,13 +10,12 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.Currency;
 import java.util.UUID;
 
 /**
- * An investment offering backed by one container. Commercial terms are frozen once published;
- * capacity counters change only through {@link com.sealease.backend.investment.service.CapacityService}.
+ * An investment plan: investors buy whole containers of one type at a fixed price per container and
+ * are paid monthly rent plus a return of capital for the tenure. Terms are frozen once published.
  */
 @Entity
 @Table(name = "investment_products")
@@ -25,12 +24,9 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "code", nullable = false, length = 20, updatable = false)
 	private String code;
 
-	@Column(name = "container_id", nullable = false, updatable = false)
-	private UUID containerId;
-
 	@Enumerated(EnumType.STRING)
-	@Column(name = "investment_type", nullable = false, length = 10)
-	private InvestmentType investmentType;
+	@Column(name = "container_type", nullable = false, length = 30)
+	private ContainerType containerType;
 
 	@Column(name = "title", nullable = false, length = 140)
 	private String title;
@@ -44,58 +40,23 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "currency", nullable = false, length = 3)
 	private String currency;
 
-	@Column(name = "total_amount", nullable = false, precision = 19, scale = 4)
-	private BigDecimal totalAmount;
+	@Column(name = "price", nullable = false, precision = 19, scale = 4)
+	private BigDecimal price;
 
-	@Column(name = "minimum_investment", nullable = false, precision = 19, scale = 4)
-	private BigDecimal minimumInvestment;
+	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal monthlyRentPercent;
 
-	@Column(name = "investment_increment", nullable = false, precision = 19, scale = 4)
-	private BigDecimal investmentIncrement;
+	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal monthlyCapitalReturnPercent;
 
-	@Column(name = "maximum_per_investor", precision = 19, scale = 4)
-	private BigDecimal maximumPerInvestor;
-
-	@Column(name = "committed_amount", nullable = false, precision = 19, scale = 4)
-	private BigDecimal committedAmount = BigDecimal.ZERO;
-
-	@Column(name = "reserved_amount", nullable = false, precision = 19, scale = 4)
-	private BigDecimal reservedAmount = BigDecimal.ZERO;
-
-	@Column(name = "expected_rental_amount", nullable = false, precision = 19, scale = 4)
-	private BigDecimal expectedRentalAmount;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "rental_frequency", nullable = false, length = 10)
-	private RentalFrequency rentalFrequency;
-
-	@Column(name = "duration_months", nullable = false)
-	private int durationMonths;
-
-	@Column(name = "management_fee_percent", nullable = false, precision = 5, scale = 2)
-	private BigDecimal managementFeePercent = BigDecimal.ZERO;
-
-	@Column(name = "lessee_name", length = 140)
-	private String lesseeName;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "risk_level", nullable = false, length = 10)
-	private RiskLevel riskLevel;
+	@Column(name = "tenure_months", nullable = false)
+	private int tenureMonths;
 
 	@Column(name = "risk_disclosure", nullable = false, columnDefinition = "text")
 	private String riskDisclosure;
 
 	@Column(name = "terms_and_conditions", nullable = false, columnDefinition = "text")
 	private String termsAndConditions;
-
-	@Column(name = "terms_version", nullable = false, length = 20)
-	private String termsVersion;
-
-	@Column(name = "offer_opens_at")
-	private Instant offerOpensAt;
-
-	@Column(name = "offer_closes_at")
-	private Instant offerClosesAt;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 20)
@@ -107,26 +68,14 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "published_by")
 	private UUID publishedBy;
 
+	@Column(name = "closed_at")
+	private Instant closedAt;
+
 	@Column(name = "cancelled_at")
 	private Instant cancelledAt;
 
 	@Column(name = "cancellation_reason", length = 500)
 	private String cancellationReason;
-
-	@Column(name = "lease_starts_on")
-	private LocalDate leaseStartsOn;
-
-	@Column(name = "lease_ends_on")
-	private LocalDate leaseEndsOn;
-
-	@Column(name = "activated_at")
-	private Instant activatedAt;
-
-	@Column(name = "activated_by")
-	private UUID activatedBy;
-
-	@Column(name = "matured_at")
-	private Instant maturedAt;
 
 	@Column(name = "created_by", nullable = false, updatable = false)
 	private UUID createdBy;
@@ -134,34 +83,24 @@ public class InvestmentProduct extends BaseEntity {
 	protected InvestmentProduct() {
 	}
 
-	public InvestmentProduct(String code, UUID containerId, UUID createdBy) {
+	public InvestmentProduct(String code, UUID createdBy) {
 		this.code = code;
-		this.containerId = containerId;
 		this.createdBy = createdBy;
 		this.status = ProductStatus.DRAFT;
 	}
 
 	public void defineTerms(ProductTerms t) {
-		this.investmentType = t.investmentType();
+		this.containerType = t.containerType();
 		this.title = t.title();
 		this.summary = t.summary();
 		this.description = t.description();
 		this.currency = t.currency().getCurrencyCode();
-		this.totalAmount = t.totalAmount();
-		this.minimumInvestment = t.minimumInvestment();
-		this.investmentIncrement = t.investmentIncrement();
-		this.maximumPerInvestor = t.maximumPerInvestor();
-		this.expectedRentalAmount = t.expectedRentalAmount();
-		this.rentalFrequency = t.rentalFrequency();
-		this.durationMonths = t.durationMonths();
-		this.managementFeePercent = t.managementFeePercent();
-		this.lesseeName = t.lesseeName();
-		this.riskLevel = t.riskLevel();
+		this.price = t.price();
+		this.monthlyRentPercent = t.monthlyRentPercent();
+		this.monthlyCapitalReturnPercent = t.monthlyCapitalReturnPercent();
+		this.tenureMonths = t.tenureMonths();
 		this.riskDisclosure = t.riskDisclosure();
 		this.termsAndConditions = t.termsAndConditions();
-		this.termsVersion = t.termsVersion();
-		this.offerOpensAt = t.offerOpensAt();
-		this.offerClosesAt = t.offerClosesAt();
 	}
 
 	public void publish(UUID actorId, Instant now) {
@@ -170,86 +109,37 @@ public class InvestmentProduct extends BaseEntity {
 		this.publishedBy = actorId;
 	}
 
+	/** No more containers are sold under the plan; those sold keep their lease and payouts. */
+	public void close(Instant now) {
+		this.status = ProductStatus.CLOSED;
+		this.closedAt = now;
+	}
+
 	public void cancel(String reason, Instant now) {
 		this.status = ProductStatus.CANCELLED;
 		this.cancellationReason = reason;
 		this.cancelledAt = now;
 	}
 
-	/** The lease begins: no more investments are taken and rental periods run from {@code startsOn}. */
-	public void activate(LocalDate startsOn, UUID actorId, Instant now) {
-		this.status = ProductStatus.ACTIVE;
-		this.leaseStartsOn = startsOn;
-		this.leaseEndsOn = startsOn.plusMonths(durationMonths);
-		this.activatedBy = actorId;
-		this.activatedAt = now;
-	}
-
-	/** Every rental period of the lease has been paid out. */
-	public void mature(Instant now) {
-		this.status = ProductStatus.MATURED;
-		this.maturedAt = now;
-	}
-
-	/** Capacity counter changes; callers hold the row lock and record a movement. */
-	public void applyReservation(BigDecimal amount) {
-		this.reservedAmount = reservedAmount.add(amount);
-	}
-
-	public void applyRelease(BigDecimal amount) {
-		this.reservedAmount = reservedAmount.subtract(amount);
-	}
-
-	public void applyCommit(BigDecimal amount) {
-		this.reservedAmount = reservedAmount.subtract(amount);
-		this.committedAmount = committedAmount.add(amount);
-		if (committedAmount.compareTo(totalAmount) == 0 && status == ProductStatus.OPEN) {
-			this.status = ProductStatus.FUNDED;
-		}
-	}
-
-	public boolean isAcceptingInvestmentsAt(Instant now) {
-		return status == ProductStatus.OPEN && (offerOpensAt == null || !now.isBefore(offerOpensAt))
-				&& (offerClosesAt == null || now.isBefore(offerClosesAt));
+	public boolean isAcceptingInvestments() {
+		return status == ProductStatus.OPEN;
 	}
 
 	public ProductTerms terms() {
-		return new ProductTerms(investmentType, title, summary, description, currencyUnit(), totalAmount,
-				minimumInvestment, investmentIncrement, maximumPerInvestor, expectedRentalAmount, rentalFrequency,
-				durationMonths, managementFeePercent, lesseeName, riskLevel, riskDisclosure, termsAndConditions, termsVersion, offerOpensAt,
-				offerClosesAt);
+		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price, monthlyRentPercent,
+				monthlyCapitalReturnPercent, tenureMonths, riskDisclosure, termsAndConditions);
 	}
 
 	public Currency currencyUnit() {
 		return Currency.getInstance(currency);
 	}
 
-	public Money total() {
-		return Money.of(totalAmount, currencyUnit());
-	}
-
-	public Money committed() {
-		return Money.of(committedAmount, currencyUnit());
-	}
-
-	public Money reserved() {
-		return Money.of(reservedAmount, currencyUnit());
-	}
-
-	public Money available() {
-		return total().minus(committed()).minus(reserved());
-	}
-
 	public String getCode() {
 		return code;
 	}
 
-	public UUID getContainerId() {
-		return containerId;
-	}
-
-	public InvestmentType getInvestmentType() {
-		return investmentType;
+	public ContainerType getContainerType() {
+		return containerType;
 	}
 
 	public ProductStatus getStatus() {
@@ -264,28 +154,16 @@ public class InvestmentProduct extends BaseEntity {
 		return publishedBy;
 	}
 
+	public Instant getClosedAt() {
+		return closedAt;
+	}
+
 	public Instant getCancelledAt() {
 		return cancelledAt;
 	}
 
 	public String getCancellationReason() {
 		return cancellationReason;
-	}
-
-	public LocalDate getLeaseStartsOn() {
-		return leaseStartsOn;
-	}
-
-	public LocalDate getLeaseEndsOn() {
-		return leaseEndsOn;
-	}
-
-	public Instant getActivatedAt() {
-		return activatedAt;
-	}
-
-	public Instant getMaturedAt() {
-		return maturedAt;
 	}
 
 	public UUID getCreatedBy() {

@@ -3,7 +3,7 @@ import type { Money } from "./marketplace";
 
 export type LeadStage = "NEW" | "CONTACTED" | "QUALIFIED" | "PROPOSAL" | "WON" | "LOST";
 export type LeadSource = "WEBSITE" | "STAFF";
-export type LeadInterest = "RETAIL" | "HNI" | "UNSURE";
+export type LeadInterest = "STANDALONE" | "UNSURE";
 export type ActivityType = "NOTE" | "CALL" | "EMAIL" | "MEETING" | "STAGE_CHANGE" | "ASSIGNMENT" | "SYSTEM";
 
 export interface Lead {

@@ -12,14 +12,11 @@ import type { ContainerType, MarketplaceListing } from "@/types/marketplace";
 
 export const metadata: Metadata = { title: "Marketplace" };
 
-const TYPES = [{ value: "RETAIL", label: "Shared (retail)" }, { value: "HNI", label: "Standalone (HNI)" }];
-const RISKS = [{ value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }];
-const STATUSES = [{ value: "OPEN", label: "Open for investment" }, { value: "FUNDED", label: "Fully funded" }];
+const STATUSES = [{ value: "OPEN", label: "Open for investment" }, { value: "CLOSED", label: "Closed" }];
 const SORTS = [
   { value: "NEWEST", label: "Newest" },
-  { value: "HIGHEST_YIELD", label: "Highest yield" },
-  { value: "MOST_AVAILABLE", label: "Most available" },
-  { value: "LOWEST_MINIMUM", label: "Lowest minimum" },
+  { value: "HIGHEST_RETURN", label: "Highest rent" },
+  { value: "LOWEST_PRICE", label: "Lowest price" },
 ];
 
 function pick(value: unknown, options: readonly { value: string }[]): string | undefined {
@@ -29,9 +26,7 @@ function pick(value: unknown, options: readonly { value: string }[]): string | u
 export default async function MarketplacePage({ searchParams }: PageProps<"/marketplace">) {
   const params = await searchParams;
   const filters = {
-    investmentType: pick(params.investmentType, TYPES),
     containerType: pick(params.containerType, CONTAINER_TYPE_OPTIONS) as ContainerType | undefined,
-    riskLevel: pick(params.riskLevel, RISKS),
     status: pick(params.status, STATUSES),
     sort: pick(params.sort, SORTS),
   };
@@ -48,16 +43,14 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
           Container Investment Opportunities
         </h1>
         <p className="max-w-2xl text-muted">
-          Each offering is backed by a specific, identified shipping container on lease. Yields shown are expected
-          gross rental yields and are not guaranteed.
+          Buy whole shipping containers under a plan. Once your payment is confirmed, a container is assigned to you by
+          its unique number and leased for the plan&apos;s tenure: every month you receive rent plus part of your capital back.
         </p>
       </header>
 
-      <form role="search" className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6">
-        <SelectField label="Type" name="investmentType" options={TYPES} placeholder="All" defaultValue={filters.investmentType ?? ""} />
+      <form role="search" className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
         <SelectField label="Container" name="containerType" options={CONTAINER_TYPE_OPTIONS} placeholder="All"
           defaultValue={filters.containerType ?? ""} />
-        <SelectField label="Risk" name="riskLevel" options={RISKS} placeholder="Any" defaultValue={filters.riskLevel ?? ""} />
         <SelectField label="Status" name="status" options={STATUSES} defaultValue={filters.status ?? "OPEN"} />
         <SelectField label="Sort by" name="sort" options={SORTS} defaultValue={filters.sort ?? "NEWEST"} />
         <Button type="submit">Apply</Button>
@@ -65,8 +58,8 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
 
       {listings.content.length === 0 ? (
         <EmptyState
-          title="No offerings match these filters"
-          description={filters.containerType ? `No ${CONTAINER_TYPE_LABEL[filters.containerType]} offerings right now.` : "New containers are listed regularly."}
+          title="No plans match these filters"
+          description={filters.containerType ? `No ${CONTAINER_TYPE_LABEL[filters.containerType]} plans right now.` : "New plans are listed regularly."}
         />
       ) : (
         <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">

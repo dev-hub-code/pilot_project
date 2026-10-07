@@ -9,17 +9,16 @@ import { Pagination } from "@/components/ui/pagination";
 import { SelectField } from "@/components/ui/select-field";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TextField } from "@/components/ui/text-field";
-import { CONDITION_LABEL, CONTAINER_TYPE_LABEL, CONTAINER_TYPE_OPTIONS } from "@/features/marketplace/labels";
+import { CONDITION_LABEL, CONTAINER_STATUS_LABEL, CONTAINER_STATUS_TONE, CONTAINER_TYPE_LABEL, CONTAINER_TYPE_OPTIONS } from "@/features/marketplace/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
-import type { ContainerDetail } from "@/types/marketplace";
-import { humanize } from "@/utils/format";
+import type { ContainerDetail, ContainerStatus } from "@/types/marketplace";
 
 export const metadata: Metadata = { title: "Containers" };
 
-const STATUSES = ["AVAILABLE", "ON_LEASE", "MAINTENANCE", "RETIRED"].map((value) => ({ value, label: humanize(value) }));
-const STATUS_TONE = { AVAILABLE: "success", ON_LEASE: "neutral", MAINTENANCE: "warning", RETIRED: "danger" } as const;
+const STATUSES = (Object.keys(CONTAINER_STATUS_LABEL) as ContainerStatus[]).map((value) => ({ value, label: CONTAINER_STATUS_LABEL[value] }));
+const STATUS_TONE = CONTAINER_STATUS_TONE;
 
 export default async function ContainersPage({ searchParams }: PageProps<"/admin/containers">) {
   const session = await requireStaff();
@@ -36,7 +35,7 @@ export default async function ContainersPage({ searchParams }: PageProps<"/admin
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Containers" description="The physical assets behind every offering."
+      <PageHeader title="Containers" description="Inventory investors buy under plans. Available containers are assigned to investors when their payment is confirmed."
         actions={hasPermission(session.permissions, Permission.INVESTMENT_CREATE)
           ? <LinkButton href="/admin/containers/new">Register container</LinkButton> : undefined} />
       <form role="search" className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-4">
@@ -46,7 +45,7 @@ export default async function ContainersPage({ searchParams }: PageProps<"/admin
         <Button type="submit">Filter</Button>
       </form>
       {containers.content.length === 0 ? (
-        <EmptyState title="No containers yet" description="Register a container to create an offering." />
+        <EmptyState title="No containers yet" description="Register containers so investors can buy them under a plan." />
       ) : (
         <DataTable columns={["Number", "Type", "Condition", "Location", "Built", "Status"]}>
           {containers.content.map(({ container: c }) => (
@@ -58,7 +57,7 @@ export default async function ContainersPage({ searchParams }: PageProps<"/admin
               <Cell>{CONDITION_LABEL[c.condition]}</Cell>
               <Cell className="text-muted">{c.currentLocation}, {c.locationCountry}</Cell>
               <Cell>{c.manufactureYear}</Cell>
-              <Cell><StatusBadge tone={STATUS_TONE[c.status]}>{humanize(c.status)}</StatusBadge></Cell>
+              <Cell><StatusBadge tone={STATUS_TONE[c.status]}>{CONTAINER_STATUS_LABEL[c.status]}</StatusBadge></Cell>
             </tr>
           ))}
         </DataTable>

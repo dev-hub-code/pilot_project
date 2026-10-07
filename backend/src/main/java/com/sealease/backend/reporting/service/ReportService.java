@@ -3,11 +3,11 @@ package com.sealease.backend.reporting.service;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.money.Money;
+import com.sealease.backend.common.money.MoneyFormat;
 import com.sealease.backend.common.money.MoneyResponse;
-import com.sealease.backend.earning.dto.DuePeriodResponse;
-import com.sealease.backend.earning.service.RentalService;
+import com.sealease.backend.earning.dto.DuePayouts;
+import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.investment.dto.HoldingResponse;
-import com.sealease.backend.investment.dto.Lease;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.investment.service.ProductService;
@@ -29,8 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -62,17 +60,17 @@ public class ReportService {
 	private final LedgerService ledger;
 	private final HoldingService holdings;
 	private final ProductService products;
-	private final RentalService rentals;
+	private final PayoutService payouts;
 	private final WithdrawalService withdrawals;
 	private final UserAccountService accounts;
 	private final Clock clock;
 
-	public ReportService(LedgerService ledger, HoldingService holdings, ProductService products, RentalService rentals,
+	public ReportService(LedgerService ledger, HoldingService holdings, ProductService products, PayoutService payouts,
 			WithdrawalService withdrawals, UserAccountService accounts, Clock clock) {
 		this.ledger = ledger;
 		this.holdings = holdings;
 		this.products = products;
-		this.rentals = rentals;
+		this.payouts = payouts;
 		this.withdrawals = withdrawals;
 		this.accounts = accounts;
 		this.clock = clock;
@@ -113,16 +111,16 @@ public class ReportService {
 		List<Section> sections = new ArrayList<>();
 		for (InvestorStatement s : ledger.investorStatements(userId, period.start(), period.end())) {
 			Currency currency = Currency.getInstance(s.currency());
-			sections.add(new Section("Summary (" + s.currency() + ")", List.of("", "", "", "Amount"), List.of(
+			sections.add(new Section("Summary (" + MoneyFormat.symbol(currency) + ")", List.of("", "", "", "Amount"), List.of(
 					Row.of("Opening balance", "", "", Format.money(s.opening())),
-					Row.of("Rental income", "Your share of rent, after fees", "", Format.money(sum(s, currency, TransactionType.RENTAL_DISTRIBUTION))),
+					Row.of("Monthly payouts", "Rent plus capital returned", "", Format.money(sum(s, currency, TransactionType.INVESTOR_PAYOUT))),
 					Row.of("Referral commissions", "", "", Format.money(sum(s, currency, TransactionType.REFERRAL_COMMISSION))),
 					Row.of("Adjustments", "", "", Format.money(sum(s, currency, TransactionType.ADJUSTMENT))),
 					Row.of("Withdrawals", "Requested, less any returned", "",
 							Format.money(sum(s, currency, TransactionType.WITHDRAWAL_RESERVE)
 								.plus(sum(s, currency, TransactionType.WITHDRAWAL_RELEASE)))),
 					Row.total("Closing balance", "", "", Format.money(s.closing())))));
-			sections.add(new Section("Account activity (" + s.currency() + ")", List.of("Date", "Description", "Type", "Amount"),
+			sections.add(new Section("Account activity (" + MoneyFormat.symbol(currency) + ")", List.of("Date", "Description", "Type", "Amount"),
 					s.entries().stream()
 						.map(e -> Row.of(Format.date(e.at()), e.description(), Format.label(e.type().name()), Format.money(e.amount())))
 						.toList()));
@@ -131,9 +129,9 @@ public class ReportService {
 			sections.add(new Section("Summary", List.of("", "", "", "Amount"), List.of()));
 		}
 		List<HoldingResponse> held = holdings.portfolio(userId).holdings();
-		sections.add(new Section("Investments", List.of("Offering", "Title", "Ownership", "Invested"), held.stream()
-			.map(h -> Row.of(h.productCode(), h.productTitle() + " · " + Format.label(h.status().name()),
-					Format.percent(h.ownershipPercent()), Format.money(h.amount())))
+		sections.add(new Section("Containers", List.of("Plan", "Container", "Lease", "Invested"), held.stream()
+			.map(h -> Row.of(h.productCode(), h.container().containerNumber() + " · " + Format.label(h.status().name()),
+					Format.date(h.leaseStartsOn()) + " – " + Format.date(h.leaseEndsOn().minusDays(1)), Format.money(h.amount())))
 			.toList()));
 		List<WithdrawalResponse> paidOut = withdrawals.forStatement(userId, period.start(), period.end());
 		sections.add(new Section("Withdrawals requested in the period", List.of("Date", "Reference", "Status", "Amount"),
@@ -160,15 +158,11 @@ public class ReportService {
 			Currency currency = Currency.getInstance(code);
 			List<PeriodTotal> t = totals.getOrDefault(code, List.of());
 			Money zero = Money.zero(currency);
-			sections.add(new Section(code, List.of("Item", "Basis", "", "Amount"), List.of(
-					Row.of("Rent collected", "Lessee payments distributed", "",
-							Format.money(total(t, zero, TransactionType.RENTAL_DISTRIBUTION, AccountType.RENTAL_CASH, Direction.DEBIT))),
-					Row.of("  to investors", "Net of management fees", "",
-							Format.money(total(t, zero, TransactionType.RENTAL_DISTRIBUTION, AccountType.INVESTOR_EARNINGS, Direction.CREDIT))),
-					Row.of("  management fees", "Platform revenue", "",
-							Format.money(total(t, zero, TransactionType.RENTAL_DISTRIBUTION, AccountType.PLATFORM_FEE_REVENUE, Direction.CREDIT))),
-					Row.of("  retained", "Unsold shares and rounding", "",
-							Format.money(total(t, zero, TransactionType.RENTAL_DISTRIBUTION, AccountType.PLATFORM_RETAINED, Direction.CREDIT))),
+			sections.add(new Section("Totals (" + MoneyFormat.symbol(currency) + ")", List.of("Item", "Basis", "", "Amount"), List.of(
+					Row.of("Rent paid to investors", "Monthly rent on their containers", "",
+							Format.money(total(t, zero, TransactionType.INVESTOR_PAYOUT, AccountType.PLATFORM_RENT_EXPENSE, Direction.DEBIT))),
+					Row.of("Capital returned to investors", "Monthly part of the price", "",
+							Format.money(total(t, zero, TransactionType.INVESTOR_PAYOUT, AccountType.PLATFORM_CAPITAL_RETURNS, Direction.DEBIT))),
 					Row.of("Referral commissions", "Paid by the platform", "",
 							Format.money(total(t, zero, TransactionType.REFERRAL_COMMISSION, AccountType.PLATFORM_REFERRAL_EXPENSE, Direction.DEBIT))),
 					Row.of("Adjustments to investors", "Credits less debits", "",
@@ -187,44 +181,29 @@ public class ReportService {
 				clock.instant(), sections, LEDGER_NOTE);
 	}
 
-	// ------------------------------------------------------------------ offerings & funding
+	// --------------------------------------------------------------------- plans & payouts
 
 	@Transactional(readOnly = true)
 	public ReportDocument offerings() {
 		List<ProductResponse> all = products.published();
-		List<UUID> ids = all.stream().map(ProductResponse::id).toList();
-		Map<UUID, Long> investors = holdings.investorCounts(ids);
-		Map<UUID, RentalService.Received> received = rentals.received(ids);
+		Map<UUID, Long> investors = holdings.investorCounts(all.stream().map(ProductResponse::id).toList());
 		LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
 
-		List<Row> funding = all.stream()
+		List<Row> plans = all.stream()
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
-					p.capacity().fundedPercent().stripTrailingZeros().toPlainString() + "% · "
+					p.containersSold() + " sold · " + p.availableContainers() + " available · "
 							+ investors.getOrDefault(p.id(), 0L) + " investor(s)",
-					Format.money(p.capacity().committed()) + " of " + Format.money(p.price())))
+					Format.money(p.price()) + " · " + Format.percent(p.monthlyRentPercent()) + " rent + "
+							+ Format.percent(p.monthlyCapitalReturnPercent()) + " capital a month"))
 			.toList();
-		List<Row> leases = all.stream()
-			.filter(p -> p.leaseStartsOn() != null)
-			.map(p -> {
-				int periods = Lease.periodCount(p.rentalFrequency(), p.durationMonths());
-				RentalService.Received paid = received.get(p.id());
-				Money currencyZero = Money.zero(Currency.getInstance(p.price().currency()));
-				return Row.of(p.code(), Format.date(p.leaseStartsOn()) + " – " + Format.date(p.leaseEndsOn().minusDays(1)),
-						(paid == null ? 0 : paid.periods()) + " of " + periods + " periods paid",
-						Format.money(paid == null ? currencyZero : paid.amount()) + " received");
-			})
+		List<DuePayouts> due = payouts.due();
+		List<Row> unpaid = due.stream()
+			.map(d -> Row.of("Due and unpaid", d.count() + " payout(s)", "", Format.money(d.total())))
 			.toList();
-		List<DuePeriodResponse> due = rentals.due();
-		List<Row> overdue = due.stream()
-			.map(d -> Row.of(d.productCode(), "Period " + d.periodNumber() + " of " + d.periodCount(),
-					"Due " + Format.date(d.dueOn()) + (d.daysOverdue() > 0 ? " · " + d.daysOverdue() + " days late" : ""),
-					Format.money(d.expectedAmount())))
-			.toList();
-		return new ReportDocument("Offerings & funding", "As of " + Format.date(today), "offerings-" + today, clock.instant(),
-				List.of(new Section("Funding", List.of("Offering", "Title", "Funded", "Committed"), funding),
-						new Section("Leases", List.of("Offering", "Lease", "Rent", "Received"), leases),
-						new Section("Rent due and not recorded", List.of("Offering", "Period", "Due", "Expected"), overdue)),
-				"Funded percentages count confirmed investments only. Received rent is what has been distributed to investors.");
+		return new ReportDocument("Plans & payouts", "As of " + Format.date(today), "plans-" + today, clock.instant(),
+				List.of(new Section("Plans", List.of("Plan", "Title", "Containers", "Terms"), plans),
+						new Section("Payouts due and not yet paid", List.of("", "Payouts", "", "Amount"), unpaid)),
+				"Containers sold count confirmed purchases. Payouts are credited automatically as they fall due.");
 	}
 
 	// ------------------------------------------------------------------------------ invoice
@@ -271,10 +250,7 @@ public class ReportService {
 		private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy");
 
 		static String money(Money m) {
-			BigDecimal v = m.toMinorUnitScale();
-			DecimalFormat f = new DecimalFormat(v.scale() == 0 ? "#,##0" : "#,##0." + "0".repeat(v.scale()),
-					DecimalFormatSymbols.getInstance(Locale.ROOT));
-			return f.format(v) + " " + m.currency().getCurrencyCode();
+			return m.display();
 		}
 
 		static String money(MoneyResponse m) {

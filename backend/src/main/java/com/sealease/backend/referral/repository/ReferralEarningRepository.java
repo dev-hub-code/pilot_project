@@ -24,4 +24,13 @@ public interface ReferralEarningRepository
 			""")
 	List<ReferralTotal> totalsBySource(@Param("userId") UUID beneficiaryUserId);
 
+	/** Commission earned by one upline per calendar month (UTC), level and currency, latest month first. */
+	@Query(value = """
+			select to_char(created_at at time zone 'UTC', 'YYYY-MM') as month, level, currency, sum(amount) as amount
+			from referral_earnings where beneficiary_user_id = :userId
+			group by 1, 2, 3
+			order by 1 desc, 3, 2
+			""", nativeQuery = true)
+	List<MonthlyLevelTotal> monthlyByLevel(@Param("userId") UUID beneficiaryUserId);
+
 }

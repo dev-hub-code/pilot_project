@@ -11,7 +11,6 @@ import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.entity.ProductTerms;
-import com.sealease.backend.investment.service.InvestmentAmountPolicy;
 import com.sealease.backend.investment.service.OfferingQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,9 +23,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * The investor's basket. It reserves nothing - an offering can sell out while it sits in a cart -
- * but every read re-validates each line so the investor sees problems before checking out.
- * One currency per cart, because an order and its payment are in one currency.
+ * The investor's basket: how many containers of which plans. It reserves nothing - containers can
+ * sell out while they sit in a cart - but every read re-validates each line so the investor sees
+ * problems before checking out. One currency per cart, because an order and its payment are in one
+ * currency.
  */
 @Service
 public class CartService {
@@ -49,38 +49,41 @@ public class CartService {
 		Money total = null;
 		boolean ready = !lines.isEmpty();
 		for (CartItem line : lines) {
-			CartLineResponse response = describe(userId, line, terms.get(line.getProductId()));
+			OfferingTerms plan = terms.get(line.getProductId());
+			CartLineResponse response = describe(userId, line, plan);
 			ready &= response.problems().isEmpty();
-			total = total == null ? line.amount() : total.plus(line.amount());
+			if (plan != null) {
+				Money amount = amount(plan, line.getQuantity());
+				total = total == null ? amount : total.plus(amount);
+			}
 			responses.add(response);
 		}
 		return new CartResponse(responses, total == null ? null : MoneyResponse.from(total), ready);
 	}
 
-	/** Adds the offering to the cart, or changes the amount if it is already there. */
+	/** Adds the plan to the cart, or changes how many containers if it is already there. */
 	@Transactional
-	public CartResponse setItem(UUID userId, UUID productId, BigDecimal requested) {
-		OfferingTerms offering = offerings.terms(productId);
-		Money amount = Money.of(requested, offering.terms().currency());
-		List<String> problems = offerings.problems(userId, productId, amount);
+	public CartResponse setItem(UUID userId, UUID productId, int quantity) {
+		OfferingTerms plan = offerings.terms(productId);
+		List<String> problems = offerings.problems(userId, productId, quantity);
 		if (!problems.isEmpty()) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, String.join("; ", problems));
 		}
 		CartItem existing = items.findByUserIdAndProductId(userId, productId).orElse(null);
 		if (existing != null) {
-			existing.changeAmount(amount);
+			existing.changeQuantity(quantity);
 		}
 		else {
 			List<CartItem> current = items.findByUserIdOrderByCreatedAt(userId);
 			if (current.size() >= MAX_ITEMS) {
-				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						"A cart holds at most " + MAX_ITEMS + " offerings");
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A cart holds at most " + MAX_ITEMS + " plans");
 			}
-			if (current.stream().anyMatch(i -> !i.getCurrency().equals(amount.currency().getCurrencyCode()))) {
+			Map<UUID, OfferingTerms> others = offerings.terms(current.stream().map(CartItem::getProductId).toList());
+			if (others.values().stream().anyMatch(o -> !o.terms().currency().equals(plan.terms().currency()))) {
 				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						"Your cart holds offerings in another currency; check those out first");
+						"Your cart holds plans in another currency; check those out first");
 			}
-			items.save(new CartItem(userId, productId, amount));
+			items.save(new CartItem(userId, productId, quantity));
 		}
 		items.flush();
 		return view(userId);
@@ -99,7 +102,7 @@ public class CartService {
 	@Transactional(propagation = Propagation.MANDATORY)
 	public List<CartLine> lockForCheckout(UUID userId) {
 		return items.findByUserIdForUpdate(userId).stream()
-			.map(i -> new CartLine(i.getProductId(), i.amount()))
+			.map(i -> new CartLine(i.getProductId(), i.getQuantity()))
 			.toList();
 	}
 
@@ -109,18 +112,23 @@ public class CartService {
 		items.deleteAllOfUser(userId);
 	}
 
-	private CartLineResponse describe(UUID userId, CartItem line, OfferingTerms offering) {
-		Money amount = line.amount();
-		if (offering == null || !offering.status().isListed()) {
-			return new CartLineResponse(line.getProductId(), null, "Unavailable offering", null, null,
-					MoneyResponse.from(amount), BigDecimal.ZERO, null, null, 0, null,
-					List.of("This offering is no longer available; remove it"));
+	private CartLineResponse describe(UUID userId, CartItem line, OfferingTerms plan) {
+		if (plan == null || !plan.status().isListed()) {
+			return new CartLineResponse(line.getProductId(), null, "Unavailable plan", null, null, line.getQuantity(),
+					null, null, BigDecimal.ZERO, BigDecimal.ZERO, null, 0, null,
+					List.of("This plan is no longer available; remove it"));
 		}
-		ProductTerms t = offering.terms();
-		return new CartLineResponse(offering.id(), offering.code(), t.title(), t.investmentType(), offering.status(),
-				MoneyResponse.from(amount), InvestmentAmountPolicy.ownershipPercent(t, amount),
-				MoneyResponse.from(InvestmentAmountPolicy.rentalShare(t, amount)), t.rentalFrequency(),
-				t.durationMonths(), t.termsVersion(), offerings.problems(userId, offering.id(), amount));
+		ProductTerms t = plan.terms();
+		BigDecimal containers = BigDecimal.valueOf(line.getQuantity());
+		return new CartLineResponse(plan.id(), plan.code(), t.title(), t.containerType(), plan.status(),
+				line.getQuantity(), MoneyResponse.from(t.pricePerContainer()), MoneyResponse.from(amount(plan, line.getQuantity())),
+				t.monthlyRentPercent(), t.monthlyCapitalReturnPercent(), MoneyResponse.from(t.monthlyPayout().times(containers)),
+				t.tenureMonths(), MoneyResponse.from(t.totalPayout().times(containers)),
+				offerings.problems(userId, plan.id(), line.getQuantity()));
+	}
+
+	private static Money amount(OfferingTerms plan, int quantity) {
+		return plan.terms().pricePerContainer().times(BigDecimal.valueOf(quantity));
 	}
 
 }

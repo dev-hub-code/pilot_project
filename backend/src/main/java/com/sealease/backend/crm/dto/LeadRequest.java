@@ -1,7 +1,7 @@
 package com.sealease.backend.crm.dto;
 
 import com.sealease.backend.common.validation.IsoCountry;
-import com.sealease.backend.common.validation.IsoCurrency;
+import com.sealease.backend.common.validation.PlatformCurrency;
 import com.sealease.backend.crm.entity.LeadInterest;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -28,7 +28,7 @@ public record LeadRequest(
 		@IsoCountry String country,
 		@NotNull LeadInterest interest,
 		@DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal estimatedAmount,
-		@IsoCurrency String estimatedCurrency,
+		@PlatformCurrency String estimatedCurrency,
 		Instant nextFollowUpAt,
 		UUID ownerId) {
 }

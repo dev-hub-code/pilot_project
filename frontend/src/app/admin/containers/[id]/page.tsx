@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { ContainerForm } from "@/features/admin/container-form";
 import { ContainerStatusForm, DocumentUploadForm } from "@/features/admin/container-panels";
 import { setDocumentVisibilityAction } from "@/features/admin/investment-actions";
-import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
+import { CONTAINER_STATUS_LABEL, CONTAINER_STATUS_TONE, CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -40,10 +39,7 @@ export default async function ContainerPage({ params }: PageProps<"/admin/contai
           <p className="text-muted">{CONTAINER_TYPE_LABEL[c.containerType]} · {c.currentLocation}, {c.locationCountry}</p>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge tone={c.status === "RETIRED" ? "danger" : "neutral"}>{humanize(c.status)}</StatusBadge>
-          {can(Permission.INVESTMENT_CREATE) && c.status !== "RETIRED" && (
-            <LinkButton href={`/admin/products/new?containerId=${c.id}`}>Create offering</LinkButton>
-          )}
+          <StatusBadge tone={CONTAINER_STATUS_TONE[c.status]}>{CONTAINER_STATUS_LABEL[c.status]}</StatusBadge>
         </div>
       </div>
       {detail.statusReason && <p className="text-sm text-muted">Status reason: {detail.statusReason}</p>}
@@ -52,7 +48,7 @@ export default async function ContainerPage({ params }: PageProps<"/admin/contai
         <div className="space-y-6">
           <Card title="Documents & photos" description="Only documents marked visible appear in the marketplace.">
             {detail.documents.length === 0 ? (
-              <p className="text-sm text-muted">No documents yet. Publishing an offering requires at least one visible photo.</p>
+              <p className="text-sm text-muted">No documents yet. Visible photos are shown on the marketplace for plans of this container type.</p>
             ) : (
               <ul className="divide-y divide-border text-sm">
                 {detail.documents.map((doc) => (
@@ -82,7 +78,16 @@ export default async function ContainerPage({ params }: PageProps<"/admin/contai
         {editable && (
           <div className="space-y-6">
             <Card title="Upload"><DocumentUploadForm containerId={c.id} /></Card>
-            <Card title="Status"><ContainerStatusForm containerId={c.id} current={c.status} /></Card>
+            <Card title="Status">
+              {c.status === "RESERVED" || c.status === "ON_LEASE" ? (
+                <p className="text-sm text-muted">
+                  {c.status === "RESERVED" ? "Reserved for an order awaiting payment." : "Leased to an investor."} Its status changes with
+                  the order and the lease.
+                </p>
+              ) : (
+                <ContainerStatusForm containerId={c.id} current={c.status} />
+              )}
+            </Card>
           </div>
         )}
       </div>

@@ -55,7 +55,7 @@ class LeadIntegrationTest {
 		submit(email.toUpperCase(), "Following up", null).andExpect(status().isAccepted());
 		submit(email(), "Bot text", "http://spam.example").andExpect(status().isAccepted());
 		mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
-				{"firstName":"Ada","email":"%s","interest":"RETAIL","consent":false}
+				{"firstName":"Ada","email":"%s","interest":"STANDALONE","consent":false}
 				""".formatted(email()))).andExpect(status().isBadRequest());
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM leads WHERE email = ?", Integer.class, email)).isEqualTo(1);
@@ -126,7 +126,7 @@ class LeadIntegrationTest {
 		createLead(rep, email).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.message").value(containsString("already exists")));
 		mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, rep.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"firstName\":\"No\",\"interest\":\"RETAIL\"}"))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"firstName\":\"No\",\"interest\":\"STANDALONE\"}"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.message").value(containsString("email address or a phone number")));
 
@@ -137,7 +137,7 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.lead.closedAt").isNotEmpty());
 		stage(rep, leadId, "QUALIFIED", null).andExpect(jsonPath("$.lead.lostReason").doesNotExist());
 		mvc.perform(post("/api/v1/admin/leads/{id}/activities", leadId).header(HttpHeaders.AUTHORIZATION, rep.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"CALL\",\"body\":\"Discussed HNI options\"}"))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"CALL\",\"body\":\"Discussed standalone options\"}"))
 			.andExpect(jsonPath("$.activities[0].type").value("CALL"))
 			.andExpect(jsonPath("$.activities[0].actorName").value("Test Investor"));
 		mvc.perform(post("/api/v1/admin/leads/{id}/activities", leadId).header(HttpHeaders.AUTHORIZATION, rep.bearer())
@@ -168,10 +168,10 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.activities[0].body").value("Registered an investor account"));
 
 		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
-		UUID product = new OfferingFixtures(mvc, manager).retail("50000", "1000", "500");
-		investors.invest(investors.approve(investor), product, "2500");
+		UUID product = new OfferingFixtures(mvc, manager).plan(1);
+		investors.invest(investors.approve(investor), product, 1);
 		lead(manager, leadId).andExpect(jsonPath("$.lead.stage").value("WON"))
-			.andExpect(jsonPath("$.lead.won.amount").value("2500.00"))
+			.andExpect(jsonPath("$.lead.won.amount").value("50000.00"))
 			.andExpect(jsonPath("$.activities[0].body").value(containsString("first investment confirmed")));
 		assertThat(api.auditCount("LEAD_WON", leadId)).isEqualTo(1);
 
@@ -179,7 +179,7 @@ class LeadIntegrationTest {
 		Account existing = investorAccount();
 		mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, manager.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("""
-						{"firstName":"Known","email":"%s","interest":"HNI"}
+						{"firstName":"Known","email":"%s","interest":"STANDALONE"}
 						""".formatted(existing.email())))
 			.andExpect(jsonPath("$.lead.userId").value(existing.id().toString()));
 	}
@@ -196,7 +196,7 @@ class LeadIntegrationTest {
 
 	private ResultActions submit(String email, String message, String honeypot) throws Exception {
 		return mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
-				{"firstName":"Ada","lastName":"Lovelace","email":"%s","interest":"HNI","consent":true%s%s}
+				{"firstName":"Ada","lastName":"Lovelace","email":"%s","interest":"STANDALONE","consent":true%s%s}
 				""".formatted(email, message == null ? "" : ",\"message\":\"" + message + "\"",
 				honeypot == null ? "" : ",\"website\":\"" + honeypot + "\"")));
 	}
@@ -213,7 +213,7 @@ class LeadIntegrationTest {
 		return mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("""
 					{"firstName":"Grace","lastName":"Hopper","email":"%s","phone":"+44 20 7946 0000","country":"GB",
-					 "interest":"HNI","estimatedAmount":"25000","estimatedCurrency":"USD"}
+					 "interest":"STANDALONE","estimatedAmount":"25000","estimatedCurrency":"INR"}
 					""".formatted(email)));
 	}
 

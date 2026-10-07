@@ -22,8 +22,7 @@ export const STAGE_TONE: Record<LeadStage, StatusTone> = {
 };
 
 export const INTEREST_LABEL: Record<LeadInterest, string> = {
-  RETAIL: "Shared containers",
-  HNI: "Whole containers (HNI)",
+  STANDALONE: "Buying containers",
   UNSURE: "Not sure yet",
 };
 

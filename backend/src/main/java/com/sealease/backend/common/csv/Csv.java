@@ -6,10 +6,10 @@ import java.util.regex.Pattern;
 public final class Csv {
 
 	/**
-	 * Plain amounts (e.g. "-12.50" or "-1,234.50 USD") are data, not formulas: they hold no operators
+	 * Plain amounts (e.g. "-12.50", "-₹1,23,450.50" or "-1,234.50 USD") are data, not formulas: they hold no operators
 	 * or references, so they are left as they are.
 	 */
-	private static final Pattern NUMBER = Pattern.compile("[-+]?\\d[\\d,]*(\\.\\d+)?( [A-Z]{3})?");
+	private static final Pattern NUMBER = Pattern.compile("[-+]?₹?\\d[\\d,]*(\\.\\d+)?( [A-Z]{3})?");
 
 	private Csv() {
 	}

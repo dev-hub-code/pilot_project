@@ -29,7 +29,7 @@ export const CATEGORY_LABEL: Record<TicketCategory, string> = {
   ACCOUNT: "My account",
   INVESTMENT: "An investment",
   PAYMENT: "A payment",
-  EARNINGS: "Rental income",
+  EARNINGS: "Payouts & earnings",
   WITHDRAWAL: "A withdrawal",
   REFERRAL: "Referrals",
   OTHER: "Something else",

@@ -5,9 +5,7 @@ import com.sealease.backend.common.api.ReasonRequest;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
-import com.sealease.backend.user.dto.ClassifyInvestorRequest;
 import com.sealease.backend.user.dto.UserSearchCriteria;
-import com.sealease.backend.user.entity.InvestorType;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.service.UserAdministrationService;
@@ -43,9 +41,8 @@ public class AdminUserController {
 			@RequestParam(required = false) @Size(max = 100) String q,
 			@RequestParam(required = false) UserStatus status,
 			@RequestParam(required = false) KycStatus kycStatus,
-			@RequestParam(required = false) InvestorType investorType,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, investorType), pageable));
+		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus), pageable));
 	}
 
 	@GetMapping("/{userId}")
@@ -66,13 +63,6 @@ public class AdminUserController {
 	public AdminUserDetail reactivate(AuthenticatedUser actor, @PathVariable UUID userId,
 			@Valid @RequestBody ReasonRequest request) {
 		return administration.reactivate(actor.userId(), userId, request.reason());
-	}
-
-	@PostMapping("/{userId}/classification")
-	@PreAuthorize("hasAuthority('INVESTOR_CLASSIFY')")
-	public AdminUserDetail classify(AuthenticatedUser actor, @PathVariable UUID userId,
-			@Valid @RequestBody ClassifyInvestorRequest request) {
-		return administration.classify(actor.userId(), userId, request.investorType(), request.reason());
 	}
 
 }

@@ -1,7 +1,8 @@
 # SeaLease — Container Investment Platform
 
-Investors fund shipping-container rental assets, jointly (retail) or exclusively (HNI), and earn
-rental income plus four-level referral income. Built as a **modular monolith** with financial
+Investors buy whole shipping containers under investment plans. Each container is assigned to its
+investor by number once paid and leased for the plan's tenure, during which the investor is paid the
+plan's monthly rent plus 100 ÷ tenure % of the price back every month (the whole price by the end); uplines earn four-level referral income on the rent. Built as a **modular monolith** with financial
 correctness, auditability and idempotency as first-class concerns.
 
 | Layer    | Stack                                                                         |
@@ -86,7 +87,7 @@ Modules (Phase 3):
 
 | Module        | Responsibility                                                                   |
 |---------------|----------------------------------------------------------------------------------|
-| `user`        | Profile, tax info, investor classification (append-only history), suspension, staff directory |
+| `user`        | Profile, tax info, suspension, staff directory |
 | `kyc`         | Identity submissions, reviewer queue, audited document access, four-eyes approval |
 | `document`    | Encrypted file storage; type detected from magic bytes (PDF/JPEG/PNG only), SHA-256 integrity check |
 | `bankaccount` | Payout accounts: encrypted numbers, IBAN checksum, duplicate/fraud fingerprinting, verification |
@@ -96,34 +97,34 @@ Modules (Phase 4):
 
 | Module        | Responsibility                                                                   |
 |---------------|----------------------------------------------------------------------------------|
-| `container`   | Physical assets: ISO 6346 numbers (check digit verified), specs, location, lifecycle, photos & documents with per-document investor visibility |
-| `investment`  | Offerings (`CONT-10001`…): terms, DRAFT → OPEN → FUNDED lifecycle, investor eligibility, amount policy, capacity accounting |
-| `marketplace` | Investor read side: listings, filters/sorting, detail with eligibility verdict, return projection, investor-visible documents |
+| `container`   | Physical assets: ISO 6346 numbers (check digit verified), specs, location, photos & documents with per-document investor visibility; inventory reserved for orders and leased to investors |
+| `investment`  | Plans (`PLAN-10001`…): container type, price per container, monthly rent %, lease tenure (capital return = 100 ÷ tenure %); DRAFT → OPEN → CLOSED lifecycle, investor eligibility |
+| `marketplace` | Investor read side: plans, filters/sorting, detail with eligibility verdict, payout projection, photos of the plan's container type |
 
 Modules (Phase 5):
 
 | Module    | Responsibility                                                                     |
 |-----------|------------------------------------------------------------------------------------|
-| `cart`    | Soft basket, one line per offering; re-validated on every read, holds no capacity  |
-| `order`   | Checkout (idempotent), terms acceptance, capacity reservation, expiry, confirmation |
-| `payment` | Provider abstraction (bank transfer, card via signed webhooks), settlement, refunds |
+| `cart`    | Soft basket: containers per plan; re-validated on every read, reserves nothing     |
+| `order`   | Checkout (idempotent), terms acceptance, container reservation, expiry, allocation on payment |
+| `payment` | Company bank accounts, bank payment with investor-submitted details, settlement, rejection, refunds |
 | `invoice` | Immutable, sequentially numbered invoices with seller/buyer snapshots              |
-| `investment` | + holdings (confirmed investments) and the investor portfolio                   |
+| `investment` | + holdings (one allocated, leased container each) and the investor portfolio    |
 | `outbox`  | Transactional outbox → Kafka relay; consumer de-duplication (`processed_events`)   |
 
 Modules (Phase 6):
 
 | Module       | Responsibility                                                                   |
 |--------------|----------------------------------------------------------------------------------|
-| `investment` | + management fee in the terms, lease activation (`FUNDED → ACTIVE`), rental schedule, maturity |
-| `earning`    | Rental receipts per period (record → four-eyes approval), distribution by ownership, investor earnings |
+| `investment` | + holding maturity at the end of the tenure (the container returns to stock)     |
+| `earning`    | Monthly payout schedule per holding (rent + capital returned), automatic crediting, investor earnings |
 | `ledger`     | Append-only double-entry ledger: accounts per investor/platform and currency, balanced transactions, adjustments |
 
 Modules (Phase 7):
 
 | Module     | Responsibility                                                                     |
 |------------|------------------------------------------------------------------------------------|
-| `referral` | Referral codes, permanent referrer links made at sign-up, effective-dated rates for four levels, commissions on rental income, downline views |
+| `referral` | Referral codes, permanent referrer links made at sign-up, effective-dated rates for four levels, commissions on the rent paid to referred investors, downline views |
 
 Modules (Phase 8):
 
@@ -156,6 +157,10 @@ by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` t
 
 - **Money**: `Money`/`BigDecimal` only, stored as `NUMERIC(19,4)` + ISO-4217 `CHAR(3)`.
   Rounded to the currency's minor unit only at payout/presentation boundaries.
+- **One currency: Indian rupees.** `app.money.default-currency` (`INR`) is the only currency accepted
+  (`@PlatformCurrency` on every request that carries one); the web app does not ask for it. Amounts are shown
+  with the symbol and Indian grouping, e.g. `₹1,23,456.50` (`Money.display()`, `formatMoney`), in messages,
+  reports, CSV and PDFs alike.
 - **Time**: inject `Clock`; store `TIMESTAMPTZ` in UTC.
 - **Immutability**: ledger/audit tables attach the `forbid_mutation()` trigger (V1 migration);
   corrections are compensating entries, never updates.
@@ -186,6 +191,9 @@ Browser ──cookies──▶ Next.js (BFF) ──Bearer JWT──▶ Spring Bo
 - **Authorization.** Permission-based (`@PreAuthorize("hasAuthority('ROLE_MANAGE')")`); role names
   never become authorities. Admins may only grant/revoke roles whose permissions they hold
   themselves and can never change their own roles.
+- **Investors or staff, never both.** Only the `INVESTOR` role grants `INVESTOR_PORTAL` (not even
+  `SUPER_ADMIN` holds it). A user's roles, and a role's permissions, cannot combine it with staff
+  permissions. Staff see only their profile and the admin area; investor pages redirect them to `/admin`.
 - **Browser.** Tokens live only in `HttpOnly`, `SameSite=Lax` cookies (`__Host-` prefixed and
   `Secure` in production). The API is cookie-free and therefore CSRF-immune; Next.js Server Actions
   reject cross-origin posts. Every page gets a nonce-based Content-Security-Policy.
@@ -230,7 +238,6 @@ from a secret manager; keep `COOKIE_SECURE` on.
 | `DELETE /…/bank-accounts/{id}`, `PUT /…/{id}/primary` | `INVESTOR_PORTAL`     | Remove / choose primary              |
 | `GET /api/v1/admin/users[/{id}]`                    | `USER_VIEW`             | Directory search, detail             |
 | `POST /api/v1/admin/users/{id}/suspend` · `/reactivate` | `USER_SUSPEND`      | Ends sessions immediately; reason required |
-| `POST /api/v1/admin/users/{id}/classification`      | `INVESTOR_CLASSIFY`     | RETAIL ↔ HNI (HNI needs approved KYC) |
 | `GET /api/v1/admin/kyc[/{id}]`, `/admin/users/{id}/kyc` | `KYC_REVIEW`        | Review queue, detail, history        |
 | `GET /api/v1/admin/kyc/{id}/documents/{docId}`      | `KYC_REVIEW`            | Decrypted evidence (audited)         |
 | `POST /api/v1/admin/kyc/{id}/approve` · `/reject`   | `KYC_REVIEW`            | Decision (not on own submission)     |
@@ -240,43 +247,42 @@ from a secret manager; keep `COOKIE_SECURE` on.
 
 ### Marketplace rules
 
-- **Offerings.** One container backs at most one live offering (partial unique index). `RETAIL`
-  offerings are shared: minimum + increments, optional per-investor cap. `HNI` offerings are
-  standalone: one investor buys the whole container (enforced by a DB `CHECK`).
-- **Lifecycle.** `DRAFT → OPEN → FUNDED → ACTIVE → MATURED → CLOSED`, or `CANCELLED`. Terms are
-  editable only in `DRAFT`. Publishing needs `INVESTMENT_APPROVE`, at least one investor-visible
-  photo and an offer window that has not closed. Cancelling is allowed only while nothing is
-  reserved or committed. An offering becomes `FUNDED` once it is fully committed. `ACTIVE` and later
-  states come from the leasing phases.
-- **Eligibility.** Account active, KYC approved, and HNI classification for standalone offerings,
-  inside the offer window. The marketplace shows the verdict and its reasons.
-- **Capacity.** `available = total − committed − reserved`. `CapacityService` is the only writer:
-  it locks the offering row (`FOR UPDATE`) and records each change as an immutable
-  `capacity_movements` row (`RESERVE`, then exactly one `RELEASE` or `COMMIT`), keyed by a
-  caller reference. Replays are no-ops and a DB `CHECK` makes overselling impossible. Phase 5 carts
-  and orders call it.
-- **Projection.** Ownership % = amount ÷ price; rental share = rental × amount ÷ price, shown per
-  payment, per year and over the term.
+- **Plans.** A plan names a container type, a price per container, a monthly rent % (above 0, at
+  most 20) and a lease tenure in months (1–120). The monthly capital return is not set by hand: it is
+  100 ÷ tenure % of the price (16 months → 6.25%, 12 months → 8.3333%), so the whole price comes back
+  over the lease. What the investor is paid every month is that capital return % plus the rent %. Every investor buys whole containers; there are
+  no shared or fractional holdings, and investors are not classified.
+- **Lifecycle.** `DRAFT → OPEN → CLOSED`, or `CANCELLED` while a draft. Terms are editable only in
+  `DRAFT`. Publishing and closing need `INVESTMENT_APPROVE`; closing stops new sales while sold
+  containers keep their lease and payouts.
+- **Stock.** A plan sells the `AVAILABLE` containers of its type (shared by plans of that type).
+  Containers move `AVAILABLE → RESERVED` (checkout) `→ ON_LEASE` (payment confirmed) `→ AVAILABLE`
+  (lease ended), or back to `AVAILABLE` when an order lapses. Those two statuses are never set by
+  hand. Checkout locks the oldest available containers with `FOR UPDATE SKIP LOCKED`, so concurrent
+  buyers never block each other or get the same container, and a DB index allows one active holding
+  per container.
+- **Eligibility.** Account active and KYC approved, and the plan open. The marketplace shows the verdict and its reasons.
+- **Projection.** For *n* containers: price × n; monthly rent = price × rent %, capital back =
+  price ÷ tenure (each rounded half-up to the paisa) × n; over the tenure, all the rent plus the whole price.
 
-### Containers, offerings & marketplace API
+### Containers, plans & marketplace API
 
 | Method & path                                              | Access                | Purpose                                 |
 |------------------------------------------------------------|-----------------------|-----------------------------------------|
 | `GET /api/v1/admin/containers[/{id}]`                      | `INVESTMENT_VIEW`     | Search (number, status, type), detail   |
 | `POST /api/v1/admin/containers`, `PUT /…/{id}`             | `INVESTMENT_CREATE` / `INVESTMENT_UPDATE` | Register / edit          |
-| `POST /api/v1/admin/containers/{id}/status`                | `INVESTMENT_UPDATE`   | Status change with reason (no retiring a live offering's container) |
+| `POST /api/v1/admin/containers/{id}/status`                | `INVESTMENT_UPDATE`   | Status change with reason (not to or from `RESERVED` / `ON_LEASE`) |
 | `POST /…/containers/{id}/documents` (multipart), `PATCH /…/documents/{docId}` | `INVESTMENT_UPDATE` | Upload photo/survey/lease/insurance/memorandum; toggle investor visibility |
 | `GET /…/containers/{id}/documents/{docId}`                 | `INVESTMENT_VIEW`     | Document content                        |
 | `GET /api/v1/admin/investment-products[/{id}]`             | `INVESTMENT_VIEW`     | Search, detail                          |
-| `GET /…/investment-products/{id}/capacity-movements`       | `INVESTMENT_VIEW`     | Latest 50 capacity movements            |
 | `POST /api/v1/admin/investment-products`, `PUT /…/{id}`    | `INVESTMENT_CREATE` / `INVESTMENT_UPDATE` | Create / edit draft      |
-| `POST /…/investment-products/{id}/publish` · `/cancel`     | `INVESTMENT_APPROVE`  | Open to investors / cancel with reason  |
-| `GET /api/v1/marketplace`                                  | `INVESTOR_PORTAL` or `INVESTMENT_VIEW` | Listings: type, container type, risk, status; sort `NEWEST`, `HIGHEST_YIELD`, `MOST_AVAILABLE`, `LOWEST_MINIMUM` |
-| `GET /api/v1/marketplace/{id}`                             | 〃                    | Detail, availability, eligibility verdict |
-| `GET /api/v1/marketplace/{id}/projection?amount=`          | 〃                    | Validated return projection             |
-| `GET /api/v1/marketplace/{id}/documents/{docId}`           | 〃                    | Investor-visible documents only         |
+| `POST /…/investment-products/{id}/publish` · `/close` · `/cancel` | `INVESTMENT_APPROVE` | Open to investors / stop sales / cancel a draft |
+| `GET /api/v1/marketplace`                                  | `INVESTOR_PORTAL` or `INVESTMENT_VIEW` | Plans: container type, risk, status; sort `NEWEST`, `HIGHEST_RETURN`, `LOWEST_PRICE` |
+| `GET /api/v1/marketplace/{id}`                             | 〃                    | Detail, containers in stock, eligibility verdict |
+| `GET /api/v1/marketplace/{id}/projection?containers=`      | 〃                    | Validated payout projection             |
+| `GET /api/v1/marketplace/{id}/documents/{docId}`           | 〃                    | Investor-visible photos of the plan's container type |
 
-Seed demo containers and offerings into a **local** API (runs as the bootstrap admin, safe to re-run):
+Seed company bank accounts, container stock and plans into a **local** API (runs as the bootstrap admin, safe to re-run):
 
 ```bash
 python3 scripts/seed-demo-data.py
@@ -286,26 +292,32 @@ python3 scripts/seed-demo-data.py
 
 ```text
 cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──▶ CONFIRMED
- (no capacity)      capacity RESERVED          (one transaction)   capacity COMMITTED, holdings,
-                    pay within 30 min                              invoice, outbox events
-                          └──expired / cancelled──▶ capacity RELEASED, pending payments cancelled
+ (nothing held)     containers RESERVED        (one transaction)   containers ON_LEASE to the investor,
+                    pay within 30 min                              holdings + payout schedules, invoice, events
+                          └──expired / cancelled──▶ containers back to AVAILABLE, pending payments cancelled
 ```
 
 - **Checkout** needs an `Idempotency-Key` header: a retry returns the original order, and reusing
-  the key for a different request is a 409. The investor accepts each offering's current terms
-  version, or checkout fails. The cart is locked, so concurrent checkouts of one cart place one
-  order. Item terms (amount, ownership, rental share, terms version) are frozen in `order_items`.
-- **Payments.** One attempt in flight per order. Starting another method cancels it, and money
-  is taken at most once (partial unique indexes). *Bank transfer*: the investor quotes a generated
-  reference, and finance records receipt (`PAYMENT_CONFIRM`); the amount must match exactly and
-  nobody may confirm their own order. *Card*: a `WebhookPaymentProvider` reports outcomes by
-  HMAC-signed webhook (`POST /api/v1/payments/webhooks/{provider}`, public, signature required).
-  Redeliveries are ignored (`payment_events` unique on provider event id). Locally, a simulator
-  stands in for the gateway and goes through the same signed-webhook path; it is disabled in
-  production.
+  the key for a different request is a 409. The investor accepts the terms of each plan in
+  the cart, or checkout fails. The cart is locked, so concurrent checkouts of one cart place one
+  order. There is one `order_items` row per container, with the plan terms frozen (price, rent %,
+  capital return %, tenure) and the container reserved for it. Investors see each
+  container's number once the order is paid; staff see the reserved containers.
+- **Payments.** Bank payment is the only method; card payments are not accepted (earlier card
+  payments, if any, remain readable as `CARD`). One attempt in flight per order, and money is taken
+  at most once (partial unique indexes). Finance maintains the company
+  bank accounts investors may pay into (account number, IFSC, optional UPI ID;
+  `COMPANY_BANK_ACCOUNT_MANAGE`, deactivated rather than deleted). The investor chooses one of the
+  active accounts, quotes a generated reference, pays online (NEFT/RTGS/IMPS/UPI), by cheque or by
+  cash deposit, and submits the transaction ID, cheque number or deposit receipt number. From then
+  on the order is held for verification (`APP_BANK_PAYMENT_VERIFICATION_WINDOW`, default 7 days)
+  instead of lapsing after 30 minutes, and the investor may correct the details until finance
+  decides. Finance confirms receipt (`PAYMENT_CONFIRM`; the amount
+  must match exactly) or rejects the payment with a reason, after which the investor can pay again
+  while the order is open. Nobody may decide on a payment for their own order.
 - **Money is never silently kept.** A payment arriving for an expired, cancelled or already paid
   order becomes `REFUND_REQUIRED`, and finance records the refund (`FINANCE_ADJUST`).
-- **Locking.** Order row, then payment row, then offering rows (in id order). Payment settlement,
+- **Locking.** Order row, then payment row, then container rows. Payment settlement,
   cancellation and the expiry sweep therefore serialise without deadlocks.
 - **Outbox.** Events are inserted in the business transaction. A relay (every 1 s, `FOR UPDATE
   SKIP LOCKED`, safe on several instances) publishes them with `eventId`/`eventType` headers, keyed
@@ -322,58 +334,49 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 | `GET /api/v1/cart`, `PUT·DELETE /api/v1/cart/items/{productId}` | `INVESTOR_PORTAL` | View (with per-line problems) / set / remove |
 | `POST /api/v1/orders` (`Idempotency-Key`)             | `INVESTOR_PORTAL`   | Check out the cart with accepted terms      |
 | `GET /api/v1/orders[/{id}]`, `POST /…/{id}/cancel`    | `INVESTOR_PORTAL`   | Own orders; cancel while awaiting payment   |
-| `GET·POST /api/v1/orders/{id}/payments` (`Idempotency-Key`) | `INVESTOR_PORTAL` | Payment attempts / start (`BANK_TRANSFER`, `CARD`) |
-| `POST /api/v1/payments/{id}/simulate`                 | `INVESTOR_PORTAL`   | Simulator only: approve or decline a card   |
+| `GET·POST /api/v1/orders/{id}/payments` (`Idempotency-Key`) | `INVESTOR_PORTAL` | Payment attempts / start a bank payment (`BANK_TRANSFER`) |
+| `POST /api/v1/payments/{id}/deposit`                  | `INVESTOR_PORTAL`   | Bank payment details: company account, mode (`ONLINE`, `CHEQUE`, `CASH_DEPOSIT`), reference |
 | `GET /api/v1/orders/{id}/invoice`                     | `INVESTOR_PORTAL`   | Invoice of a confirmed order                |
 | `GET /api/v1/portfolio`                               | `INVESTOR_PORTAL`   | Holdings and totals per currency            |
-| `POST /api/v1/payments/webhooks/{provider}`           | public, signed      | Gateway callbacks                           |
 | `GET /api/v1/admin/orders[/{id}[/holdings·/invoice]]` | `ORDER_VIEW`        | Search, detail, holdings, invoice           |
 | `GET /api/v1/admin/payments`, `/admin/orders/{id}/payments` | `FINANCE_VIEW` (or `ORDER_VIEW`) | Payment queue / per order |
-| `POST /api/v1/admin/payments/{id}/confirm`            | `PAYMENT_CONFIRM`   | Record a received bank transfer             |
+| `POST /api/v1/admin/payments/{id}/confirm`            | `PAYMENT_CONFIRM`   | Record a received bank payment              |
+| `POST /api/v1/admin/payments/{id}/reject`             | `PAYMENT_CONFIRM`   | Reject a bank payment that never arrived (reason) |
+| `GET·POST /api/v1/admin/company-bank-accounts`, `PUT /…/{id}`, `POST /…/{id}/activate·deactivate` | `COMPANY_BANK_ACCOUNT_MANAGE` (list: or `FINANCE_VIEW`) | Company bank accounts investors pay into |
 | `POST /api/v1/admin/payments/{id}/refund`             | `FINANCE_ADJUST`    | Record a refund                             |
 
-### Leases, rental income & the ledger
+### Payouts & the ledger
 
 ```text
-offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──▶ RECORDED ──approved (other user)──▶ DISTRIBUTED
- (or OPEN, settled)   sales stop,      per period,              │            earnings + ledger + outbox, one transaction
-                      periods start    expected vs received     └─void──▶ REJECTED (record again)
-                                       after the last period is distributed ──▶ offering & holdings MATURED
+payment confirmed ──▶ holding per container, lease from today for the plan's tenure (T months)
+                      T installments: n due on start + n months (in arrears), each rent + capital
+installment due ──payout job (hourly) or POST /admin/payouts/run──▶ PAID: investor wallet credited (one ledger transaction)
+last installment paid ──▶ holding MATURED, container back to AVAILABLE
 ```
 
-- **Fee.** `managementFeePercent` (0–50) is part of the offering's terms, so it is frozen once published. Listed
-  yields, projections and each order line's rental share are net of it.
-- **Lease.** `INVESTMENT_APPROVE` starts the lease of a `FUNDED` offering, or of an `OPEN` one with confirmed
-  investors and nothing awaiting payment. Starting the lease ends sales. Period *n* runs from `start + (n−1)` periods to
-  `start + n` periods, computed from the start date so month-ends do not drift. Rent is due in arrears, and a trailing
-  part-period is not a period.
-- **Receipts.** Finance (`RENTAL_RECORD`) records what the lessee actually paid for one period, with the bank
-  reference. A note is required when the amount differs from the expected rent. A period is paid at most once.
-  Someone else (`RENTAL_APPROVE`) approves, and the database rejects a self-approved distribution. The recorder or an
-  approver can void a mistaken entry. Periods that have ended without a receipt are listed as due or overdue.
-- **Distribution.** Each holding gets gross = receipt × holding amount ÷ price, rounded *down* to the minor unit.
-  Then fee = gross × fee % (half-up) and net = gross − fee. The unsold share and rounding remainders are *retained* by the
-  platform, so `receipt = Σ net + fees + retained` exactly. Recorded receipts show this split as a preview.
-- **Ledger.** Every distribution and adjustment is one transaction of debit/credit entries. A deferred constraint
-  trigger rejects any transaction that does not balance or mixes currencies, and accounts, transactions and entries
-  are append-only. Distribution: debit *Rental cash*; credit each *Investor earnings* account (net), *Fee
-  revenue* and *Retained*. Investor earnings balances are what Phase 8 withdrawals will draw on.
+- **Amounts.** Per container per month: rent = price × the plan's rent %, capital = price ÷ tenure, each
+  rounded half-up to the paisa and fixed when the schedule is created. The last installment's capital takes
+  up the rounding, so the capital returned adds up to exactly the price.
+- **Paying.** A scheduled job (`app.payouts.sweep-interval`, hourly) pays every due installment, each in
+  its own transaction under a row lock, so runs can overlap and repeat safely. Finance can run it at once
+  (`PAYOUT_PROCESS`). Paid installments stay `PAID`; nothing is edited afterwards.
+- **Ledger.** Every payout, commission and adjustment is one transaction of debit/credit entries. A deferred
+  constraint trigger rejects any transaction that does not balance or mixes currencies, and accounts,
+  transactions and entries are append-only. A payout debits *Rent paid to investors* and *Capital returned to
+  investors* and credits the investor's *Investor earnings* account (their wallet), which withdrawals draw on.
 - **Adjustments.** `FINANCE_ADJUST` credits or debits an investor's balance against *Adjustments*, with a reason and an
   `Idempotency-Key`. A debit cannot overdraw the balance, and nobody may adjust their own.
-- **Events.** `rental.generated` per distributed receipt and `earning.created` per investor share, via the outbox.
+- **Events.** `earning.created` per payout, via the outbox.
 
-### Rentals, earnings & ledger API
+### Payouts, earnings & ledger API
 
 | Method & path                                         | Access              | Purpose                                     |
 |-------------------------------------------------------|---------------------|---------------------------------------------|
-| `POST /api/v1/admin/investment-products/{id}/activate` | `INVESTMENT_APPROVE` | Start the lease (`leaseStartsOn`)          |
-| `GET /api/v1/admin/rentals[/{id}]`, `/rentals/due`    | `FINANCE_VIEW`, `RENTAL_RECORD` or `RENTAL_APPROVE` | Receipts (with split), periods due |
-| `POST /api/v1/admin/rentals`                          | `RENTAL_RECORD`     | Record a lessee payment for one period      |
-| `POST /api/v1/admin/rentals/{id}/approve`             | `RENTAL_APPROVE`    | Distribute (not the recorder)               |
-| `POST /api/v1/admin/rentals/{id}/reject`              | `RENTAL_APPROVE`, or the recorder | Void a recorded payment       |
+| `GET /api/v1/admin/payouts?status&userId&holdingId&dueBy`, `/payouts/due` | `FINANCE_VIEW` or `PAYOUT_PROCESS` | Payout schedule; due and unpaid totals |
+| `POST /api/v1/admin/payouts/run`                      | `PAYOUT_PROCESS`    | Pay everything due now                      |
 | `GET /api/v1/admin/ledger/accounts[/{id}[/entries]]`, `/trial-balance` | `FINANCE_VIEW` | Balances, statements, trial balance |
 | `POST /api/v1/admin/ledger/adjustments` (`Idempotency-Key`) | `FINANCE_ADJUST` | Correct an investor's balance        |
-| `GET /api/v1/earnings`, `/earnings/summary`           | `INVESTOR_PORTAL`   | Own rental income history, balance, per-holding totals |
+| `GET /api/v1/earnings?status`, `/earnings/summary`    | `INVESTOR_PORTAL`   | Own payouts (paid or scheduled), wallet, rent and capital received, next payout |
 
 ### Referrals
 
@@ -384,11 +387,11 @@ offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──�
 - **Rates.** Levels 1–4 each take 0–10%, and at most 20% together. The seeded rates are 2 / 1 / 0.5 / 0.25%. A change is a
   new version starting now or later (`REFERRAL_CONFIG_MANAGE`). Versions in force are never edited, and a scheduled
   version can be cancelled before it starts. Each commission records the version and rate that produced it.
-- **Commissions.** When rent is distributed, the earnings module publishes `RentalDistributedEvent` in-process,
-  and commissions are paid in the same database transaction. Each referred investor's *gross* share earns
-  their uplines, nearest first, up to four levels: share × rate, rounded down to the minor unit. The platform pays
-  (*Referral commissions* expense → each upline's *Investor earnings* account, one `REFERRAL_COMMISSION` ledger
-  transaction per receipt). The referred investor's own income is unchanged. An upline whose account is not
+- **Commissions.** When a monthly payout is credited, the earnings module publishes `PayoutPaidEvent` in-process,
+  and commissions are paid in the same database transaction. The *rent* part of the referred investor's payout (not
+  the capital returned) earns their uplines, nearest first, up to four levels: rent × rate, rounded down to the minor
+  unit. The platform pays (*Referral commissions* expense → each upline's *Investor earnings* account, one
+  `REFERRAL_COMMISSION` ledger transaction per payout). The referred investor's own payout is unchanged. An upline whose account is not
   active, or whose identity is not verified, forfeits that level; it is not passed further up.
 - **Privacy.** Investors see their downline by first name and last initial, with opaque node ids. Staff
   see full names and account links.
@@ -414,11 +417,11 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 ```
 
 - **Request.** The investor chooses one of their *verified* bank accounts, and the withdrawal is in its currency.
-  The account must be active and KYC-approved. The amount must be at least `app.withdrawals.minimum-amount` (default 50) and within the
+  The account must be active and KYC-approved. The amount must be at least `app.withdrawals.minimum-amount` (default ₹500) and within the
   balance, and only one withdrawal per currency can be open (partial unique index). The request needs an `Idempotency-Key`.
   Under the lock on the investor's ledger account (the same lock adjustments take), the amount moves from
   *Investor earnings* to *Withdrawals in transit*, so the same balance can never be withdrawn twice.
-- **Approval.** `WITHDRAWAL_APPROVE` approves. Above `dual-approval-threshold` (default 10 000) a second, different
+- **Approval.** `WITHDRAWAL_APPROVE` approves. Above `dual-approval-threshold` (default ₹1,00,000) a second, different
   approver is required (enforced by the database too), and nobody decides on their own withdrawal. The final approval re-checks
   the investor and their bank account. `WITHDRAWAL_REJECT` rejects before batching, and the investor can cancel while it awaits
   approval. Both return the money (`WITHDRAWAL_RELEASE`).
@@ -527,17 +530,17 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
   four-column rows) and rendered as JSON (on-screen preview), CSV or PDF, so all formats always show the same figures.
   PDFs come from a single JasperReports template (`reports/document.jrxml`, compiled once) with fonts embedded.
 - **Reports.** *Investor statement*: per currency, opening and closing earnings balance and every entry in the period,
-  plus holdings and withdrawals requested. *Financial summary*: per currency, rent collected and how it was split
-  (investors, management fees, retained), referral commissions, adjustments, withdrawals requested, returned and paid,
-  and what is owed / in transit at period end — straight from the ledger. *Offerings & funding*: funding per published
-  offering, leases with rent received, and rent due but not yet recorded. *Invoices* as PDF.
+  plus holdings and withdrawals requested. *Financial summary*: per currency, rent paid and capital returned to investors,
+  referral commissions, adjustments, withdrawals requested, returned and paid,
+  and what is owed / in transit at period end — straight from the ledger. *Plans & payouts*: containers sold and in stock per
+  published plan, and payouts due but not yet paid. *Invoices* as PDF.
 - **Periods** are inclusive dates in UTC, at most 366 days.
 - **Access.** Investors get their own statement and invoices. Staff previews need `REPORT_VIEW`; PDF/CSV downloads need
   `REPORT_GENERATE` and are audited (`REPORT_GENERATED`, with report, format and parameters). Staff invoice PDFs need
   `ORDER_VIEW`. Downloads are sent `Cache-Control: no-store`.
 - **CSV safety.** Every field is quoted, and values starting with `= + - @` are prefixed with `'` (CSV injection),
   except plain amounts. Payout bank files use the same helper.
-- **Admin overview.** `/admin` shows key figures (investors, capital invested, rent this month, owed to investors,
+- **Admin overview.** `/admin` shows key figures (investors, capital invested, paid to investors this month, owed to investors,
   withdrawals in progress, support waiting, open leads). Each tile is computed only for viewers holding the permission
   that guards its data.
 
@@ -549,7 +552,7 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 | `GET /api/v1/reports/invoices/{orderId}?format`                               | `INVESTOR_PORTAL`                  | Own invoice (pdf by default)        |
 | `GET /api/v1/admin/reports/statement?userId&from&to&format`                   | `REPORT_VIEW` / `REPORT_GENERATE`  | Any investor's statement            |
 | `GET /api/v1/admin/reports/financial-summary?from&to&format`                  | `REPORT_VIEW` / `REPORT_GENERATE`  | Ledger summary for a period         |
-| `GET /api/v1/admin/reports/offerings?format`                                  | `REPORT_VIEW` / `REPORT_GENERATE`  | Funding, leases, rent outstanding   |
+| `GET /api/v1/admin/reports/offerings?format`                                  | `REPORT_VIEW` / `REPORT_GENERATE`  | Plans, stock, payouts outstanding   |
 | `GET /api/v1/admin/reports/invoices/{orderId}?format`                         | `ORDER_VIEW`                       | Any invoice as PDF                  |
 | `GET /api/v1/admin/dashboard`                                                 | signed in                          | Overview tiles the viewer may see   |
 
@@ -559,13 +562,13 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 
 1. ✅ Project setup & base architecture
 2. ✅ Authentication — registration, login, RS256 JWT, refresh-token rotation, roles & permissions
-3. ✅ Users — profile, KYC, bank details, investor classification
-4. ✅ Marketplace — containers, investment products, availability
+3. ✅ Users — profile, KYC, bank details
+4. ✅ Marketplace — containers, investment plans, container stock
 5. ✅ Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
-6. ✅ Earnings — leases, rental income, ownership distribution, double-entry ledger
-7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rental income, downline tree
+6. ✅ Earnings — leases per container, monthly payouts (rent + capital back over the tenure), double-entry ledger
+7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rent paid, downline tree
 8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
 9. ✅ Sales CRM — leads from staff and the website, pipeline, activity log, assignment, conversion to investors
 10. ✅ Support — tickets, internal notes, attachments, response targets, in-app notifications
-11. ✅ Reporting — statements, financial summary, offerings, invoice PDFs (JasperReports), CSV exports, admin overview
+11. ✅ Reporting — statements, financial summary, plans & payouts, invoice PDFs (JasperReports), CSV exports, admin overview
 12. Production hardening

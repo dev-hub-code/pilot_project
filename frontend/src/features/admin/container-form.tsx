@@ -7,7 +7,9 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { TextArea } from "@/components/ui/text-area";
 import { TextField } from "@/components/ui/text-field";
 import { CONDITION_LABEL, CONTAINER_TYPE_OPTIONS } from "@/features/marketplace/labels";
-import { COUNTRY_OPTIONS, CURRENCY_OPTIONS } from "@/lib/countries";
+import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { CURRENCY } from "@/lib/currency";
+import { currencyLabel } from "@/utils/money";
 import type { ContainerDetail } from "@/types/marketplace";
 import type { FormState } from "@/validators/form-state";
 import { saveContainerAction } from "./investment-actions";
@@ -47,12 +49,9 @@ export function ContainerForm({ existing }: { existing?: ContainerDetail }) {
           defaultValue={v("currentLocation", c?.currentLocation)} error={e.currentLocation} />
         <SelectField label="Country" name="locationCountry" options={COUNTRY_OPTIONS} placeholder="Select…"
           defaultValue={v("locationCountry", c?.locationCountry)} error={e.locationCountry} />
-        <div className="grid grid-cols-[1fr_7rem] gap-2">
-          <TextField label="Acquisition cost" name="acquisitionCost" inputMode="decimal"
-            defaultValue={v("acquisitionCost", existing?.acquisitionCost)} error={e.acquisitionCost} />
-          <SelectField label="Currency" name="acquisitionCurrency" options={CURRENCY_OPTIONS} placeholder="—"
-            defaultValue={v("acquisitionCurrency", existing?.acquisitionCurrency)} error={e.acquisitionCurrency} />
-        </div>
+        <TextField label={currencyLabel("Acquisition cost")} name="acquisitionCost" inputMode="decimal"
+          defaultValue={v("acquisitionCost", existing?.acquisitionCost)} error={e.acquisitionCost} />
+        <input type="hidden" name="acquisitionCurrency" value={CURRENCY} />
       </fieldset>
       <TextArea label="Internal notes" name="notes" rows={2} defaultValue={v("notes", existing?.notes)} error={e.notes} />
       <SubmitButton>{c ? "Save changes" : "Register container"}</SubmitButton>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CURRENCY } from "@/lib/currency";
 
 /** Client-side mirrors of the backend's lead validation; the backend is authoritative. */
 const optional = (max: number) => z.string().trim().max(max).optional().transform((v) => v || undefined);
@@ -6,7 +7,7 @@ const phone = z.string().trim().optional().transform((v) => v || undefined)
   .pipe(z.string().regex(/^[+0-9 ()-]{6,40}$/, "Enter a phone number").optional());
 const country = z.string().trim().optional().transform((v) => v || undefined)
   .pipe(z.string().regex(/^[A-Z]{2}$/).optional());
-const interest = z.enum(["RETAIL", "HNI", "UNSURE"]);
+const interest = z.enum(["STANDALONE", "UNSURE"]);
 
 export const interestSchema = z.object({
   firstName: z.string().trim().min(1, "Enter your first name").max(100),
@@ -29,15 +30,15 @@ export const leadSchema = z.object({
   interest,
   estimatedAmount: z.string().trim().optional().transform((v) => v || undefined)
     .pipe(z.string().regex(/^\d{1,13}(\.\d{1,2})?$/, "Up to 2 decimals").optional()),
-  estimatedCurrency: z.string().trim().optional().transform((v) => v || undefined)
-    .pipe(z.string().regex(/^[A-Z]{3}$/).optional()),
+  /** Not a form field: estimates are in the platform currency (rupees). */
+  estimatedCurrency: z.string().optional(),
   /** datetime-local input, read as UTC. */
   nextFollowUpAt: z.string().trim().optional()
     .transform((v) => (v ? `${v.length === 16 ? `${v}:00` : v}Z` : undefined))
     .pipe(z.iso.datetime("Enter a valid date and time").optional()),
   ownerId: z.string().trim().optional().transform((v) => v || undefined).pipe(z.uuid().optional()),
 }).refine((d) => d.email || d.phone, { path: ["email"], message: "Give an email address or a phone number" })
-  .refine((d) => !d.estimatedAmount === !d.estimatedCurrency, { path: ["estimatedAmount"], message: "Give the amount and its currency" });
+  .transform((d) => ({ ...d, estimatedCurrency: d.estimatedAmount ? CURRENCY : undefined }));
 
 export const stageSchema = z.object({
   stage: z.enum(["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "WON", "LOST"]),

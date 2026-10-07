@@ -1,6 +1,6 @@
 package com.sealease.backend.ledger.dto;
 
-import com.sealease.backend.common.validation.IsoCurrency;
+import com.sealease.backend.common.validation.PlatformCurrency;
 import com.sealease.backend.ledger.service.Direction;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -18,7 +18,7 @@ import java.util.UUID;
  */
 public record AdjustmentRequest(
 		@NotNull UUID userId,
-		@NotBlank @IsoCurrency String currency,
+		@NotBlank @PlatformCurrency String currency,
 		@NotNull Direction direction,
 		@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal amount,
 		@NotBlank @Size(max = 250) String reason) {

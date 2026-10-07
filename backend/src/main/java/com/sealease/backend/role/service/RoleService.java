@@ -6,6 +6,7 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.permission.PermissionCode;
 import com.sealease.backend.permission.entity.Permission;
 import com.sealease.backend.permission.service.PermissionService;
 import com.sealease.backend.role.dto.CreateRoleRequest;
@@ -66,6 +67,7 @@ public class RoleService {
 			throw new BusinessException(ErrorCode.CONFLICT, "A role with this name already exists");
 		}
 		Set<Permission> granted = permissions.resolve(request.permissions());
+		requireNotMixed(codes(granted));
 		userRoleService.requireActorHolds(actorId, codes(granted));
 
 		Role role = roles.saveAndFlush(new Role(request.name(), request.description().strip(), granted));
@@ -84,6 +86,7 @@ public class RoleService {
 		Set<Permission> newPermissions = permissions.resolve(request.permissions());
 		Set<String> before = codes(role.getPermissions());
 		Set<String> after = codes(newPermissions);
+		requireNotMixed(after);
 
 		Set<String> changedCodes = new HashSet<>(before);
 		changedCodes.addAll(after);
@@ -132,6 +135,14 @@ public class RoleService {
 	private static Map<String, Object> snapshot(Role role) {
 		List<String> codes = codes(role.getPermissions()).stream().sorted().toList();
 		return Map.of("name", role.getName(), "description", role.getDescription(), "permissions", codes);
+	}
+
+	/** A role grants either the investor portal or staff permissions, so no account can be both. */
+	private static void requireNotMixed(Set<String> codes) {
+		if (PermissionCode.mixesInvestorAndStaff(codes)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"A role cannot combine the investor portal with staff permissions");
+		}
 	}
 
 }

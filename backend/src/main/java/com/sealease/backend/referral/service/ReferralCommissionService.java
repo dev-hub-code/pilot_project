@@ -4,7 +4,7 @@ import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.earning.event.RentalDistributedEvent;
+import com.sealease.backend.earning.event.PayoutPaidEvent;
 import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.LedgerService;
@@ -24,22 +24,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Pays referral commissions when rent is distributed, in the distribution's transaction: each
- * referred investor's gross share earns their uplines (levels 1-4) the rates in force. The platform
+ * Pays referral commissions when a monthly payout is credited, in the payout's transaction: the rent
+ * part of a referred investor's payout earns their uplines (levels 1-4) the rates in force (the
+ * capital part, being the investor's own money, earns nothing). The platform
  * pays (referral expense); the investor's own earnings are untouched. An upline who is not active
  * or not verified forfeits that level's commission - it is not passed further up.
  */
 @Service
 public class ReferralCommissionService {
 
-	private static final String ENTITY = "RENTAL_RECEIPT";
+	private static final String ENTITY = "PAYOUT";
 
 	private final ReferralService referrals;
 	private final ReferralRateService rates;
@@ -63,26 +63,26 @@ public class ReferralCommissionService {
 
 	@EventListener
 	@Transactional(propagation = Propagation.MANDATORY)
-	public void onRentalDistributed(RentalDistributedEvent event) {
+	public void onPayoutPaid(PayoutPaidEvent event) {
+		if (!event.rent().isPositive()) {
+			return;
+		}
 		Instant now = clock.instant();
 		ReferralRateVersion version = rates.inForceAt(now);
-		Map<UUID, Boolean> eligible = new HashMap<>();
 		List<ReferralEarning> commissions = new ArrayList<>();
 		int forfeited = 0;
-		for (RentalDistributedEvent.Share share : event.shares()) {
-			for (Upline upline : referrals.uplines(share.userId())) {
-				Money amount = version.commission(upline.level(), share.gross());
-				if (!amount.isPositive()) {
-					continue;
-				}
-				if (!eligible.computeIfAbsent(upline.userId(), id -> referrals.ineligibility(id).isEmpty())) {
-					forfeited++;
-					continue;
-				}
-				commissions.add(new ReferralEarning(event.receiptId(), share.earningId(), share.userId(),
-						upline.userId(), event.productId(), event.periodNumber(), upline.level(), share.gross(),
-						version.percentFor(upline.level()), amount, version.getId(), now));
+		for (Upline upline : referrals.uplines(event.userId())) {
+			Money amount = version.commission(upline.level(), event.rent());
+			if (!amount.isPositive()) {
+				continue;
 			}
+			if (!referrals.ineligibility(upline.userId()).isEmpty()) {
+				forfeited++;
+				continue;
+			}
+			commissions.add(new ReferralEarning(event.installmentId(), event.userId(), upline.userId(), event.productId(),
+					event.installmentNumber(), upline.level(), event.rent(), version.percentFor(upline.level()), amount,
+					version.getId(), now));
 		}
 		if (commissions.isEmpty()) {
 			return;
@@ -94,12 +94,12 @@ public class ReferralCommissionService {
 		List<Posting> postings = new ArrayList<>();
 		postings.add(Posting.debit(AccountType.PLATFORM_REFERRAL_EXPENSE, null, total));
 		perBeneficiary.forEach((userId, amount) -> postings.add(Posting.credit(AccountType.INVESTOR_EARNINGS, userId, amount)));
-		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.receiptId().toString(),
-				"Referral commissions on rent %s period %d".formatted(event.productCode(), event.periodNumber()),
-				event.approvedBy(), postings);
+		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.installmentId().toString(),
+				"Referral commissions on rent %s payout %d".formatted(event.productCode(), event.installmentNumber()),
+				null, postings);
 
 		List<ReferralEarning> saved = earnings.saveAll(commissions);
-		audit.record(AuditRecord.of(event.approvedBy(), AuditAction.REFERRAL_COMMISSIONS_PAID, ENTITY, event.receiptId())
+		audit.record(AuditRecord.of(null, AuditAction.REFERRAL_COMMISSIONS_PAID, ENTITY, event.installmentId())
 			.withNewValue(Map.of("total", total.toString(), "commissions", saved.size(),
 					"beneficiaries", perBeneficiary.size(), "forfeited", forfeited,
 					"rateVersionId", version.getId().toString(), "ledgerTransactionId", transactionId.toString())));
@@ -108,7 +108,7 @@ public class ReferralCommissionService {
 					"REFERRAL_EARNING", c.getId(),
 					Map.of("referralEarningId", c.getId().toString(), "beneficiaryUserId", c.getBeneficiaryUserId().toString(),
 							"sourceUserId", c.getSourceUserId().toString(), "level", c.getLevel(),
-							"receiptId", c.getReceiptId().toString(), "amount", c.amount().amount().toPlainString(),
+							"installmentId", c.getSourceInstallmentId().toString(), "amount", c.amount().amount().toPlainString(),
 							"currency", c.amount().currency().getCurrencyCode())));
 		}
 	}

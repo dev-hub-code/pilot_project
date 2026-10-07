@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { AdjustmentForm } from "@/features/admin/rental-forms";
+import { AdjustmentForm } from "@/features/admin/ledger-forms";
 import { ACCOUNT_LABEL } from "@/features/earnings/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -17,8 +17,8 @@ import { formatMoney } from "@/utils/money";
 export const metadata: Metadata = { title: "Ledger" };
 
 const TYPES: readonly AccountType[] = [
-  "RENTAL_CASH", "INVESTOR_EARNINGS", "PLATFORM_FEE_REVENUE", "PLATFORM_RETAINED", "PLATFORM_ADJUSTMENTS", "PLATFORM_REFERRAL_EXPENSE",
-  "WITHDRAWALS_IN_TRANSIT",
+  "RENTAL_CASH", "INVESTOR_EARNINGS", "PLATFORM_RENT_EXPENSE", "PLATFORM_CAPITAL_RETURNS", "PLATFORM_ADJUSTMENTS",
+  "PLATFORM_REFERRAL_EXPENSE", "WITHDRAWALS_IN_TRANSIT",
 ];
 
 export default async function LedgerPage({ searchParams }: PageProps<"/admin/ledger">) {
@@ -33,11 +33,10 @@ export default async function LedgerPage({ searchParams }: PageProps<"/admin/led
     authFetch<PageResponse<LedgerAccount>>(`/api/v1/admin/ledger/accounts?${query}`),
   ]);
   const canAdjust = hasPermission(session.permissions, Permission.FINANCE_ADJUST);
-  const currencies = trial.length > 0 ? trial.map((t) => t.currency) : ["USD"];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Ledger" description="Double-entry record of every rental distribution and adjustment. Entries are never edited." />
+      <PageHeader title="Ledger" description="Double-entry record of every investor payout, commission, adjustment and withdrawal. Entries are never edited." />
 
       <section className="space-y-3" aria-label="Trial balance">
         <h2 className="text-lg font-semibold tracking-tight">Trial balance</h2>
@@ -92,7 +91,7 @@ export default async function LedgerPage({ searchParams }: PageProps<"/admin/led
 
       {canAdjust && (
         <Card title="Adjust an investor's balance" description="Booked against platform adjustments; audited with your reason.">
-          <AdjustmentForm idempotencyKey={crypto.randomUUID()} currencies={currencies} />
+          <AdjustmentForm idempotencyKey={crypto.randomUUID()} />
         </Card>
       )}
     </div>

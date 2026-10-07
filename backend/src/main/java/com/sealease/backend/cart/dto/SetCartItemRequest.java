@@ -1,11 +1,10 @@
 package com.sealease.backend.cart.dto;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Digits;
+import com.sealease.backend.investment.service.PlanRules;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
-import java.math.BigDecimal;
-
-/** The amount is in the offering's currency. */
-public record SetCartItemRequest(@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 4) BigDecimal amount) {
+/** How many containers of the plan to buy. */
+public record SetCartItemRequest(@NotNull @Min(1) @Max(PlanRules.MAX_CONTAINERS_PER_LINE) Integer quantity) {
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CURRENCY, CURRENCY_SYMBOL } from "@/lib/currency";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -45,7 +46,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
       </section>
 
       <Card title="Request a withdrawal"
-        description={`Minimum ${policy.minimumAmount} per withdrawal, one at a time per currency. Paid in the bank account's currency.`}>
+        description={`Minimum ${formatMoney({ amount: String(policy.minimumAmount), currency: CURRENCY })} per withdrawal, one at a time.`}>
         {profile.kycStatus !== "APPROVED" ? (
           <Notice tone="warning">
             Verify your identity before withdrawing. <Link href="/profile/verification" className="underline">Start verification</Link>
@@ -58,14 +59,13 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
           <Notice tone="info">There is nothing to withdraw yet.</Notice>
         ) : payable.length === 0 ? (
           <Notice tone="warning">
-            Your balance is in {[...fundedCurrencies].join(", ")}, but none of your verified bank accounts is.
-            Add an account in that currency. <Link href="/profile/bank-accounts" className="underline">Bank accounts</Link>
+            None of your verified bank accounts is in rupees ({CURRENCY_SYMBOL}). Add an Indian rupee account. <Link href="/profile/bank-accounts" className="underline">Bank accounts</Link>
           </Notice>
         ) : (
           <WithdrawalRequestForm idempotencyKey={crypto.randomUUID()}
             accounts={payable.map((a) => ({
               value: a.id,
-              label: `${a.bankName} ${a.accountNumberMasked} (${a.currency})${a.primary ? " · primary" : ""}`,
+              label: `${a.bankName} ${a.accountNumberMasked}${a.primary ? " · primary" : ""}`,
             }))} />
         )}
       </Card>

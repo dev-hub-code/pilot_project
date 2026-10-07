@@ -28,8 +28,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * <li><b>CSRF disabled</b>: the backend never reads cookies for authentication, so it is not
  * CSRF-exposed. Browser cookies live on the Next.js origin, which applies its own CSRF defences
  * (SameSite cookies + Origin checks) before forwarding the bearer token.</li>
- * <li><b>Deny by default</b>: only health probes, the sign-in endpoints, the JWK set, signed
- * payment webhooks and (when enabled) API docs are public.</li>
+ * <li><b>Deny by default</b>: only health probes, the sign-in endpoints, the JWK set, the public
+ * interest form and (when enabled) API docs are public.</li>
  * <li><b>Method security</b>: endpoints authorise on fine-grained permissions, e.g.
  * {@code @PreAuthorize("hasAuthority('WITHDRAWAL_APPROVE')")}.</li>
  * </ul>
@@ -42,8 +42,6 @@ public class SecurityConfig {
 	private static final String[] PUBLIC_ACTUATOR = { "/actuator/health", "/actuator/health/**", "/actuator/info" };
 	private static final String[] PUBLIC_AUTH = { "/api/v1/auth/register", "/api/v1/auth/login",
 			"/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/jwks" };
-	/** Gateways cannot sign in; webhook deliveries are authenticated by their signature instead. */
-	private static final String PAYMENT_WEBHOOKS = "/api/v1/payments/webhooks/*";
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 
@@ -74,7 +72,6 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> {
 				auth.requestMatchers(PUBLIC_ACTUATOR).permitAll();
 				auth.requestMatchers(PUBLIC_AUTH).permitAll();
-				auth.requestMatchers(HttpMethod.POST, PAYMENT_WEBHOOKS).permitAll();
 				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
 				if (apiDocsEnabled) {
 					auth.requestMatchers(API_DOCS).permitAll();

@@ -1,8 +1,11 @@
 package com.sealease.backend.payment.entity;
 
 public enum PaymentMethod {
-	/** Investor transfers to the platform account; finance confirms receipt. */
+	/**
+	 * Investor pays into a company bank account (online transfer, cheque or cash deposit) and submits
+	 * the details; finance confirms receipt.
+	 */
 	BANK_TRANSFER,
-	/** Card payment through a gateway, which reports the outcome by signed webhook. */
+	/** Card payment through a gateway. No longer accepted; kept so earlier card payments stay readable. */
 	CARD
 }

@@ -58,8 +58,8 @@ class SupportIntegrationTest {
 	@Test
 	void aTicketGoesBackAndForthUntilItIsClosed() throws Exception {
 		Account investor = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, api.admin()).retail("50000", "1000", "500");
-		String orderId = investors.placeOrder(investor, product, "1000");
+		UUID product = new OfferingFixtures(mvc, api.admin()).plan(1);
+		String orderId = investors.placeOrder(investor, product, 1);
 
 		String ticketId = JsonPath.read(open(investor, "Payment not showing", "ORDER", orderId, png("receipt.png"))
 			.andExpect(status().isCreated())
@@ -112,8 +112,8 @@ class SupportIntegrationTest {
 	void investorsSeeOnlyTheirOwnTicketsAndRecords() throws Exception {
 		Account investor = investors.approvedInvestor();
 		Account other = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, api.admin()).retail("50000", "1000", "500");
-		String othersOrder = investors.placeOrder(other, product, "1000");
+		UUID product = new OfferingFixtures(mvc, api.admin()).plan(1);
+		String othersOrder = investors.placeOrder(other, product, 1);
 
 		open(investor, "Not mine", "ORDER", othersOrder).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.message").value(containsString("not found among yours")));

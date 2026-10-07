@@ -1,6 +1,6 @@
 package com.sealease.backend.earning;
 
-import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
@@ -16,23 +16,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Phase 6: leases, rental receipts, distribution to investors, the ledger and maturity. */
+/** Monthly payouts (rent plus capital returned), the ledger, and maturity at the end of the tenure. */
 @IntegrationTest
 class EarningsIntegrationTest {
 
@@ -45,163 +40,114 @@ class EarningsIntegrationTest {
 	@Autowired
 	private TransactionTemplate transactions;
 
+	@Autowired
+	private PayoutService payouts;
+
 	private TestApi api;
 	private OfferingFixtures offerings;
 	private InvestorFixtures investors;
-	private Account admin;
 
 	@BeforeEach
 	void setUp() throws Exception {
 		api = new TestApi(mvc, jdbc);
-		admin = api.admin();
-		offerings = new OfferingFixtures(mvc, admin);
+		offerings = new OfferingFixtures(mvc, api.admin());
 		investors = new InvestorFixtures(mvc, jdbc, api);
 	}
 
-	// --------------------------------------------------------------------------- happy path
+	// ------------------------------------------------------------------------------ payouts
 
 	@Test
-	void rentIsSplitByOwnershipNetOfTheFeeAndTheOfferingMaturesAfterTheLastPeriod() throws Exception {
-		// 10 000 USD container, 1 000 USD rent a month for 3 months, 10% management fee.
-		UUID product = offerings.published("RETAIL", "10000", "1000", "1000", "1000", 3, "10");
-		Account alice = investors.approvedInvestor();
-		Account bob = investors.approvedInvestor();
-		investors.invest(alice, product, "5000");
-		investors.invest(bob, product, "3000");
-		Account recorder = api.staff("FINANCE");
-		Account approver = api.staff("FINANCE");
+	void payoutsAreCreditedMonthlyAndTheContainerReturnsToStockAfterTheLast() throws Exception {
+		// ₹50,000 container at 2% rent over 16 months: ₹1,000 rent + ₹3,125 capital = ₹4,125 a month.
+		Account investor = investors.approvedInvestor();
+		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
+		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
 
-		// 20% stays unsold; the lease starts anyway, early enough for all three periods to be due.
-		LocalDate start = today().minusMonths(3).minusDays(1);
-		backdatePublication(product);
-		activate(admin, product, start).andExpect(status().isOk())
-			.andExpect(jsonPath("$.status").value("ACTIVE"))
-			.andExpect(jsonPath("$.leaseStartsOn").value(start.toString()))
-			.andExpect(jsonPath("$.managementFeePercent").value(10.0));
-		mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, bob.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"amount\":\"1000\"}"))
-			.andExpect(status().isUnprocessableContent());
+		// Nothing is due on the day of purchase: payouts are paid in arrears.
+		payouts.payDue();
+		assertThat(paid(holding)).isZero();
 
-		String due = mvc.perform(get("/api/v1/admin/rentals/due").header(HttpHeaders.AUTHORIZATION, recorder.bearer()))
-			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-		List<Integer> duePeriods = JsonPath.read(due, "$[?(@.productId == '%s')].periodNumber".formatted(product));
-		assertThat(duePeriods).containsExactly(1, 2, 3);
+		// Three months later.
+		backdate(holding, 3);
+		assertThat(payouts.payDue()).isGreaterThanOrEqualTo(3);
+		assertThat(paid(holding)).isEqualTo(3);
+		payouts.payDue();
+		assertThat(paid(holding)).as("paying again changes nothing").isEqualTo(3);
 
-		// Period 1: recorded by one person, previewed, approved by another.
-		String first = id(record(recorder, product, 1, "1000", null).andExpect(status().isCreated())
-			.andExpect(jsonPath("$.receipt.status").value("RECORDED"))
-			.andExpect(jsonPath("$.preview").value(true))
-			.andExpect(jsonPath("$.distribution[0].gross.amount").value("500.00"))
-			.andExpect(jsonPath("$.distribution[0].fee.amount").value("50.00"))
-			.andExpect(jsonPath("$.distribution[0].net.amount").value("450.00"))
-			.andExpect(jsonPath("$.distribution[1].net.amount").value("270.00"))
-			.andExpect(jsonPath("$.toInvestors.amount").value("720.00"))
-			.andExpect(jsonPath("$.fees.amount").value("80.00"))
-			.andExpect(jsonPath("$.retained.amount").value("200.00")));
-		record(approver, product, 1, "1000", null).andExpect(status().isConflict());
-		approve(recorder, first).andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.message").value(containsString("someone other")));
-		approve(approver, first).andExpect(status().isOk())
-			.andExpect(jsonPath("$.receipt.status").value("DISTRIBUTED"))
-			.andExpect(jsonPath("$.preview").value(false))
-			.andExpect(jsonPath("$.distribution.length()").value(2));
-		approve(approver, first).andExpect(status().isConflict());
+		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.balances[0].amount").value("12375.00"))
+			.andExpect(jsonPath("$.rentPaid[0].amount").value("3000.00"))
+			.andExpect(jsonPath("$.capitalReturned[0].amount").value("9375.00"))
+			.andExpect(jsonPath("$.nextPayout.total.amount").value("4125.00"))
+			.andExpect(jsonPath("$.holdings[0].paid").value(3))
+			.andExpect(jsonPath("$.holdings[0].installments").value(16))
+			.andExpect(jsonPath("$.holdings[0].received.amount").value("12375.00"));
+		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(16))
+			.andExpect(jsonPath("$.content[0].status").value("SCHEDULED"))
+			.andExpect(jsonPath("$.content[0].installmentNumber").value(16));
+		mvc.perform(get("/api/v1/earnings").param("status", "PAID").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(3))
+			.andExpect(jsonPath("$.content[0].rent.amount").value("1000.00"))
+			.andExpect(jsonPath("$.content[0].capital.amount").value("3125.00"))
+			.andExpect(jsonPath("$.content[0].total.amount").value("4125.00"))
+			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty());
 
-		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, alice.bearer()))
-			.andExpect(jsonPath("$.balances[0].amount").value("450.00"))
-			.andExpect(jsonPath("$.totalEarned[0].amount").value("450.00"))
-			.andExpect(jsonPath("$.holdings[0].payments").value(1));
-		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, bob.bearer()))
-			.andExpect(jsonPath("$.content.length()").value(1))
-			.andExpect(jsonPath("$.content[0].periodNumber").value(1))
-			.andExpect(jsonPath("$.content[0].gross.amount").value("300.00"))
-			.andExpect(jsonPath("$.content[0].fee.amount").value("30.00"))
-			.andExpect(jsonPath("$.content[0].net.amount").value("270.00"))
-			.andExpect(jsonPath("$.content[0].periodStartsOn").value(start.toString()));
-		assertThat(outboxCount("rental.generated", first)).isEqualTo(1);
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'earning.created' "
-				+ "AND payload ->> 'productId' = ?", Integer.class, product.toString())).isEqualTo(2);
-		assertThat(api.auditCount("RENTAL_DISTRIBUTED", first)).isEqualTo(1);
+		// Each payout is one balanced ledger transaction: rent and capital are platform expenses.
+		UUID first = jdbc.queryForObject("SELECT id FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
+				UUID.class, holding);
+		assertThat(entries(first.toString())).containsExactlyInAnyOrder(
+				"DEBIT PLATFORM_RENT_EXPENSE 1000.0000", "DEBIT PLATFORM_CAPITAL_RETURNS 3125.0000",
+				"CREDIT INVESTOR_EARNINGS 4125.0000");
+		assertThat(api.auditCount("PAYOUT_PAID", first)).isEqualTo(1);
+		assertThat(outboxCount("earning.created", first.toString())).isEqualTo(1);
 
-		// Period 2 was paid short: a note is required.
-		record(recorder, product, 2, "900", null).andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("explain the difference")));
-		approve(approver, id(record(recorder, product, 2, "900", "Lessee paid 100 short; arrears agreed")
-			.andExpect(status().isCreated()))).andExpect(status().isOk())
-			.andExpect(jsonPath("$.distribution[0].net.amount").value("405.00"));
-
-		// The last period matures the offering and its holdings.
-		approve(approver, id(record(recorder, product, 3, "1000", null))).andExpect(status().isOk());
-		mvc.perform(get("/api/v1/admin/investment-products/{id}", product).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(jsonPath("$.status").value("MATURED"))
-			.andExpect(jsonPath("$.maturedAt").isNotEmpty());
-		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, alice.bearer()))
+		// The tenure ends: the last payout matures the holding and the container goes back to stock.
+		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("ON_LEASE");
+		backdate(holding, 16);
+		payouts.payDue();
+		assertThat(paid(holding)).isEqualTo(16);
+		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?", String.class, holding)).isEqualTo("MATURED");
+		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("AVAILABLE");
+		assertThat(api.auditCount("HOLDING_MATURED", holding)).isEqualTo(1);
+		// 16 × ₹4,125: 32% of the price in rent and the whole price back.
+		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.balances[0].amount").value("66000.00"))
+			.andExpect(jsonPath("$.rentPaid[0].amount").value("16000.00"))
+			.andExpect(jsonPath("$.capitalReturned[0].amount").value("50000.00"))
+			.andExpect(jsonPath("$.nextPayout").doesNotExist());
+		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.activeHoldings").value(0))
 			.andExpect(jsonPath("$.holdings[0].status").value("MATURED"));
-		record(recorder, product, 3, "1000", null).andExpect(status().isUnprocessableContent());
-
-		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, alice.bearer()))
-			.andExpect(jsonPath("$.balances[0].amount").value("1305.00"))
-			.andExpect(jsonPath("$.holdings[0].payments").value(3));
-		mvc.perform(get("/api/v1/admin/rentals/due").header(HttpHeaders.AUTHORIZATION, recorder.bearer()))
-			.andExpect(jsonPath("$[*].productId").value(not(hasItem(product.toString()))));
 		assertLedgerBalanced();
 	}
 
-	// ------------------------------------------------------------------------------- leases
-
 	@Test
-	void onlyFundedOrSettledOfferingsCanStartTheirLease() throws Exception {
-		UUID product = offerings.published("RETAIL", "10000", "1000", "1000", "500", 12, "0");
-		backdatePublication(product);
+	void financeCanRunDuePayoutsNow() throws Exception {
 		Account investor = investors.approvedInvestor();
-
-		activate(admin, product, today()).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("confirmed investors")));
-		investors.invest(investor, product, "2000");
-		investors.placeOrder(investors.approvedInvestor(), product, "1000");
-		activate(admin, product, today()).andExpect(status().isUnprocessableContent());
-		activate(investor, product, today()).andExpect(status().isForbidden());
-
-		UUID funded = offerings.published("HNI", "8000", "8000", "8000", "400", 12, "0");
-		investors.invest(investors.hniInvestor(), funded, "8000");
-		activate(admin, funded, today().minusYears(1)).andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("before the offering was published")));
-		activate(admin, funded, today()).andExpect(status().isOk())
-			.andExpect(jsonPath("$.leaseEndsOn").value(today().plusMonths(12).toString()));
-		activate(admin, funded, today()).andExpect(status().isUnprocessableContent());
-		assertThat(api.auditCount("PRODUCT_LEASE_ACTIVATED", funded)).isEqualTo(1);
-	}
-
-	// ------------------------------------------------------------------------------ rentals
-
-	@Test
-	void recordingValidatesThePeriodAndAMistakeCanBeVoided() throws Exception {
-		UUID product = activeLease("1200", 6);
+		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
+		backdate(holding, 1);
 		Account finance = api.staff("FINANCE");
 
-		record(finance, product, 0, "1200", null).andExpect(status().isBadRequest());
-		record(finance, product, 7, "1200", null).andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("periods 1 to 6")));
-		mvc.perform(post("/api/v1/admin/rentals").header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(rentalBody(product, 1, "1200", null, today().plusDays(1))))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("future")));
-		record(finance, product, 1, "1200.005", null).andExpect(status().isBadRequest());
-
-		String wrong = id(record(finance, product, 1, "1200", null).andExpect(status().isCreated()));
-		mvc.perform(post("/api/v1/admin/rentals/{id}/reject", wrong).header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Booked against the wrong offering\"}"))
+		mvc.perform(get("/api/v1/admin/payouts/due").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.receipt.status").value("REJECTED"))
-			.andExpect(jsonPath("$.distribution.length()").value(0));
-		record(finance, product, 1, "1200", null).andExpect(status().isCreated());
-
-		Account investor = investors.approvedInvestor();
-		mvc.perform(get("/api/v1/admin/rentals").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(status().isForbidden());
-		mvc.perform(get("/api/v1/admin/rentals").param("productId", product.toString())
+			.andExpect(jsonPath("$[0].count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+		mvc.perform(get("/api/v1/admin/payouts").param("holdingId", holding.toString())
 				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(2));
+			.andExpect(jsonPath("$.totalElements").value(16))
+			.andExpect(jsonPath("$.content[0].userId").value(investor.id().toString()));
+
+		run(investor).andExpect(status().isForbidden());
+		run(api.staff("SUPPORT")).andExpect(status().isForbidden());
+		run(finance).andExpect(status().isOk()).andExpect(jsonPath("$.paid").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
+		assertThat(paid(holding)).isEqualTo(1);
+
+		// Investors see their own payouts only.
+		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, investors.approvedInvestor().bearer()))
+			.andExpect(jsonPath("$.totalElements").value(0));
 	}
 
 	// ------------------------------------------------------------------------------- ledger
@@ -218,7 +164,7 @@ class EarningsIntegrationTest {
 			.andExpect(jsonPath("$.balance.amount").value("25.00"));
 		adjust(finance, investor, "DEBIT", "30", UUID.randomUUID().toString())
 			.andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("only 25.00 USD")));
+			.andExpect(jsonPath("$.message").value(containsString("only ₹25.00")));
 		adjust(finance, investor, "DEBIT", "25", UUID.randomUUID().toString())
 			.andExpect(jsonPath("$.balance.amount").value("0.00"));
 		adjust(finance, finance, "CREDIT", "1", UUID.randomUUID().toString()).andExpect(status().isForbidden());
@@ -259,52 +205,40 @@ class EarningsIntegrationTest {
 
 	// ------------------------------------------------------------------------------ helpers
 
-	/** An offering fully owned by one investor, on lease since well before any period is due. */
-	private UUID activeLease(String rental, int months) throws Exception {
-		UUID product = offerings.published("HNI", "10000", "10000", "10000", rental, months, "0");
-		investors.invest(investors.hniInvestor(), product, "10000");
-		backdatePublication(product);
-		activate(admin, product, today().minusMonths(months).minusDays(1)).andExpect(status().isOk());
-		return product;
+	/** Moves the holding's schedule into the past, as if the lease had started {@code months} months ago. */
+	private void backdate(UUID holding, int months) {
+		jdbc.update("""
+				UPDATE payout_installments
+				SET due_on = (now() AT TIME ZONE 'UTC')::date - make_interval(months => ? - installment_number)
+				WHERE holding_id = ?""", months, holding);
 	}
 
-	private void backdatePublication(UUID product) {
-		jdbc.update("UPDATE investment_products SET published_at = now() - interval '2 years' WHERE id = ?", product);
+	private int paid(UUID holding) {
+		Integer count = jdbc.queryForObject("SELECT count(*) FROM payout_installments WHERE holding_id = ? AND status = 'PAID'",
+				Integer.class, holding);
+		return count == null ? 0 : count;
 	}
 
-	private ResultActions activate(Account actor, UUID product, LocalDate startsOn) throws Exception {
-		return mvc.perform(post("/api/v1/admin/investment-products/{id}/activate", product)
-			.header(HttpHeaders.AUTHORIZATION, actor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"leaseStartsOn\":\"" + startsOn + "\"}"));
+	/** The ledger entries of a payout, as "DIRECTION ACCOUNT_TYPE amount". */
+	private List<String> entries(String installmentId) {
+		return jdbc.queryForList("""
+				SELECT e.direction || ' ' || a.account_type || ' ' || e.amount
+				FROM ledger_entries e
+				JOIN ledger_transactions t ON t.id = e.transaction_id
+				JOIN ledger_accounts a ON a.id = e.account_id
+				WHERE t.transaction_type = 'INVESTOR_PAYOUT' AND t.reference = ?""", String.class, installmentId);
 	}
 
-	private ResultActions record(Account actor, UUID product, int period, String amount, String note) throws Exception {
-		return mvc.perform(post("/api/v1/admin/rentals").header(HttpHeaders.AUTHORIZATION, actor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content(rentalBody(product, period, amount, note, today())));
-	}
-
-	private static String rentalBody(UUID product, int period, String amount, String note, LocalDate receivedOn) {
-		return """
-				{"productId":"%s","periodNumber":%d,"amount":"%s","receivedOn":"%s","externalReference":"LESSEE-%d"%s}
-				""".formatted(product, period, amount, receivedOn, period,
-				note == null ? "" : ",\"note\":\"" + note + "\"");
-	}
-
-	private ResultActions approve(Account actor, String receiptId) throws Exception {
-		return mvc.perform(post("/api/v1/admin/rentals/{id}/approve", receiptId)
-			.header(HttpHeaders.AUTHORIZATION, actor.bearer()));
+	private ResultActions run(Account actor) throws Exception {
+		return mvc.perform(post("/api/v1/admin/payouts/run").header(HttpHeaders.AUTHORIZATION, actor.bearer()));
 	}
 
 	private ResultActions adjust(Account actor, Account investor, String direction, String amount, String key)
 			throws Exception {
 		return mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content("""
-					{"userId":"%s","currency":"USD","direction":"%s","amount":"%s","reason":"Goodwill credit"}
+					{"userId":"%s","currency":"INR","direction":"%s","amount":"%s","reason":"Goodwill credit"}
 					""".formatted(investor.id(), direction, amount)));
-	}
-
-	private static String id(ResultActions result) throws Exception {
-		return JsonPath.read(result.andReturn().getResponse().getContentAsString(), "$.receipt.id");
 	}
 
 	private void assertLedgerBalanced() {
@@ -320,10 +254,6 @@ class EarningsIntegrationTest {
 		Integer count = jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = ? AND aggregate_id = ?",
 				Integer.class, topic, aggregateId);
 		return count == null ? 0 : count;
-	}
-
-	private static LocalDate today() {
-		return LocalDate.now(ZoneOffset.UTC);
 	}
 
 }

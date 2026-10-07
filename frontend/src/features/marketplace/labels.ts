@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge";
-import type { ContainerCondition, ContainerType, ProductStatus, RiskLevel } from "@/types/marketplace";
+import type { ContainerCondition, ContainerStatus, ContainerType, ProductStatus } from "@/types/marketplace";
 
 export const CONTAINER_TYPE_LABEL: Record<ContainerType, string> = {
   DRY_20FT: "20ft Dry",
@@ -21,9 +21,7 @@ export const CONDITION_LABEL: Record<ContainerCondition, string> = {
   WIND_WATERTIGHT: "Wind & watertight",
 };
 
-export const RISK_LABEL: Record<RiskLevel, string> = { LOW: "Low risk", MEDIUM: "Medium risk", HIGH: "High risk" };
 
-export const RISK_TONE = { LOW: "success", MEDIUM: "warning", HIGH: "danger" } as const;
 
 export const CONTAINER_TYPE_OPTIONS = (Object.keys(CONTAINER_TYPE_LABEL) as ContainerType[]).map((value) => ({
   value,
@@ -33,9 +31,29 @@ export const CONTAINER_TYPE_OPTIONS = (Object.keys(CONTAINER_TYPE_LABEL) as Cont
 export const PRODUCT_TONE: Record<ProductStatus, StatusTone> = {
   DRAFT: "neutral",
   OPEN: "success",
-  FUNDED: "success",
-  ACTIVE: "success",
-  MATURED: "neutral",
   CLOSED: "neutral",
   CANCELLED: "danger",
+};
+
+export const PRODUCT_STATUS_LABEL: Record<ProductStatus, string> = {
+  DRAFT: "Draft",
+  OPEN: "Open",
+  CLOSED: "Closed to new investors",
+  CANCELLED: "Cancelled",
+};
+
+export const CONTAINER_STATUS_LABEL: Record<ContainerStatus, string> = {
+  AVAILABLE: "Available",
+  RESERVED: "Reserved for an order",
+  ON_LEASE: "Leased to an investor",
+  MAINTENANCE: "Maintenance",
+  RETIRED: "Retired",
+};
+
+export const CONTAINER_STATUS_TONE: Record<ContainerStatus, StatusTone> = {
+  AVAILABLE: "success",
+  RESERVED: "warning",
+  ON_LEASE: "neutral",
+  MAINTENANCE: "warning",
+  RETIRED: "danger",
 };

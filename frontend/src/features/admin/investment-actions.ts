@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { ContainerDetail, Product } from "@/types/marketplace";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { activateLeaseSchema, containerSchema, documentSchema, productSchema, statusSchema } from "@/validators/investment";
+import { containerSchema, documentSchema, productSchema, statusSchema } from "@/validators/investment";
 import { reasonSchema } from "@/validators/profile";
 
 const id = (value: string) => encodeURIComponent(value);
@@ -82,7 +82,7 @@ export async function setDocumentVisibilityAction(containerId: string, documentI
   revalidatePath(`/admin/containers/${containerId}`);
 }
 
-// ------------------------------------------------------------------------------- offerings
+// ---------------------------------------------------------------------------------- plans
 
 export async function saveProductAction(productId: string | null, _p: FormState, formData: FormData): Promise<FormState> {
   const input = values(formData);
@@ -92,14 +92,7 @@ export async function saveProductAction(productId: string | null, _p: FormState,
   try {
     saved = await authFetch<Product>(productId ? `/api/v1/admin/investment-products/${id(productId)}` : "/api/v1/admin/investment-products", {
       method: productId ? "PUT" : "POST",
-      json: {
-        ...parsed.data,
-        minimumInvestment: parsed.data.minimumInvestment ?? null,
-        investmentIncrement: parsed.data.investmentIncrement ?? null,
-        maximumPerInvestor: parsed.data.maximumPerInvestor ?? null,
-        offerOpensAt: parsed.data.offerOpensAt ?? null,
-        offerClosesAt: parsed.data.offerClosesAt ?? null,
-      },
+      json: parsed.data,
     });
   } catch (error) {
     return failureState(error, input);
@@ -115,20 +108,17 @@ export async function publishProductAction(productId: string): Promise<FormState
     return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Published. The offering is now live in the marketplace." };
+  return { success: "Published. Investors can now buy containers under this plan." };
 }
 
-export async function activateLeaseAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const input = values(formData);
-  const parsed = activateLeaseSchema.safeParse(input);
-  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
+export async function closeProductAction(productId: string): Promise<FormState> {
   try {
-    await authFetch(`/api/v1/admin/investment-products/${id(productId)}/activate`, { method: "POST", json: parsed.data });
+    await authFetch(`/api/v1/admin/investment-products/${id(productId)}/close`, { method: "POST" });
   } catch (error) {
-    return failureState(error, input);
+    return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Lease started. Rental periods are now tracked under Rentals." };
+  return { success: "Plan closed. Containers already sold keep their lease and payouts." };
 }
 
 export async function cancelProductAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {
@@ -140,5 +130,5 @@ export async function cancelProductAction(productId: string, _p: FormState, form
     return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Offering cancelled." };
+  return { success: "Plan cancelled." };
 }

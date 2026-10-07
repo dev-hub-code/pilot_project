@@ -17,18 +17,19 @@ import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.outbox.DomainEvent;
 import com.sealease.backend.outbox.OutboxPublisher;
 import com.sealease.backend.payment.dto.BankTransferInstructions;
+import com.sealease.backend.payment.dto.CompanyBankAccountResponse;
 import com.sealease.backend.payment.dto.ConfirmTransferRequest;
+import com.sealease.backend.payment.dto.DepositDetails;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
 import com.sealease.backend.payment.dto.RefundRequest;
+import com.sealease.backend.payment.dto.SubmitDepositRequest;
+import com.sealease.backend.payment.entity.CompanyBankAccount;
 import com.sealease.backend.payment.entity.Payment;
 import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
 import com.sealease.backend.payment.provider.BankTransferProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
-import com.sealease.backend.payment.provider.ProviderEvent;
-import com.sealease.backend.payment.provider.SimulatedCardProvider;
-import com.sealease.backend.payment.provider.WebhookPaymentProvider;
 import com.sealease.backend.payment.repository.PaymentRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
@@ -37,22 +38,19 @@ import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -69,51 +67,38 @@ public class PaymentService {
 
 	private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 	private static final String ENTITY = "PAYMENT";
-	private static final String INSERT_EVENT = """
-			INSERT INTO payment_events (id, provider, provider_event_id, payment_id, event_type, payload, received_at)
-			VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
-			ON CONFLICT (provider, provider_event_id) DO NOTHING
-			""";
 
 	private final PaymentRepository payments;
 	private final OrderService orders;
 	private final Map<PaymentMethod, PaymentProvider> providersByMethod = new EnumMap<>(PaymentMethod.class);
-	private final Map<String, WebhookPaymentProvider> webhookProviders = new HashMap<>();
-	private final Optional<SimulatedCardProvider> simulator;
-	private final BankTransferProperties bankAccount;
+	private final CompanyBankAccountService companyAccounts;
+	private final BankTransferProperties bankTransfer;
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
-	private final JdbcTemplate jdbc;
-	private final JsonMapper jsonMapper;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
-			Optional<SimulatedCardProvider> simulator, BankTransferProperties bankAccount, OutboxPublisher outbox,
-			AuditService audit, JdbcTemplate jdbc, JsonMapper jsonMapper, Clock clock) {
+			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OutboxPublisher outbox,
+			AuditService audit, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
 			if (providersByMethod.putIfAbsent(provider.method(), provider) != null) {
 				throw new IllegalStateException("More than one payment provider for " + provider.method());
 			}
-			if (provider instanceof WebhookPaymentProvider webhook) {
-				webhookProviders.put(webhook.name(), webhook);
-			}
 		}
-		this.simulator = simulator;
-		this.bankAccount = bankAccount;
+		this.companyAccounts = companyAccounts;
+		this.bankTransfer = bankTransfer;
 		this.outbox = outbox;
 		this.audit = audit;
-		this.jdbc = jdbc;
-		this.jsonMapper = jsonMapper;
 		this.clock = clock;
 	}
 
 	// --------------------------------------------------------------------------- investor
 
 	/**
-	 * Starts paying an order. Idempotent per key; asking again for the method already in flight
-	 * resumes that payment, and switching method cancels the attempt in flight.
+	 * Starts paying an order by bank (the only method offered). Idempotent per key; asking again while
+	 * a bank payment is in flight resumes it, and an earlier card attempt still in flight is cancelled.
 	 */
 	@Transactional
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
@@ -135,7 +120,11 @@ public class PaymentService {
 					? "The payment window for this order has passed" : "This order is no longer awaiting payment");
 		}
 		PaymentProvider provider = providersByMethod.get(method);
-		if (provider == null) {
+		if (method != PaymentMethod.BANK_TRANSFER) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Card payments are not accepted; please pay by bank");
+		}
+		if (provider == null || !companyAccounts.anyActive()) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					humanize(method) + " payments are not available");
 		}
@@ -154,77 +143,50 @@ public class PaymentService {
 		return view(payment, order.orderNumber());
 	}
 
+	/**
+	 * The investor tells us how they paid a bank payment: into which company account, and the
+	 * transaction id, cheque number or deposit receipt number. The order then waits for finance to
+	 * verify the money instead of lapsing. Details may be corrected until the payment is settled.
+	 */
+	@Transactional
+	public PaymentResponse submitDeposit(UUID userId, UUID paymentId, SubmitDepositRequest request) {
+		Payment payment = load(paymentId);
+		if (!payment.getUserId().equals(userId)) {
+			throw new ResourceNotFoundException("Payment", paymentId);
+		}
+		if (payment.getMethod() != PaymentMethod.BANK_TRANSFER) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank payments take payment details");
+		}
+		PayableOrder order = orders.lockForPayment(payment.getOrderId());
+		Payment locked = lockPayment(paymentId);
+		if (locked.getStatus() != PaymentStatus.PENDING) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(locked.getStatus()));
+		}
+		Instant now = clock.instant();
+		if (!order.acceptsPaymentAt(now)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This order is no longer awaiting payment");
+		}
+		CompanyBankAccount account = companyAccounts.requireActive(request.companyBankAccountId());
+		String reference = request.reference().strip().toUpperCase(Locale.ROOT);
+		locked.submitDeposit(account.getId(), request.mode(), reference, now);
+		payments.flush();
+		order = orders.holdForVerification(order.id(), now.plus(bankTransfer.verificationWindow()));
+		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_DETAILS_SUBMITTED, ENTITY, paymentId)
+			.withNewValue(Map.of("companyBankAccountId", account.getId().toString(), "mode", request.mode(),
+					"reference", reference, "orderExpiresAt", order.expiresAt().toString())));
+		return view(locked, order.orderNumber());
+	}
+
 	@Transactional(readOnly = true)
 	public List<PaymentResponse> forOrder(UUID orderId, UUID ownerId) {
 		PayableOrder order = orders.payable(orderId);
 		if (ownerId != null && !order.userId().equals(ownerId)) {
 			throw new ResourceNotFoundException("Order", orderId);
 		}
-		return payments.findByOrderIdOrderByCreatedAtDesc(orderId).stream()
-			.map(p -> view(p, order.orderNumber()))
-			.toList();
-	}
-
-	/** Development only: makes the simulated card gateway report an outcome for a payment. */
-	@Transactional
-	public PaymentResponse simulate(UUID userId, UUID paymentId, ProviderEvent.Outcome outcome) {
-		SimulatedCardProvider gateway = simulator.orElseThrow(() -> new ResourceNotFoundException("Payment simulator", "card"));
-		Payment payment = load(paymentId);
-		if (!payment.getUserId().equals(userId)) {
-			throw new ResourceNotFoundException("Payment", paymentId);
-		}
-		if (!SimulatedCardProvider.NAME.equals(payment.getProvider()) || payment.getStatus() != PaymentStatus.PENDING) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only pending simulated card payments");
-		}
-		SimulatedCardProvider.SignedEvent delivery = gateway.signedEvent(payment.getProviderReference(), payment.amount(),
-				outcome);
-		receiveWebhook(SimulatedCardProvider.NAME, delivery.body(), delivery.signature());
-		return view(load(paymentId), orders.payable(payment.getOrderId()).orderNumber());
-	}
-
-	// ----------------------------------------------------------------------------- webhooks
-
-	/**
-	 * Handles a provider notification. Redeliveries (same provider event id) are ignored, so the
-	 * provider may retry as often as it likes.
-	 */
-	@Transactional
-	public void receiveWebhook(String providerName, byte[] body, String signature) {
-		WebhookPaymentProvider provider = webhookProviders.get(providerName);
-		if (provider == null) {
-			throw new ResourceNotFoundException("Payment provider", providerName);
-		}
-		ProviderEvent event = provider.verify(body, signature);
-		Optional<Payment> payment = payments.findByProviderAndProviderReference(providerName, event.providerReference());
-		int recorded = jdbc.update(INSERT_EVENT, UUID.randomUUID(), providerName, event.eventId(),
-				payment.map(Payment::getId).orElse(null), event.outcome().name(),
-				jsonMapper.writeValueAsString(event.payload()), OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
-		if (recorded == 0) {
-			log.debug("Ignoring redelivered {} event {}", providerName, event.eventId());
-			return;
-		}
-		if (payment.isEmpty()) {
-			log.warn("{} event {} refers to unknown payment {}", providerName, event.eventId(), event.providerReference());
-			return;
-		}
-
-		PayableOrder order = orders.lockForPayment(payment.get().getOrderId());
-		Payment locked = lockPayment(payment.get().getId());
-		if (event.outcome() == ProviderEvent.Outcome.SUCCEEDED) {
-			Money received = event.amount() == null || event.currency() == null ? null
-					: Money.of(event.amount().toPlainString(), event.currency());
-			settle(locked, order, received, event.eventId(), null);
-		}
-		else if (locked.getStatus() == PaymentStatus.PENDING) {
-			String reason = event.failureReason() == null ? "Declined by the provider" : event.failureReason();
-			locked.fail(reason);
-			payments.flush();
-			audit.record(AuditRecord.of(null, AuditAction.PAYMENT_FAILED, ENTITY, locked.getId())
-				.withNewValue(Map.of("reason", reason)));
-			outbox.publish(DomainEvent.of(KafkaTopics.PAYMENT_FAILED, "PaymentFailed", ENTITY, locked.getId(),
-					Map.of("paymentId", locked.getId().toString(), "orderId", locked.getOrderId().toString(),
-							"userId", locked.getUserId().toString(), "reason", reason)));
-		}
+		List<Payment> found = payments.findByOrderIdOrderByCreatedAtDesc(orderId);
+		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(found));
+		List<CompanyBankAccountResponse> active = companyAccounts.active();
+		return found.stream().map(p -> view(p, order.orderNumber(), accounts, active)).toList();
 	}
 
 	// -------------------------------------------------------------------------------- staff
@@ -253,6 +215,35 @@ public class PaymentService {
 		return view(locked, order.orderNumber());
 	}
 
+	/**
+	 * Finance could not find the money (or the cheque bounced). The order keeps its reservation until
+	 * it expires, so the investor can pay again or correct the details in a new payment.
+	 */
+	@Transactional
+	public PaymentResponse rejectBankPayment(UUID actorId, UUID paymentId, String reason) {
+		Payment payment = load(paymentId);
+		if (payment.getMethod() != PaymentMethod.BANK_TRANSFER) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank payments are rejected manually");
+		}
+		if (payment.getUserId().equals(actorId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot decide on a payment for your own order");
+		}
+		PayableOrder order = orders.lockForPayment(payment.getOrderId());
+		Payment locked = lockPayment(paymentId);
+		if (locked.getStatus() != PaymentStatus.PENDING) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(locked.getStatus()));
+		}
+		String note = reason.strip();
+		locked.fail(note);
+		payments.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.PAYMENT_REJECTED, ENTITY, paymentId)
+			.withNewValue(Map.of("reason", note)));
+		outbox.publish(DomainEvent.of(KafkaTopics.PAYMENT_FAILED, "PaymentFailed", ENTITY, paymentId,
+				Map.of("paymentId", paymentId.toString(), "orderId", order.id().toString(),
+						"userId", locked.getUserId().toString(), "reason", note)));
+		return view(locked, order.orderNumber());
+	}
+
 	/** Finance records that money held for an order that could not be confirmed was paid back. */
 	@Transactional
 	public PaymentResponse recordRefund(UUID actorId, UUID paymentId, RefundRequest request) {
@@ -275,7 +266,9 @@ public class PaymentService {
 	public Page<PaymentResponse> search(PaymentSearchCriteria criteria, Pageable pageable) {
 		Page<Payment> page = payments.findAll(matching(criteria), pageable);
 		Map<UUID, String> numbers = orders.orderNumbers(page.map(Payment::getOrderId).toList());
-		return page.map(p -> view(p, numbers.get(p.getOrderId())));
+		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(page.getContent()));
+		List<CompanyBankAccountResponse> active = companyAccounts.active();
+		return page.map(p -> view(p, numbers.get(p.getOrderId()), accounts, active));
 	}
 
 	// ----------------------------------------------------------------------------- internal
@@ -336,13 +329,29 @@ public class PaymentService {
 	}
 
 	private PaymentResponse view(Payment payment, String orderNumber) {
+		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(List.of(payment)));
+		return view(payment, orderNumber, accounts, companyAccounts.active());
+	}
+
+	private static PaymentResponse view(Payment payment, String orderNumber, Map<UUID, CompanyBankAccount> accounts,
+			List<CompanyBankAccountResponse> activeAccounts) {
 		BankTransferInstructions instructions = payment.getMethod() == PaymentMethod.BANK_TRANSFER
 				&& payment.getStatus() == PaymentStatus.PENDING
-				? new BankTransferInstructions(bankAccount.beneficiaryName(), bankAccount.iban(), bankAccount.bic(),
-						bankAccount.bankName(), payment.getProviderReference(), MoneyResponse.from(payment.amount()))
+				? new BankTransferInstructions(payment.getProviderReference(), MoneyResponse.from(payment.amount()),
+						activeAccounts)
 				: null;
-		return PaymentResponse.from(payment, orderNumber, instructions,
-				SimulatedCardProvider.NAME.equals(payment.getProvider()));
+		DepositDetails deposit = null;
+		if (payment.hasDepositDetails()) {
+			CompanyBankAccount account = accounts.get(payment.getCompanyBankAccountId());
+			deposit = new DepositDetails(payment.getDepositMode(), payment.getDepositReference(),
+					payment.getDepositSubmittedAt(), payment.getCompanyBankAccountId(),
+					account == null ? null : account.getBankName(), account == null ? null : account.getAccountNumber());
+		}
+		return PaymentResponse.from(payment, orderNumber, instructions, deposit);
+	}
+
+	private static List<UUID> depositAccountIds(List<Payment> found) {
+		return found.stream().map(Payment::getCompanyBankAccountId).filter(Objects::nonNull).distinct().toList();
 	}
 
 	private Payment load(UUID paymentId) {
@@ -354,7 +363,11 @@ public class PaymentService {
 	}
 
 	private static String humanize(PaymentMethod method) {
-		return method == PaymentMethod.CARD ? "Card" : "Bank transfer";
+		return method == PaymentMethod.CARD ? "Card" : "Bank";
+	}
+
+	private static String humanize(PaymentStatus status) {
+		return status.name().toLowerCase(Locale.ROOT).replace('_', ' ');
 	}
 
 	private static Specification<Payment> matching(PaymentSearchCriteria c) {

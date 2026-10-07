@@ -1,6 +1,7 @@
 package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.common.api.ReasonRequest;
 import com.sealease.backend.payment.dto.ConfirmTransferRequest;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
@@ -52,6 +53,13 @@ public class AdminPaymentController {
 	public PaymentResponse confirm(AuthenticatedUser actor, @PathVariable UUID paymentId,
 			@Valid @RequestBody ConfirmTransferRequest request) {
 		return payments.confirmBankTransfer(actor.userId(), paymentId, request);
+	}
+
+	@PostMapping("/api/v1/admin/payments/{paymentId}/reject")
+	@PreAuthorize("hasAuthority('PAYMENT_CONFIRM')")
+	public PaymentResponse reject(AuthenticatedUser actor, @PathVariable UUID paymentId,
+			@Valid @RequestBody ReasonRequest request) {
+		return payments.rejectBankPayment(actor.userId(), paymentId, request.reason());
 	}
 
 	@PostMapping("/api/v1/admin/payments/{paymentId}/refund")

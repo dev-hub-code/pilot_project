@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Reports" };
 
 const REPORTS = [
   { key: "financial-summary", label: "Financial summary", description: "Rent, fees, commissions, withdrawals and balances owed, per currency." },
-  { key: "offerings", label: "Offerings & funding", description: "Funding, investors, leases and rent received or overdue." },
+  { key: "offerings", label: "Plans & payouts", description: "Containers sold and in stock per plan, and payouts due and not yet paid." },
   { key: "statement", label: "Investor statement", description: "One investor's account activity, holdings and withdrawals." },
 ] as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;

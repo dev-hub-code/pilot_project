@@ -71,6 +71,19 @@ public class Payment extends BaseEntity {
 	@Column(name = "refund_reason", length = 500)
 	private String refundReason;
 
+	@Column(name = "company_bank_account_id")
+	private UUID companyBankAccountId;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "deposit_mode", length = 20)
+	private DepositMode depositMode;
+
+	@Column(name = "deposit_reference", length = 100)
+	private String depositReference;
+
+	@Column(name = "deposit_submitted_at")
+	private Instant depositSubmittedAt;
+
 	protected Payment() {
 	}
 
@@ -100,6 +113,25 @@ public class Payment extends BaseEntity {
 		this.confirmedBy = confirmedBy;
 		this.failureReason = note;
 		this.settledAt = now;
+	}
+
+	/**
+	 * Records how the investor says they paid a bank payment. They may correct the details until
+	 * finance has settled the payment.
+	 */
+	public void submitDeposit(UUID companyBankAccountId, DepositMode mode, String reference, Instant now) {
+		requireStatus(PaymentStatus.PENDING);
+		if (method != PaymentMethod.BANK_TRANSFER) {
+			throw new IllegalStateException("Only bank payments have deposit details");
+		}
+		this.companyBankAccountId = companyBankAccountId;
+		this.depositMode = mode;
+		this.depositReference = reference;
+		this.depositSubmittedAt = now;
+	}
+
+	public boolean hasDepositDetails() {
+		return depositSubmittedAt != null;
 	}
 
 	public void fail(String reason) {
@@ -187,6 +219,22 @@ public class Payment extends BaseEntity {
 
 	public String getRefundReason() {
 		return refundReason;
+	}
+
+	public UUID getCompanyBankAccountId() {
+		return companyBankAccountId;
+	}
+
+	public DepositMode getDepositMode() {
+		return depositMode;
+	}
+
+	public String getDepositReference() {
+		return depositReference;
+	}
+
+	public Instant getDepositSubmittedAt() {
+		return depositSubmittedAt;
 	}
 
 }

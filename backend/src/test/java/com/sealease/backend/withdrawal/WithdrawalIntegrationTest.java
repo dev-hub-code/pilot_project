@@ -55,12 +55,12 @@ class WithdrawalIntegrationTest {
 
 	@Test
 	void requestingReservesTheBalanceAndIsIdempotent() throws Exception {
-		Investor investor = funded("USD", "500", "Test Investor");
+		Investor investor = funded("INR", "500", "Test Investor");
 
 		request(investor, "40", key()).andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("minimum withdrawal is 50.00 USD")));
+			.andExpect(jsonPath("$.message").value(containsString("minimum withdrawal is ₹50.00")));
 		request(investor, "600", key()).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("available balance is 500.00 USD")));
+			.andExpect(jsonPath("$.message").value(containsString("available balance is ₹500.00")));
 
 		String key = key();
 		String id = JsonPath.read(request(investor, "300", key).andExpect(status().isCreated())
@@ -74,7 +74,7 @@ class WithdrawalIntegrationTest {
 		request(investor, "300", key).andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(id));
 		request(investor, "250", key).andExpect(status().isConflict());
 		request(investor, "100", key()).andExpect(status().isConflict())
-			.andExpect(jsonPath("$.message").value(containsString("already have a USD withdrawal")));
+			.andExpect(jsonPath("$.message").value(containsString("already have a INR withdrawal")));
 
 		approve(investor.account(), id).andExpect(status().isForbidden());
 		approve(finance, id).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
@@ -90,15 +90,15 @@ class WithdrawalIntegrationTest {
 	@Test
 	void onlyVerifiedAccountsOfTheInvestorCanBePaid() throws Exception {
 		Account investor = investors.approvedInvestor();
-		String unverified = addBankAccount(investor, "USD", "Test Investor");
-		credit(investor, "USD", "500");
+		String unverified = addBankAccount(investor, "INR", "Test Investor");
+		credit(investor, "INR", "500");
 		mvc.perform(post("/api/v1/withdrawals").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON)
 				.content(body(unverified, "100")))
 			.andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("verified bank accounts")));
 
-		Investor other = funded("USD", "100", "Test Investor");
+		Investor other = funded("INR", "100", "Test Investor");
 		mvc.perform(post("/api/v1/withdrawals").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON)
 				.content(body(other.bankAccountId(), "100")))
@@ -109,7 +109,7 @@ class WithdrawalIntegrationTest {
 
 	@Test
 	void largeWithdrawalsNeedTwoDifferentApprovers() throws Exception {
-		Investor investor = funded("USD", "20000", "Test Investor");
+		Investor investor = funded("INR", "20000", "Test Investor");
 		String id = id(request(investor, "15000", key()).andExpect(jsonPath("$.requiredApprovals").value(2)));
 		Account second = api.staff("FINANCE");
 
@@ -123,7 +123,7 @@ class WithdrawalIntegrationTest {
 
 	@Test
 	void cancellingOrRejectingReturnsTheMoney() throws Exception {
-		Investor investor = funded("USD", "1000", "Test Investor");
+		Investor investor = funded("INR", "1000", "Test Investor");
 
 		String first = id(request(investor, "400", key()));
 		mvc.perform(post("/api/v1/withdrawals/{id}/cancel", first).header(HttpHeaders.AUTHORIZATION, investor.account().bearer()))
@@ -148,16 +148,22 @@ class WithdrawalIntegrationTest {
 
 	@Test
 	void approvedWithdrawalsArePaidInBatchesAndReconciled() throws Exception {
-		Investor alice = funded("EUR", "1000", "Alice Example");
-		Investor bob = funded("EUR", "1000", "Bob Example");
-		Investor carol = funded("EUR", "1000", "=HYPERLINK(\\\"http://x\\\")");
+		// One currency for the whole platform: a batch takes every approved withdrawal, so clear out
+		// any left by other tests (rejecting returns their money, keeping the ledger consistent).
+		for (String leftover : jdbc.queryForList("SELECT id::text FROM withdrawals WHERE status = 'APPROVED'", String.class)) {
+			reject(finance, leftover).andExpect(status().isOk());
+		}
+		java.math.BigDecimal inTransitBefore = inTransit();
+		Investor alice = funded("INR", "1000", "Alice Example");
+		Investor bob = funded("INR", "1000", "Bob Example");
+		Investor carol = funded("INR", "1000", "=HYPERLINK(\\\"http://x\\\")");
 		String a = approved(alice, "100");
 		String b = approved(bob, "200");
 		String c = approved(carol, "300");
 		Account investorOnly = alice.account();
 
 		mvc.perform(post("/api/v1/admin/withdrawal-batches").header(HttpHeaders.AUTHORIZATION, investorOnly.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"currency\":\"EUR\"}"))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"currency\":\"INR\"}"))
 			.andExpect(status().isForbidden());
 		String draft = batchId(createBatch().andExpect(status().isCreated())
 			.andExpect(jsonPath("$.batch.itemCount").value(3))
@@ -179,7 +185,7 @@ class WithdrawalIntegrationTest {
 			.andReturn().getResponse().getContentAsString();
 		assertThat(csv.lines()).hasSize(4);
 		assertThat(csv).startsWith("reference,beneficiary_name,account_number")
-			.contains("\"Alice Example\"", "\"026009593\"", ",100.00,EUR,", "\"SeaLease withdrawal WD-")
+			.contains("\"Alice Example\"", "\"026009593\"", ",100.00,INR,", "\"SeaLease withdrawal WD-")
 			// A beneficiary name starting with "=" must not become a spreadsheet formula.
 			.contains("\"'=HYPERLINK(");
 		assertThat(api.auditCount("WITHDRAWAL_BATCH_EXPORTED", batch)).isEqualTo(1);
@@ -208,16 +214,20 @@ class WithdrawalIntegrationTest {
 			.andExpect(jsonPath("$.content[0].payoutReference").value("BANK-STATEMENT-7"));
 		assertThat(outboxCount("withdrawal.completed", a)).isEqualTo(1);
 		assertThat(outboxCount("withdrawal.failed", b)).isEqualTo(1);
-		// Nothing is left in transit once every item is reconciled.
-		assertThat(jdbc.queryForObject("""
-				SELECT coalesce(sum(CASE e.direction WHEN 'CREDIT' THEN e.amount ELSE -e.amount END), 0)
-				FROM ledger_entries e JOIN ledger_accounts acc ON acc.id = e.account_id
-				WHERE acc.account_type = 'WITHDRAWALS_IN_TRANSIT' AND acc.currency = 'EUR'
-				""", java.math.BigDecimal.class)).isZero();
+		// Nothing of this batch is left in transit once every item is reconciled.
+		assertThat(inTransit()).isEqualByComparingTo(inTransitBefore);
 		assertLedgerBalanced();
 	}
 
 	// ----------------------------------------------------------------------------- helpers
+
+	private java.math.BigDecimal inTransit() {
+		return jdbc.queryForObject("""
+				SELECT coalesce(sum(CASE e.direction WHEN 'CREDIT' THEN e.amount ELSE -e.amount END), 0)
+				FROM ledger_entries e JOIN ledger_accounts acc ON acc.id = e.account_id
+				WHERE acc.account_type = 'WITHDRAWALS_IN_TRANSIT'
+				""", java.math.BigDecimal.class);
+	}
 
 	/** An approved investor with a verified bank account in the currency and a credited balance. */
 	private Investor funded(String currency, String balance, String holder) throws Exception {
@@ -274,7 +284,7 @@ class WithdrawalIntegrationTest {
 
 	private ResultActions createBatch() throws Exception {
 		return mvc.perform(post("/api/v1/admin/withdrawal-batches").header(HttpHeaders.AUTHORIZATION, finance.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"currency\":\"EUR\"}"));
+			.contentType(MediaType.APPLICATION_JSON).content("{\"currency\":\"INR\"}"));
 	}
 
 	private ResultActions batchAction(String batchId, String action) throws Exception {

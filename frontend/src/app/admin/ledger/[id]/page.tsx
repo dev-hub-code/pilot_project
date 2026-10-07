@@ -46,9 +46,7 @@ export default async function LedgerAccountPage({ params, searchParams }: PagePr
               <Cell className="text-muted">{formatDateTime(e.createdAt)}</Cell>
               <Cell>{humanize(e.transactionType)}</Cell>
               <Cell className="max-w-md truncate">
-                {e.transactionType === "RENTAL_DISTRIBUTION" || e.transactionType === "REFERRAL_COMMISSION"
-                  ? <Link href={`/admin/rentals/${e.reference}`} className="text-gold-text hover:underline">{e.description}</Link>
-                  : e.transactionType.startsWith("WITHDRAWAL_")
+                {e.transactionType.startsWith("WITHDRAWAL_")
                     ? <Link href={`/admin/withdrawals/${e.reference}`} className="text-gold-text hover:underline">{e.description}</Link>
                     : e.description}
               </Cell>

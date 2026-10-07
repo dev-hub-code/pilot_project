@@ -1,15 +1,14 @@
 package com.sealease.backend.payment.provider;
 
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** The platform's collection account, shown to investors paying by bank transfer. */
-@Validated
+import java.time.Duration;
+
+/**
+ * @param verificationWindow how long an order waits for finance to verify a bank payment once the
+ *                           investor has submitted its details
+ */
 @ConfigurationProperties(prefix = "app.payments.bank-transfer")
-public record BankTransferProperties(
-		@NotBlank String beneficiaryName,
-		@NotBlank String iban,
-		@NotBlank String bic,
-		@NotBlank String bankName) {
+public record BankTransferProperties(@DefaultValue("7d") Duration verificationWindow) {
 }

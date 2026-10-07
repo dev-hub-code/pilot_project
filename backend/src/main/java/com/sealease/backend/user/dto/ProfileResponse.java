@@ -1,6 +1,5 @@
 package com.sealease.backend.user.dto;
 
-import com.sealease.backend.user.entity.InvestorType;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
@@ -21,7 +20,6 @@ public record ProfileResponse(
 		Address address,
 		String taxResidencyCountry,
 		String taxIdMasked,
-		InvestorType investorType,
 		KycStatus kycStatus,
 		boolean emailNotifications,
 		boolean smsNotifications,
@@ -37,7 +35,7 @@ public record ProfileResponse(
 				p.getPhone(), p.getDateOfBirth(), p.getNationality(),
 				new Address(p.getAddressLine1(), p.getAddressLine2(), p.getCity(), p.getStateRegion(),
 						p.getPostalCode(), p.getCountry()),
-				p.getTaxResidencyCountry(), mask(p.getTaxIdLast4()), p.getInvestorType(), p.getKycStatus(),
+				p.getTaxResidencyCountry(), mask(p.getTaxIdLast4()), p.getKycStatus(),
 				p.isEmailNotifications(), p.isSmsNotifications(), u.isMfaEnabled());
 	}
 

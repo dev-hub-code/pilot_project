@@ -10,7 +10,6 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.dto.UpdateProfileRequest;
 import com.sealease.backend.user.dto.UpdateTaxInfoRequest;
-import com.sealease.backend.user.entity.InvestorType;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.User;
 import com.sealease.backend.user.entity.UserProfile;
@@ -137,11 +136,6 @@ public class UserProfileService {
 	@Transactional(readOnly = true)
 	public KycStatus kycStatusOf(UUID userId) {
 		return load(userId).getKycStatus();
-	}
-
-	@Transactional(readOnly = true)
-	public InvestorType investorTypeOf(UUID userId) {
-		return load(userId).getInvestorType();
 	}
 
 	private UserProfile load(UUID userId) {

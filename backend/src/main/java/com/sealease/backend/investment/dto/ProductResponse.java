@@ -1,71 +1,59 @@
 package com.sealease.backend.investment.dto;
 
-import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
-import com.sealease.backend.container.dto.ContainerSummary;
+import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.investment.entity.InvestmentProduct;
-import com.sealease.backend.investment.entity.InvestmentType;
 import com.sealease.backend.investment.entity.ProductStatus;
 import com.sealease.backend.investment.entity.ProductTerms;
-import com.sealease.backend.investment.entity.RentalFrequency;
-import com.sealease.backend.investment.entity.RiskLevel;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
-/** Full offering view (staff, and the basis of the investor detail view). */
+/**
+ * Full plan view (staff, and the basis of the investor detail view). Payout figures are per
+ * container.
+ *
+ * @param availableContainers containers of the plan's type in inventory now (shared by plans of that type)
+ * @param containersSold      containers bought under this plan
+ */
 public record ProductResponse(
 		UUID id,
 		String code,
 		ProductStatus status,
-		InvestmentType investmentType,
+		ContainerType containerType,
 		String title,
 		String summary,
 		String description,
 		MoneyResponse price,
-		MoneyResponse minimumInvestment,
-		MoneyResponse investmentIncrement,
-		MoneyResponse maximumPerInvestor,
-		MoneyResponse expectedRentalAmount,
-		RentalFrequency rentalFrequency,
-		BigDecimal expectedAnnualReturnPercent,
-		int durationMonths,
-		BigDecimal managementFeePercent,
-		String lesseeName,
-		RiskLevel riskLevel,
+		BigDecimal monthlyRentPercent,
+		BigDecimal monthlyCapitalReturnPercent,
+		BigDecimal monthlyPayoutPercent,
+		int tenureMonths,
+		MoneyResponse monthlyRent,
+		MoneyResponse monthlyCapitalReturn,
+		MoneyResponse monthlyPayout,
+		MoneyResponse totalPayout,
 		String riskDisclosure,
 		String termsAndConditions,
-		String termsVersion,
-		Instant offerOpensAt,
-		Instant offerClosesAt,
-		CapacityView capacity,
-		ContainerSummary container,
+		long availableContainers,
+		long containersSold,
 		Instant publishedAt,
-		LocalDate leaseStartsOn,
-		LocalDate leaseEndsOn,
-		Instant maturedAt,
+		Instant closedAt,
 		Instant cancelledAt,
 		String cancellationReason,
 		Instant createdAt,
 		long version) {
 
-	public static ProductResponse from(InvestmentProduct p, ContainerSummary container) {
+	public static ProductResponse from(InvestmentProduct p, long availableContainers, long containersSold) {
 		ProductTerms t = p.terms();
-		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), t.investmentType(), t.title(), t.summary(),
-				t.description(), money(t.totalAmount(), t), money(t.minimumInvestment(), t),
-				money(t.investmentIncrement(), t), money(t.maximumPerInvestor(), t), money(t.expectedRentalAmount(), t),
-				t.rentalFrequency(), t.expectedAnnualReturnPercent(), t.durationMonths(), t.managementFeePercent(),
-				t.lesseeName(), t.riskLevel(),
-				t.riskDisclosure(), t.termsAndConditions(), t.termsVersion(), t.offerOpensAt(), t.offerClosesAt(),
-				CapacityView.of(p), container, p.getPublishedAt(), p.getLeaseStartsOn(), p.getLeaseEndsOn(),
-				p.getMaturedAt(), p.getCancelledAt(), p.getCancellationReason(),
-				p.getCreatedAt(), p.getVersion());
-	}
-
-	private static MoneyResponse money(BigDecimal amount, ProductTerms t) {
-		return amount == null ? null : MoneyResponse.from(Money.of(amount, t.currency()));
+		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), t.containerType(), t.title(), t.summary(),
+				t.description(), MoneyResponse.from(t.pricePerContainer()), t.monthlyRentPercent(),
+				t.monthlyCapitalReturnPercent(), t.monthlyPayoutPercent(), t.tenureMonths(),
+				MoneyResponse.from(t.monthlyRent()), MoneyResponse.from(t.monthlyCapitalReturn()),
+				MoneyResponse.from(t.monthlyPayout()), MoneyResponse.from(t.totalPayout()),
+				t.riskDisclosure(), t.termsAndConditions(), availableContainers, containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
+				p.getCancellationReason(), p.getCreatedAt(), p.getVersion());
 	}
 
 }

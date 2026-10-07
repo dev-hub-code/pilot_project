@@ -20,7 +20,6 @@ const PURPOSES = [
 
 const STATUSES = [
   { value: "AVAILABLE", label: "Available" },
-  { value: "ON_LEASE", label: "On lease" },
   { value: "MAINTENANCE", label: "Maintenance" },
   { value: "RETIRED", label: "Retired (permanent)" },
 ];

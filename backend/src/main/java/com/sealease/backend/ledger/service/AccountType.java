@@ -7,20 +7,20 @@ package com.sealease.backend.ledger.service;
  */
 public enum AccountType {
 
-	/** Asset: lessee rent received into the client-money account. */
+	/** Asset: the client-money bank account withdrawals are paid out of. */
 	RENTAL_CASH(Direction.DEBIT, false),
 	/** Liability: earnings owed to one investor, withdrawable later. */
 	INVESTOR_EARNINGS(Direction.CREDIT, true),
-	/** Income: management fees deducted from rental. */
-	PLATFORM_FEE_REVENUE(Direction.CREDIT, false),
-	/** Income: rental on the unsold share of an offering, and rounding left over from distributions. */
-	PLATFORM_RETAINED(Direction.CREDIT, false),
 	/** Expense: manual corrections credited to (or recovered from) investors. */
 	PLATFORM_ADJUSTMENTS(Direction.DEBIT, false),
 	/** Expense: referral commissions paid to uplines on their downline's rental income. */
 	PLATFORM_REFERRAL_EXPENSE(Direction.DEBIT, false),
 	/** Liability: withdrawals requested and not yet paid out or returned; reserved so they cannot be spent twice. */
-	WITHDRAWALS_IN_TRANSIT(Direction.CREDIT, false);
+	WITHDRAWALS_IN_TRANSIT(Direction.CREDIT, false),
+	/** Expense: the monthly rent paid to investors on their containers. */
+	PLATFORM_RENT_EXPENSE(Direction.DEBIT, false),
+	/** Expense: the monthly part of their capital returned to investors. */
+	PLATFORM_CAPITAL_RETURNS(Direction.DEBIT, false);
 
 	private final Direction normalBalance;
 	private final boolean perInvestor;

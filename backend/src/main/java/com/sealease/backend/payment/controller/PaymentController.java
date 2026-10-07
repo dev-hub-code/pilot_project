@@ -2,8 +2,8 @@ package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.payment.dto.PaymentResponse;
-import com.sealease.backend.payment.dto.SimulatePaymentRequest;
 import com.sealease.backend.payment.dto.StartPaymentRequest;
+import com.sealease.backend.payment.dto.SubmitDepositRequest;
 import com.sealease.backend.payment.service.PaymentService;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -42,11 +42,12 @@ public class PaymentController {
 		return payments.start(investor.userId(), orderId, request.method(), idempotencyKey);
 	}
 
-	/** Available only while the card simulator is enabled (local development, tests). */
-	@PostMapping("/api/v1/payments/{paymentId}/simulate")
-	public PaymentResponse simulate(AuthenticatedUser investor, @PathVariable UUID paymentId,
-			@Valid @RequestBody SimulatePaymentRequest request) {
-		return payments.simulate(investor.userId(), paymentId, request.outcome());
+	/** How the investor paid a bank payment: the company account and the transaction id, cheque or receipt number. */
+	@PostMapping("/api/v1/payments/{paymentId}/deposit")
+	public PaymentResponse submitDeposit(AuthenticatedUser investor, @PathVariable UUID paymentId,
+			@Valid @RequestBody SubmitDepositRequest request) {
+		return payments.submitDeposit(investor.userId(), paymentId, request);
 	}
+
 
 }

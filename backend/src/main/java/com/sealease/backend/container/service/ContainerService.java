@@ -22,6 +22,7 @@ import com.sealease.backend.document.service.DocumentContent;
 import com.sealease.backend.document.service.DocumentService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -47,15 +48,13 @@ public class ContainerService {
 	private final ContainerRepository containers;
 	private final ContainerDocumentRepository containerDocuments;
 	private final DocumentService documents;
-	private final ContainerUsage usage;
 	private final AuditService audit;
 
 	public ContainerService(ContainerRepository containers, ContainerDocumentRepository containerDocuments,
-			DocumentService documents, ContainerUsage usage, AuditService audit) {
+			DocumentService documents, AuditService audit) {
 		this.containers = containers;
 		this.containerDocuments = containerDocuments;
 		this.documents = documents;
-		this.usage = usage;
 		this.audit = audit;
 	}
 
@@ -98,9 +97,11 @@ public class ContainerService {
 		if (previous == ContainerStatus.RETIRED) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A retired container cannot be reinstated");
 		}
-		if (status == ContainerStatus.RETIRED && usage.hasLiveOffering(containerId)) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"The container backs a live investment offering and cannot be retired");
+		if (previous.isAllocation() || status.isAllocation()) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, previous.isAllocation()
+					? "The container is " + (previous == ContainerStatus.RESERVED ? "reserved for an order" : "leased to an investor")
+							+ "; its status changes with the order and the lease"
+					: "Containers are reserved and leased through investors' orders, not by hand");
 		}
 		container.changeStatus(status, reason.strip());
 		containers.flush();
@@ -202,6 +203,22 @@ public class ContainerService {
 		containerDocuments.findVisibleByContainersAndPurpose(containerIds, DocumentPurpose.CONTAINER_PHOTO)
 			.forEach(d -> covers.putIfAbsent(d.getContainerId(), d.getDocumentId()));
 		return covers;
+	}
+
+	/** Investor-visible photos of containers of the type, oldest first: what a plan's containers look like. */
+	@Transactional(readOnly = true)
+	public List<UUID> photosOfType(ContainerType type, int limit) {
+		return containerDocuments.findVisibleByTypeAndPurpose(type, DocumentPurpose.CONTAINER_PHOTO, PageRequest.of(0, limit))
+			.stream()
+			.map(ContainerDocument::getDocumentId)
+			.toList();
+	}
+
+	/** Investor access to a photo shown for a plan: a visible photo of a container of the plan's type. */
+	@Transactional(readOnly = true)
+	public Optional<DocumentContent> investorPhotoOfType(ContainerType type, UUID documentId) {
+		return containerDocuments.findVisibleOfType(type, documentId, DocumentPurpose.CONTAINER_PHOTO)
+			.map(d -> documents.load(documentId));
 	}
 
 	@Transactional(readOnly = true)

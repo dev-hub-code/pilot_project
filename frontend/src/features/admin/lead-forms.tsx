@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { currencyLabel } from "@/utils/money";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -11,7 +12,6 @@ import type { Assignee, Lead, LeadStage } from "@/types/lead";
 import type { FormState } from "@/validators/form-state";
 import { assignLeadAction, changeStageAction, logActivityAction, saveLeadAction } from "./lead-actions";
 
-const CURRENCIES = ["USD", "EUR", "GBP", "SGD", "AED"].map((c) => ({ value: c, label: c }));
 
 /** "2026-10-07T09:30:00Z" → "2026-10-07T09:30" for a datetime-local input (UTC). */
 function toLocalInput(iso: string | null | undefined): string | undefined {
@@ -33,10 +33,8 @@ export function LeadForm({ lead, assignees }: { lead?: Lead; assignees?: Assigne
         <SelectField label="Country" name="country" defaultValue={v("country", lead?.country) ?? ""} placeholder="—" options={COUNTRY_OPTIONS} />
         <SelectField label="Interested in" name="interest" defaultValue={v("interest", lead?.interest ?? "UNSURE")}
           options={Object.entries(INTEREST_LABEL).map(([value, label]) => ({ value, label }))} />
-        <TextField label="Estimated investment" name="estimatedAmount" inputMode="decimal"
+        <TextField label={currencyLabel("Estimated investment")} name="estimatedAmount" inputMode="decimal"
           defaultValue={v("estimatedAmount", lead?.estimate?.amount)} error={e.estimatedAmount} />
-        <SelectField label="Currency" name="estimatedCurrency" defaultValue={v("estimatedCurrency", lead?.estimate?.currency) ?? ""}
-          placeholder="—" options={CURRENCIES} />
         <TextField label="Next follow-up (UTC)" name="nextFollowUpAt" type="datetime-local"
           defaultValue={v("nextFollowUpAt", toLocalInput(lead?.nextFollowUpAt))} error={e.nextFollowUpAt} />
         {!lead && assignees && (

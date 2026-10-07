@@ -1,6 +1,7 @@
 package com.sealease.backend.referral;
 
 import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
@@ -30,7 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Phase 7: referral codes, the four-level hierarchy, commissions on rental income and rate versions. */
+/** Referral codes, the four-level hierarchy, commissions on the rent paid to referred investors, and rate versions. */
 @IntegrationTest
 class ReferralIntegrationTest {
 
@@ -39,6 +40,9 @@ class ReferralIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private PayoutService payouts;
 
 	private TestApi api;
 	private InvestorFixtures investors;
@@ -93,26 +97,22 @@ class ReferralIntegrationTest {
 		Account l3 = api.register(codeOf(l4));                         // identity not verified: forfeits
 		Account l2 = investors.approve(api.register(codeOf(l3)));
 		Account l1 = investors.approve(api.register(codeOf(l2)));
-		Account investor = investors.hni(investors.approve(api.register(codeOf(l1))));
+		Account investor = investors.approve(api.register(codeOf(l1)));
 
-		UUID product = offerings.published("HNI", "10000", "10000", "10000", "1000", 1, "10");
-		investors.invest(investor, product, "10000");
-		jdbc.update("UPDATE investment_products SET published_at = now() - interval '2 years' WHERE id = ?", product);
-		mvc.perform(post("/api/v1/admin/investment-products/{id}/activate", product)
-				.header(HttpHeaders.AUTHORIZATION, admin.bearer()).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"leaseStartsOn\":\"" + LocalDate.now(ZoneOffset.UTC).minusMonths(1).minusDays(1) + "\"}"))
-			.andExpect(status().isOk());
-		String receipt = distribute(product);
+		// ₹50,000 container at 2% over 16 months: each payout is ₹1,000 rent + ₹3,125 capital.
+		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		String receipt = payFirstPayout(orderId);
 
-		// Commission is on the gross share (1 000.00), paid by the platform: 2% / 1% / – / 0.25%.
+		// Commission is on the rent (₹1,000.00), not the capital, paid by the platform: 2% / 1% / – / 0.25%.
 		earned(l1).andExpect(jsonPath("$.totalEarned[0].amount").value("20.00"));
 		earned(l2).andExpect(jsonPath("$.totalEarned[0].amount").value("10.00"));
 		earned(l3).andExpect(jsonPath("$.totalEarned.length()").value(0));
 		earned(l4).andExpect(jsonPath("$.totalEarned[0].amount").value("2.50"));
 		earned(top).andExpect(jsonPath("$.totalEarned.length()").value(0));
-		balance(l1).andExpect(jsonPath("$.balances[0].amount").value("20.00"));
-		// The referred investor keeps their full net share.
-		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("900.00"));
+		balance(l1).andExpect(jsonPath("$.balances[0].amount").value("20.00"))
+			.andExpect(jsonPath("$.referralEarned[0].amount").value("20.00"));
+		// The referred investor keeps their full payout.
+		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("4125.00"));
 
 		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, l2.bearer()))
 			.andExpect(jsonPath("$.content[0].level").value(2))
@@ -120,6 +120,17 @@ class ReferralIntegrationTest {
 			.andExpect(jsonPath("$.content[0].sourceUserId").doesNotExist())
 			.andExpect(jsonPath("$.content[0].base.amount").value("1000.00"))
 			.andExpect(jsonPath("$.content[0].amount.amount").value("10.00"));
+
+		// Each month's commission, split by level.
+		mvc.perform(get("/api/v1/referrals/monthly").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].month").value(matchesPattern("\\d{4}-\\d{2}")))
+			.andExpect(jsonPath("$[0].levels.length()").value(4))
+			.andExpect(jsonPath("$[0].levels[0].amount").value("0.00"))
+			.andExpect(jsonPath("$[0].levels[3].amount").value("2.50"))
+			.andExpect(jsonPath("$[0].total.amount").value("2.50"));
+		mvc.perform(get("/api/v1/referrals/monthly").header(HttpHeaders.AUTHORIZATION, l3.bearer()))
+			.andExpect(jsonPath("$.length()").value(0));
 
 		String downline = mvc.perform(get("/api/v1/referrals/downline").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
 			.andExpect(jsonPath("$.truncated").value(false))
@@ -133,7 +144,7 @@ class ReferralIntegrationTest {
 		assertThat(earnedFromInvestor).containsExactly("2.50");
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'referral.earning.created' "
-				+ "AND payload ->> 'receiptId' = ?", Integer.class, receipt)).isEqualTo(3);
+				+ "AND payload ->> 'installmentId' = ?", Integer.class, receipt)).isEqualTo(3);
 		assertThat(jdbc.queryForObject("""
 				SELECT new_value ->> 'forfeited' FROM audit_logs WHERE action = 'REFERRAL_COMMISSIONS_PAID' AND entity_id = ?
 				""", String.class, receipt)).isEqualTo("1");
@@ -206,19 +217,14 @@ class ReferralIntegrationTest {
 		return mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, account.bearer()));
 	}
 
-	/** Records rent for period 1 and has a second finance user approve it; returns the receipt id. */
-	private String distribute(UUID product) throws Exception {
-		Account recorder = api.staff("FINANCE");
-		Account approver = api.staff("FINANCE");
-		String receipt = JsonPath.read(mvc.perform(post("/api/v1/admin/rentals")
-				.header(HttpHeaders.AUTHORIZATION, recorder.bearer()).contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"productId":"%s","periodNumber":1,"amount":"1000","receivedOn":"%s","externalReference":"LESSEE-1"}
-						""".formatted(product, LocalDate.now(ZoneOffset.UTC))))
-			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.receipt.id");
-		mvc.perform(post("/api/v1/admin/rentals/{id}/approve", receipt).header(HttpHeaders.AUTHORIZATION, approver.bearer()))
-			.andExpect(status().isOk());
-		return receipt;
+	/** Brings the order's first monthly payout due and pays it; returns the installment id. */
+	private String payFirstPayout(String orderId) {
+		UUID installment = jdbc.queryForObject("""
+				SELECT p.id FROM payout_installments p JOIN holdings h ON h.id = p.holding_id
+				WHERE h.order_id = ?::uuid AND p.installment_number = 1""", UUID.class, orderId);
+		jdbc.update("UPDATE payout_installments SET due_on = (now() AT TIME ZONE 'UTC')::date WHERE id = ?", installment);
+		payouts.payDue();
+		return installment.toString();
 	}
 
 	private ResultActions schedule(Account actor, Instant from, String... percents) throws Exception {
