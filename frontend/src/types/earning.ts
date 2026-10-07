@@ -86,7 +86,8 @@ export type AccountType =
   | "PLATFORM_FEE_REVENUE"
   | "PLATFORM_RETAINED"
   | "PLATFORM_ADJUSTMENTS"
-  | "PLATFORM_REFERRAL_EXPENSE";
+  | "PLATFORM_REFERRAL_EXPENSE"
+  | "WITHDRAWALS_IN_TRANSIT";
 export type Direction = "DEBIT" | "CREDIT";
 
 export interface LedgerAccount {
@@ -101,7 +102,13 @@ export interface LedgerAccount {
 export interface LedgerEntry {
   id: string;
   transactionId: string;
-  transactionType: "RENTAL_DISTRIBUTION" | "ADJUSTMENT" | "REFERRAL_COMMISSION";
+  transactionType:
+    | "RENTAL_DISTRIBUTION"
+    | "ADJUSTMENT"
+    | "REFERRAL_COMMISSION"
+    | "WITHDRAWAL_RESERVE"
+    | "WITHDRAWAL_RELEASE"
+    | "WITHDRAWAL_PAYOUT";
   reference: string;
   description: string;
   direction: Direction;

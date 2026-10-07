@@ -29,7 +29,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Available balance</p>
           <p className="font-display text-4xl font-semibold tabular-nums">{totals(summary.balances)}</p>
-          <p className="text-xs text-muted">Withdrawals to your bank account arrive in a later release.</p>
+          <Link href="/withdrawals" className="text-sm text-gold-text hover:underline">Withdraw to your bank account →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Rental income to date</p>

@@ -144,16 +144,14 @@ public class LedgerService {
 					"Amounts in " + currency.getCurrencyCode() + " allow at most " + digits + " decimals");
 		}
 		Money amount = Money.of(request.amount(), currency);
-		OffsetDateTime now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
-		UUID accountId = accountId(AccountType.INVESTOR_EARNINGS, request.userId(), currency, now);
-		// Serialises adjustments (and, later, withdrawals) of one investor's balance.
-		jdbc.queryForObject("SELECT id FROM ledger_accounts WHERE id = ? FOR UPDATE", UUID.class, accountId);
+		Money balance = lockInvestorBalance(request.userId(), currency);
+		UUID accountId = accountId(AccountType.INVESTOR_EARNINGS, request.userId(), currency,
+				OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
 
 		Optional<UUID> replay = transactionId(TransactionType.ADJUSTMENT, request.userId() + ":" + key);
 		if (replay.isPresent()) {
 			return account(accountId);
 		}
-		Money balance = Money.of(balanceOf(accountId), currency);
 		if (request.direction() == Direction.DEBIT && amount.isGreaterThan(balance)) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					"The investor's balance is only " + balance.display());
@@ -168,6 +166,19 @@ public class LedgerService {
 			.withNewValue(Map.of("userId", request.userId().toString(), "direction", investorSide,
 					"amount", amount.toString(), "reason", reason)));
 		return account(accountId);
+	}
+
+	/**
+	 * Locks an investor's earnings account (opening it if needed) and returns its balance. Every
+	 * posting that takes money out of the account (adjustments, withdrawals) holds this lock, so two
+	 * of them can never both spend the same balance.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public Money lockInvestorBalance(UUID userId, Currency currency) {
+		UUID accountId = accountId(AccountType.INVESTOR_EARNINGS, userId, currency,
+				OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+		jdbc.queryForObject("SELECT id FROM ledger_accounts WHERE id = ? FOR UPDATE", UUID.class, accountId);
+		return Money.of(balanceOf(accountId), currency);
 	}
 
 	// ------------------------------------------------------------------------------ queries

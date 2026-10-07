@@ -4,5 +4,8 @@ package com.sealease.backend.ledger.service;
 public enum TransactionType {
 	RENTAL_DISTRIBUTION,
 	ADJUSTMENT,
-	REFERRAL_COMMISSION
+	REFERRAL_COMMISSION,
+	WITHDRAWAL_RESERVE,
+	WITHDRAWAL_RELEASE,
+	WITHDRAWAL_PAYOUT
 }

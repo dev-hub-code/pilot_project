@@ -36,7 +36,7 @@ export default async function DashboardPage() {
   const kpis = [
     { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} active investment(s)` : "Investor accounts only" },
     { label: "Rental income", value: list(earnings?.totalEarned), note: earnings ? "Net of management fees, to date" : "Investor accounts only" },
-    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Withdrawals arrive in a later release" : "Investor accounts only" },
+    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Ready to withdraw to your bank account" : "Investor accounts only" },
   ];
 
   return (

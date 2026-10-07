@@ -15,12 +15,13 @@ export const RECEIPT_TONE: Record<ReceiptStatus, StatusTone> = {
 };
 
 export const ACCOUNT_LABEL: Record<AccountType, string> = {
-  RENTAL_CASH: "Rental cash received",
+  RENTAL_CASH: "Client money (cash)",
   INVESTOR_EARNINGS: "Investor earnings",
   PLATFORM_FEE_REVENUE: "Management fee revenue",
   PLATFORM_RETAINED: "Retained (unsold share & rounding)",
   PLATFORM_ADJUSTMENTS: "Adjustments",
   PLATFORM_REFERRAL_EXPENSE: "Referral commissions",
+  WITHDRAWALS_IN_TRANSIT: "Withdrawals in transit",
 };
 
 /** Adds whole months to an ISO date the way java.time does: the day is clamped to the month's end. */

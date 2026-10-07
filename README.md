@@ -125,8 +125,15 @@ Modules (Phase 7):
 |------------|------------------------------------------------------------------------------------|
 | `referral` | Referral codes, permanent referrer links made at sign-up, effective-dated rates for four levels, commissions on rental income, downline views |
 
+Modules (Phase 8):
+
+| Module       | Responsibility                                                                   |
+|--------------|----------------------------------------------------------------------------------|
+| `withdrawal` | Requests that reserve the balance, single/dual approval, payout batches per currency, bank file export, reconciliation |
+
 Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
 `earning` → `investment`, `ledger`; `referral` → `earning` (event), `ledger`, `user`; `auth` → `referral`;
+`withdrawal` → `ledger`, `bankaccount`, `user`;
 `marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
@@ -384,6 +391,46 @@ offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──�
 | `GET /api/v1/admin/referral-earnings`                 | `FINANCE_VIEW`           | Commissions paid, by beneficiary or source  |
 | `GET /api/v1/admin/users/{id}/referrals`              | `USER_VIEW`              | Upline chain, downline size per level, totals |
 
+### Withdrawals
+
+```text
+request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ APPROVED ──batch──▶ BATCHED ──file sent──▶ PROCESSING ──▶ PAID
+ balance → in transit     │ cancel (investor) / reject                 │ reject      (batch cancel → APPROVED)    └──▶ FAILED
+                          └──────────── money returns to the balance ──┘                                              (money returns)
+```
+
+- **Request.** The investor chooses one of their *verified* bank accounts, and the withdrawal is in its currency.
+  The account must be active and KYC-approved. The amount must be at least `app.withdrawals.minimum-amount` (default 50) and within the
+  balance, and only one withdrawal per currency can be open (partial unique index). The request needs an `Idempotency-Key`.
+  Under the lock on the investor's ledger account (the same lock adjustments take), the amount moves from
+  *Investor earnings* to *Withdrawals in transit*, so the same balance can never be withdrawn twice.
+- **Approval.** `WITHDRAWAL_APPROVE` approves. Above `dual-approval-threshold` (default 10 000) a second, different
+  approver is required (enforced by the database too), and nobody decides on their own withdrawal. The final approval re-checks
+  the investor and their bank account. `WITHDRAWAL_REJECT` rejects before batching, and the investor can cancel while it awaits
+  approval. Both return the money (`WITHDRAWAL_RELEASE`).
+- **Payout.** `WITHDRAWAL_PROCESS` batches the oldest approved withdrawals of a currency (up to `max-batch-size`)
+  and downloads the bank file. The CSV carries full account numbers, so every download is audited, and fields are quoted with
+  formula characters neutralised. The file is refused if a payee's account is no longer verified. Before it is sent, a batch can be cancelled;
+  once marked sent, its items are *processing*.
+- **Reconciliation.** Each item is marked paid (in transit → cash, `WITHDRAWAL_PAYOUT`) or failed (money returned), or
+  "mark remaining paid" settles the rest. A batch closes when nothing is outstanding, and *Withdrawals in transit*
+  then nets to zero for it.
+- **Events.** `withdrawal.requested`, `.approved`, `.batched` and `.processing` (per batch), `.completed`, and `.failed`
+  (also used for rejections and cancellations, with event types `WithdrawalRejected` and `WithdrawalCancelled`).
+
+### Withdrawals API
+
+| Method & path                                                  | Access               | Purpose                                     |
+|----------------------------------------------------------------|----------------------|---------------------------------------------|
+| `GET /api/v1/withdrawals/policy`, `GET /api/v1/withdrawals`    | `INVESTOR_PORTAL`    | Limits; own withdrawals                     |
+| `POST /api/v1/withdrawals` (`Idempotency-Key`), `/{id}/cancel` | `INVESTOR_PORTAL`    | Request; cancel while awaiting approval     |
+| `GET /api/v1/admin/withdrawals[/{id}]`                         | `WITHDRAWAL_VIEW`    | Queue by status/currency/user, detail       |
+| `POST /api/v1/admin/withdrawals/{id}/approve` · `/reject`      | `WITHDRAWAL_APPROVE` / `WITHDRAWAL_REJECT` | Decide                 |
+| `GET /api/v1/admin/withdrawal-batches[/{id}]`                  | `WITHDRAWAL_VIEW`    | Batches with paid/failed/outstanding counts |
+| `POST /api/v1/admin/withdrawal-batches`, `/{id}/cancel`, `/{id}/sent` | `WITHDRAWAL_PROCESS` | Create, cancel, mark sent            |
+| `GET /api/v1/admin/withdrawal-batches/{id}/file`               | `WITHDRAWAL_PROCESS` | Bank payment file (CSV, audited)            |
+| `POST /…/withdrawal-batches/{id}/items/{wid}/paid` · `/failed`, `/{id}/settle` | `WITHDRAWAL_PROCESS` | Reconcile             |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -393,5 +440,5 @@ offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──�
 5. ✅ Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
 6. ✅ Earnings — leases, rental income, ownership distribution, double-entry ledger
 7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rental income, downline tree
-8. Withdrawals — validation, approval, batch processing, reconciliation
+8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
 9. Sales CRM · 10. Support · 11. Reporting · 12. Production hardening

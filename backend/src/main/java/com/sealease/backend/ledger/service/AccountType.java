@@ -18,7 +18,9 @@ public enum AccountType {
 	/** Expense: manual corrections credited to (or recovered from) investors. */
 	PLATFORM_ADJUSTMENTS(Direction.DEBIT, false),
 	/** Expense: referral commissions paid to uplines on their downline's rental income. */
-	PLATFORM_REFERRAL_EXPENSE(Direction.DEBIT, false);
+	PLATFORM_REFERRAL_EXPENSE(Direction.DEBIT, false),
+	/** Liability: withdrawals requested and not yet paid out or returned; reserved so they cannot be spent twice. */
+	WITHDRAWALS_IN_TRANSIT(Direction.CREDIT, false);
 
 	private final Direction normalBalance;
 	private final boolean perInvestor;

@@ -48,7 +48,9 @@ export default async function LedgerAccountPage({ params, searchParams }: PagePr
               <Cell className="max-w-md truncate">
                 {e.transactionType === "RENTAL_DISTRIBUTION" || e.transactionType === "REFERRAL_COMMISSION"
                   ? <Link href={`/admin/rentals/${e.reference}`} className="text-gold-text hover:underline">{e.description}</Link>
-                  : e.description}
+                  : e.transactionType.startsWith("WITHDRAWAL_")
+                    ? <Link href={`/admin/withdrawals/${e.reference}`} className="text-gold-text hover:underline">{e.description}</Link>
+                    : e.description}
               </Cell>
               <Cell className="tabular-nums">{e.direction === "DEBIT" ? formatMoney(e.amount) : ""}</Cell>
               <Cell className="tabular-nums">{e.direction === "CREDIT" ? formatMoney(e.amount) : ""}</Cell>

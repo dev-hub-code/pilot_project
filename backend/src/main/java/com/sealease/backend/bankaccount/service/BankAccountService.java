@@ -6,6 +6,8 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.bankaccount.dto.AddBankAccountRequest;
 import com.sealease.backend.bankaccount.dto.AdminBankAccountResponse;
 import com.sealease.backend.bankaccount.dto.BankAccountResponse;
+import com.sealease.backend.bankaccount.dto.PayoutAccount;
+import com.sealease.backend.bankaccount.dto.PayoutInstruction;
 import com.sealease.backend.bankaccount.entity.BankAccount;
 import com.sealease.backend.bankaccount.entity.BankAccountStatus;
 import com.sealease.backend.bankaccount.repository.BankAccountRepository;
@@ -21,10 +23,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Investor payout accounts. Owners add, remove and choose a primary account; holders of
@@ -159,6 +163,27 @@ public class BankAccountService {
 			.filter(a -> a.isPrimary() && a.getStatus() == BankAccountStatus.VERIFIED)
 			.findFirst()
 			.map(BankAccountResponse::from);
+	}
+
+	/** For the withdrawal module: an account's payout eligibility and display details (nothing secret). */
+	@Transactional(readOnly = true)
+	public Optional<PayoutAccount> payoutAccount(UUID accountId) {
+		return accounts.findById(accountId).map(a -> new PayoutAccount(a.getId(), a.getUserId(),
+				a.getAccountHolderName(), a.getBankName(), a.getCountry(), a.getCurrency(), a.getAccountNumberLast4(),
+				a.getStatus()));
+	}
+
+	/**
+	 * For payout files only: full, decrypted account details. Callers must audit every use and never
+	 * log, store or return them through the API.
+	 */
+	@Transactional(readOnly = true)
+	public Map<UUID, PayoutInstruction> payoutInstructions(Collection<UUID> accountIds) {
+		return accounts.findAllById(accountIds).stream()
+			.collect(Collectors.toMap(BankAccount::getId, a -> new PayoutInstruction(a.getId(),
+					a.getAccountHolderName(), a.getBankName(), a.getCountry(), a.getCurrency(),
+					encryptor.decrypt(a.getAccountNumberEncrypted(), ACCOUNT_NUMBER_CONTEXT),
+					encryptor.decrypt(a.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT))));
 	}
 
 	private BankAccount pendingForReview(UUID reviewerId, UUID accountId) {

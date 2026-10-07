@@ -127,6 +127,14 @@ public class BankAccount extends BaseEntity {
 		return currency;
 	}
 
+	public String getAccountNumberEncrypted() {
+		return accountNumberEncrypted;
+	}
+
+	public String getRoutingCodeEncrypted() {
+		return routingCodeEncrypted;
+	}
+
 	public String getAccountNumberLast4() {
 		return accountNumberLast4;
 	}
