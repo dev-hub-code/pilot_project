@@ -143,6 +143,25 @@ class ReferralIntegrationTest {
 		List<String> earnedFromInvestor = JsonPath.read(downline, "$.members[?(@.level == 4)].earned[0].amount");
 		assertThat(earnedFromInvestor).containsExactly("125.00");
 
+		// Each member opens on its own, with the commission ledger from that member only.
+		List<String> investorId = JsonPath.read(downline, "$.members[?(@.level == 4)].id");
+		mvc.perform(get("/api/v1/referrals/members/{id}", investorId.getFirst()).header(HttpHeaders.AUTHORIZATION, l4.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.level").value(4))
+			.andExpect(jsonPath("$.displayName").value("Test I."));
+		mvc.perform(get("/api/v1/referrals/members/{id}/earnings", investorId.getFirst())
+				.header(HttpHeaders.AUTHORIZATION, l4.bearer()))
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].level").value(4))
+			.andExpect(jsonPath("$.content[0].sourceUserId").doesNotExist())
+			.andExpect(jsonPath("$.content[0].amount.amount").value("125.00"));
+		mvc.perform(get("/api/v1/referrals/members/m1/earnings").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
+			.andExpect(jsonPath("$.content.length()").value(0));
+		mvc.perform(get("/api/v1/referrals/members/m5").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
+			.andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/referrals/members/m1").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isNotFound());
+
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'referral.earning.created' "
 				+ "AND payload ->> 'installmentId' = ?", Integer.class, receipt)).isEqualTo(3);
 		assertThat(jdbc.queryForObject("""

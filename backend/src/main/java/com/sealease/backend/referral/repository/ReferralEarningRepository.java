@@ -16,6 +16,9 @@ public interface ReferralEarningRepository
 
 	Page<ReferralEarning> findByBeneficiaryUserIdOrderByCreatedAtDescIdDesc(UUID beneficiaryUserId, Pageable pageable);
 
+	Page<ReferralEarning> findByBeneficiaryUserIdAndSourceUserIdOrderByCreatedAtDescIdDesc(UUID beneficiaryUserId,
+			UUID sourceUserId, Pageable pageable);
+
 	/** Commission earned by one upline, per referred investor and currency. */
 	@Query("""
 			select new com.sealease.backend.referral.repository.ReferralTotal(e.sourceUserId, e.currency, sum(e.amount))

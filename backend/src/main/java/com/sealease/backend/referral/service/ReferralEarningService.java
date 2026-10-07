@@ -33,11 +33,14 @@ public class ReferralEarningService {
 	private final ReferralEarningRepository earnings;
 	private final OfferingQuery plans;
 	private final UserAccountService accounts;
+	private final ReferralService referrals;
 
-	public ReferralEarningService(ReferralEarningRepository earnings, OfferingQuery plans, UserAccountService accounts) {
+	public ReferralEarningService(ReferralEarningRepository earnings, OfferingQuery plans, UserAccountService accounts,
+			ReferralService referrals) {
 		this.earnings = earnings;
 		this.plans = plans;
 		this.accounts = accounts;
+		this.referrals = referrals;
 	}
 
 	/** The investor's own commissions; the referred investors appear by display name only. */
@@ -47,6 +50,17 @@ public class ReferralEarningService {
 		Map<UUID, UserAccount> sources = accounts.getAccounts(page.map(ReferralEarning::getSourceUserId).toSet());
 		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarning::getProductId).toSet());
 		return page.map(e -> view(e, ReferralService.displayName(sources.get(e.getSourceUserId())), products, false));
+	}
+
+	/** The investor's commissions from one member of their downline (by its id in downline views). */
+	@Transactional(readOnly = true)
+	public Page<ReferralEarningResponse> fromMember(UUID userId, String memberId, Pageable pageable) {
+		UUID source = referrals.memberUserId(userId, memberId);
+		Page<ReferralEarning> page = earnings.findByBeneficiaryUserIdAndSourceUserIdOrderByCreatedAtDescIdDesc(userId,
+				source, pageable);
+		String name = ReferralService.displayName(accounts.getAccount(source));
+		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarning::getProductId).toSet());
+		return page.map(e -> view(e, name, products, false));
 	}
 
 	/** Commission the investor has earned over all time, per currency. */

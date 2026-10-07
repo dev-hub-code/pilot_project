@@ -5,6 +5,7 @@ import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
+import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.referral.dto.AdminReferralView;
@@ -38,6 +39,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The referral hierarchy: codes, who referred whom, and views of a user's uplines and downline.
@@ -56,6 +59,8 @@ public class ReferralService {
 	/** No 0/O, 1/I/L: codes are read aloud and typed by hand. */
 	private static final char[] ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ".toCharArray();
 	private static final int CODE_LENGTH = 8;
+	/** Downline member ids: "m" + position in join order, 1-based. */
+	private static final Pattern MEMBER_ID = Pattern.compile("m([1-9]\\d{0,8})");
 
 	private static final String UPLINES = """
 			WITH RECURSIVE up (user_id, referrer_id, depth) AS (
@@ -174,6 +179,40 @@ public class ReferralService {
 
 	@Transactional(readOnly = true)
 	public Downline downline(UUID userId) {
+		LoadedDownline loaded = load(userId);
+		return new Downline(loaded.members(), loaded.truncated());
+	}
+
+	/**
+	 * One member of the user's downline, by its id in downline views. Ids are positions in join order,
+	 * which are stable: referrals never change and new members always join last.
+	 */
+	@Transactional(readOnly = true)
+	public DownlineMember member(UUID userId, String memberId) {
+		LoadedDownline loaded = load(userId);
+		return loaded.members().get(memberIndex(memberId, loaded.members().size()));
+	}
+
+	/** The account behind a downline member id; for the member's commission ledger. */
+	@Transactional(readOnly = true)
+	UUID memberUserId(UUID userId, String memberId) {
+		LoadedDownline loaded = load(userId);
+		return loaded.userIds().get(memberIndex(memberId, loaded.userIds().size()));
+	}
+
+	private static int memberIndex(String memberId, int members) {
+		Matcher m = MEMBER_ID.matcher(memberId == null ? "" : memberId);
+		int index = m.matches() ? Integer.parseInt(m.group(1)) - 1 : -1;
+		if (index < 0 || index >= members) {
+			throw new ResourceNotFoundException("Referral member", memberId);
+		}
+		return index;
+	}
+
+	private record LoadedDownline(List<DownlineMember> members, List<UUID> userIds, boolean truncated) {
+	}
+
+	private LoadedDownline load(UUID userId) {
 		List<UUID[]> rows = new ArrayList<>();
 		List<Integer> depths = new ArrayList<>();
 		List<OffsetDateTime> joined = new ArrayList<>();
@@ -205,7 +244,7 @@ public class ReferralService {
 					depths.get(i), displayName(people.get(member)), joined.get(i).toInstant(),
 					earned.getOrDefault(member, List.of()).stream().map(MoneyResponse::from).toList()));
 		}
-		return new Downline(members, truncated);
+		return new LoadedDownline(members, rows.stream().limit(size).map(r -> r[0]).toList(), truncated);
 	}
 
 	@Transactional(readOnly = true)

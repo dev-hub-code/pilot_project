@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { DownlineMember } from "@/types/referral";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
@@ -26,7 +27,7 @@ function Branch({ nodes, nested = false }: { nodes: Node[]; nested?: boolean }) 
               <span className="mr-2 rounded-full border border-border px-2 py-0.5 text-[11px] tracking-[0.08em] text-muted uppercase">
                 Level {node.level}
               </span>
-              <span className="font-medium">{node.displayName}</span>
+              <Link href={`/referrals/members/${node.id}`} className="font-medium hover:underline">{node.displayName}</Link>
               <span className="ml-2 text-xs text-muted">joined {formatDate(node.joinedAt)}</span>
             </span>
             <span className="tabular-nums text-muted">

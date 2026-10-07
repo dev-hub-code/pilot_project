@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,11 +53,14 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
           <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
         </div>
         {overview.levels.map((l) => (
-          <div key={l.level} className="space-y-2 bg-surface p-6">
+          <Link key={l.level} href={`/referrals/levels/${l.level}`} className="group space-y-2 bg-surface p-6 hover:bg-background">
             <p className="text-xs uppercase tracking-[0.1em] text-muted">Level {l.level} · {formatPercent(l.ratePercent, l.ratePercent % 1 === 0 ? 0 : 2)}</p>
             <p className="font-display text-3xl font-semibold tabular-nums">{l.members}</p>
-            <p className="text-xs text-muted">{l.level === 1 ? "invited by you" : `invited by level ${l.level - 1}`}</p>
-          </div>
+            <p className="text-xs text-muted">
+              {l.level === 1 ? "invited by you" : `invited by level ${l.level - 1}`}
+              <span className="ml-1 text-gold-text group-hover:underline">· View members →</span>
+            </p>
+          </Link>
         ))}
       </section>
       <p className="text-xs text-muted">
