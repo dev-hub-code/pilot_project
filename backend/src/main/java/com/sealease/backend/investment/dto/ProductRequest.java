@@ -4,6 +4,7 @@ import com.sealease.backend.common.validation.IsoCurrency;
 import com.sealease.backend.investment.entity.InvestmentType;
 import com.sealease.backend.investment.entity.RentalFrequency;
 import com.sealease.backend.investment.entity.RiskLevel;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
@@ -19,6 +20,8 @@ import java.util.UUID;
 /**
  * Offering terms. For HNI (standalone) offerings, minimum and increment may be omitted: they are
  * always the full price.
+ *
+ * @param managementFeePercent share of each rental payment kept by the platform; omitted means none
  */
 public record ProductRequest(
 		@NotNull UUID containerId,
@@ -34,6 +37,7 @@ public record ProductRequest(
 		@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal expectedRentalAmount,
 		@NotNull RentalFrequency rentalFrequency,
 		@NotNull @Min(1) @Max(360) Integer durationMonths,
+		@DecimalMin("0") @DecimalMax("50") @Digits(integer = 2, fraction = 2) BigDecimal managementFeePercent,
 		@Size(max = 140) String lesseeName,
 		@NotNull RiskLevel riskLevel,
 		@NotBlank @Size(max = 10_000) String riskDisclosure,

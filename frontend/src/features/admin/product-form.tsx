@@ -75,6 +75,8 @@ export function ProductForm({ containers, existing, preselectedContainer }: {
         <SelectField label="Paid" name="rentalFrequency" defaultValue={v("rentalFrequency", existing?.rentalFrequency ?? "MONTHLY")}
           options={[{ value: "MONTHLY", label: "Monthly" }, { value: "QUARTERLY", label: "Quarterly" }]} />
         <TextField label="Term (months)" name="durationMonths" inputMode="numeric" defaultValue={v("durationMonths", existing?.durationMonths ?? 36)} error={e.durationMonths} />
+        <TextField label="Management fee (% of rental)" name="managementFeePercent" inputMode="decimal"
+          defaultValue={v("managementFeePercent", existing?.managementFeePercent?.toString() ?? "0")} error={e.managementFeePercent} />
         <TextField label="Offer opens (UTC, optional)" name="offerOpensAt" type="datetime-local"
           defaultValue={v("offerOpensAt", toLocalInput(existing?.offerOpensAt))} error={e.offerOpensAt} />
         <TextField label="Offer closes (UTC, optional)" name="offerClosesAt" type="datetime-local"

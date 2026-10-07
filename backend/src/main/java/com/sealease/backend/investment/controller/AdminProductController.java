@@ -2,6 +2,7 @@ package com.sealease.backend.investment.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
+import com.sealease.backend.investment.dto.ActivateLeaseRequest;
 import com.sealease.backend.investment.dto.CapacityMovementResponse;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
@@ -80,6 +81,13 @@ public class AdminProductController {
 	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
 	public ProductResponse publish(AuthenticatedUser actor, @PathVariable UUID productId) {
 		return products.publish(actor.userId(), productId);
+	}
+
+	@PostMapping("/{productId}/activate")
+	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
+	public ProductResponse activate(AuthenticatedUser actor, @PathVariable UUID productId,
+			@Valid @RequestBody ActivateLeaseRequest request) {
+		return products.activateLease(actor.userId(), productId, request.leaseStartsOn());
 	}
 
 	@PostMapping("/{productId}/cancel")

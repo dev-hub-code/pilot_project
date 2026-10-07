@@ -20,6 +20,7 @@ public record ProductTerms(
 		BigDecimal expectedRentalAmount,
 		RentalFrequency rentalFrequency,
 		int durationMonths,
+		BigDecimal managementFeePercent,
 		String lesseeName,
 		RiskLevel riskLevel,
 		String riskDisclosure,
@@ -28,12 +29,21 @@ public record ProductTerms(
 		Instant offerOpensAt,
 		Instant offerClosesAt) {
 
-	/** Gross annual rental yield in percent, 2 decimals: rental × periods per year ÷ price × 100. */
+	/**
+	 * Annual rental yield to investors in percent, 2 decimals, net of the management fee:
+	 * rental × (1 − fee) × periods per year ÷ price × 100.
+	 */
 	public BigDecimal expectedAnnualReturnPercent() {
-		return expectedRentalAmount.multiply(BigDecimal.valueOf(rentalFrequency.periodsPerYear()))
+		return expectedRentalAmount.multiply(investorShareOfRental())
+			.multiply(BigDecimal.valueOf(rentalFrequency.periodsPerYear()))
 			.multiply(BigDecimal.valueOf(100))
 			.divide(totalAmount, MathContext.DECIMAL128)
 			.setScale(2, RoundingMode.HALF_UP);
+	}
+
+	/** The part of each rental payment that goes to investors: 1 − fee ÷ 100. */
+	public BigDecimal investorShareOfRental() {
+		return BigDecimal.ONE.subtract(managementFeePercent.movePointLeft(2));
 	}
 
 }

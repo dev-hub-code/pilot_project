@@ -98,7 +98,8 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
 
           <dl className="grid grid-cols-2 gap-px border border-border bg-border">
             <Fact label="Expected annual yield" value={formatPercent(listing.expectedAnnualReturnPercent)} emphasis />
-            <Fact label="Rental income" value={`${formatMoney(listing.expectedRentalAmount)}/${FREQUENCY_LABEL[listing.rentalFrequency]}`} />
+            <Fact label="Container rental" value={`${formatMoney(listing.expectedRentalAmount)}/${FREQUENCY_LABEL[listing.rentalFrequency]}${
+              detail.managementFeePercent > 0 ? ` · ${formatPercent(detail.managementFeePercent)} fee` : ""}`} />
             <Fact label="Container price" value={formatMoney(listing.price)} />
             <Fact label="Term" value={`${listing.durationMonths} months`} />
             <Fact label="Minimum investment" value={formatMoney(listing.minimumInvestment)} />
@@ -192,7 +193,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               </ul>
             )}
             <p className="text-xs text-on-ink/60">
-              Expected figures assume the lessee pays rent as forecast. They are not guaranteed.
+              Expected figures are net of the management fee and assume the lessee pays rent as forecast. They are not guaranteed.
             </p>
           </section>
 

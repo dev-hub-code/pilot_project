@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { ContainerDetail, Product } from "@/types/marketplace";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { containerSchema, documentSchema, productSchema, statusSchema } from "@/validators/investment";
+import { activateLeaseSchema, containerSchema, documentSchema, productSchema, statusSchema } from "@/validators/investment";
 import { reasonSchema } from "@/validators/profile";
 
 const id = (value: string) => encodeURIComponent(value);
@@ -116,6 +116,19 @@ export async function publishProductAction(productId: string): Promise<FormState
   }
   revalidatePath("/admin/products", "layout");
   return { success: "Published. The offering is now live in the marketplace." };
+}
+
+export async function activateLeaseAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  const input = values(formData);
+  const parsed = activateLeaseSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
+  try {
+    await authFetch(`/api/v1/admin/investment-products/${id(productId)}/activate`, { method: "POST", json: parsed.data });
+  } catch (error) {
+    return failureState(error, input);
+  }
+  revalidatePath("/admin/products", "layout");
+  return { success: "Lease started. Rental periods are now tracked under Rentals." };
 }
 
 export async function cancelProductAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {

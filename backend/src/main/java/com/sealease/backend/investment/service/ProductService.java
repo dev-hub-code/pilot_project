@@ -10,6 +10,7 @@ import com.sealease.backend.container.dto.ContainerSummary;
 import com.sealease.backend.container.entity.ContainerStatus;
 import com.sealease.backend.container.service.ContainerService;
 import com.sealease.backend.investment.dto.CapacityMovementResponse;
+import com.sealease.backend.investment.dto.Lease;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.dto.ProductSearchCriteria;
@@ -30,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -143,6 +146,45 @@ public class ProductService {
 		return detail(productId);
 	}
 
+	/**
+	 * Starts the lease: the offering stops taking investments and rental periods run from
+	 * {@code startsOn}. A FUNDED offering qualifies, and so does an OPEN one with confirmed investors
+	 * and nothing reserved (its unsold share then earns for the platform, not for investors).
+	 */
+	@Transactional
+	public ProductResponse activateLease(UUID actorId, UUID productId, LocalDate startsOn) {
+		InvestmentProduct product = lock(productId);
+		ProductStatus previous = product.getStatus();
+		boolean openAndSettled = previous == ProductStatus.OPEN && product.committed().isPositive()
+				&& product.reserved().isZero();
+		if (previous != ProductStatus.FUNDED && !openAndSettled) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, previous == ProductStatus.OPEN
+					? "Only offerings with confirmed investors and no orders awaiting payment can start their lease"
+					: "A " + previous + " offering cannot start a lease");
+		}
+		ProductTerms terms = product.terms();
+		if (Lease.periodCount(terms.rentalFrequency(), terms.durationMonths()) == 0) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"The term is shorter than one rental period");
+		}
+		Instant now = clock.instant();
+		LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+		if (startsOn.isBefore(LocalDate.ofInstant(product.getPublishedAt(), ZoneOffset.UTC))) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The lease cannot start before the offering was published");
+		}
+		if (startsOn.isAfter(today.plusYears(1))) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The lease must start within a year");
+		}
+		product.activate(startsOn, actorId, now);
+		products.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.PRODUCT_LEASE_ACTIVATED, ENTITY, productId)
+			.withOldValue(Map.of("status", previous))
+			.withNewValue(Map.of("status", ProductStatus.ACTIVE, "leaseStartsOn", startsOn.toString(),
+					"leaseEndsOn", product.getLeaseEndsOn().toString(),
+					"committed", product.committed().toString())));
+		return detail(productId);
+	}
+
 	@Transactional(readOnly = true)
 	public Page<ProductResponse> search(ProductSearchCriteria criteria, Pageable pageable) {
 		Page<InvestmentProduct> page = products.findAll(matching(criteria), pageable);
@@ -200,7 +242,8 @@ public class ProductService {
 		}
 		return new ProductTerms(r.investmentType(), r.title().strip(), r.summary().strip(), r.description().strip(),
 				currency, total, minimum, increment, maximum, r.expectedRentalAmount(), r.rentalFrequency(),
-				r.durationMonths(), blankToNull(r.lesseeName()), r.riskLevel(), r.riskDisclosure().strip(),
+				r.durationMonths(), r.managementFeePercent() == null ? BigDecimal.ZERO : r.managementFeePercent(),
+				blankToNull(r.lesseeName()), r.riskLevel(), r.riskDisclosure().strip(),
 				r.termsAndConditions().strip(), r.termsVersion().strip(), r.offerOpensAt(), r.offerClosesAt());
 	}
 
@@ -209,7 +252,8 @@ public class ProductService {
 		return Map.of("code", p.getCode(), "type", t.investmentType(), "currency", t.currency().getCurrencyCode(),
 				"price", t.totalAmount().toPlainString(), "minimum", t.minimumInvestment().toPlainString(),
 				"rental", t.expectedRentalAmount().toPlainString() + "/" + t.rentalFrequency(),
-				"durationMonths", t.durationMonths(), "termsVersion", t.termsVersion());
+				"durationMonths", t.durationMonths(), "managementFeePercent", t.managementFeePercent().toPlainString(),
+				"termsVersion", t.termsVersion());
 	}
 
 	private InvestmentProduct load(UUID id) {

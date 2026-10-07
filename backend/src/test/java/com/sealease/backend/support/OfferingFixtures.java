@@ -31,8 +31,14 @@ public final class OfferingFixtures {
 		this.admin = admin;
 	}
 
-	/** A published offering; returns its id. Rental is per month. */
+	/** A published offering; returns its id. Rental is per month, over 36 months, without a fee. */
 	public UUID published(String type, String total, String minimum, String increment, String rental) throws Exception {
+		return published(type, total, minimum, increment, rental, 36, "0");
+	}
+
+	/** A published offering with monthly rental over {@code durationMonths} and a management fee. */
+	public UUID published(String type, String total, String minimum, String increment, String rental,
+			int durationMonths, String feePercent) throws Exception {
 		UUID containerId = container();
 		mvc.perform(multipart("/api/v1/admin/containers/{id}/documents", containerId)
 				.file(new MockMultipartFile("file", "photo.png", "image/png", PNG))
@@ -44,10 +50,11 @@ public final class OfferingFixtures {
 						{"containerId":"%s","investmentType":"%s","title":"40ft dry container on lease","summary":"Leased",
 						 "description":"A cargo-worthy 40ft container.","currency":"USD","totalAmount":"%s",
 						 "minimumInvestment":"%s","investmentIncrement":"%s","expectedRentalAmount":"%s",
-						 "rentalFrequency":"MONTHLY","durationMonths":36,"riskLevel":"MEDIUM",
+						 "rentalFrequency":"MONTHLY","durationMonths":%d,"managementFeePercent":"%s","riskLevel":"MEDIUM",
 						 "riskDisclosure":"Rental income depends on the lessee.","termsAndConditions":"Standard terms.",
 						 "termsVersion":"%s","offerClosesAt":"%s"}
-						""".formatted(containerId, type, total, minimum, increment, rental, TERMS_VERSION,
+						""".formatted(containerId, type, total, minimum, increment, rental, durationMonths, feePercent,
+						TERMS_VERSION,
 						Instant.now().plus(60, ChronoUnit.DAYS))))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		UUID productId = UUID.fromString(JsonPath.read(product, "$.id"));

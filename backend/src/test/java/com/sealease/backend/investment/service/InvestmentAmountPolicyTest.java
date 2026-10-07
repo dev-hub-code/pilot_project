@@ -85,7 +85,7 @@ class InvestmentAmountPolicyTest {
 	private static ProductTerms terms(InvestmentType type, String minimum, String increment, String maximum) {
 		return new ProductTerms(type, "Title", "Summary", "Description", USD, new BigDecimal("50000"),
 				new BigDecimal(minimum), new BigDecimal(increment), maximum == null ? null : new BigDecimal(maximum),
-				new BigDecimal("1500"), RentalFrequency.MONTHLY, 36, null, RiskLevel.MEDIUM, "Risk", "Terms", "v1",
+				new BigDecimal("1500"), RentalFrequency.MONTHLY, 36, BigDecimal.ZERO, null, RiskLevel.MEDIUM, "Risk", "Terms", "v1",
 				null, null);
 	}
 

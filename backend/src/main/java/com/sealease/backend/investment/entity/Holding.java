@@ -69,6 +69,11 @@ public class Holding extends BaseEntity {
 		this.confirmedAt = confirmedAt;
 	}
 
+	/** The lease of the offering has ended and all its rental has been distributed. */
+	public void mature() {
+		this.status = HoldingStatus.MATURED;
+	}
+
 	public Money amount() {
 		return Money.of(amount, Currency.getInstance(currency));
 	}

@@ -8,6 +8,8 @@ import { toneFor } from "@/components/ui/status-tones";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import type { CurrentUser } from "@/types/auth";
+import type { EarningsSummary } from "@/types/earning";
+import type { Money } from "@/types/marketplace";
 import type { Portfolio } from "@/types/order";
 import type { Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
@@ -21,16 +23,20 @@ export default async function DashboardPage() {
     authFetch<Profile>("/api/v1/users/me"),
   ]);
   const needsVerification = profile.kycStatus !== "APPROVED";
-  const portfolio = hasPermission(me.permissions, Permission.INVESTOR_PORTAL)
-    ? await authFetch<Portfolio>("/api/v1/portfolio")
-    : null;
+  const investor = hasPermission(me.permissions, Permission.INVESTOR_PORTAL);
+  const [portfolio, earnings] = investor
+    ? await Promise.all([authFetch<Portfolio>("/api/v1/portfolio"), authFetch<EarningsSummary>("/api/v1/earnings/summary")])
+    : [null, null];
+  const list = (amounts: Money[] | undefined) => (amounts && amounts.length > 0
+    ? amounts.map((m) => formatMoney(m, { compact: true })).join(" · ")
+    : "—");
   const invested = portfolio && portfolio.totalsByCurrency.length > 0
     ? portfolio.totalsByCurrency.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—";
   const kpis = [
     { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} active investment(s)` : "Investor accounts only" },
-    { label: "Rental income", value: "—", note: "Paid out from the first rental period" },
-    { label: "Available balance", value: "—", note: "Available once rental income is paid" },
+    { label: "Rental income", value: list(earnings?.totalEarned), note: earnings ? "Net of management fees, to date" : "Investor accounts only" },
+    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Withdrawals arrive in a later release" : "Investor accounts only" },
   ];
 
   return (

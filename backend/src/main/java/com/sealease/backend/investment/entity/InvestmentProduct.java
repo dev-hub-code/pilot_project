@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -71,6 +72,9 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "duration_months", nullable = false)
 	private int durationMonths;
 
+	@Column(name = "management_fee_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal managementFeePercent = BigDecimal.ZERO;
+
 	@Column(name = "lessee_name", length = 140)
 	private String lesseeName;
 
@@ -109,6 +113,21 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "cancellation_reason", length = 500)
 	private String cancellationReason;
 
+	@Column(name = "lease_starts_on")
+	private LocalDate leaseStartsOn;
+
+	@Column(name = "lease_ends_on")
+	private LocalDate leaseEndsOn;
+
+	@Column(name = "activated_at")
+	private Instant activatedAt;
+
+	@Column(name = "activated_by")
+	private UUID activatedBy;
+
+	@Column(name = "matured_at")
+	private Instant maturedAt;
+
 	@Column(name = "created_by", nullable = false, updatable = false)
 	private UUID createdBy;
 
@@ -135,6 +154,7 @@ public class InvestmentProduct extends BaseEntity {
 		this.expectedRentalAmount = t.expectedRentalAmount();
 		this.rentalFrequency = t.rentalFrequency();
 		this.durationMonths = t.durationMonths();
+		this.managementFeePercent = t.managementFeePercent();
 		this.lesseeName = t.lesseeName();
 		this.riskLevel = t.riskLevel();
 		this.riskDisclosure = t.riskDisclosure();
@@ -154,6 +174,21 @@ public class InvestmentProduct extends BaseEntity {
 		this.status = ProductStatus.CANCELLED;
 		this.cancellationReason = reason;
 		this.cancelledAt = now;
+	}
+
+	/** The lease begins: no more investments are taken and rental periods run from {@code startsOn}. */
+	public void activate(LocalDate startsOn, UUID actorId, Instant now) {
+		this.status = ProductStatus.ACTIVE;
+		this.leaseStartsOn = startsOn;
+		this.leaseEndsOn = startsOn.plusMonths(durationMonths);
+		this.activatedBy = actorId;
+		this.activatedAt = now;
+	}
+
+	/** Every rental period of the lease has been paid out. */
+	public void mature(Instant now) {
+		this.status = ProductStatus.MATURED;
+		this.maturedAt = now;
 	}
 
 	/** Capacity counter changes; callers hold the row lock and record a movement. */
@@ -181,7 +216,7 @@ public class InvestmentProduct extends BaseEntity {
 	public ProductTerms terms() {
 		return new ProductTerms(investmentType, title, summary, description, currencyUnit(), totalAmount,
 				minimumInvestment, investmentIncrement, maximumPerInvestor, expectedRentalAmount, rentalFrequency,
-				durationMonths, lesseeName, riskLevel, riskDisclosure, termsAndConditions, termsVersion, offerOpensAt,
+				durationMonths, managementFeePercent, lesseeName, riskLevel, riskDisclosure, termsAndConditions, termsVersion, offerOpensAt,
 				offerClosesAt);
 	}
 
@@ -235,6 +270,22 @@ public class InvestmentProduct extends BaseEntity {
 
 	public String getCancellationReason() {
 		return cancellationReason;
+	}
+
+	public LocalDate getLeaseStartsOn() {
+		return leaseStartsOn;
+	}
+
+	public LocalDate getLeaseEndsOn() {
+		return leaseEndsOn;
+	}
+
+	public Instant getActivatedAt() {
+		return activatedAt;
+	}
+
+	public Instant getMaturedAt() {
+		return maturedAt;
 	}
 
 	public UUID getCreatedBy() {

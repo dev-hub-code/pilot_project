@@ -72,9 +72,9 @@ public final class InvestmentAmountPolicy {
 			.divide(terms.totalAmount(), 4, Money.ROUNDING);
 	}
 
-	/** The investor's share of one rental payment: rental × amount ÷ price. */
+	/** The investor's share of one expected rental payment, net of the fee: rental × (1 − fee) × amount ÷ price. */
 	public static Money rentalShare(ProductTerms terms, Money amount) {
-		return Money.of(terms.expectedRentalAmount().multiply(amount.amount())
+		return Money.of(terms.expectedRentalAmount().multiply(terms.investorShareOfRental()).multiply(amount.amount())
 			.divide(terms.totalAmount(), Money.SCALE, Money.ROUNDING), terms.currency());
 	}
 

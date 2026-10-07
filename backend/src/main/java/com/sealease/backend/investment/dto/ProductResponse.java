@@ -12,6 +12,7 @@ import com.sealease.backend.investment.entity.RiskLevel;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** Full offering view (staff, and the basis of the investor detail view). */
@@ -31,6 +32,7 @@ public record ProductResponse(
 		RentalFrequency rentalFrequency,
 		BigDecimal expectedAnnualReturnPercent,
 		int durationMonths,
+		BigDecimal managementFeePercent,
 		String lesseeName,
 		RiskLevel riskLevel,
 		String riskDisclosure,
@@ -41,6 +43,9 @@ public record ProductResponse(
 		CapacityView capacity,
 		ContainerSummary container,
 		Instant publishedAt,
+		LocalDate leaseStartsOn,
+		LocalDate leaseEndsOn,
+		Instant maturedAt,
 		Instant cancelledAt,
 		String cancellationReason,
 		Instant createdAt,
@@ -51,9 +56,11 @@ public record ProductResponse(
 		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), t.investmentType(), t.title(), t.summary(),
 				t.description(), money(t.totalAmount(), t), money(t.minimumInvestment(), t),
 				money(t.investmentIncrement(), t), money(t.maximumPerInvestor(), t), money(t.expectedRentalAmount(), t),
-				t.rentalFrequency(), t.expectedAnnualReturnPercent(), t.durationMonths(), t.lesseeName(), t.riskLevel(),
+				t.rentalFrequency(), t.expectedAnnualReturnPercent(), t.durationMonths(), t.managementFeePercent(),
+				t.lesseeName(), t.riskLevel(),
 				t.riskDisclosure(), t.termsAndConditions(), t.termsVersion(), t.offerOpensAt(), t.offerClosesAt(),
-				CapacityView.of(p), container, p.getPublishedAt(), p.getCancelledAt(), p.getCancellationReason(),
+				CapacityView.of(p), container, p.getPublishedAt(), p.getLeaseStartsOn(), p.getLeaseEndsOn(),
+				p.getMaturedAt(), p.getCancelledAt(), p.getCancellationReason(),
 				p.getCreatedAt(), p.getVersion());
 	}
 

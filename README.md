@@ -111,7 +111,16 @@ Modules (Phase 5):
 | `investment` | + holdings (confirmed investments) and the investor portfolio                   |
 | `outbox`  | Transactional outbox → Kafka relay; consumer de-duplication (`processed_events`)   |
 
+Modules (Phase 6):
+
+| Module       | Responsibility                                                                   |
+|--------------|----------------------------------------------------------------------------------|
+| `investment` | + management fee in the terms, lease activation (`FUNDED → ACTIVE`), rental schedule, maturity |
+| `earning`    | Rental receipts per period (record → four-eyes approval), distribution by ownership, investor earnings |
+| `ledger`     | Append-only double-entry ledger: accounts per investor/platform and currency, balanced transactions, adjustments |
+
 Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
+`earning` → `investment`, `ledger`;
 `marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
@@ -296,6 +305,49 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 | `POST /api/v1/admin/payments/{id}/confirm`            | `PAYMENT_CONFIRM`   | Record a received bank transfer             |
 | `POST /api/v1/admin/payments/{id}/refund`             | `FINANCE_ADJUST`    | Record a refund                             |
 
+### Leases, rental income & the ledger
+
+```text
+offering FUNDED ──activate lease──▶ ACTIVE ──rent recorded──▶ RECORDED ──approved (other user)──▶ DISTRIBUTED
+ (or OPEN, settled)   sales stop,      per period,              │            earnings + ledger + outbox, one transaction
+                      periods start    expected vs received     └─void──▶ REJECTED (record again)
+                                       after the last period is distributed ──▶ offering & holdings MATURED
+```
+
+- **Fee.** `managementFeePercent` (0–50) is part of the offering's terms, so it is frozen once published. Listed
+  yields, projections and each order line's rental share are net of it.
+- **Lease.** `INVESTMENT_APPROVE` starts the lease of a `FUNDED` offering, or of an `OPEN` one with confirmed
+  investors and nothing awaiting payment. Starting the lease ends sales. Period *n* runs from `start + (n−1)` periods to
+  `start + n` periods, computed from the start date so month-ends do not drift. Rent is due in arrears, and a trailing
+  part-period is not a period.
+- **Receipts.** Finance (`RENTAL_RECORD`) records what the lessee actually paid for one period, with the bank
+  reference. A note is required when the amount differs from the expected rent. A period is paid at most once.
+  Someone else (`RENTAL_APPROVE`) approves, and the database rejects a self-approved distribution. The recorder or an
+  approver can void a mistaken entry. Periods that have ended without a receipt are listed as due or overdue.
+- **Distribution.** Each holding gets gross = receipt × holding amount ÷ price, rounded *down* to the minor unit.
+  Then fee = gross × fee % (half-up) and net = gross − fee. The unsold share and rounding remainders are *retained* by the
+  platform, so `receipt = Σ net + fees + retained` exactly. Recorded receipts show this split as a preview.
+- **Ledger.** Every distribution and adjustment is one transaction of debit/credit entries. A deferred constraint
+  trigger rejects any transaction that does not balance or mixes currencies, and accounts, transactions and entries
+  are append-only. Distribution: debit *Rental cash*; credit each *Investor earnings* account (net), *Fee
+  revenue* and *Retained*. Investor earnings balances are what Phase 8 withdrawals will draw on.
+- **Adjustments.** `FINANCE_ADJUST` credits or debits an investor's balance against *Adjustments*, with a reason and an
+  `Idempotency-Key`. A debit cannot overdraw the balance, and nobody may adjust their own.
+- **Events.** `rental.generated` per distributed receipt and `earning.created` per investor share, via the outbox.
+
+### Rentals, earnings & ledger API
+
+| Method & path                                         | Access              | Purpose                                     |
+|-------------------------------------------------------|---------------------|---------------------------------------------|
+| `POST /api/v1/admin/investment-products/{id}/activate` | `INVESTMENT_APPROVE` | Start the lease (`leaseStartsOn`)          |
+| `GET /api/v1/admin/rentals[/{id}]`, `/rentals/due`    | `FINANCE_VIEW`, `RENTAL_RECORD` or `RENTAL_APPROVE` | Receipts (with split), periods due |
+| `POST /api/v1/admin/rentals`                          | `RENTAL_RECORD`     | Record a lessee payment for one period      |
+| `POST /api/v1/admin/rentals/{id}/approve`             | `RENTAL_APPROVE`    | Distribute (not the recorder)               |
+| `POST /api/v1/admin/rentals/{id}/reject`              | `RENTAL_APPROVE`, or the recorder | Void a recorded payment       |
+| `GET /api/v1/admin/ledger/accounts[/{id}[/entries]]`, `/trial-balance` | `FINANCE_VIEW` | Balances, statements, trial balance |
+| `POST /api/v1/admin/ledger/adjustments` (`Idempotency-Key`) | `FINANCE_ADJUST` | Correct an investor's balance        |
+| `GET /api/v1/earnings`, `/earnings/summary`           | `INVESTOR_PORTAL`   | Own rental income history, balance, per-holding totals |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -303,7 +355,7 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 3. ✅ Users — profile, KYC, bank details, investor classification
 4. ✅ Marketplace — containers, investment products, availability
 5. ✅ Cart, orders, payments, investment confirmation, invoices (+ transactional outbox)
-6. Earnings — rental income, ownership distribution, ledger
+6. ✅ Earnings — leases, rental income, ownership distribution, double-entry ledger
 7. Referrals — four-level hierarchy, configuration, earnings, downline tree
 8. Withdrawals — validation, approval, batch processing, reconciliation
 9. Sales CRM · 10. Support · 11. Reporting · 12. Production hardening

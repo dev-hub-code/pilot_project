@@ -85,6 +85,8 @@ export interface MarketplaceDetail {
   description: string;
   investmentIncrement: Money;
   maximumPerInvestor: Money | null;
+  /** Deducted from every rental payment; yields and projections are already net of it. */
+  managementFeePercent: number;
   lesseeName: string | null;
   riskDisclosure: string;
   termsAndConditions: string;
@@ -121,6 +123,7 @@ export interface Product {
   rentalFrequency: RentalFrequency;
   expectedAnnualReturnPercent: number;
   durationMonths: number;
+  managementFeePercent: number;
   lesseeName: string | null;
   riskLevel: RiskLevel;
   riskDisclosure: string;
@@ -131,6 +134,10 @@ export interface Product {
   capacity: CapacityView;
   container: ContainerSummary;
   publishedAt: string | null;
+  /** ISO dates (no time). The lease ends on leaseEndsOn, exclusive. */
+  leaseStartsOn: string | null;
+  leaseEndsOn: string | null;
+  maturedAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
   createdAt: string;

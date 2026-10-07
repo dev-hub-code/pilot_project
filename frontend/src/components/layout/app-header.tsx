@@ -10,7 +10,12 @@ export function AppHeader({ session }: { session: Session }) {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/marketplace", label: "Marketplace" },
     ...(investor
-      ? [{ href: "/portfolio", label: "Portfolio" }, { href: "/orders", label: "Orders" }, { href: "/cart", label: "Cart" }]
+      ? [
+        { href: "/portfolio", label: "Portfolio" },
+        { href: "/earnings", label: "Earnings" },
+        { href: "/orders", label: "Orders" },
+        { href: "/cart", label: "Cart" },
+      ]
       : []),
     { href: "/profile", label: "Profile" },
     ...(hasStaffAccess(session.permissions) ? [{ href: "/admin", label: "Admin" }] : []),

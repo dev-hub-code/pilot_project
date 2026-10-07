@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import { authFetch } from "@/lib/server/auth/session";
+import type { EarningsSummary } from "@/types/earning";
 import type { Portfolio } from "@/types/order";
 import { formatDate, humanize } from "@/utils/format";
 import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
@@ -14,7 +15,11 @@ import { formatMoney, formatPercent, FREQUENCY_LABEL } from "@/utils/money";
 export const metadata: Metadata = { title: "Portfolio" };
 
 export default async function PortfolioPage() {
-  const portfolio = await authFetch<Portfolio>("/api/v1/portfolio");
+  const [portfolio, earnings] = await Promise.all([
+    authFetch<Portfolio>("/api/v1/portfolio"),
+    authFetch<EarningsSummary>("/api/v1/earnings/summary"),
+  ]);
+  const earned = new Map(earnings.holdings.map((h) => [h.holdingId, h]));
 
   return (
     <div className="space-y-6">
@@ -38,7 +43,7 @@ export default async function PortfolioPage() {
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
-        <DataTable columns={["Offering", "Invested", "Ownership", "Expected rental", "Term", "Since", "Status"]}>
+        <DataTable columns={["Offering", "Invested", "Ownership", "Expected rental", "Earned", "Term", "Since", "Status"]}>
           {portfolio.holdings.map((h) => (
             <tr key={h.id} className="hover:bg-background">
               <Cell>
@@ -48,6 +53,10 @@ export default async function PortfolioPage() {
               <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
               <Cell className="tabular-nums">{formatPercent(h.ownershipPercent, 4)}</Cell>
               <Cell className="tabular-nums">{formatMoney(h.expectedRentalPerPayment)}/{FREQUENCY_LABEL[h.rentalFrequency]}</Cell>
+              <Cell className="tabular-nums">
+                {formatMoney(earned.get(h.id)?.earned)}
+                {earned.has(h.id) && <span className="block text-xs text-muted">{earned.get(h.id)?.payments} payment(s)</span>}
+              </Cell>
               <Cell>{h.durationMonths} months</Cell>
               <Cell className="text-muted">{formatDate(h.confirmedAt)}</Cell>
               <Cell><StatusBadge tone={toneFor(h.status)}>{humanize(h.status)}</StatusBadge></Cell>
@@ -55,7 +64,9 @@ export default async function PortfolioPage() {
           ))}
         </DataTable>
       )}
-      <p className="text-xs text-muted">Expected rental assumes the lessee pays as forecast. Rental income starts being paid out in a later release.</p>
+      <p className="text-xs text-muted">
+        Expected rental is net of the management fee and assumes the lessee pays as forecast. See <Link href="/earnings" className="underline">Earnings</Link> for what has been paid.
+      </p>
     </div>
   );
 }

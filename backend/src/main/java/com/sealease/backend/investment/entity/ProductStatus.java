@@ -5,7 +5,8 @@ import java.util.Set;
 
 /**
  * Offering lifecycle: DRAFT → OPEN → FUNDED → ACTIVE → MATURED → CLOSED, or CANCELLED before any
- * capacity is taken. ACTIVE/MATURED/CLOSED are driven by the leasing lifecycle in later phases.
+ * capacity is taken. ACTIVE starts the lease (no more sales); MATURED follows the last rental
+ * distribution. CLOSED is reserved for later phases.
  */
 public enum ProductStatus {
 	DRAFT,

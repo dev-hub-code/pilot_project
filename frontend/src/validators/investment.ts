@@ -44,6 +44,9 @@ export const productSchema = z.object({
   expectedRentalAmount: money,
   rentalFrequency: z.enum(["MONTHLY", "QUARTERLY"]),
   durationMonths: z.coerce.number().int().min(1).max(360),
+  managementFeePercent: z.string().trim().transform((v) => v || "0")
+    .pipe(z.string().regex(/^\d{1,2}(\.\d{1,2})?$/, "Enter a percentage with up to 2 decimals"))
+    .refine((v) => Number(v) <= 50, "The fee cannot exceed 50%"),
   lesseeName: optionalText(140),
   riskLevel: z.enum(["LOW", "MEDIUM", "HIGH"]),
   riskDisclosure: z.string().trim().min(1, "Disclose the risks").max(10_000),
@@ -54,6 +57,10 @@ export const productSchema = z.object({
 }).refine((d) => d.investmentType === "HNI" || (d.minimumInvestment && d.investmentIncrement), {
   path: ["minimumInvestment"],
   message: "Shared offerings need a minimum and an increment",
+});
+
+export const activateLeaseSchema = z.object({
+  leaseStartsOn: z.iso.date("Choose the date the lease starts"),
 });
 
 export const statusSchema = z.object({

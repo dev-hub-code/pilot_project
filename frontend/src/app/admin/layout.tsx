@@ -16,6 +16,9 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     { href: "/admin/products", label: "Offerings", show: can(Permission.INVESTMENT_VIEW) },
     { href: "/admin/orders", label: "Orders", show: can(Permission.ORDER_VIEW) },
     { href: "/admin/payments", label: "Payments", show: can(Permission.FINANCE_VIEW) },
+    { href: "/admin/rentals", label: "Rentals",
+      show: can(Permission.FINANCE_VIEW) || can(Permission.RENTAL_RECORD) || can(Permission.RENTAL_APPROVE) },
+    { href: "/admin/ledger", label: "Ledger", show: can(Permission.FINANCE_VIEW) },
   ].filter((item) => item.show);
 
   return (
