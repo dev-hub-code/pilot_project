@@ -1,0 +1,25 @@
+# Local development profile (default when no profile is active).
+# Connection credentials come from the environment or a git-ignored .env file, looked up in the
+# working directory and its parent (so both `backend/` and the repo root work).
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  security:
+    cors:
+      allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  kafka:
+    create-topics: true
+
+logging:
+  level:
+    com.sealease: DEBUG

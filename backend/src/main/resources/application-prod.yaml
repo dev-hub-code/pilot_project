@@ -1,0 +1,11 @@
+# Production profile. Activate with SPRING_PROFILES_ACTIVE=prod.
+logging:
+  structured:
+    format:
+      console: ecs
+  level:
+    root: INFO
+
+app:
+  kafka:
+    create-topics: false

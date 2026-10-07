@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * SeaLease design tokens — "dusk at the container yard": charcoal, warm gold and white on a
+ * light-grey frame. Components use these tokens only; never raw colours.
+ */
+:root {
+  --frame: #e9e9e7;          /* page backdrop around the white canvas */
+  --background: #f6f5f2;     /* app canvas */
+  --surface: #ffffff;        /* cards, inputs */
+  --foreground: #121212;     /* ink */
+  --muted: #66625b;          /* secondary text (AA on surface and background) */
+  --border: #e3e1dc;
+  --ink: #121212;            /* dark panels (hero, auth aside) */
+  --on-ink: #f4f1ea;         /* text on dark panels */
+  --gold: #c9a24c;           /* fills: primary buttons, dots, marks */
+  --gold-hover: #b8913d;
+  --on-gold: #17130b;        /* text on gold fills (~9:1) */
+  --gold-text: #876521;      /* gold used as text on light surfaces (AA) */
+  --focus: #c9a24c;
+}
+
+@theme inline {
+  --color-frame: var(--frame);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-gold: var(--gold);
+  --color-gold-hover: var(--gold-hover);
+  --color-on-gold: var(--on-gold);
+  --color-gold-text: var(--gold-text);
+  /* Legacy alias: "brand" now means the gold accent. */
+  --color-brand: var(--gold-text);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display-face);
+  --font-wordmark: var(--font-wordmark-face);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --frame: #090909;
+    --background: #0f0f0e;
+    --surface: #171716;
+    --foreground: #f1eee8;
+    --muted: #a8a399;
+    --border: #2a2925;
+    --ink: #070707;
+    --on-ink: #f4f1ea;
+    --gold: #d1ab57;
+    --gold-hover: #e0bc69;
+    --on-gold: #17130b;
+    --gold-text: #d9b464;
+  }
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--gold);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display-face), var(--font-body), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

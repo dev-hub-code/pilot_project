@@ -1,0 +1,20 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.secrets/
+# Test-only keys used by the backend test suite
+!backend/src/test/resources/jwt/*.pem
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/

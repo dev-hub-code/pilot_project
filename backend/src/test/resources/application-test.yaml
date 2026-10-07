@@ -1,0 +1,29 @@
+# Integration-test profile. Connection details come from Testcontainers @ServiceConnection beans;
+# these values only satisfy the required placeholders in application.yaml.
+DB_USERNAME: overridden-by-testcontainers
+DB_PASSWORD: overridden-by-testcontainers
+
+# Test-only encryption keys (two keys to exercise rotation). Never use outside tests.
+APP_CRYPTO_DATA_KEYS: "t1:K/rki3gS2prDYo1Q1XuQfDF9V3r4MOOvVLezrUl8EuY=,t2:Wr5fuwFgyi2yttGMF6zjl+xkK8nGrhAqXZLtELw+6+c="
+APP_CRYPTO_ACTIVE_KEY_ID: t2
+APP_CRYPTO_FINGERPRINT_KEY: "p8dOVQGnnHFMqp9KxXQ4385DAzggIBeuU0XWEwyKl8k="
+JWT_PRIVATE_KEY_LOCATION: classpath:jwt/test-only-private.pem
+JWT_PUBLIC_KEY_LOCATION: classpath:jwt/test-only-public.pem
+
+app:
+  bootstrap:
+    super-admin:
+      email: root-admin@sealease.test
+      password: Integration-Test-Admin-2026
+  auth:
+    session:
+      # Deterministic theft detection: any replay of a consumed refresh token revokes the session.
+      reuse-grace-period: 0s
+    rate-limit:
+      # Integration tests sign in many times from the same address.
+      login-per-ip: { requests: 10000, window: 1m }
+      register-per-ip: { requests: 10000, window: 1m }
+      refresh-per-ip: { requests: 10000, window: 1m }
+  kafka:
+    create-topics: true
+    partitions: 1
