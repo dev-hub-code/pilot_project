@@ -1,0 +1,123 @@
+<!--
+  Shared layout for every SeaLease report (statements, financial summary, offerings, invoices).
+  A report is a title plus sections of four-column rows (see ReportDocument); rows are grouped by
+  section, whose name and column headers repeat on each page. JasperReports 7 format; fonts are
+  the embedded DejaVu family (jasperreports-fonts) so PDFs look the same everywhere.
+-->
+<jasperReport name="document" pageWidth="595" pageHeight="842" whenNoDataType="AllSectionsNoDetail" columnWidth="515" leftMargin="40" rightMargin="40" topMargin="36" bottomMargin="36" uuid="026786c9-57b1-4a2a-ad07-6bbcced96e67">
+	<style name="Base" default="true" forecolor="#0B1F2A" fontName="DejaVu Sans" fontSize="8.5"/>
+	<style name="Cell" style="Base">
+		<conditionalStyle bold="true">
+			<conditionExpression><![CDATA[$F{emphasis}]]></conditionExpression>
+		</conditionalStyle>
+	</style>
+	<parameter name="title" class="java.lang.String"/>
+	<parameter name="subtitle" class="java.lang.String"/>
+	<parameter name="generatedAt" class="java.lang.String"/>
+	<parameter name="footnote" class="java.lang.String"/>
+	<field name="sectionKey" class="java.lang.String"/>
+	<field name="section" class="java.lang.String"/>
+	<field name="h1" class="java.lang.String"/>
+	<field name="h2" class="java.lang.String"/>
+	<field name="h3" class="java.lang.String"/>
+	<field name="h4" class="java.lang.String"/>
+	<field name="c1" class="java.lang.String"/>
+	<field name="c2" class="java.lang.String"/>
+	<field name="c3" class="java.lang.String"/>
+	<field name="c4" class="java.lang.String"/>
+	<field name="emphasis" class="java.lang.Boolean"/>
+	<group name="section" reprintHeaderOnEachPage="true" minHeightToStartNewPage="80">
+		<expression><![CDATA[$F{sectionKey}]]></expression>
+		<groupHeader>
+			<band height="38">
+				<element kind="textField" uuid="4bb2fb84-2aeb-4c82-beaf-5869d5fbee46" x="0" y="8" width="515" height="16" forecolor="#0B1F2A" fontSize="11.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+					<expression><![CDATA[$F{section}]]></expression>
+				</element>
+				<element kind="textField" uuid="dd8dcccf-a6e4-4b92-aaf9-c20d8dbdec7d" x="0" y="24" width="95" height="13" forecolor="#5B6770" fontSize="7.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+					<box leftPadding="0" rightPadding="4" style="Base">
+						<bottomPen lineWidth="0.75" lineColor="#D9DDE0"/>
+					</box>
+					<expression><![CDATA[$F{h1}]]></expression>
+				</element>
+				<element kind="textField" uuid="5e077ebe-8929-4a3a-87d4-37e4e0b73f00" x="95" y="24" width="205" height="13" forecolor="#5B6770" fontSize="7.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+					<box leftPadding="4" rightPadding="4" style="Base">
+						<bottomPen lineWidth="0.75" lineColor="#D9DDE0"/>
+					</box>
+					<expression><![CDATA[$F{h2}]]></expression>
+				</element>
+				<element kind="textField" uuid="0c5b8c5d-8456-4b0e-ac4d-39a97741fcb3" x="300" y="24" width="105" height="13" forecolor="#5B6770" fontSize="7.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+					<box leftPadding="4" rightPadding="4" style="Base">
+						<bottomPen lineWidth="0.75" lineColor="#D9DDE0"/>
+					</box>
+					<expression><![CDATA[$F{h3}]]></expression>
+				</element>
+				<element kind="textField" uuid="c6706e42-28da-4695-8ebe-1a938f0097b6" x="405" y="24" width="110" height="13" forecolor="#5B6770" fontSize="7.0" bold="true" blankWhenNull="true" hTextAlign="Right" style="Base">
+					<box leftPadding="4" rightPadding="0" style="Base">
+						<bottomPen lineWidth="0.75" lineColor="#D9DDE0"/>
+					</box>
+					<expression><![CDATA[$F{h4}]]></expression>
+				</element>
+			</band>
+		</groupHeader>
+		<groupFooter>
+			<band height="6"/>
+		</groupFooter>
+	</group>
+	<title height="78">
+		<element kind="textField" uuid="d1148a39-48be-402d-ade8-d4e66bac28bc" x="0" y="0" width="300" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA["SEALEASE"]]></expression>
+		</element>
+		<element kind="textField" uuid="91329079-8b3c-4bca-85fe-c96085f18a40" x="300" y="0" width="215" height="12" forecolor="#5B6770" fontSize="7.5" blankWhenNull="true" hTextAlign="Right" style="Base">
+			<expression><![CDATA[$P{generatedAt} == null ? "" : "Generated " + $P{generatedAt}]]></expression>
+		</element>
+		<element kind="textField" uuid="1216a0ca-6e06-4d20-b751-2489828f910d" x="0" y="16" width="515" height="26" forecolor="#0B1F2A" fontSize="18.0" textAdjust="StretchHeight" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{title}]]></expression>
+		</element>
+		<element kind="textField" uuid="524afe71-05b8-4c66-9f70-a9befd126466" x="0" y="44" width="515" height="16" forecolor="#5B6770" fontSize="9.5" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{subtitle}]]></expression>
+		</element>
+		<element kind="line" uuid="c82d5b45-0a27-4fab-9137-55b199100670" x="0" y="68" width="515" height="1" forecolor="#B8862B">
+			<pen lineWidth="1.5"/>
+		</element>
+	</title>
+	<detail>
+		<band height="15" splitType="Prevent">
+			<element kind="textField" uuid="6dbc111b-751a-43fe-bcdc-ee52564886b8" x="0" y="0" width="95" height="15" stretchType="ContainerHeight" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Cell">
+				<box topPadding="3" leftPadding="0" bottomPadding="2" rightPadding="4" style="Cell">
+					<bottomPen lineWidth="0.25" lineColor="#D9DDE0"/>
+				</box>
+				<expression><![CDATA[$F{c1}]]></expression>
+			</element>
+			<element kind="textField" uuid="120bb478-71e7-4c3a-840e-1f4fcc7e5b40" x="95" y="0" width="205" height="15" stretchType="ContainerHeight" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Cell">
+				<box topPadding="3" leftPadding="4" bottomPadding="2" rightPadding="4" style="Cell">
+					<bottomPen lineWidth="0.25" lineColor="#D9DDE0"/>
+				</box>
+				<expression><![CDATA[$F{c2}]]></expression>
+			</element>
+			<element kind="textField" uuid="95a821c8-2b07-4e92-b4f6-dd105653d563" x="300" y="0" width="105" height="15" stretchType="ContainerHeight" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Cell">
+				<box topPadding="3" leftPadding="4" bottomPadding="2" rightPadding="4" style="Cell">
+					<bottomPen lineWidth="0.25" lineColor="#D9DDE0"/>
+				</box>
+				<expression><![CDATA[$F{c3}]]></expression>
+			</element>
+			<element kind="textField" uuid="db5bc84b-16d5-41bd-bb0d-22d742bc5f29" x="405" y="0" width="110" height="15" stretchType="ContainerHeight" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Right" style="Cell">
+				<box topPadding="3" leftPadding="4" bottomPadding="2" rightPadding="0" style="Cell">
+					<bottomPen lineWidth="0.25" lineColor="#D9DDE0"/>
+				</box>
+				<expression><![CDATA[$F{c4}]]></expression>
+			</element>
+		</band>
+	</detail>
+	<pageFooter height="26">
+		<element kind="textField" uuid="79bfcfb3-ee5b-4f2a-aad2-1f458a3f7ed4" x="0" y="6" width="420" height="18" forecolor="#5B6770" fontSize="6.5" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{footnote} == null ? "" : $P{footnote}]]></expression>
+		</element>
+		<element kind="textField" uuid="49b09749-35a5-4a7e-a4d3-721a6437309b" x="420" y="6" width="75" height="12" forecolor="#5B6770" fontSize="7.0" blankWhenNull="true" hTextAlign="Right" style="Base">
+			<expression><![CDATA["Page " + $V{PAGE_NUMBER} + " of "]]></expression>
+		</element>
+		<element kind="textField" uuid="9656e926-a24e-4f90-a9af-1744461da6dc" x="495" y="6" width="20" height="12" forecolor="#5B6770" fontSize="7.0" evaluationTime="Report" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<box leftPadding="3" style="Base"/>
+			<expression><![CDATA[$V{PAGE_NUMBER}]]></expression>
+		</element>
+	</pageFooter>
+</jasperReport>

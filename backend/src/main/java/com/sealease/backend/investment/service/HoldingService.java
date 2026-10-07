@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,6 +55,18 @@ public class HoldingService {
 		return holdings.findById(holdingId)
 			.filter(h -> h.getUserId().equals(userId))
 			.map(h -> offerings.terms(List.of(h.getProductId())).get(h.getProductId()).code() + " · " + h.amount().display());
+	}
+
+	/** Distinct investors per offering. */
+	@Transactional(readOnly = true)
+	public Map<UUID, Long> investorCounts(Collection<UUID> productIds) {
+		Map<UUID, Long> counts = new HashMap<>();
+		if (!productIds.isEmpty()) {
+			for (Object[] row : holdings.countInvestorsByProduct(productIds)) {
+				counts.put((UUID) row[0], (Long) row[1]);
+			}
+		}
+		return counts;
 	}
 
 	@Transactional(readOnly = true)

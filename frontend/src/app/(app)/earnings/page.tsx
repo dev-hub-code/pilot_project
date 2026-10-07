@@ -24,7 +24,8 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Earnings" description="Rental income from your containers, credited after each lessee payment is received and checked." />
+      <PageHeader title="Earnings" description="Rental income from your containers, credited after each lessee payment is received and checked."
+        actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
       <section className="grid gap-px bg-border sm:grid-cols-2" aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Available balance</p>

@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -167,6 +168,28 @@ public class WithdrawalService {
 			.withOldValue(Map.of("status", WithdrawalStatus.PENDING_APPROVAL)));
 		publish(KafkaTopics.WITHDRAWAL_FAILED, "WithdrawalCancelled", withdrawal, Map.of());
 		return WithdrawalResponse.forInvestor(withdrawal);
+	}
+
+	/** The investor's withdrawals requested in {@code [from, to)}, for statements. */
+	@Transactional(readOnly = true)
+	public List<WithdrawalResponse> forStatement(UUID userId, Instant from, Instant to) {
+		return withdrawals.findByUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAt(userId, from, to)
+			.stream().map(WithdrawalResponse::forInvestor).toList();
+	}
+
+	/** Withdrawals not yet paid out or returned: count and amount per currency. */
+	@Transactional(readOnly = true)
+	public Map<String, Money> openAmounts() {
+		Map<String, Money> totals = new TreeMap<>();
+		for (Withdrawal w : withdrawals.findByStatusIn(WithdrawalStatus.OPEN)) {
+			totals.merge(w.getCurrency(), w.amount(), Money::plus);
+		}
+		return totals;
+	}
+
+	@Transactional(readOnly = true)
+	public long openCount() {
+		return withdrawals.findByStatusIn(WithdrawalStatus.OPEN).size();
 	}
 
 	/** For support tickets: the reference of one of the user's own withdrawals. */

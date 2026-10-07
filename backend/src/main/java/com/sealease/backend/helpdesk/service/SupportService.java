@@ -295,6 +295,15 @@ public class SupportService {
 		return documents.load(attachment.getDocumentId());
 	}
 
+	/** Tickets waiting for staff, and those past their first-response target. */
+	@Transactional(readOnly = true)
+	public QueueCounts queueCounts() {
+		return new QueueCounts(tickets.countByStatus(TicketStatus.OPEN), tickets.countOverdue(clock.instant()));
+	}
+
+	public record QueueCounts(long open, long overdue) {
+	}
+
 	@Transactional(readOnly = true)
 	public List<Agent> agents() {
 		return accounts.getAccounts(roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name())).values().stream()

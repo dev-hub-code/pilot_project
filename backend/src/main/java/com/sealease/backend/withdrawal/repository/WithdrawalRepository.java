@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,11 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, J
 	boolean existsByUserIdAndCurrencyAndStatusIn(UUID userId, String currency, Collection<WithdrawalStatus> statuses);
 
 	Page<Withdrawal> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+
+	List<Withdrawal> findByUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAt(UUID userId,
+			Instant from, Instant to);
+
+	List<Withdrawal> findByStatusIn(Collection<WithdrawalStatus> statuses);
 
 	@Query(value = "select nextval('withdrawal_number_seq')", nativeQuery = true)
 	long nextNumber();

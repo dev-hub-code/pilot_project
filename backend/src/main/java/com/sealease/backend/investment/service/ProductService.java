@@ -6,6 +6,7 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.common.money.Money;
 import com.sealease.backend.container.dto.ContainerSummary;
 import com.sealease.backend.container.entity.ContainerStatus;
 import com.sealease.backend.container.service.ContainerService;
@@ -24,6 +25,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +37,12 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Currency;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /** Staff management of offerings: drafting, publishing and cancelling. */
@@ -45,6 +50,9 @@ import java.util.UUID;
 public class ProductService {
 
 	private static final String ENTITY = "INVESTMENT_PRODUCT";
+	/** Offerings that have been in front of investors. */
+	private static final Set<ProductStatus> PUBLISHED = EnumSet.of(ProductStatus.OPEN, ProductStatus.FUNDED,
+			ProductStatus.ACTIVE, ProductStatus.MATURED, ProductStatus.CLOSED);
 
 	private final InvestmentProductRepository products;
 	private final CapacityMovementRepository movements;
@@ -183,6 +191,28 @@ public class ProductService {
 					"leaseEndsOn", product.getLeaseEndsOn().toString(),
 					"committed", product.committed().toString())));
 		return detail(productId);
+	}
+
+	/** Every offering that has been published (not drafts or cancelled ones), by code: for reports. */
+	@Transactional(readOnly = true)
+	public List<ProductResponse> published() {
+		List<InvestmentProduct> all = products.findAll((root, query, cb) -> root.get("status").in(PUBLISHED), Sort.by("code"));
+		Map<UUID, ContainerSummary> byId = containers.summaries(all.stream().map(InvestmentProduct::getContainerId).toList());
+		return all.stream().map(p -> ProductResponse.from(p, byId.get(p.getContainerId()))).toList();
+	}
+
+	/** Capital confirmed by investors across published offerings, per currency. */
+	@Transactional(readOnly = true)
+	public Map<String, Money> committedCapital() {
+		Map<String, Money> totals = new TreeMap<>();
+		for (ProductResponse p : published()) {
+			Money committed = Money.of(new BigDecimal(p.capacity().committed().amount()),
+					Currency.getInstance(p.capacity().committed().currency()));
+			if (committed.isPositive()) {
+				totals.merge(committed.currency().getCurrencyCode(), committed, Money::plus);
+			}
+		}
+		return totals;
 	}
 
 	@Transactional(readOnly = true)

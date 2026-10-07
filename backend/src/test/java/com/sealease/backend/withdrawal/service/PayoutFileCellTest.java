@@ -15,10 +15,14 @@ class PayoutFileCellTest {
 
 	@Test
 	void neutralisesSpreadsheetFormulas() {
-		for (String formula : new String[] { "=SUM(A1)", "+1", "-1", "@cmd", "\tx" }) {
+		for (String formula : new String[] { "=SUM(A1)", "+cmd", "-1+1", "@cmd", "\tx" }) {
 			assertThat(PayoutBatchService.cell(formula)).startsWith("\"'");
 		}
 		assertThat(PayoutBatchService.cell("O'Brien")).isEqualTo("\"O'Brien\"");
+		// Plain numbers stay numbers (negative amounts in reports).
+		assertThat(PayoutBatchService.cell("-12.50")).isEqualTo("\"-12.50\"");
+		assertThat(PayoutBatchService.cell("-1,234.50 USD")).isEqualTo("\"-1,234.50 USD\"");
+		assertThat(PayoutBatchService.cell("-1+cmd|' /C calc'!A0")).startsWith("\"'");
 	}
 
 }

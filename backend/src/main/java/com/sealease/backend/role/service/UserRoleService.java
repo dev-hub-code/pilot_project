@@ -62,6 +62,11 @@ public class UserRoleService implements AuthorityGuard {
 		return new UserAuthorities(roleNames, permissions);
 	}
 
+	@Transactional(readOnly = true)
+	public long countUsersWithRole(String roleName) {
+		return userRoles.countUsersWithRole(roleName);
+	}
+
 	/** Accounts that currently hold a permission through any of their roles (e.g. who can work leads). */
 	@Transactional(readOnly = true)
 	public List<UUID> usersWithPermission(String permissionCode) {

@@ -27,7 +27,10 @@ export default async function InvoicePage({ params }: PageProps<"/orders/[id]/in
           <Link href="/orders" className="hover:text-foreground">Orders</Link> /{" "}
           <Link href={`/orders/${id}`} className="font-mono hover:text-foreground">{invoice.orderNumber}</Link> / Invoice
         </nav>
-        <PrintButton />
+        <div className="flex items-center gap-3">
+          <a href={`/orders/${id}/invoice/pdf`} className="text-sm text-gold-text hover:underline">Download PDF</a>
+          <PrintButton />
+        </div>
       </div>
       <InvoiceDocument invoice={invoice} />
     </div>

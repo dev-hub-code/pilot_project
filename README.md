@@ -313,7 +313,7 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
   transaction. Topics: `investment.created` (order placed), `payment.success`, `payment.failed`,
   `investment.confirmed`, `invoice.generated`.
 - **Invoices** (`INV-2026-000042`) are append-only; corrections will be credit notes. The portal
-  renders them for print / PDF; JasperReports PDFs arrive with reporting (Phase 11).
+  renders them for print, and offers a JasperReports PDF (see *Reporting*).
 
 ### Cart, orders & payments API
 
@@ -521,6 +521,40 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 - **UI.** *Users → New staff member*. The user page shows roles, lets `USER_ROLE_ASSIGN` holders edit them, and offers
   *Issue temporary password* for staff. Everyone can change their password from *Profile → Password*.
 
+### Reporting
+
+- **One document model, three formats.** Every report is built once as a `ReportDocument` (title, subtitle, sections of
+  four-column rows) and rendered as JSON (on-screen preview), CSV or PDF, so all formats always show the same figures.
+  PDFs come from a single JasperReports template (`reports/document.jrxml`, compiled once) with fonts embedded.
+- **Reports.** *Investor statement*: per currency, opening and closing earnings balance and every entry in the period,
+  plus holdings and withdrawals requested. *Financial summary*: per currency, rent collected and how it was split
+  (investors, management fees, retained), referral commissions, adjustments, withdrawals requested, returned and paid,
+  and what is owed / in transit at period end — straight from the ledger. *Offerings & funding*: funding per published
+  offering, leases with rent received, and rent due but not yet recorded. *Invoices* as PDF.
+- **Periods** are inclusive dates in UTC, at most 366 days.
+- **Access.** Investors get their own statement and invoices. Staff previews need `REPORT_VIEW`; PDF/CSV downloads need
+  `REPORT_GENERATE` and are audited (`REPORT_GENERATED`, with report, format and parameters). Staff invoice PDFs need
+  `ORDER_VIEW`. Downloads are sent `Cache-Control: no-store`.
+- **CSV safety.** Every field is quoted, and values starting with `= + - @` are prefixed with `'` (CSV injection),
+  except plain amounts. Payout bank files use the same helper.
+- **Admin overview.** `/admin` shows key figures (investors, capital invested, rent this month, owed to investors,
+  withdrawals in progress, support waiting, open leads). Each tile is computed only for viewers holding the permission
+  that guards its data.
+
+### Reporting API
+
+| Method & path                                                                 | Access                             | Purpose                             |
+|-------------------------------------------------------------------------------|------------------------------------|-------------------------------------|
+| `GET /api/v1/reports/statement?from&to&format`                                | `INVESTOR_PORTAL`                  | Own statement (json, csv, pdf)      |
+| `GET /api/v1/reports/invoices/{orderId}?format`                               | `INVESTOR_PORTAL`                  | Own invoice (pdf by default)        |
+| `GET /api/v1/admin/reports/statement?userId&from&to&format`                   | `REPORT_VIEW` / `REPORT_GENERATE`  | Any investor's statement            |
+| `GET /api/v1/admin/reports/financial-summary?from&to&format`                  | `REPORT_VIEW` / `REPORT_GENERATE`  | Ledger summary for a period         |
+| `GET /api/v1/admin/reports/offerings?format`                                  | `REPORT_VIEW` / `REPORT_GENERATE`  | Funding, leases, rent outstanding   |
+| `GET /api/v1/admin/reports/invoices/{orderId}?format`                         | `ORDER_VIEW`                       | Any invoice as PDF                  |
+| `GET /api/v1/admin/dashboard`                                                 | signed in                          | Overview tiles the viewer may see   |
+
+`format` is `json` (default for reports), `csv` or `pdf`; csv and pdf need `REPORT_GENERATE` on staff reports.
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -533,4 +567,5 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
 9. ✅ Sales CRM — leads from staff and the website, pipeline, activity log, assignment, conversion to investors
 10. ✅ Support — tickets, internal notes, attachments, response targets, in-app notifications
-11. Reporting · 12. Production hardening
+11. ✅ Reporting — statements, financial summary, offerings, invoice PDFs (JasperReports), CSV exports, admin overview
+12. Production hardening

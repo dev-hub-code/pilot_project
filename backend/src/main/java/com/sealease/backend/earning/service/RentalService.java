@@ -43,6 +43,8 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -225,6 +227,23 @@ public class RentalService {
 		RentalReceipt receipt = receipts.findById(receiptId)
 			.orElseThrow(() -> new ResourceNotFoundException("Rental payment", receiptId));
 		return detail(receipt, leases.lease(receipt.getProductId()));
+	}
+
+	/** Rent distributed so far per offering: the number of periods paid and the total amount received. */
+	@Transactional(readOnly = true)
+	public Map<UUID, Received> received(Collection<UUID> productIds) {
+		Map<UUID, Received> out = new HashMap<>();
+		for (RentalReceipt r : productIds.isEmpty() ? List.<RentalReceipt>of()
+				: receipts.findByProductIdInAndStatusNot(productIds, ReceiptStatus.REJECTED)) {
+			if (r.getStatus() == ReceiptStatus.DISTRIBUTED) {
+				out.merge(r.getProductId(), new Received(1, r.amount()),
+						(a, b) -> new Received(a.periods() + b.periods(), a.amount().plus(b.amount())));
+			}
+		}
+		return out;
+	}
+
+	public record Received(int periods, Money amount) {
 	}
 
 	/** Periods of offerings on lease whose rent has fallen due but has not been recorded, oldest first. */

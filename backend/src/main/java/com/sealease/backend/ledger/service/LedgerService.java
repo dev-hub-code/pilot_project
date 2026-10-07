@@ -10,8 +10,10 @@ import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.ledger.dto.AdjustmentRequest;
+import com.sealease.backend.ledger.dto.InvestorStatement;
 import com.sealease.backend.ledger.dto.LedgerAccountResponse;
 import com.sealease.backend.ledger.dto.LedgerEntryResponse;
+import com.sealease.backend.ledger.dto.PeriodTotal;
 import com.sealease.backend.ledger.dto.TrialBalanceLine;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -26,6 +28,7 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -259,6 +263,81 @@ public class LedgerService {
 			return new TrialBalanceLine(currency.getCurrencyCode(), MoneyResponse.from(debits),
 					MoneyResponse.from(credits), debits.equals(credits));
 		});
+	}
+
+	// ---------------------------------------------------------------------------- reporting
+
+	/** The investor's earnings accounts over {@code [from, to)}, one statement per currency. */
+	@Transactional(readOnly = true)
+	public List<InvestorStatement> investorStatements(UUID userId, Instant from, Instant to) {
+		List<InvestorStatement> statements = new ArrayList<>();
+		for (LedgerAccountResponse account : investorAccounts(userId)) {
+			Currency currency = Currency.getInstance(account.balance().currency());
+			BigDecimal opening = signedSum(account.id(), null, from);
+			List<InvestorStatement.Entry> entries = jdbc.query("""
+					SELECT t.created_at, t.transaction_type, t.description,
+					       CASE e.direction WHEN 'CREDIT' THEN e.amount ELSE -e.amount END AS signed
+					FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+					WHERE e.account_id = ? AND e.created_at >= ? AND e.created_at < ?
+					ORDER BY e.created_at, e.id
+					""", (rs, i) -> new InvestorStatement.Entry(rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+					TransactionType.valueOf(rs.getString("transaction_type")), rs.getString("description"),
+					Money.of(rs.getBigDecimal("signed"), currency)), account.id(), utc(from), utc(to));
+			BigDecimal moved = entries.stream().map(e -> e.amount().amount()).reduce(BigDecimal.ZERO, BigDecimal::add);
+			statements.add(new InvestorStatement(currency.getCurrencyCode(), Money.of(opening, currency),
+					Money.of(opening.add(moved), currency), entries));
+		}
+		return statements;
+	}
+
+	/** Totals posted in {@code [from, to)} by currency, transaction type, account type and side. */
+	@Transactional(readOnly = true)
+	public Map<String, List<PeriodTotal>> periodTotals(Instant from, Instant to) {
+		Map<String, List<PeriodTotal>> byCurrency = new TreeMap<>();
+		jdbc.query("""
+				SELECT a.currency, t.transaction_type, a.account_type, e.direction, sum(e.amount) AS total
+				FROM ledger_entries e
+				         JOIN ledger_transactions t ON t.id = e.transaction_id
+				         JOIN ledger_accounts a ON a.id = e.account_id
+				WHERE e.created_at >= ? AND e.created_at < ?
+				GROUP BY a.currency, t.transaction_type, a.account_type, e.direction
+				""", rs -> {
+			Currency currency = Currency.getInstance(rs.getString("currency"));
+			byCurrency.computeIfAbsent(currency.getCurrencyCode(), c -> new ArrayList<>())
+				.add(new PeriodTotal(TransactionType.valueOf(rs.getString("transaction_type")),
+						AccountType.valueOf(rs.getString("account_type")), Direction.valueOf(rs.getString("direction")),
+						Money.of(rs.getBigDecimal("total"), currency)));
+		}, utc(from), utc(to));
+		return byCurrency;
+	}
+
+	/** Balances of one account type, summed over all its accounts, as of {@code at}, per currency. */
+	@Transactional(readOnly = true)
+	public Map<String, Money> balancesAt(AccountType type, Instant at) {
+		Map<String, Money> balances = new TreeMap<>();
+		jdbc.query("""
+				SELECT a.currency,
+				       coalesce(sum(CASE WHEN e.direction = ? THEN e.amount ELSE -e.amount END), 0) AS balance
+				FROM ledger_accounts a LEFT JOIN ledger_entries e ON e.account_id = a.id AND e.created_at < ?
+				WHERE a.account_type = ?
+				GROUP BY a.currency
+				""", rs -> {
+			Currency currency = Currency.getInstance(rs.getString("currency"));
+			balances.put(currency.getCurrencyCode(), Money.of(rs.getBigDecimal("balance"), currency));
+		}, type.normalBalance().name(), utc(at), type.name());
+		return balances;
+	}
+
+	/** Credits minus debits on an account, for entries in {@code [from, to)} ({@code from} null: since the start). */
+	private BigDecimal signedSum(UUID accountId, Instant from, Instant to) {
+		return jdbc.queryForObject("""
+				SELECT coalesce(sum(CASE direction WHEN 'CREDIT' THEN amount ELSE -amount END), 0)
+				FROM ledger_entries WHERE account_id = ? AND created_at >= ? AND created_at < ?
+				""", BigDecimal.class, accountId, from == null ? OffsetDateTime.parse("1970-01-01T00:00:00Z") : utc(from), utc(to));
+	}
+
+	private static OffsetDateTime utc(Instant instant) {
+		return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
 	}
 
 	// ----------------------------------------------------------------------------- internal

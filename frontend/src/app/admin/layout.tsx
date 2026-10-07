@@ -22,6 +22,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
       show: can(Permission.FINANCE_VIEW) || can(Permission.RENTAL_RECORD) || can(Permission.RENTAL_APPROVE) },
     { href: "/admin/ledger", label: "Ledger", show: can(Permission.FINANCE_VIEW) },
     { href: "/admin/withdrawals", label: "Withdrawals", show: can(Permission.WITHDRAWAL_VIEW) },
+    { href: "/admin/reports", label: "Reports", show: can(Permission.REPORT_VIEW) || can(Permission.REPORT_GENERATE) },
     { href: "/admin/referrals", label: "Referrals",
       show: can(Permission.FINANCE_VIEW) || can(Permission.REFERRAL_CONFIG_MANAGE) },
   ].filter((item) => item.show);

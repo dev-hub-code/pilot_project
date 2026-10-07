@@ -25,7 +25,10 @@ export default async function AdminInvoicePage({ params }: PageProps<"/admin/ord
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <Link href={`/admin/orders/${id}`} className="font-mono text-sm text-muted hover:text-foreground">← {invoice.orderNumber}</Link>
-        <PrintButton />
+        <div className="flex items-center gap-3">
+          <a href={`/admin/orders/${id}/invoice/pdf`} className="text-sm text-gold-text hover:underline">Download PDF</a>
+          <PrintButton />
+        </div>
       </div>
       <InvoiceDocument invoice={invoice} />
     </div>

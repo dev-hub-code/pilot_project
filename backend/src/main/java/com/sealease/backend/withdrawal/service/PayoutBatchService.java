@@ -6,6 +6,7 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.bankaccount.dto.PayoutAccount;
 import com.sealease.backend.bankaccount.dto.PayoutInstruction;
 import com.sealease.backend.bankaccount.service.BankAccountService;
+import com.sealease.backend.common.csv.Csv;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
@@ -290,16 +291,8 @@ public class PayoutBatchService {
 		return value == null || value.isBlank() ? null : value.strip();
 	}
 
-	/**
-	 * A CSV field, quoted, with a leading formula character neutralised so the file is safe to open
-	 * in a spreadsheet (CSV injection).
-	 */
 	static String cell(String value) {
-		String v = value == null ? "" : value;
-		if (!v.isEmpty() && "=+-@\t\r".indexOf(v.charAt(0)) >= 0) {
-			v = "'" + v;
-		}
-		return "\"" + v.replace("\"", "\"\"") + "\"";
+		return Csv.cell(value);
 	}
 
 	/** A generated bank file. */
