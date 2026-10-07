@@ -169,6 +169,12 @@ public class WithdrawalService {
 		return WithdrawalResponse.forInvestor(withdrawal);
 	}
 
+	/** For support tickets: the reference of one of the user's own withdrawals. */
+	@Transactional(readOnly = true)
+	public Optional<String> ownedReference(UUID userId, UUID withdrawalId) {
+		return withdrawals.findById(withdrawalId).filter(w -> w.getUserId().equals(userId)).map(Withdrawal::getReference);
+	}
+
 	@Transactional(readOnly = true)
 	public Page<WithdrawalResponse> mine(UUID userId, Pageable pageable) {
 		return withdrawals.findByUserIdOrderByCreatedAtDesc(userId, pageable).map(WithdrawalResponse::forInvestor);

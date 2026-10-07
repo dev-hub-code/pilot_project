@@ -8,13 +8,14 @@ import { forwardedClientHeaders } from "@/lib/server/request-context";
 /** Refresh this long before expiry so bursts of requests rarely race on an expired token. */
 const REFRESH_AHEAD_MS = 60_000;
 
-const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/admin"];
+const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/admin"];
 const STAFF_PREFIXES = ["/admin"];
 const GUEST_ONLY = ["/login", "/register"];
 /** Route handlers that send their own, stricter CSP (sandboxed file downloads). */
 const OWN_CSP = [
   /^\/(?:admin\/kyc|admin\/containers|marketplace)\/[^/]+\/documents\/[^/]+$/,
   /^\/admin\/withdrawals\/batches\/[^/]+\/file$/,
+  /^\/(?:admin\/)?support\/[^/]+\/attachments\/[^/]+$/,
 ];
 
 /**

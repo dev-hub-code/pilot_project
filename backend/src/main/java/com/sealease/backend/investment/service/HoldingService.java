@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -44,6 +45,14 @@ public class HoldingService {
 	public PortfolioResponse portfolio(UUID userId) {
 		List<Holding> owned = holdings.findByUserIdOrderByConfirmedAtDesc(userId);
 		return summarise(owned);
+	}
+
+	/** For support tickets: a label for one of the user's own holdings, e.g. "CONT-10001 · 5000.00 USD". */
+	@Transactional(readOnly = true)
+	public Optional<String> ownedLabel(UUID userId, UUID holdingId) {
+		return holdings.findById(holdingId)
+			.filter(h -> h.getUserId().equals(userId))
+			.map(h -> offerings.terms(List.of(h.getProductId())).get(h.getProductId()).code() + " · " + h.amount().display());
 	}
 
 	@Transactional(readOnly = true)

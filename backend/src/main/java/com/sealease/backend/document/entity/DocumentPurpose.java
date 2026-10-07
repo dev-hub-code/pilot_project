@@ -10,7 +10,9 @@ public enum DocumentPurpose {
 	CONTAINER_SURVEY_REPORT,
 	LEASE_AGREEMENT,
 	INSURANCE_CERTIFICATE,
-	OFFERING_MEMORANDUM;
+	OFFERING_MEMORANDUM,
+
+	SUPPORT_ATTACHMENT;
 
 	public boolean isContainerDocument() {
 		return name().startsWith("CONTAINER_") || this == LEASE_AGREEMENT || this == INSURANCE_CERTIFICATE

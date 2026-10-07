@@ -11,6 +11,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     { href: "/admin", label: "Overview", show: true },
     { href: "/admin/users", label: "Users", show: can(Permission.USER_VIEW) },
     { href: "/admin/leads", label: "Leads", show: can(Permission.LEAD_VIEW) },
+    { href: "/admin/support", label: "Support", show: can(Permission.SUPPORT_TICKET_VIEW) },
     { href: "/admin/kyc", label: "KYC reviews", show: can(Permission.KYC_REVIEW) },
     { href: "/admin/bank-accounts", label: "Bank accounts", show: can(Permission.BANK_ACCOUNT_VERIFY) },
     { href: "/admin/containers", label: "Containers", show: can(Permission.INVESTMENT_VIEW) },

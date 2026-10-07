@@ -303,6 +303,12 @@ public class OrderService {
 			.orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 	}
 
+	/** For support tickets: the number of one of the user's own orders. */
+	@Transactional(readOnly = true)
+	public Optional<String> ownedOrderNumber(UUID userId, UUID orderId) {
+		return orders.findById(orderId).filter(o -> o.getUserId().equals(userId)).map(InvestmentOrder::getOrderNumber);
+	}
+
 	@Transactional(readOnly = true)
 	public Page<OrderResponse> search(OrderSearchCriteria criteria, Pageable pageable) {
 		return withItems(orders.findAll(matching(criteria), pageable));

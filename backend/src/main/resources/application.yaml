@@ -157,6 +157,9 @@ app:
   security:
     cors:
       allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+  support:
+    # First-response targets per priority; tickets past them without a staff reply are overdue.
+    response-targets: { low: 48h, normal: 24h, high: 8h, urgent: 2h }
   crm:
     # Public interest form: submissions accepted per client IP.
     public-form-per-ip: { requests: 5, window: 1h }

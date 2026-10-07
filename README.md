@@ -137,9 +137,17 @@ Modules (Phase 9):
 |--------|----------------------------------------------------------------------------------------|
 | `crm`  | Leads from staff and the public interest form, fixed pipeline, activity log, assignment, conversion to investors |
 
+Modules (Phase 10):
+
+| Module         | Responsibility                                                                 |
+|----------------|--------------------------------------------------------------------------------|
+| `helpdesk`     | Support tickets: conversation, internal notes, encrypted attachments, priority and first-response targets, assignment |
+| `notification` | In-app notification centre (unread count, mark read) and `notification.created` events |
+
 Dependency direction is one-way (`payment` → `order` → `cart`, `invoice`, `investment` → `container`;
 `earning` → `investment`, `ledger`; `referral` → `earning` (event), `ledger`, `user`; `auth` → `referral`;
 `withdrawal` → `ledger`, `bankaccount`, `user`; `crm` → `user`, `role`, `order` (event);
+`helpdesk` → `notification`, `document`, `order`, `withdrawal`, `investment`, `role`;
 `marketplace` → `investment`; `kyc`, `bankaccount`, `invoice` → `user` → `audit`/`common`). Where a lower
 module needs something from a higher one it declares an interface (`user.AuthorityGuard`, implemented
 by `role`) or publishes an event (`UserStatusChangedEvent`, consumed by `auth` to end sessions).
@@ -467,6 +475,34 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 | `PUT /…/leads/{id}`, `POST /…/{id}/stage`, `/activities`, `/claim` | `LEAD_UPDATE` | Edit, move, log, claim        |
 | `GET /…/leads/assignees`, `POST /…/{id}/assign`       | `LEAD_ASSIGN`  | Staff who can work leads; (re)assign           |
 
+### Support
+
+- **Tickets.** Investors open requests with a subject, a category and, optionally, a link to one of their *own* orders,
+  withdrawals or holdings (checked, and shown to agents as a link). Status: `OPEN ⇄ WAITING_ON_CUSTOMER → RESOLVED →
+  CLOSED`. A staff reply hands the ticket to the customer, and a customer reply puts it back in the queue, reopening a
+  resolved ticket. Closed is final.
+- **Agents.** `SUPPORT_TICKET_VIEW` reads the queue. `SUPPORT_TICKET_MANAGE` replies, adds **internal notes** (never
+  shown to the customer, nor their attachments), sets priority, assigns to another agent, and resolves or closes. Nobody
+  answers their own ticket.
+- **Response targets.** Each priority has a first-response target (`app.support.response-targets`, defaults: low 48h, normal 24h,
+  high 8h, urgent 2h). A ticket with no staff reply past its target is *overdue* and gets its own queue. Changing the
+  priority moves the target.
+- **Attachments.** Up to 3 per message, stored encrypted in the document store, which checks the real file type
+  (PDF/JPEG/PNG, 5 MB). Filenames are stripped of paths, and staff downloads are audited.
+- **Notifications.** Replies, status changes, assignments and customer replies (to the assignee) create in-app
+  notifications, in the same transaction, and publish `notification.created`, ready for an email/SMS sender that
+  honours profile preferences. The header bell shows the unread count.
+
+### Support API
+
+| Method & path                                                    | Access                  | Purpose                              |
+|------------------------------------------------------------------|-------------------------|--------------------------------------|
+| `GET·POST /api/v1/support/tickets` (multipart), `GET /{id}`      | `INVESTOR_PORTAL`       | Own tickets; open with files         |
+| `POST /…/tickets/{id}/messages` (multipart), `/{id}/close`, `GET /{id}/attachments/{aid}` | `INVESTOR_PORTAL` | Reply, close, download |
+| `GET /api/v1/admin/support/tickets` (`status`, `priority`, `assignee`, `overdue`, `q`), `/{id}`, `/{id}/attachments/{aid}` | `SUPPORT_TICKET_VIEW` | Queue, detail, audited downloads |
+| `POST /…/tickets/{id}/messages` (multipart, `internal`), `/status`, `/priority`, `/assign`; `GET /…/agents` | `SUPPORT_TICKET_MANAGE` | Handle tickets |
+| `GET /api/v1/notifications`, `/unread-count`; `POST /{id}/read`, `/read-all` | signed in       | Own notifications                    |
+
 ## Delivery phases
 
 1. ✅ Project setup & base architecture
@@ -478,4 +514,5 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rental income, downline tree
 8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
 9. ✅ Sales CRM — leads from staff and the website, pipeline, activity log, assignment, conversion to investors
-10. Support · 11. Reporting · 12. Production hardening
+10. ✅ Support — tickets, internal notes, attachments, response targets, in-app notifications
+11. Reporting · 12. Production hardening
