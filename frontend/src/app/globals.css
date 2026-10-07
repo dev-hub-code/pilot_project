@@ -33,6 +33,10 @@
   --on-gold: #17130b;        /* text on gold fills (~9:1) */
   --gold-text: #876521;      /* gold used as text on light surfaces (AA) */
   --focus: #c9a24c;
+  /* Chart series, in fixed order (validated for colour-vision deficiency on --surface). */
+  --chart-1: #a9832f;        /* gold: rent */
+  --chart-2: #2f6db5;        /* blue: capital returned */
+  --chart-3: #1f9a78;        /* green: referral commission */
   color-scheme: light;
 }
 
@@ -49,6 +53,9 @@
   --color-gold-hover: var(--gold-hover);
   --color-on-gold: var(--on-gold);
   --color-gold-text: var(--gold-text);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
   /* Legacy alias: "brand" now means the gold accent. */
   --color-brand: var(--gold-text);
   --font-sans: var(--font-body);
@@ -71,6 +78,9 @@
     --gold-hover: #e0bc69;
     --on-gold: #17130b;
     --gold-text: #d9b464;
+    --chart-1: #b58f3a;
+    --chart-2: #4683d0;
+    --chart-3: #22a07d;
     color-scheme: dark;
   }
 }
@@ -88,6 +98,9 @@
   --gold-hover: #e0bc69;
   --on-gold: #17130b;
   --gold-text: #d9b464;
+  --chart-1: #b58f3a;
+  --chart-2: #4683d0;
+  --chart-3: #22a07d;
   color-scheme: dark;
 }
 

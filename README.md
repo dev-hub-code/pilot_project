@@ -377,6 +377,7 @@ last installment paid ──▶ holding MATURED, container back to AVAILABLE
 | `GET /api/v1/admin/ledger/accounts[/{id}[/entries]]`, `/trial-balance` | `FINANCE_VIEW` | Balances, statements, trial balance |
 | `POST /api/v1/admin/ledger/adjustments` (`Idempotency-Key`) | `FINANCE_ADJUST` | Correct an investor's balance        |
 | `GET /api/v1/earnings?status`, `/earnings/summary`    | `INVESTOR_PORTAL`   | Own payouts (paid or scheduled), wallet, rent and capital received, next payout |
+| `GET /api/v1/earnings/monthly?from&to` (`yyyy-MM`, ≤ 36 months) | `INVESTOR_PORTAL` | Rent and capital per month by due date, paid and scheduled (dashboard chart) |
 
 ### Referrals
 

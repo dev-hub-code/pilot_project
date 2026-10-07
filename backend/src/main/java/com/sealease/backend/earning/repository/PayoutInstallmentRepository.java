@@ -35,6 +35,8 @@ public interface PayoutInstallmentRepository
 
 	List<PayoutInstallment> findByHoldingIdOrderByInstallmentNumber(UUID holdingId);
 
+	List<PayoutInstallment> findByUserIdAndDueOnBetweenOrderByDueOn(UUID userId, LocalDate from, LocalDate to);
+
 	/** Scheduled payouts due on or before the day, per currency: count and total. */
 	@Query("""
 			select p.currency, count(p), sum(p.rentAmount + p.capitalAmount) from PayoutInstallment p

@@ -94,3 +94,12 @@ export interface TrialBalanceLine {
   credits: Money;
   balanced: boolean;
 }
+
+/** Payouts falling due in one calendar month ("yyyy-MM"), paid and still scheduled. */
+export interface PayoutMonth {
+  month: string;
+  rentPaid: Money;
+  capitalPaid: Money;
+  rentScheduled: Money;
+  capitalScheduled: Money;
+}

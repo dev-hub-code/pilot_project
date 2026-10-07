@@ -1,21 +1,43 @@
 import type { Metadata } from "next";
 import { ContainerScene } from "@/components/brand/container-scene";
 import { Eyebrow } from "@/components/brand/eyebrow";
+import { ColumnChart, type ColumnSeries } from "@/components/charts/column-chart";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
+import { LeaseProgress } from "@/features/dashboard/lease-progress";
+import { monthColumns, monthKey } from "@/features/dashboard/months";
+import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
+import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import type { CurrentUser } from "@/types/auth";
-import type { EarningsSummary } from "@/types/earning";
+import type { EarningsSummary, PayoutMonth } from "@/types/earning";
 import type { Money } from "@/types/marketplace";
 import type { Portfolio } from "@/types/order";
+import type { ReferralMonth } from "@/types/referral";
 import type { Profile } from "@/types/user";
 import { formatDate, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+/** Months shown around the current one: the last five, this one, and the next six. */
+const PAST = -5;
+const AHEAD = 6;
+
+const PAYOUT_SERIES: readonly ColumnSeries[] = [
+  { key: "rentPaid", label: "Rent", fill: "fill-chart-1", swatch: "bg-chart-1" },
+  { key: "capitalPaid", label: "Capital returned", fill: "fill-chart-2", swatch: "bg-chart-2" },
+  { key: "rentScheduled", label: "Rent", fill: "fill-chart-1", swatch: "bg-chart-1", scheduled: true },
+  { key: "capitalScheduled", label: "Capital returned", fill: "fill-chart-2", swatch: "bg-chart-2", scheduled: true },
+];
+
+const REFERRAL_SERIES: readonly ColumnSeries[] = [
+  { key: "total", label: "Commission", fill: "fill-chart-3", swatch: "bg-chart-3" },
+];
 
 export default async function DashboardPage() {
   const [me, profile] = await Promise.all([
@@ -24,9 +46,15 @@ export default async function DashboardPage() {
   ]);
   const needsVerification = profile.kycStatus !== "APPROVED";
   const investor = hasPermission(me.permissions, Permission.INVESTOR_PORTAL);
-  const [portfolio, earnings] = investor
-    ? await Promise.all([authFetch<Portfolio>("/api/v1/portfolio"), authFetch<EarningsSummary>("/api/v1/earnings/summary")])
-    : [null, null];
+  const [portfolio, earnings, payoutMonths, referralMonths] = investor
+    ? await Promise.all([
+      authFetch<Portfolio>("/api/v1/portfolio"),
+      authFetch<EarningsSummary>("/api/v1/earnings/summary"),
+      // The charts are a convenience: a failure there must not break the dashboard.
+      authFetch<PayoutMonth[]>(`/api/v1/earnings/monthly?from=${monthKey(PAST)}&to=${monthKey(AHEAD)}`).catch(() => null),
+      authFetch<ReferralMonth[]>("/api/v1/referrals/monthly").catch(() => null),
+    ])
+    : [null, null, null, null];
   const list = (amounts: Money[] | undefined) => (amounts && amounts.length > 0
     ? amounts.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—");
@@ -76,6 +104,52 @@ export default async function DashboardPage() {
         ))}
       </section>
 
+      {earnings && (
+        <>
+          <section className="grid gap-6 lg:grid-cols-3" aria-label="Payouts">
+            <Card title="Monthly payouts" description="Rent plus capital back, by due date" className="lg:col-span-2">
+              {payoutMonths === null ? (
+                <EmptyState title="The chart could not be loaded" description="Your payouts are listed on the Earnings page." />
+              ) : payoutMonths.length === 0 && earnings.holdings.length === 0 ? (
+                <EmptyState title="No payouts yet" description="Buy a container and its monthly payouts appear here." />
+              ) : (
+                <ColumnChart series={PAYOUT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Monthly payouts"
+                  data={monthColumns(payoutMonths, PAST, AHEAD, CURRENCY, (m) => ({
+                    rentPaid: m.rentPaid, capitalPaid: m.capitalPaid,
+                    rentScheduled: m.rentScheduled, capitalScheduled: m.capitalScheduled,
+                  }))} />
+              )}
+            </Card>
+            <Card title="Your returns" description="Everything paid into your wallet">
+              <ReturnsBreakdown currency={CURRENCY} parts={[
+                { label: "Rent", amount: sum(earnings.rentPaid), fill: "fill-chart-1", swatch: "bg-chart-1" },
+                { label: "Capital returned", amount: sum(earnings.capitalReturned), fill: "fill-chart-2", swatch: "bg-chart-2" },
+                { label: "Referral commission", amount: sum(earnings.referralEarned), fill: "fill-chart-3", swatch: "bg-chart-3" },
+              ]} />
+            </Card>
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-2" aria-label="Leases and referrals">
+            <Card title="Lease progress" description="Months paid out of each container's tenure"
+              actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
+              {earnings.holdings.some((h) => h.paid < h.installments)
+                ? <LeaseProgress holdings={earnings.holdings} />
+                : <EmptyState title="No active leases" description="Containers you own appear here with their payout progress." />}
+            </Card>
+            <Card title="Referral commission" description="Earned from your network, last six months"
+              actions={<LinkButton href="/referrals" variant="secondary">Referrals</LinkButton>}>
+              {referralMonths && referralMonths.length > 0 ? (
+                <ColumnChart series={REFERRAL_SERIES} currency={CURRENCY} label="Referral commission by month"
+                  data={monthColumns(referralMonths, PAST, 0, CURRENCY, (m) => ({ total: m.total }))} />
+              ) : (
+                <EmptyState title="No commission yet"
+                  description="Share your referral link: you earn a share of what the people you invite invest, every month." />
+              )}
+            </Card>
+          </section>
+        </>
+      )}
+
       <Card title="Account">
         <dl className="grid gap-6 text-sm sm:grid-cols-4">
           <Item label="Account status">
@@ -89,6 +163,11 @@ export default async function DashboardPage() {
       </Card>
     </div>
   );
+}
+
+/** The platform-currency amount of a list of per-currency totals. */
+function sum(amounts: readonly Money[]): number {
+  return amounts.filter((m) => m.currency === CURRENCY).reduce((total, m) => total + Number(m.amount), 0);
 }
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {

@@ -3,10 +3,13 @@ package com.sealease.backend.earning.service;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
+import com.sealease.backend.common.exception.BusinessException;
+import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.earning.dto.DuePayouts;
 import com.sealease.backend.earning.dto.EarningsSummary;
+import com.sealease.backend.earning.dto.PayoutMonth;
 import com.sealease.backend.earning.dto.PayoutResponse;
 import com.sealease.backend.earning.dto.PayoutSearchCriteria;
 import com.sealease.backend.earning.entity.PayoutInstallment;
@@ -41,8 +44,10 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Currency;
 import java.util.LinkedHashMap;
@@ -64,6 +69,8 @@ public class PayoutService {
 
 	private static final String ENTITY = "PAYOUT";
 	private static final int BATCH_SIZE = 200;
+	/** The longest range {@link #monthly} answers: three years. */
+	static final int MAX_MONTHS = 36;
 
 	private final PayoutInstallmentRepository installments;
 	private final HoldingService holdings;
@@ -218,6 +225,37 @@ public class PayoutService {
 	}
 
 	/** The investor's payouts, paid and scheduled. */
+	/**
+	 * The investor's payouts per calendar month from {@code from} to {@code to} (both included), by due date,
+	 * oldest first; months without payouts are left out.
+	 */
+	@Transactional(readOnly = true)
+	public List<PayoutMonth> monthly(UUID userId, YearMonth from, YearMonth to) {
+		if (to.isBefore(from) || from.plusMonths(MAX_MONTHS - 1).isBefore(to)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"Choose a range of 1 to " + MAX_MONTHS + " months, ending after it starts");
+		}
+		// month|currency -> rent paid, capital paid, rent scheduled, capital scheduled
+		Map<String, Money[]> byMonth = new TreeMap<>();
+		for (PayoutInstallment p : installments.findByUserIdAndDueOnBetweenOrderByDueOn(userId, from.atDay(1),
+				to.atEndOfMonth())) {
+			Currency currency = p.total().currency();
+			Money[] sums = byMonth.computeIfAbsent(YearMonth.from(p.getDueOn()) + "|" + currency.getCurrencyCode(), k -> {
+				Money[] zeros = new Money[4];
+				Arrays.fill(zeros, Money.zero(currency));
+				return zeros;
+			});
+			int offset = p.getStatus() == PayoutStatus.PAID ? 0 : 2;
+			sums[offset] = sums[offset].plus(p.rent());
+			sums[offset + 1] = sums[offset + 1].plus(p.capital());
+		}
+		List<PayoutMonth> months = new ArrayList<>();
+		byMonth.forEach((key, sums) -> months.add(new PayoutMonth(key.substring(0, key.indexOf('|')),
+				MoneyResponse.from(sums[0]), MoneyResponse.from(sums[1]), MoneyResponse.from(sums[2]),
+				MoneyResponse.from(sums[3]))));
+		return months;
+	}
+
 	@Transactional(readOnly = true)
 	public Page<PayoutResponse> mine(UUID userId, PayoutStatus status, Pageable pageable) {
 		return search(new PayoutSearchCriteria(status, userId, null, null), pageable, false);

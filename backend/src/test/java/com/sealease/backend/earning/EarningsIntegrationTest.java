@@ -16,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -94,6 +96,25 @@ class EarningsIntegrationTest {
 			.andExpect(jsonPath("$.content[0].capital.amount").value("3125.00"))
 			.andExpect(jsonPath("$.content[0].total.amount").value("4125.00"))
 			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty());
+		// Per month: the three paid installments, then the next one still scheduled.
+		YearMonth now = YearMonth.now(ZoneOffset.UTC);
+		mvc.perform(get("/api/v1/earnings/monthly").param("from", now.minusMonths(5).toString())
+				.param("to", now.plusMonths(1).toString()).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(4))
+			.andExpect(jsonPath("$[0].month").value(now.minusMonths(2).toString()))
+			.andExpect(jsonPath("$[0].rentPaid.amount").value("1000.00"))
+			.andExpect(jsonPath("$[0].capitalPaid.amount").value("3125.00"))
+			.andExpect(jsonPath("$[0].rentScheduled.amount").value("0.00"))
+			.andExpect(jsonPath("$[2].month").value(now.toString()))
+			.andExpect(jsonPath("$[2].rentPaid.amount").value("1000.00"))
+			.andExpect(jsonPath("$[3].month").value(now.plusMonths(1).toString()))
+			.andExpect(jsonPath("$[3].rentPaid.amount").value("0.00"))
+			.andExpect(jsonPath("$[3].rentScheduled.amount").value("1000.00"))
+			.andExpect(jsonPath("$[3].capitalScheduled.amount").value("3125.00"));
+		mvc.perform(get("/api/v1/earnings/monthly").param("from", now.toString()).param("to", now.minusMonths(1).toString())
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isBadRequest());
 
 		// Each payout is one balanced ledger transaction: rent and capital are platform expenses.
 		UUID first = jdbc.queryForObject("SELECT id FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
