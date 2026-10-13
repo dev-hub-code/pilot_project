@@ -5,14 +5,17 @@ import com.sealease.backend.earning.entity.PayoutInstallment;
 import com.sealease.backend.earning.entity.PayoutStatus;
 import com.sealease.backend.investment.dto.HoldingLabel;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * One monthly payout of one container: rent plus capital returned.
+ * One monthly payout of one container: rent plus capital returned, for the days from
+ * {@code periodStart} to {@code periodEnd}.
  *
- * @param userId shown to staff only
+ * @param userId     shown to staff only
+ * @param monthShare the period as a share of a month: less than 1 for a part month
  */
 public record PayoutResponse(
 		UUID id,
@@ -24,6 +27,9 @@ public record PayoutResponse(
 		String containerNumber,
 		int installmentNumber,
 		int installmentCount,
+		LocalDate periodStart,
+		LocalDate periodEnd,
+		BigDecimal monthShare,
 		LocalDate dueOn,
 		MoneyResponse rent,
 		MoneyResponse capital,
@@ -34,7 +40,7 @@ public record PayoutResponse(
 	public static PayoutResponse from(PayoutInstallment p, HoldingLabel label, boolean staff) {
 		return new PayoutResponse(p.getId(), p.getHoldingId(), staff ? p.getUserId() : null, p.getProductId(),
 				label.productCode(), label.productTitle(), label.containerNumber(), p.getInstallmentNumber(),
-				label.tenureMonths(), p.getDueOn(), MoneyResponse.from(p.rent()), MoneyResponse.from(p.capital()),
+				p.getInstallmentCount(), p.getPeriodStart(), p.getPeriodEnd(), p.getMonthShare(), p.getDueOn(), MoneyResponse.from(p.rent()), MoneyResponse.from(p.capital()),
 				MoneyResponse.from(p.total()), p.getStatus(), p.getPaidAt());
 	}
 

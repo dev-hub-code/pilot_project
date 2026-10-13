@@ -27,6 +27,8 @@ export interface Ticket {
   createdAt: string;
   resolvedAt: string | null;
   closedAt: string | null;
+  /** Set only while a resolved or closed ticket can still be reopened by its customer. */
+  reopenableUntil: string | null;
 }
 
 export interface TicketAttachment {
@@ -46,9 +48,26 @@ export interface TicketMessage {
   attachments: TicketAttachment[];
 }
 
+export type TicketEventType = "OPENED" | "STATUS_CHANGED" | "REOPENED" | "ASSIGNED" | "UNASSIGNED" | "PRIORITY_CHANGED";
+
+/** One update in a ticket's history; customers never receive priority changes or unassignments. */
+export interface TicketEvent {
+  id: string;
+  type: TicketEventType;
+  /** Previous and new status or priority, when the event changed one. */
+  fromValue: string | null;
+  toValue: string | null;
+  byStaff: boolean;
+  actorName: string | null;
+  /** For assignments: the agent now handling the ticket. */
+  agentName: string | null;
+  createdAt: string;
+}
+
 export interface TicketDetail {
   ticket: Ticket;
   messages: TicketMessage[];
+  events: TicketEvent[];
 }
 
 export interface Agent {

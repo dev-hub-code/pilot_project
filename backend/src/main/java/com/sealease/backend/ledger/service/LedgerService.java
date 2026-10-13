@@ -13,6 +13,7 @@ import com.sealease.backend.ledger.dto.AdjustmentRequest;
 import com.sealease.backend.ledger.dto.InvestorStatement;
 import com.sealease.backend.ledger.dto.LedgerAccountResponse;
 import com.sealease.backend.ledger.dto.LedgerEntryResponse;
+import com.sealease.backend.ledger.dto.MonthlyTotal;
 import com.sealease.backend.ledger.dto.PeriodTotal;
 import com.sealease.backend.ledger.dto.TrialBalanceLine;
 import org.springframework.data.domain.Page;
@@ -30,10 +31,13 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Currency;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -148,8 +152,9 @@ public class LedgerService {
 					"Amounts in " + currency.getCurrencyCode() + " allow at most " + digits + " decimals");
 		}
 		Money amount = Money.of(request.amount(), currency);
-		Money balance = lockInvestorBalance(request.userId(), currency);
-		UUID accountId = accountId(AccountType.INVESTOR_EARNINGS, request.userId(), currency,
+		EarningsBalance target = request.balance() == null ? EarningsBalance.RENT_BANK : request.balance();
+		Money balance = lockInvestorBalance(request.userId(), currency, target);
+		UUID accountId = accountId(target.account(), request.userId(), currency,
 				OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
 
 		Optional<UUID> replay = transactionId(TransactionType.ADJUSTMENT, request.userId() + ":" + key);
@@ -164,11 +169,11 @@ public class LedgerService {
 		Direction platformSide = investorSide == Direction.CREDIT ? Direction.DEBIT : Direction.CREDIT;
 		String reason = request.reason().strip();
 		UUID transactionId = post(TransactionType.ADJUSTMENT, request.userId() + ":" + key, "Adjustment: " + reason,
-				actorId, List.of(new Posting(AccountType.INVESTOR_EARNINGS, request.userId(), investorSide, amount),
+				actorId, List.of(new Posting(target.account(), request.userId(), investorSide, amount),
 						new Posting(AccountType.PLATFORM_ADJUSTMENTS, null, platformSide, amount)));
 		audit.record(AuditRecord.of(actorId, AuditAction.LEDGER_ADJUSTMENT_POSTED, ENTITY, transactionId)
 			.withNewValue(Map.of("userId", request.userId().toString(), "direction", investorSide,
-					"amount", amount.toString(), "reason", reason)));
+					"amount", amount.toString(), "balance", target, "reason", reason)));
 		return account(accountId);
 	}
 
@@ -178,14 +183,35 @@ public class LedgerService {
 	 * of them can never both spend the same balance.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public Money lockInvestorBalance(UUID userId, Currency currency) {
-		UUID accountId = accountId(AccountType.INVESTOR_EARNINGS, userId, currency,
+	public Money lockInvestorBalance(UUID userId, Currency currency, EarningsBalance which) {
+		UUID accountId = accountId(which.account(), userId, currency,
 				OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
 		jdbc.queryForObject("SELECT id FROM ledger_accounts WHERE id = ? FOR UPDATE", UUID.class, accountId);
 		return Money.of(balanceOf(accountId), currency);
 	}
 
 	// ------------------------------------------------------------------------------ queries
+
+	/** An investor's balance, unlocked (zero when the account has never been opened); for display only. */
+	@Transactional(readOnly = true)
+	public Money investorBalance(UUID userId, Currency currency, EarningsBalance which) {
+		List<UUID> ids = jdbc.queryForList(
+				"SELECT id FROM ledger_accounts WHERE account_type = ? AND owner_user_id = ? AND currency = ?", UUID.class,
+				which.account().name(), userId, currency.getCurrencyCode());
+		return ids.isEmpty() ? Money.zero(currency) : Money.of(balanceOf(ids.getFirst()), currency);
+	}
+
+	/**
+	 * Investors whose {@code balance} in {@code currency} is at least {@code minimum}, in a stable order.
+	 * Unlocked: re-read each balance with {@link #lockInvestorBalance} before spending it.
+	 */
+	@Transactional(readOnly = true)
+	public List<UUID> investorsWithBalanceAtLeast(EarningsBalance balance, Currency currency, BigDecimal minimum) {
+		return jdbc.queryForList("SELECT owner_user_id FROM (" + ACCOUNTS + """
+				 WHERE a.account_type = ? AND a.currency = ?) b
+				WHERE b.balance >= ? ORDER BY owner_user_id
+				""", UUID.class, balance.account().name(), currency.getCurrencyCode(), minimum);
+	}
 
 	/** An investor's earnings balances, one per currency. */
 	@Transactional(readOnly = true)
@@ -309,6 +335,47 @@ public class LedgerService {
 						Money.of(rs.getBigDecimal("total"), currency)));
 		}, utc(from), utc(to));
 		return byCurrency;
+	}
+
+	/**
+	 * Net movement of each of {@code types} in one currency per calendar month (UTC) over {@code [from, to)},
+	 * reported positive on the type's normal side. Months and types with no entries are left out.
+	 */
+	@Transactional(readOnly = true)
+	public List<MonthlyTotal> monthlyTotals(Collection<AccountType> types, Currency currency, Instant from, Instant to) {
+		if (types.isEmpty()) {
+			return List.of();
+		}
+		Map<YearMonth, Map<AccountType, BigDecimal>> net = new TreeMap<>();
+		List<Object> args = new ArrayList<>(List.of(currency.getCurrencyCode(), utc(from), utc(to)));
+		types.forEach(t -> args.add(t.name()));
+		jdbc.query("""
+				SELECT to_char(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM') AS month, a.account_type, e.direction,
+				       sum(e.amount) AS total
+				FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+				WHERE a.currency = ? AND e.created_at >= ? AND e.created_at < ? AND a.account_type IN (%s)
+				GROUP BY 1, a.account_type, e.direction
+				""".formatted(String.join(", ", types.stream().map(t -> "?").toList())), rs -> {
+			AccountType type = AccountType.valueOf(rs.getString("account_type"));
+			BigDecimal total = rs.getBigDecimal("total");
+			BigDecimal signed = Direction.valueOf(rs.getString("direction")) == type.normalBalance() ? total : total.negate();
+			net.computeIfAbsent(YearMonth.parse(rs.getString("month")), m -> new EnumMap<>(AccountType.class))
+				.merge(type, signed, BigDecimal::add);
+		}, args.toArray());
+		List<MonthlyTotal> out = new ArrayList<>();
+		net.forEach((month, byType) -> byType.forEach((type, amount) ->
+				out.add(new MonthlyTotal(month, type, Money.of(amount, currency)))));
+		return out;
+	}
+
+	/** Everything owed to investors (all their earnings balances), as of {@code at}, per currency. */
+	@Transactional(readOnly = true)
+	public Map<String, Money> investorBalancesAt(Instant at) {
+		Map<String, Money> total = new TreeMap<>();
+		for (AccountType type : EarningsBalance.ACCOUNT_TYPES) {
+			balancesAt(type, at).forEach((currency, m) -> total.merge(currency, m, Money::plus));
+		}
+		return total;
 	}
 
 	/** Balances of one account type, summed over all its accounts, as of {@code at}, per currency. */

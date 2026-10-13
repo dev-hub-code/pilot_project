@@ -12,15 +12,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
- * Inventory for the order and investment modules: containers are reserved for an order at
- * checkout, leased to the investor once it is paid, and returned to inventory when the order lapses
- * or the lease ends. All calls run in the caller's transaction.
+ * Containers for the order and investment modules. Finance types the number of the container it assigns to each paid
+ * investment, which records and leases it; it becomes available again when the lease ends. (Orders placed before
+ * manual assignment reserved containers at checkout; those are still leased on payment or released when the order
+ * lapses.) All changes run in the caller's transaction.
  */
 @Service
 public class ContainerAllocationService {
@@ -68,6 +67,41 @@ public class ContainerAllocationService {
 		return ContainerSummary.from(container);
 	}
 
+	/**
+	 * Leases the container finance typed in to a paid investment. A number seen before (a container whose earlier lease
+	 * has ended) is reused if it is free and of the right type; a new number is recorded.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public ContainerSummary assign(String containerNumber, ContainerType type, String currentLocation, UUID actorId) {
+		// Any format is accepted; spacing, dashes and case are tidied so one container is recorded once.
+		String number = ContainerNumbers.normalize(containerNumber);
+		if (number == null || number.isBlank()) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Enter the container number");
+		}
+		String location = currentLocation == null || currentLocation.isBlank() ? null : currentLocation.strip();
+		Container container = containers.findByContainerNumberForUpdate(number).orElse(null);
+		if (container == null) {
+			container = new Container(number, type, actorId);
+			container.locatedAt(location);
+			containers.saveAndFlush(container);
+		}
+		else {
+			if (container.getContainerType() != type) {
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Container " + number + " is a "
+						+ container.getContainerType().label() + "; this investment needs a " + type.label());
+			}
+			if (container.getStatus() != ContainerStatus.AVAILABLE) {
+				throw new BusinessException(ErrorCode.CONFLICT, "Container " + number + " is already leased to an investor");
+			}
+			if (location != null) {
+				container.locatedAt(location);
+			}
+		}
+		container.assign();
+		containers.flush();
+		return ContainerSummary.from(container);
+	}
+
 	/** The lease has run its tenure: the container goes back to inventory. */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void endLease(UUID containerId) {
@@ -76,20 +110,6 @@ public class ContainerAllocationService {
 			container.endLease();
 			containers.flush();
 		}
-	}
-
-	@Transactional(readOnly = true)
-	public long available(ContainerType type) {
-		return containers.countByContainerTypeAndStatus(type, ContainerStatus.AVAILABLE);
-	}
-
-	@Transactional(readOnly = true)
-	public Map<ContainerType, Long> availableByType() {
-		Map<ContainerType, Long> counts = new EnumMap<>(ContainerType.class);
-		for (Object[] row : containers.countByTypeWithStatus(ContainerStatus.AVAILABLE)) {
-			counts.put((ContainerType) row[0], (Long) row[1]);
-		}
-		return counts;
 	}
 
 	private Container lock(UUID containerId) {

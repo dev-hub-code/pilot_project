@@ -58,7 +58,7 @@ class ReportIntegrationTest {
 	@Test
 	void anInvestorsStatementMatchesTheirLedger() throws Exception {
 		Account investor = investors.approvedInvestor();
-		credit(investor, "INR", "500");
+		credit(investor, "INR", "500", "RENT_BANK");
 
 		String today = today().toString();
 		statement(investor, today, today, null).andExpect(status().isOk())
@@ -97,9 +97,11 @@ class ReportIntegrationTest {
 		// Other tests post in the same currency on the same day, so compare totals before and after.
 		java.math.BigDecimal adjustmentsBefore = summaryFigure(today, "Adjustments to investors");
 		java.math.BigDecimal owedBefore = summaryFigure(today, "Owed to investors");
-		credit(investor, "INR", "250");
-		assertThat(summaryFigure(today, "Adjustments to investors").subtract(adjustmentsBefore)).isEqualByComparingTo("250");
-		assertThat(summaryFigure(today, "Owed to investors").subtract(owedBefore)).isEqualByComparingTo("250");
+		credit(investor, "INR", "250", "RENT_BANK");
+		credit(investor, "INR", "100", "REFERRAL");
+		credit(investor, "INR", "50", "RENT_CASH");
+		assertThat(summaryFigure(today, "Adjustments to investors").subtract(adjustmentsBefore)).isEqualByComparingTo("400");
+		assertThat(summaryFigure(today, "Owed to investors").subtract(owedBefore)).isEqualByComparingTo("400");
 
 		Account viewer = api.staff("REPORT_VIEWER");
 		mvc.perform(get("/api/v1/admin/reports/offerings").param("format", "pdf").header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
@@ -128,7 +130,7 @@ class ReportIntegrationTest {
 	@Test
 	void investorsDownloadTheirOwnInvoicesAsPdf() throws Exception {
 		Account investor = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, admin).plan(1);
+		UUID product = new OfferingFixtures(mvc, admin).plan();
 		String orderId = investors.invest(investor, product, 1);
 
 		byte[] pdf = mvc.perform(get("/api/v1/reports/invoices/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
@@ -159,6 +161,23 @@ class ReportIntegrationTest {
 		assertThat(sales).containsExactly("capital", "leads");
 	}
 
+	@Test
+	void theDashboardChartsShowOnlyWhatTheViewerMaySee() throws Exception {
+		String all = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		assertThat((Object) JsonPath.read(all, "$.payouts")).isNotNull();
+		assertThat((Object) JsonPath.read(all, "$.investors")).isNotNull();
+		List<String> stages = JsonPath.read(all, "$.pipeline[*].stage");
+		assertThat(stages).containsExactly("NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "WON", "LOST");
+
+		String sales = mvc.perform(get("/api/v1/admin/dashboard/charts")
+				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString();
+		assertThat((Object) JsonPath.read(sales, "$.payouts")).isNull();
+		assertThat((Object) JsonPath.read(sales, "$.investors")).isNull();
+		assertThat((Object) JsonPath.read(sales, "$.invested")).isNotNull();
+		assertThat((Object) JsonPath.read(sales, "$.pipeline")).isNotNull();
+	}
+
 	// ----------------------------------------------------------------------------- helpers
 
 	/** One INR figure of today's financial summary, e.g. "₹1,23,450.00" → 123450.00. */
@@ -173,11 +192,11 @@ class ReportIntegrationTest {
 				: java.math.BigDecimal.ZERO;
 	}
 
-	private ResultActions credit(Account investor, String currency, String amount) throws Exception {
+	private ResultActions credit(Account investor, String currency, String amount, String balance) throws Exception {
 		return mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
-						{"userId":"%s","currency":"%s","direction":"CREDIT","amount":"%s","reason":"Report test"}
-						""".formatted(investor.id(), currency, amount)))
+						{"userId":"%s","currency":"%s","direction":"CREDIT","amount":"%s","reason":"Report test","balance":"%s"}
+						""".formatted(investor.id(), currency, amount, balance)))
 			.andExpect(status().isCreated());
 	}
 

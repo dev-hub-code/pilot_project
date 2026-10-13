@@ -13,7 +13,9 @@ const id = (value: string) => encodeURIComponent(value);
 // ---------------------------------------------------------------------------------- cart
 
 export async function setCartItemAction(productId: string, then: "cart" | "stay", _p: FormState, formData: FormData): Promise<FormState> {
-  const input = { quantity: String(formData.get("quantity") ?? "") };
+  const years = formData.get("tenureYears");
+  const input: Record<string, string> = { quantity: String(formData.get("quantity") ?? "") };
+  if (typeof years === "string" && years) input.tenureYears = years;
   const parsed = cartItemSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
@@ -23,7 +25,7 @@ export async function setCartItemAction(productId: string, then: "cart" | "stay"
   }
   revalidatePath("/cart");
   if (then === "cart") redirect("/cart");
-  return { success: "Containers updated." };
+  return { success: "Cart updated." };
 }
 
 export async function removeCartItemAction(productId: string): Promise<void> {

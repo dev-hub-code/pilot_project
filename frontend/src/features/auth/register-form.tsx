@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
-import { type FormState, PASSWORD_MIN } from "@/validators/auth";
+import { type FormState, PASSWORD_MAX, PASSWORD_MIN, PASSWORD_RULES } from "@/validators/auth";
 import { registerAction } from "./actions";
 
 export function RegisterForm({ referralCode }: { referralCode?: string }) {
@@ -43,11 +43,23 @@ export function RegisterForm({ referralCode }: { referralCode?: string }) {
         error={errors.email}
       />
       <TextField
+        label="Mobile number"
+        name="phone"
+        type="tel"
+        autoComplete="tel"
+        inputMode="tel"
+        placeholder="98765 43210"
+        required
+        defaultValue={state.values?.phone}
+        error={errors.phone}
+      />
+      <TextField
         label="Password"
         name="password"
         type="password"
         autoComplete="new-password"
         minLength={PASSWORD_MIN}
+        maxLength={PASSWORD_MAX}
         required
         error={errors.password}
       />
@@ -60,7 +72,7 @@ export function RegisterForm({ referralCode }: { referralCode?: string }) {
         error={errors.confirmPassword}
       />
       <p className="text-xs text-muted">
-        At least {PASSWORD_MIN} characters. A memorable passphrase works well.
+        Use {PASSWORD_RULES}.
       </p>
       <TextField
         label="Referral code (optional)"

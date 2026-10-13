@@ -46,7 +46,8 @@ public class CartService {
 		List<CartItem> lines = items.findByUserIdOrderByCreatedAt(userId);
 		Map<UUID, OfferingTerms> terms = offerings.terms(lines.stream().map(CartItem::getProductId).toList());
 		List<CartLineResponse> responses = new ArrayList<>();
-		Money total = null;
+		Money subtotal = null;
+		Money gst = null;
 		boolean ready = !lines.isEmpty();
 		for (CartItem line : lines) {
 			OfferingTerms plan = terms.get(line.getProductId());
@@ -54,24 +55,34 @@ public class CartService {
 			ready &= response.problems().isEmpty();
 			if (plan != null) {
 				Money amount = amount(plan, line.getQuantity());
-				total = total == null ? amount : total.plus(amount);
+				Money lineGst = plan.terms().gstPerContainer().times(BigDecimal.valueOf(line.getQuantity()));
+				subtotal = subtotal == null ? amount : subtotal.plus(amount);
+				gst = gst == null ? lineGst : gst.plus(lineGst);
 			}
 			responses.add(response);
 		}
-		return new CartResponse(responses, total == null ? null : MoneyResponse.from(total), ready);
+		return subtotal == null ? new CartResponse(responses, null, null, null, ready)
+				: new CartResponse(responses, MoneyResponse.from(subtotal), MoneyResponse.from(gst),
+						MoneyResponse.from(subtotal.plus(gst)), ready);
 	}
 
-	/** Adds the plan to the cart, or changes how many containers if it is already there. */
+	/**
+	 * Adds the plan to the cart, or changes how many containers and the lease if it is already there.
+	 *
+	 * @param tenureYears the lease in whole years; {@code null} keeps the line's lease, or takes the plan's shortest
+	 */
 	@Transactional
-	public CartResponse setItem(UUID userId, UUID productId, int quantity) {
+	public CartResponse setItem(UUID userId, UUID productId, int quantity, Integer tenureYears) {
 		OfferingTerms plan = offerings.terms(productId);
-		List<String> problems = offerings.problems(userId, productId, quantity);
+		CartItem existing = items.findByUserIdAndProductId(userId, productId).orElse(null);
+		int years = tenureYears != null ? tenureYears
+				: existing != null ? existing.getTenureYears() : plan.terms().minTenureYears();
+		List<String> problems = offerings.problems(userId, productId, quantity, years);
 		if (!problems.isEmpty()) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, String.join("; ", problems));
 		}
-		CartItem existing = items.findByUserIdAndProductId(userId, productId).orElse(null);
 		if (existing != null) {
-			existing.changeQuantity(quantity);
+			existing.change(quantity, years);
 		}
 		else {
 			List<CartItem> current = items.findByUserIdOrderByCreatedAt(userId);
@@ -83,7 +94,7 @@ public class CartService {
 				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 						"Your cart holds plans in another currency; check those out first");
 			}
-			items.save(new CartItem(userId, productId, quantity));
+			items.save(new CartItem(userId, productId, quantity, years));
 		}
 		items.flush();
 		return view(userId);
@@ -102,7 +113,7 @@ public class CartService {
 	@Transactional(propagation = Propagation.MANDATORY)
 	public List<CartLine> lockForCheckout(UUID userId) {
 		return items.findByUserIdForUpdate(userId).stream()
-			.map(i -> new CartLine(i.getProductId(), i.getQuantity()))
+			.map(i -> new CartLine(i.getProductId(), i.getQuantity(), i.getTenureYears()))
 			.toList();
 	}
 
@@ -115,16 +126,20 @@ public class CartService {
 	private CartLineResponse describe(UUID userId, CartItem line, OfferingTerms plan) {
 		if (plan == null || !plan.status().isListed()) {
 			return new CartLineResponse(line.getProductId(), null, "Unavailable plan", null, null, line.getQuantity(),
-					null, null, BigDecimal.ZERO, BigDecimal.ZERO, null, 0, null,
+					null, null, BigDecimal.ZERO, null, null, BigDecimal.ZERO, BigDecimal.ZERO, null, line.getTenureYears(), 0, 0,
+					null,
 					List.of("This plan is no longer available; remove it"));
 		}
 		ProductTerms t = plan.terms();
 		BigDecimal containers = BigDecimal.valueOf(line.getQuantity());
 		return new CartLineResponse(plan.id(), plan.code(), t.title(), t.containerType(), plan.status(),
 				line.getQuantity(), MoneyResponse.from(t.pricePerContainer()), MoneyResponse.from(amount(plan, line.getQuantity())),
+				t.gstRatePercent(), MoneyResponse.from(t.gstPerContainer().times(containers)),
+				MoneyResponse.from(t.pricePerContainerWithGst().times(containers)),
 				t.monthlyRentPercent(), t.monthlyCapitalReturnPercent(), MoneyResponse.from(t.monthlyPayout().times(containers)),
-				t.tenureMonths(), MoneyResponse.from(t.totalPayout().times(containers)),
-				offerings.problems(userId, plan.id(), line.getQuantity()));
+				line.getTenureYears(), t.minTenureYears(), t.maxTenureYears(),
+				MoneyResponse.from(t.totalPayout(line.getTenureYears()).times(containers)),
+				offerings.problems(userId, plan.id(), line.getQuantity(), line.getTenureYears()));
 	}
 
 	private static Money amount(OfferingTerms plan, int quantity) {

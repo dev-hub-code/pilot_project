@@ -3,6 +3,7 @@ package com.sealease.backend.auth.controller;
 import com.sealease.backend.auth.dto.AuthTokensResponse;
 import com.sealease.backend.auth.dto.CurrentUserResponse;
 import com.sealease.backend.auth.service.AuthService;
+import com.sealease.backend.auth.service.PasswordResetService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.ratelimit.RateLimitExceededException;
@@ -45,12 +46,15 @@ class AuthControllerTest {
 	@MockitoBean
 	private AuthService authService;
 
+	@MockitoBean
+	private PasswordResetService passwordResetService;
+
 	@Test
 	void registrationIsPublicAndReturnsTokens() throws Exception {
 		when(authService.register(any(), any())).thenReturn(tokens());
 
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"alice@example.com","password":"correct horse battery","firstName":"Alice","lastName":"Lee"}
+				{"email":"alice@example.com","password":"Correct-Horse-9","firstName":"Alice","lastName":"Lee","phone":"98765 43210"}
 				"""))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.tokenType").value("Bearer"))
@@ -65,7 +69,8 @@ class AuthControllerTest {
 				"""))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-			.andExpect(jsonPath("$.fieldErrors.length()").value(3));
+			.andExpect(jsonPath("$.fieldErrors.length()").value(4))
+			.andExpect(jsonPath("$.fieldErrors[?(@.field == 'phone')].message").value(org.hamcrest.Matchers.hasItem("Enter your mobile number")));
 		verifyNoInteractions(authService);
 	}
 

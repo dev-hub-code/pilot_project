@@ -12,8 +12,10 @@ import java.util.UUID;
 /**
  * One container of an order.
  *
- * @param containerNumber the container allocated to the investor; {@code null} until the order is paid
- *                        (staff always see the reserved container)
+ * @param amount          the container's price, without GST (rent is based on it)
+ * @param amountWithGst   what the investor paid for it: the price plus GST
+ * @param containerNumber the container assigned to the investor; {@code null} until finance assigns one after
+ *                        payment (staff also see containers reserved by orders placed before manual assignment)
  */
 public record OrderItemResponse(
 		UUID id,
@@ -23,16 +25,22 @@ public record OrderItemResponse(
 		ContainerType containerType,
 		String containerNumber,
 		MoneyResponse amount,
+		BigDecimal gstRatePercent,
+		MoneyResponse gstAmount,
+		MoneyResponse amountWithGst,
 		BigDecimal monthlyRentPercent,
 		BigDecimal monthlyCapitalReturnPercent,
 		MoneyResponse monthlyPayout,
 		int tenureMonths) {
 
 	public static OrderItemResponse from(OrderItem i, String containerNumber) {
-		Money monthly = ProductTerms.percentOf(i.amount(), i.getMonthlyRentPercent())
-			.plus(ProductTerms.capitalPerMonth(i.amount(), i.getTenureMonths()));
+		Money monthly = ProductTerms.percentOf(i.amount(), i.getMonthlyRentPercent());
+		if (ProductTerms.returnsCapital(i.getMonthlyCapitalReturnPercent())) {
+			monthly = monthly.plus(ProductTerms.capitalPerMonth(i.amount(), i.getTenureMonths()));
+		}
 		return new OrderItemResponse(i.getId(), i.getProductId(), i.getProductCode(), i.getProductTitle(),
-				i.getContainerType(), containerNumber, MoneyResponse.from(i.amount()), i.getMonthlyRentPercent(),
+				i.getContainerType(), containerNumber, MoneyResponse.from(i.amount()), i.getGstRatePercent(),
+				MoneyResponse.from(i.gst()), MoneyResponse.from(i.amountWithGst()), i.getMonthlyRentPercent(),
 				i.getMonthlyCapitalReturnPercent(), MoneyResponse.from(monthly), i.getTenureMonths());
 	}
 

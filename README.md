@@ -2,7 +2,7 @@
 
 Investors buy whole shipping containers under investment plans. Each container is assigned to its
 investor by number once paid and leased for the plan's tenure, during which the investor is paid the
-plan's monthly rent plus 100 ÷ tenure % of the price back every month (the whole price by the end); uplines earn four-level referral income on the rent. Built as a **modular monolith** with financial
+plan's monthly rent every month (plans pay rent only; holdings bought before that also get 100 ÷ tenure % of the price back each month); uplines earn four-level referral income. Built as a **modular monolith** with financial
 correctness, auditability and idempotency as first-class concerns.
 
 | Layer    | Stack                                                                         |
@@ -18,7 +18,7 @@ correctness, auditability and idempotency as first-class concerns.
 ```text
 backend/    Spring Boot API (com.sealease.backend)
 frontend/   Next.js app — investor portal + admin console
-docker-compose.yml   Local PostgreSQL + Kafka
+docker-compose.yml   Local PostgreSQL + Kafka + Mailpit (email)
 .env.example         Local configuration template
 ```
 
@@ -29,7 +29,7 @@ cp .env.example .env                 # set DB_PASSWORD (and DB_PORT if 5432 is t
 scripts/generate-jwt-keys.sh         # RS256 key pair -> .secrets/ (git-ignored); paste paths into .env
 scripts/generate-encryption-keys.sh >> .env   # field-encryption keys (tax ids, KYC files, bank accounts)
 #   optionally set BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD to create the first super-admin
-docker compose up -d                 # PostgreSQL + Kafka
+docker compose up -d                 # PostgreSQL + Kafka + Mailpit
 
 cd backend && ./mvnw spring-boot:run # http://localhost:8080 (profile: local)
 
@@ -43,6 +43,7 @@ Useful local endpoints:
 - `GET /actuator/health/liveness`, `/actuator/health/readiness` — public probes
 - `/swagger-ui.html` — API docs (local profile only)
 - `GET /api/v1/auth/jwks` — public token-verification key
+- http://localhost:8025 — Mailpit inbox: every notification email sent locally
 
 ### Tests
 
@@ -98,7 +99,7 @@ Modules (Phase 4):
 | Module        | Responsibility                                                                   |
 |---------------|----------------------------------------------------------------------------------|
 | `container`   | Physical assets: ISO 6346 numbers (check digit verified), specs, location, photos & documents with per-document investor visibility; inventory reserved for orders and leased to investors |
-| `investment`  | Plans (`PLAN-10001`…): container type, price per container, monthly rent %, lease tenure (capital return = 100 ÷ tenure %); DRAFT → OPEN → CLOSED lifecycle, investor eligibility |
+| `investment`  | Plans (`PLAN-10001`…): container type, price per container, monthly rent %, shortest and longest lease in years (the investor picks); rent only; DRAFT → OPEN → CLOSED lifecycle, investor eligibility |
 | `marketplace` | Investor read side: plans, filters/sorting, detail with eligibility verdict, payout projection, photos of the plan's container type |
 
 Modules (Phase 5):
@@ -117,7 +118,7 @@ Modules (Phase 6):
 | Module       | Responsibility                                                                   |
 |--------------|----------------------------------------------------------------------------------|
 | `investment` | + holding maturity at the end of the tenure (the container returns to stock)     |
-| `earning`    | Monthly payout schedule per holding (rent + capital returned), automatic crediting, investor earnings |
+| `earning`    | Monthly payout schedule per holding (rent; plus capital for holdings bought before plans became rent-only), automatic crediting, investor earnings |
 | `ledger`     | Append-only double-entry ledger: accounts per investor/platform and currency, balanced transactions, adjustments |
 
 Modules (Phase 7):
@@ -233,7 +234,7 @@ from a secret manager; keep `COOKIE_SECURE` on.
 |-----------------------------------------------------|-------------------------|--------------------------------------|
 | `GET/PUT /api/v1/users/me`                          | authenticated           | Own profile (tax id masked)          |
 | `PUT /api/v1/users/me/tax`                          | authenticated           | Tax residency + tax id (encrypted)   |
-| `GET/POST /api/v1/users/me/kyc`                     | authenticated           | Latest KYC / submit (multipart)      |
+| `GET/POST /api/v1/users/me/kyc`                     | authenticated           | Latest KYC / upload Aadhaar or PAN (multipart; review starts once both are in) |
 | `GET/POST /api/v1/users/me/bank-accounts`           | `INVESTOR_PORTAL`       | List / add payout account            |
 | `DELETE /…/bank-accounts/{id}`, `PUT /…/{id}/primary` | `INVESTOR_PORTAL`     | Remove / choose primary              |
 | `GET /api/v1/admin/users[/{id}]`                    | `USER_VIEW`             | Directory search, detail             |
@@ -248,22 +249,27 @@ from a secret manager; keep `COOKIE_SECURE` on.
 ### Marketplace rules
 
 - **Plans.** A plan names a container type, a price per container, a monthly rent % (above 0, at
-  most 20) and a lease tenure in months (1–120). The monthly capital return is not set by hand: it is
-  100 ÷ tenure % of the price (16 months → 6.25%, 12 months → 8.3333%), so the whole price comes back
-  over the lease. What the investor is paid every month is that capital return % plus the rent %. Every investor buys whole containers; there are
+  most 20) and the shortest and longest lease in whole years (1–30). The investor chooses the lease, in
+  whole years within those limits, for each plan in their cart; it is copied to the order and holding in
+  months (V34). Plans pay rent only: every month of the lease the investor is
+  paid the rent %, and the price is not paid back (the monthly capital return is 0%, enforced in the DB).
+  Holdings bought before this (V33) keep their terms: rent plus 100 ÷ tenure % of the price back each month,
+  so the whole price came back over the lease. Every investor buys whole containers; there are
   no shared or fractional holdings, and investors are not classified.
 - **Lifecycle.** `DRAFT → OPEN → CLOSED`, or `CANCELLED` while a draft. Terms are editable only in
   `DRAFT`. Publishing and closing need `INVESTMENT_APPROVE`; closing stops new sales while sold
   containers keep their lease and payouts.
-- **Stock.** A plan sells the `AVAILABLE` containers of its type (shared by plans of that type).
-  Containers move `AVAILABLE → RESERVED` (checkout) `→ ON_LEASE` (payment confirmed) `→ AVAILABLE`
-  (lease ended), or back to `AVAILABLE` when an order lapses. Those two statuses are never set by
-  hand. Checkout locks the oldest available containers with `FOR UPDATE SKIP LOCKED`, so concurrent
-  buyers never block each other or get the same container, and a DB index allows one active holding
-  per container.
+- **Stock.** Sales are not limited by stock and checkout reserves nothing. Once an order is paid, each
+  container bought is a holding `AWAITING_CONTAINER`; finance (`CONTAINER_ASSIGN`, *Admin → Assign containers*)
+  picks an `AVAILABLE` container of the plan's type for it, which moves it `AVAILABLE → ON_LEASE`, starts the
+  lease and payout schedule that day and notifies the investor. The container row is locked, so it can only go to
+  one investment, and a DB index allows one active holding per container. It returns to `AVAILABLE` when the
+  lease ends. (Orders placed before manual assignment reserved containers at checkout, `RESERVED`; those are
+  still leased on payment or released when the order lapses.)
 - **Eligibility.** Account active and KYC approved, and the plan open. The marketplace shows the verdict and its reasons.
-- **Projection.** For *n* containers: price × n; monthly rent = price × rent %, capital back =
-  price ÷ tenure (each rounded half-up to the paisa) × n; over the tenure, all the rent plus the whole price.
+- **Projection.** For *n* containers and a lease of *y* years (the plan's shortest when not given): price × n;
+  monthly rent = price × rent % (rounded half-up to the paisa) × n; over the lease, the rent × 12 × *y*. The price is
+  not paid back.
 
 ### Containers, plans & marketplace API
 
@@ -301,8 +307,7 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
   the key for a different request is a 409. The investor accepts the terms of each plan in
   the cart, or checkout fails. The cart is locked, so concurrent checkouts of one cart place one
   order. There is one `order_items` row per container, with the plan terms frozen (price, rent %,
-  capital return %, tenure) and the container reserved for it. Investors see each
-  container's number once the order is paid; staff see the reserved containers.
+  capital return %, tenure). Investors see each container's number once finance has assigned it.
 - **Payments.** Bank payment is the only method; card payments are not accepted (earlier card
   payments, if any, remain readable as `CARD`). One attempt in flight per order, and money is taken
   at most once (partial unique indexes). Finance maintains the company
@@ -348,25 +353,30 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 ### Payouts & the ledger
 
 ```text
-payment confirmed ──▶ holding per container, lease from today for the plan's tenure (T months)
-                      T installments: n due on start + n months (in arrears), each rent + capital
-installment due ──payout job (hourly) or POST /admin/payouts/run──▶ PAID: investor wallet credited (one ledger transaction)
-last installment paid ──▶ holding MATURED, container back to AVAILABLE
+payment confirmed ──▶ holding per container, AWAITING_CONTAINER (no lease, no payouts)
+container assigned by finance ──▶ ACTIVE, lease from that day for the chosen tenure (T months)
+                      one installment per calendar month of the lease (a part month at each end)
+every day that ends ──payout job (hourly) or POST /admin/payouts/run──▶ that day's rent credited to the wallet
+last day of a month credited ──▶ installment PAID, referral commission on it paid
+last installment PAID ──▶ holding MATURED, container back to AVAILABLE
 ```
 
-- **Amounts.** Per container per month: rent = price × the plan's rent %, capital = price ÷ tenure, each
-  rounded half-up to the paisa and fixed when the schedule is created. The last installment's capital takes
-  up the rounding, so the capital returned adds up to exactly the price.
-- **Paying.** A scheduled job (`app.payouts.sweep-interval`, hourly) pays every due installment, each in
-  its own transaction under a row lock, so runs can overlap and repeat safely. Finance can run it at once
-  (`PAYOUT_PROCESS`). Paid installments stay `PAID`; nothing is edited afterwards.
+- **Amounts.** Per container per month: rent = price × the plan's rent %, rounded half-up to the paisa and
+  fixed when the schedule is created; a part month gets its days ÷ the month's days of it. Holdings bought
+  before plans became rent-only (their recorded capital return % is above 0) also get capital = price ÷ tenure a
+  month; the last installment's capital takes up the rounding.
+- **Daily crediting (V40).** Each day of an installment is credited the day after, one ledger transaction and one
+  `rent_credits` row per day: the month's amount ÷ its days, rounded so the days add up to exactly the month's
+  amount. The job (`app.payouts.sweep-interval`, hourly) catches up any days missed, each installment in its own
+  transaction under a row lock, so runs can overlap and repeat safely; a day is never credited twice (unique per
+  installment and day). Finance can run it at once (`PAYOUT_PROCESS`).
 - **Ledger.** Every payout, commission and adjustment is one transaction of debit/credit entries. A deferred
   constraint trigger rejects any transaction that does not balance or mixes currencies, and accounts,
-  transactions and entries are append-only. A payout debits *Rent paid to investors* and *Capital returned to
-  investors* and credits the investor's *Investor earnings* account (their wallet), which withdrawals draw on.
+  transactions and entries are append-only. A day's rent debits *Rent paid to investors* (and *Capital returned to
+  investors*) and credits the investor's rent balance (bank or cash, by how the order was paid), which withdrawals draw on.
 - **Adjustments.** `FINANCE_ADJUST` credits or debits an investor's balance against *Adjustments*, with a reason and an
   `Idempotency-Key`. A debit cannot overdraw the balance, and nobody may adjust their own.
-- **Events.** `earning.created` per payout, via the outbox.
+- **Events.** `earning.created` per installment fully credited, via the outbox.
 
 ### Payouts, earnings & ledger API
 
@@ -411,43 +421,57 @@ last installment paid ──▶ holding MATURED, container back to AVAILABLE
 
 ### Withdrawals
 
+Investors do not request withdrawals: they are made by a monthly schedule (V41), or by finance at the office.
+
 ```text
-request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ APPROVED ──batch──▶ BATCHED ──file sent──▶ PROCESSING ──▶ PAID
- balance → in transit     │ cancel (investor) / reject                 │ reject      (batch cancel → APPROVED)    └──▶ FAILED
-                          └──────────── money returns to the balance ──┘                                              (money returns)
+rent file day (the day before the rent withdrawal day, default 9th) ──▶ every investor's bank-rent balance:
+    withdrawal BATCHED into this month's "Rent-<Month>-<Year>.xlsx" (balance → in transit)
+referral file day (default 14th) ──▶ likewise referral balances of investors paid by bank this year: "Referral-…xlsx"
+finance pays the file by hand on the day, uploads it back with Status per row ──▶ PROCESSING ──▶ PAID
+                                                                                       └──▶ FAILED: held + support ticket
+FAILED ──finance resolves──▶ PAID (paid by hand)  or  RETURNED (money back to the balance, paid next month)
+cash at the office (from the withdrawal day) ──finance makes it in front of the investor──▶ APPROVED ──hand over──▶ PAID
 ```
 
-- **Request.** The investor chooses one of their *verified* bank accounts, and the withdrawal is in its currency.
-  The account must be active and KYC-approved. The amount must be at least `app.withdrawals.minimum-amount` (default ₹500) and within the
-  balance, and only one withdrawal per currency can be open (partial unique index). The request needs an `Idempotency-Key`.
-  Under the lock on the investor's ledger account (the same lock adjustments take), the amount moves from
-  *Investor earnings* to *Withdrawals in transit*, so the same balance can never be withdrawn twice.
-- **Approval.** `WITHDRAWAL_APPROVE` approves. Above `dual-approval-threshold` (default ₹1,00,000) a second, different
-  approver is required (enforced by the database too), and nobody decides on their own withdrawal. The final approval re-checks
-  the investor and their bank account. `WITHDRAWAL_REJECT` rejects before batching, and the investor can cancel while it awaits
-  approval. Both return the money (`WITHDRAWAL_RELEASE`).
-- **Payout.** `WITHDRAWAL_PROCESS` batches the oldest approved withdrawals of a currency (up to `max-batch-size`)
-  and downloads the bank file. The CSV carries full account numbers, so every download is audited, and fields are quoted with
-  formula characters neutralised. The file is refused if a payee's account is no longer verified. Before it is sent, a batch can be cancelled;
-  once marked sent, its items are *processing*.
-- **Reconciliation.** Each item is marked paid (in transit → cash, `WITHDRAWAL_PAYOUT`) or failed (money returned), or
-  "mark remaining paid" settles the rest. A batch closes when nothing is outstanding, and *Withdrawals in transit*
-  then nets to zero for it.
-- **Events.** `withdrawal.requested`, `.approved`, `.batched` and `.processing` (per batch), `.completed`, and `.failed`
-  (also used for rejections and cancellations, with event types `WithdrawalRejected` and `WithdrawalCancelled`).
+- **Balances.** *Rent (bank)* on containers paid by bank goes only to a bank account; *rent (cash)* on containers paid in
+  cash at the office is collected only in cash there; *referral earnings* go the way the investor chose for the year.
+- **Referral payout mode.** The investor chooses bank or cash once per calendar year (`referral_payout_modes`); until
+  then it is bank if they have a verified primary bank account, else cash. Finance can change it on request.
+- **Monthly runs.** `app.withdrawals.schedule-interval` (hourly) makes each run once its file day has come; each month
+  and kind runs once (`scheduled_withdrawal_runs`). The whole balance (at least `app.withdrawals.minimum-amount`) is
+  withdrawn to the verified primary bank account. Skipped, with the reason kept: inactive or unverified accounts, no
+  verified primary account, or an earlier failed withdrawal still unresolved. Finance can run a month early.
+  The withdrawal days are set by an admin (`SYSTEM_SETTINGS_MANAGE`), 2–28.
+- **The file.** Excel, kept encrypted with the batch: Serial No, User ID, Name, Account Number, IFSC Code, Amount, and
+  empty Status and Remarks columns. Finance uploads it back: rows are matched by User ID; Status PAID (Remarks: the
+  bank reference), FAILED (Remarks: why) or blank (still outstanding). One bad row refuses the whole file; uploading
+  it again changes nothing. Every download and upload is audited and kept.
+- **Failures.** A failed payment is held (still *in transit*) and a support ticket (category Withdrawal, high priority)
+  is opened for the investor, assigned to the finance user who recorded it (FINANCE can now work tickets). Resolving
+  the withdrawal resolves the ticket with a note to the investor.
+- **Cash at the office.** On the investor's admin page, finance withdraws a whole rent (cash) or referral balance (if
+  the investor chose cash) in front of them, once a month from the withdrawal day, then records the hand-over with the
+  receipt number. One not handed over can be cancelled; the money goes back.
+- **Events.** `withdrawal.approved`, `.batched` and `.processing` (per batch), `.completed`, and `.failed` (also for
+  returns and cancellations, with event types `WithdrawalReturned` and `WithdrawalRejected`).
 
 ### Withdrawals API
 
-| Method & path                                                  | Access               | Purpose                                     |
-|----------------------------------------------------------------|----------------------|---------------------------------------------|
-| `GET /api/v1/withdrawals/policy`, `GET /api/v1/withdrawals`    | `INVESTOR_PORTAL`    | Limits; own withdrawals                     |
-| `POST /api/v1/withdrawals` (`Idempotency-Key`), `/{id}/cancel` | `INVESTOR_PORTAL`    | Request; cancel while awaiting approval     |
-| `GET /api/v1/admin/withdrawals[/{id}]`                         | `WITHDRAWAL_VIEW`    | Queue by status/currency/user, detail       |
-| `POST /api/v1/admin/withdrawals/{id}/approve` · `/reject`      | `WITHDRAWAL_APPROVE` / `WITHDRAWAL_REJECT` | Decide                 |
-| `GET /api/v1/admin/withdrawal-batches[/{id}]`                  | `WITHDRAWAL_VIEW`    | Batches with paid/failed/outstanding counts |
-| `POST /api/v1/admin/withdrawal-batches`, `/{id}/cancel`, `/{id}/sent` | `WITHDRAWAL_PROCESS` | Create, cancel, mark sent            |
-| `GET /api/v1/admin/withdrawal-batches/{id}/file`               | `WITHDRAWAL_PROCESS` | Bank payment file (CSV, audited)            |
-| `POST /…/withdrawal-batches/{id}/items/{wid}/paid` · `/failed`, `/{id}/settle` | `WITHDRAWAL_PROCESS` | Reconcile             |
+| Method & path                                                           | Access               | Purpose                                        |
+|-------------------------------------------------------------------------|----------------------|------------------------------------------------|
+| `GET /api/v1/withdrawals/policy`, `GET /api/v1/withdrawals`             | `INVESTOR_PORTAL`    | Schedule and office; own withdrawals           |
+| `GET`, `PUT /api/v1/withdrawals/referral-mode`                          | `INVESTOR_PORTAL`    | This year's referral payout mode; choose once  |
+| `GET /api/v1/admin/withdrawals[/{id}]`                                  | `WITHDRAWAL_VIEW`    | Withdrawals by status/currency/user, detail    |
+| `GET`, `POST /api/v1/admin/withdrawals/office`                          | `WITHDRAWAL_PROCESS` | Cash at the office: what is allowed; make one  |
+| `POST /api/v1/admin/withdrawals/{id}/hand-over` · `/reject`             | `WITHDRAWAL_PROCESS` / `WITHDRAWAL_REJECT` | Cash handed over; cancel |
+| `POST /api/v1/admin/withdrawals/{id}/resolve`                           | `WITHDRAWAL_PROCESS` | Failed payment: `PAID` or `RETURNED`           |
+| `GET`, `PUT /api/v1/admin/users/{id}/referral-mode`                     | `WITHDRAWAL_VIEW` / `_PROCESS` | An investor's mode; change on request |
+| `GET`, `POST /api/v1/admin/withdrawal-runs?kind=RENT\|REFERRAL`         | `WITHDRAWAL_VIEW` / `_PROCESS` | Monthly runs; run this month now     |
+| `GET`, `PUT /api/v1/admin/settings/withdrawals`                         | `WITHDRAWAL_VIEW` / `SYSTEM_SETTINGS_MANAGE` | Rent and referral withdrawal days |
+| `GET /api/v1/admin/withdrawal-batches[/{id}]`, `/{id}/files`            | `WITHDRAWAL_VIEW`    | Files with paid/failed/outstanding counts      |
+| `GET /api/v1/admin/withdrawal-batches/{id}/file`, `/files/{fileId}`     | `WITHDRAWAL_PROCESS` | The Excel file, kept uploads (audited)         |
+| `POST /api/v1/admin/withdrawal-batches/{id}/reconciliation` (multipart) | `WITHDRAWAL_PROCESS` | Upload the file back with Status per row       |
+| `POST /…/withdrawal-batches/{id}/sent`, `/items/{wid}/paid` · `/failed`, `/{id}/settle` | `WITHDRAWAL_PROCESS` | Settle by hand |
 
 ### Sales CRM
 
@@ -483,8 +507,10 @@ request ──▶ PENDING_APPROVAL ──approve (×2 above threshold)──▶ 
 
 - **Tickets.** Investors open requests with a subject, a category and, optionally, a link to one of their *own* orders,
   withdrawals or holdings (checked, and shown to agents as a link). Status: `OPEN ⇄ WAITING_ON_CUSTOMER → RESOLVED →
-  CLOSED`. A staff reply hands the ticket to the customer, and a customer reply puts it back in the queue, reopening a
-  resolved ticket. Closed is final.
+  CLOSED`. A staff reply hands the ticket to the customer, and a customer reply puts it back in the queue. A resolved
+  ticket can be reopened by its customer (with a reason, or by replying) for `app.support.auto-close-after` (24 hours),
+  after which it closes by itself (checked every `app.support.auto-close-interval`, 15 minutes). Closed is final: it
+  cannot be reopened or replied to; the customer opens a new request.
 - **Agents.** `SUPPORT_TICKET_VIEW` reads the queue. `SUPPORT_TICKET_MANAGE` replies, adds **internal notes** (never
   shown to the customer, nor their attachments), sets priority, assigns to another agent, and resolves or closes. Nobody
   answers their own ticket.

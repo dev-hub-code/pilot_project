@@ -1,6 +1,7 @@
 package com.sealease.backend.payment.repository;
 
 import com.sealease.backend.payment.entity.Payment;
+import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;

@@ -7,6 +7,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,9 +18,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 /** Account helpers for integration tests. */
 public final class TestApi {
 
-	public static final String PASSWORD = "correct horse battery staple";
+	public static final String PASSWORD = "Correct-Horse-9";
 	public static final String ADMIN_EMAIL = "root-admin@sealease.test";
-	public static final String ADMIN_PASSWORD = "Integration-Test-Admin-2026";
+	public static final String ADMIN_PASSWORD = "Super-Admin-2026!";
 
 	private final MockMvc mvc;
 	private final JdbcTemplate jdbc;
@@ -26,6 +28,9 @@ public final class TestApi {
 	public TestApi(MockMvc mvc, JdbcTemplate jdbc) {
 		this.mvc = mvc;
 		this.jdbc = jdbc;
+		// Payouts on today's day of the month: containers bought today are paid whole months, which most
+		// tests assume. Tests of part months set another day.
+		jdbc.update("UPDATE payout_settings SET payout_day = ? WHERE id = 1", LocalDate.now(ZoneOffset.UTC).getDayOfMonth());
 	}
 
 	public record Account(UUID id, String email, String accessToken) {
@@ -51,9 +56,14 @@ public final class TestApi {
 	public MvcResult registerResult(String email, String referralCode) throws Exception {
 		return mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
-						+ "\",\"firstName\":\"Test\",\"lastName\":\"Investor\""
+						+ "\",\"firstName\":\"Test\",\"lastName\":\"Investor\",\"phone\":\"" + mobile() + "\""
 						+ (referralCode == null ? "" : ",\"referralCode\":\"" + referralCode + "\"") + "}"))
 			.andReturn();
+	}
+
+	/** A random Indian mobile number: a number may belong to one account only, and tests share a database. */
+	public static String mobile() {
+		return "9" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1_000_000_000));
 	}
 
 	public Account login(String email, String password) throws Exception {

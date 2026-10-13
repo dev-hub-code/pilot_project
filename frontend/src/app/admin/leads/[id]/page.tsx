@@ -41,7 +41,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
         <div className="space-y-1">
           <Link href="/admin/leads" className="text-sm text-muted hover:underline">Leads</Link>
           <h1 className="text-3xl font-semibold tracking-tight">{l.firstName} {l.lastName}</h1>
-          <p className="font-mono text-sm text-muted">{l.reference} · {l.source === "WEBSITE" ? "website enquiry" : "entered by staff"}</p>
+          <p className="font-mono text-sm text-muted">{l.reference} · {l.source === "WEBSITE" ? "website enquiry" : "entered by an employee"}</p>
         </div>
         <StatusBadge tone={STAGE_TONE[l.stage]}>{STAGE_LABEL[l.stage]}</StatusBadge>
       </div>

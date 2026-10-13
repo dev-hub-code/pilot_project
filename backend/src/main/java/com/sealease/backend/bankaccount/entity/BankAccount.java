@@ -61,6 +61,17 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "removed_at")
 	private Instant removedAt;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "proof_type", length = 20, updatable = false)
+	private BankProofType proofType;
+
+	@Column(name = "proof_document_id", updatable = false)
+	private UUID proofDocumentId;
+
+	/** Set when this account was submitted as the replacement of another of the owner's accounts. */
+	@Column(name = "replaces_account_id", updatable = false)
+	private UUID replacesAccountId;
+
 	protected BankAccount() {
 	}
 
@@ -77,6 +88,20 @@ public class BankAccount extends BaseEntity {
 		this.accountFingerprint = accountFingerprint;
 		this.routingCodeEncrypted = routingCodeEncrypted;
 		this.status = BankAccountStatus.PENDING_VERIFICATION;
+	}
+
+	/** The bank statement or cancelled cheque proving the account; before it is first saved. */
+	public void provedBy(BankProofType type, UUID documentId) {
+		this.proofType = type;
+		this.proofDocumentId = documentId;
+	}
+
+	public BankProofType getProofType() {
+		return proofType;
+	}
+
+	public UUID getProofDocumentId() {
+		return proofDocumentId;
 	}
 
 	public boolean isActive() {
@@ -161,6 +186,10 @@ public class BankAccount extends BaseEntity {
 
 	public String getRejectionReason() {
 		return rejectionReason;
+	}
+
+	public UUID getReplacesAccountId() {
+		return replacesAccountId;
 	}
 
 }

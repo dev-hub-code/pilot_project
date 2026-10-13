@@ -168,7 +168,7 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.activities[0].body").value("Registered an investor account"));
 
 		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
-		UUID product = new OfferingFixtures(mvc, manager).plan(1);
+		UUID product = new OfferingFixtures(mvc, manager).plan();
 		investors.invest(investors.approve(investor), product, 1);
 		lead(manager, leadId).andExpect(jsonPath("$.lead.stage").value("WON"))
 			.andExpect(jsonPath("$.lead.won.amount").value("50000.00"))

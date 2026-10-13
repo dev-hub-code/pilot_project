@@ -16,16 +16,17 @@ public record ContainerSummary(
 		ContainerCondition condition,
 		ContainerStatus status,
 		BigDecimal capacityCbm,
-		int maxGrossKg,
-		int tareKg,
-		int manufactureYear,
+		Integer maxGrossKg,
+		Integer tareKg,
+		Integer manufactureYear,
 		String manufacturer,
 		String currentLocation,
 		String locationCountry) {
 
 	public static ContainerSummary from(Container c) {
 		return new ContainerSummary(c.getId(), c.getContainerNumber(), c.getContainerType(), c.getCondition(),
-				c.getStatus(), c.getCapacityCbm(), c.getMaxGrossKg(), c.getTareKg(), c.getManufactureYear(),
+				c.getStatus(), c.getCapacityCbm(), c.getMaxGrossKg(), c.getTareKg(),
+				c.getManufactureYear() == null ? null : c.getManufactureYear().intValue(),
 				c.getManufacturer(), c.getCurrentLocation(), c.getLocationCountry());
 	}
 

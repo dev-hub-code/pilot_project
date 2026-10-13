@@ -9,11 +9,12 @@ import type { Role } from "@/types/auth";
 import type { StaffCredentials } from "@/types/staff";
 import type { FormState } from "@/validators/form-state";
 import { type CredentialsState, createStaffAction, resetStaffPasswordAction, updateRolesAction } from "./staff-actions";
+import { copyText } from "@/utils/clipboard";
 
 function RoleChoices({ roles, selected, error }: { roles: Role[]; selected: string[]; error?: string }) {
   return (
     <fieldset className="space-y-2">
-      <legend className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Roles</legend>
+      <legend className="text-sm font-medium text-foreground">Roles</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {roles.map((r) => (
           <label key={r.id} className="flex items-start gap-3 border border-border px-3 py-2 text-sm">
@@ -36,17 +37,15 @@ export function IssuedCredentials({ credentials }: { credentials: StaffCredentia
       <div className="flex flex-wrap items-center gap-3">
         <code className="bg-surface px-3 py-2 font-mono text-base tracking-wider">{credentials.temporaryPassword}</code>
         <Button type="button" variant="secondary" onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(credentials.temporaryPassword);
-            setCopied(true);
-          } catch {
-            // Clipboard unavailable: the password stays selectable.
-          }
+          // If copying fails the password stays selectable.
+          if (await copyText(credentials.temporaryPassword)) setCopied(true);
         }}>{copied ? "Copied" : "Copy"}</Button>
       </div>
       <p className="text-xs text-muted">
-        Shown only now. Share it privately; they must replace it at first sign-in, before{" "}
-        {new Date(credentials.expiresAt).toUTCString()}.
+        {credentials.emailed
+          ? `We emailed these sign-in details to ${credentials.email}. `
+          : "We could not email these sign-in details: share the password privately. "}
+        Shown only now. They must replace it at first sign-in, before {new Date(credentials.expiresAt).toUTCString()}.
       </p>
     </div>
   );
@@ -75,7 +74,8 @@ export function CreateStaffForm({ roles }: { roles: Role[] }) {
         </div>
       </div>
       <RoleChoices roles={roles} selected={[]} error={e.roles} />
-      <SubmitButton>Create staff account</SubmitButton>
+      <SubmitButton>Create employee account</SubmitButton>
+      <p className="text-xs text-muted">The employee is emailed their sign-in details, with a temporary password to replace at first sign-in.</p>
     </form>
   );
 }

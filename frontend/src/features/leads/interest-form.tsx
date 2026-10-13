@@ -29,7 +29,7 @@ export function InterestForm() {
           options={Object.entries(INTEREST_LABEL).map(([value, label]) => ({ value, label }))} />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="lead-message" className="block text-xs font-medium uppercase tracking-[0.08em] text-muted">Message (optional)</label>
+        <label htmlFor="lead-message" className="block text-sm font-medium text-foreground">Message (optional)</label>
         <textarea id="lead-message" name="message" rows={3} maxLength={2000} defaultValue={v("message")}
           className="w-full rounded-none border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold" />
       </div>

@@ -5,11 +5,13 @@ import com.sealease.backend.bankaccount.entity.BankAccountStatus;
 import com.sealease.backend.bankaccount.service.BankAccountService;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
+import com.sealease.backend.document.web.DocumentResponses;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +45,13 @@ public class AdminBankAccountController {
 	@PreAuthorize("hasAnyAuthority('BANK_ACCOUNT_VERIFY', 'FINANCE_VIEW')")
 	public List<AdminBankAccountResponse> forUser(@PathVariable UUID userId) {
 		return bankAccounts.adminListFor(userId);
+	}
+
+	/** The account's bank statement or cancelled cheque, for its verifier. Every view is audited. */
+	@GetMapping("/api/v1/admin/bank-accounts/{accountId}/proof")
+	@PreAuthorize("hasAuthority('BANK_ACCOUNT_VERIFY')")
+	public ResponseEntity<byte[]> proof(AuthenticatedUser reviewer, @PathVariable UUID accountId) {
+		return DocumentResponses.inline(bankAccounts.proof(reviewer.userId(), accountId));
 	}
 
 	@PostMapping("/api/v1/admin/bank-accounts/{accountId}/verify")

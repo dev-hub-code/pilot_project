@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/** Credits investors' monthly payouts as they fall due. */
+/** Credits investors' rent for every day that has ended. */
 @Component
 class PayoutJob {
 
@@ -18,10 +18,10 @@ class PayoutJob {
 	}
 
 	@Scheduled(fixedDelayString = "${app.payouts.sweep-interval:1h}", initialDelayString = "${app.payouts.initial-delay:1m}")
-	void payDue() {
-		int paid = payouts.payDue();
-		if (paid > 0) {
-			log.info("Paid {} monthly payout(s) to investors", paid);
+	void creditDue() {
+		int days = payouts.creditDue();
+		if (days > 0) {
+			log.info("Credited {} day(s) of rent to investors", days);
 		}
 	}
 

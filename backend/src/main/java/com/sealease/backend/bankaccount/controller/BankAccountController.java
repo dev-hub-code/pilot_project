@@ -2,20 +2,24 @@ package com.sealease.backend.bankaccount.controller;
 
 import com.sealease.backend.bankaccount.dto.AddBankAccountRequest;
 import com.sealease.backend.bankaccount.dto.BankAccountResponse;
+import com.sealease.backend.bankaccount.entity.BankProofType;
 import com.sealease.backend.bankaccount.service.BankAccountService;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -37,10 +41,16 @@ public class BankAccountController {
 		return bankAccounts.listFor(user.userId());
 	}
 
-	@PostMapping
+	/**
+	 * Multipart: a JSON part {@code account}, the {@code proofType} (BANK_STATEMENT or CANCELLED_CHEQUE) and the
+	 * {@code proof} file.
+	 */
+	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
-	public BankAccountResponse add(AuthenticatedUser user, @Valid @RequestBody AddBankAccountRequest request) {
-		return bankAccounts.add(user.userId(), request);
+	public BankAccountResponse add(AuthenticatedUser user, @Valid @RequestPart("account") AddBankAccountRequest request,
+			@RequestParam(required = false) BankProofType proofType,
+			@RequestPart(value = "proof", required = false) MultipartFile proof) {
+		return bankAccounts.add(user.userId(), request, proofType, proof);
 	}
 
 	@DeleteMapping("/{accountId}")

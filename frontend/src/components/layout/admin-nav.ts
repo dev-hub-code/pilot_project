@@ -1,0 +1,27 @@
+import { Permission, hasPermission } from "@/lib/permissions";
+import type { MenuLink } from "@/components/layout/account-menu";
+
+/** The admin area's pages the viewer may open. Navigation mirrors permissions for convenience only; the API enforces them. */
+export function adminNavLinks(permissions: readonly string[]): MenuLink[] {
+  const can = (permission: string) => hasPermission(permissions, permission);
+  return [
+    { href: "/admin", label: "Overview", show: true },
+    { href: "/admin/users", label: "Users", show: can(Permission.USER_VIEW) },
+    { href: "/admin/leads", label: "Leads", show: can(Permission.LEAD_VIEW) },
+    { href: "/admin/support", label: "Support", show: can(Permission.SUPPORT_TICKET_VIEW) },
+    { href: "/admin/kyc", label: "KYC reviews", show: can(Permission.KYC_REVIEW) },
+    { href: "/admin/bank-accounts", label: "Bank accounts", show: can(Permission.BANK_ACCOUNT_VERIFY) },
+    { href: "/admin/container-assignments", label: "Assign containers", show: can(Permission.CONTAINER_ASSIGN) },
+    { href: "/admin/products", label: "Plans", show: can(Permission.INVESTMENT_VIEW) },
+    { href: "/admin/orders", label: "Orders", show: can(Permission.ORDER_VIEW) },
+    { href: "/admin/payments", label: "Payments", show: can(Permission.FINANCE_VIEW) },
+    { href: "/admin/company-bank-accounts", label: "Company accounts",
+      show: can(Permission.FINANCE_VIEW) || can(Permission.COMPANY_BANK_ACCOUNT_MANAGE) },
+    { href: "/admin/payouts", label: "Payouts", show: can(Permission.FINANCE_VIEW) || can(Permission.PAYOUT_PROCESS) },
+    { href: "/admin/ledger", label: "Ledger", show: can(Permission.FINANCE_VIEW) },
+    { href: "/admin/withdrawals", label: "Withdrawals", show: can(Permission.WITHDRAWAL_VIEW) },
+    { href: "/admin/reports", label: "Reports", show: can(Permission.REPORT_VIEW) || can(Permission.REPORT_GENERATE) },
+    { href: "/admin/referrals", label: "Referrals",
+      show: can(Permission.FINANCE_VIEW) || can(Permission.REFERRAL_CONFIG_MANAGE) },
+  ].filter((item) => item.show).map(({ href, label }) => ({ href, label }));
+}

@@ -11,7 +11,7 @@ export function TextField({ label, name, error, id, ...props }: TextFieldProps) 
   const errorId = `${inputId}-error`;
   return (
     <div className="space-y-1.5">
-      <label htmlFor={inputId} className="block text-xs font-medium uppercase tracking-[0.08em] text-muted">
+      <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
         {label}
       </label>
       <input

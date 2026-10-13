@@ -98,6 +98,14 @@ public class SupportTicket extends BaseEntity {
 		resolvedAt = null;
 	}
 
+	/** The customer reopened a resolved or closed ticket: back in the queue. */
+	public void reopen(Instant now) {
+		lastMessageAt = now;
+		status = TicketStatus.OPEN;
+		resolvedAt = null;
+		closedAt = null;
+	}
+
 	public void resolve(Instant now) {
 		status = TicketStatus.RESOLVED;
 		resolvedAt = now;

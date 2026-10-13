@@ -54,8 +54,9 @@ public class MarketplaceController {
 
 	@GetMapping("/{productId}/projection")
 	public ReturnProjection projection(AuthenticatedUser viewer, @PathVariable UUID productId,
-			@RequestParam @Min(0) @Max(PlanRules.MAX_CONTAINERS_PER_LINE) int containers) {
-		return marketplace.project(productId, viewer.userId(), containers);
+			@RequestParam @Min(0) @Max(PlanRules.MAX_CONTAINERS_PER_LINE) int containers,
+			@RequestParam(required = false) @Min(1) @Max(30) Integer years) {
+		return marketplace.project(productId, viewer.userId(), containers, years);
 	}
 
 	@GetMapping("/{productId}/documents/{documentId}")

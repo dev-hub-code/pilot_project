@@ -79,6 +79,12 @@
 			<artifactId>spring-boot-starter-kafka</artifactId>
 		</dependency>
 
+		<!-- Email: notifications are also sent by email to users who opted in. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
 		<!-- Reporting: PDF documents (statements, invoices, staff reports). Fonts are embedded so PDFs look the same everywhere. -->
 		<dependency>
 			<groupId>net.sf.jasperreports</groupId>
@@ -97,6 +103,17 @@
 		</dependency>
 
 		<!-- Observability -->
+		<!-- Excel (.xlsx) withdrawal files: written for finance and read back after paying. -->
+		<dependency>
+			<groupId>org.dhatim</groupId>
+			<artifactId>fastexcel</artifactId>
+			<version>0.20.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.dhatim</groupId>
+			<artifactId>fastexcel-reader</artifactId>
+			<version>0.20.2</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>

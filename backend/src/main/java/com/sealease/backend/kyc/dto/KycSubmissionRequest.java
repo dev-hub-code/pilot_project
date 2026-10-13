@@ -1,30 +1,21 @@
 package com.sealease.backend.kyc.dto;
 
-import com.sealease.backend.common.validation.IsoCountry;
-import com.sealease.backend.kyc.entity.IdentityDocumentType;
-import jakarta.validation.constraints.Future;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Past;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDate;
-
+/**
+ * The investor's Aadhaar number, PAN, or both (checked in the service), each uploaded with its card: they may come at
+ * different times. Name, date of birth and nationality are taken from the investor's profile.
+ *
+ * @param aadhaarNumber the 12-digit Aadhaar number; spaces and dashes are ignored; blank when not uploading it now
+ * @param panNumber     the PAN, e.g. ABCDE1234F; case and spaces are ignored; blank when not uploading it now
+ */
 public record KycSubmissionRequest(
-		@NotBlank @Size(max = 100) String legalFirstName,
-		@NotBlank @Size(max = 100) String legalLastName,
-		@NotNull @Past LocalDate dateOfBirth,
-		@NotBlank @IsoCountry String nationality,
-		@NotNull IdentityDocumentType documentType,
-		@NotBlank @Pattern(regexp = "^[A-Za-z0-9 -]{4,30}$", message = "must be 4-30 letters, digits, spaces or dashes")
-		String documentNumber,
-		@NotBlank @IsoCountry String documentIssuingCountry,
-		@NotNull @Future(message = "document must not be expired") LocalDate documentExpiryDate) {
+		@Size(max = 20) String aadhaarNumber,
+		@Size(max = 20) String panNumber) {
 
 	@Override
 	public String toString() {
-		return "KycSubmissionRequest[documentType=" + documentType + ", documentNumber=***]";
+		return "KycSubmissionRequest[aadhaarNumber=***, panNumber=***]";
 	}
 
 }

@@ -9,6 +9,7 @@ import { toneFor } from "@/components/ui/status-tones";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { KycSubmission, KycSubmissionStatus } from "@/types/user";
+import { kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDateTime, humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "KYC reviews" };
@@ -43,7 +44,7 @@ export default async function KycQueuePage({ searchParams }: PageProps<"/admin/k
                   {s.legalFirstName} {s.legalLastName}
                 </Link>
               </Cell>
-              <Cell>{humanize(s.documentType)} <span className="font-mono">{s.documentNumberMasked}</span></Cell>
+              <Cell className="font-mono text-xs">{kycNumbers(s)}</Cell>
               <Cell>{s.nationality}</Cell>
               <Cell className="text-muted">{formatDateTime(s.submittedAt)}</Cell>
               <Cell><StatusBadge tone={toneFor(s.status)}>{humanize(s.status)}</StatusBadge></Cell>

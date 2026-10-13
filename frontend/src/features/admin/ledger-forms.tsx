@@ -5,10 +5,14 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
+import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
+import type { EarningsBalance } from "@/types/earning";
 import { currencyLabel } from "@/utils/money";
 import type { FormState } from "@/validators/form-state";
 import { adjustBalanceAction } from "./ledger-actions";
+
+const BALANCES: readonly EarningsBalance[] = ["RENT_BANK", "RENT_CASH", "REFERRAL"];
 
 export function AdjustmentForm({ idempotencyKey }: { idempotencyKey: string }) {
   const [state, action] = useActionState<FormState, FormData>(adjustBalanceAction.bind(null, idempotencyKey), {});
@@ -22,6 +26,8 @@ export function AdjustmentForm({ idempotencyKey }: { idempotencyKey: string }) {
         <input type="hidden" name="currency" value={CURRENCY} />
         <SelectField label="Direction" name="direction" defaultValue={v("direction", "CREDIT")}
           options={[{ value: "CREDIT", label: "Credit (pay the investor more)" }, { value: "DEBIT", label: "Debit (recover an over-payment)" }]} />
+        <SelectField label="Balance" name="balance" defaultValue={v("balance", "RENT_BANK")} error={e.balance}
+          options={BALANCES.map((b) => ({ value: b, label: EARNINGS_BALANCE_LABEL[b] }))} />
         <TextField label={currencyLabel("Amount")} name="amount" inputMode="decimal" defaultValue={v("amount")} error={e.amount} />
         <div className="sm:col-span-2">
           <TextField label="Reason (shown on the statement)" name="reason" defaultValue={v("reason")} error={e.reason} />

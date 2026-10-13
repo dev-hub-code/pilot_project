@@ -68,7 +68,7 @@ export function ActivityForm({ leadId }: { leadId: string }) {
       <SelectField label="Type" name="type" defaultValue={state.values?.type ?? "CALL"}
         options={[{ value: "CALL", label: "Call" }, { value: "EMAIL", label: "Email" }, { value: "MEETING", label: "Meeting" }, { value: "NOTE", label: "Note" }]} />
       <div className="space-y-1.5">
-        <label htmlFor="activity-body" className="block text-xs font-medium uppercase tracking-[0.08em] text-muted">What happened</label>
+        <label htmlFor="activity-body" className="block text-sm font-medium text-foreground">What happened</label>
         <textarea id="activity-body" name="body" rows={3} maxLength={4000} defaultValue={state.values?.body}
           className="w-full rounded-none border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold" />
         {state.fieldErrors?.body && <p className="text-xs text-rose-600 dark:text-rose-400">{state.fieldErrors.body}</p>}

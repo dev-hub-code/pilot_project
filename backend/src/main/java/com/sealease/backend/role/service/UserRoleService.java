@@ -21,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
@@ -65,6 +67,16 @@ public class UserRoleService implements AuthorityGuard {
 	@Transactional(readOnly = true)
 	public long countUsersWithRole(String roleName) {
 		return userRoles.countUsersWithRole(roleName);
+	}
+
+	/** How many accounts were given a role per UTC month since {@code from}; empty months are left out. */
+	@Transactional(readOnly = true)
+	public Map<YearMonth, Long> roleAssignmentsByMonth(String roleName, Instant from) {
+		Map<YearMonth, Long> counts = new TreeMap<>();
+		for (Object[] row : userRoles.countAssignmentsByMonth(roleName, from)) {
+			counts.put(YearMonth.parse((String) row[0]), ((Number) row[1]).longValue());
+		}
+		return counts;
 	}
 
 	/** Accounts that currently hold a permission through any of their roles (e.g. who can work leads). */
@@ -111,7 +123,7 @@ public class UserRoleService implements AuthorityGuard {
 			.collect(Collectors.toSet());
 		if (PermissionCode.mixesInvestorAndStaff(resulting)) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-					"An account is either an investor or staff: investor and staff roles cannot be combined");
+					"An account is either an investor or an employee: investor and employee roles cannot be combined");
 		}
 
 		List<UserRole> current = userRoles.findByIdUserId(targetUserId);

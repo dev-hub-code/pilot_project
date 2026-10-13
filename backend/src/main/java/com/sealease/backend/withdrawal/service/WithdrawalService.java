@@ -9,23 +9,29 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.common.web.IdempotencyKey;
+import com.sealease.backend.common.money.MoneyProperties;
+import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.service.AccountType;
+import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.service.LedgerService;
 import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
 import com.sealease.backend.outbox.DomainEvent;
 import com.sealease.backend.outbox.OutboxPublisher;
+import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
 import com.sealease.backend.withdrawal.dto.WithdrawalPolicy;
-import com.sealease.backend.withdrawal.dto.WithdrawalRequest;
+import com.sealease.backend.withdrawal.dto.OfficeWithdrawalOption;
 import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
 import com.sealease.backend.withdrawal.dto.WithdrawalSearchCriteria;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
+import com.sealease.backend.withdrawal.entity.WithdrawalKind;
+import com.sealease.backend.withdrawal.entity.WithdrawalOrigin;
+import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
 import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import com.sealease.backend.withdrawal.repository.WithdrawalRepository;
 import jakarta.persistence.criteria.Predicate;
@@ -35,25 +41,31 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Withdrawal requests and their approval.
+ * Withdrawals: what investors see of them, and cash withdrawn at the office.
  *
- * <p>Requesting moves the amount from the investor's earnings into "withdrawals in transit" under
- * the lock on the investor's ledger account, so a balance can never be withdrawn twice. Rejection,
- * cancellation and a failed payout move it back ({@link #release}); a payout moves it out
- * ({@link PayoutBatchService}). Lock order: withdrawal, then ledger account.
+ * <p>Bank withdrawals are made by the monthly runs ({@link ScheduledWithdrawalService}) and paid in batches
+ * ({@link PayoutBatchService}). Cash is withdrawn by finance at the office in front of the investor, from the
+ * withdrawal day: rent on containers paid in cash, and referral commission of investors who chose cash this year.
+ * Making a withdrawal moves its amount from the investor's balance into "withdrawals in transit" under the lock on
+ * the balance's ledger account, so a balance can never be withdrawn twice; rejection or return moves it back
+ * ({@link #release}). Lock order: withdrawal, then ledger account.
  */
 @Service
 public class WithdrawalService {
@@ -68,11 +80,18 @@ public class WithdrawalService {
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final WithdrawalProperties properties;
+	private final OfficeProperties office;
+	private final MoneyProperties money;
+	private final WithdrawalSettingsService settings;
+	private final ReferralPayoutModeService referralModes;
 	private final Clock clock;
 
 	public WithdrawalService(WithdrawalRepository withdrawals, BankAccountService bankAccounts,
 			UserAccountService accounts, UserProfileService profiles, LedgerService ledger, OutboxPublisher outbox,
-			AuditService audit, WithdrawalProperties properties, Clock clock) {
+			AuditService audit, WithdrawalProperties properties, OfficeProperties office,
+			MoneyProperties money, WithdrawalSettingsService settings, ReferralPayoutModeService referralModes, Clock clock) {
+		this.settings = settings;
+		this.referralModes = referralModes;
 		this.withdrawals = withdrawals;
 		this.bankAccounts = bankAccounts;
 		this.accounts = accounts;
@@ -81,93 +100,109 @@ public class WithdrawalService {
 		this.outbox = outbox;
 		this.audit = audit;
 		this.properties = properties;
+		this.office = office;
+		this.money = money;
 		this.clock = clock;
 	}
 
 	public WithdrawalPolicy policy() {
-		return new WithdrawalPolicy(properties.minimumAmount(), properties.dualApprovalThreshold());
+		return new WithdrawalPolicy(properties.minimumAmount(), settings.withdrawalDay(WithdrawalKind.RENT),
+				settings.withdrawalDay(WithdrawalKind.REFERRAL), office.address(), office.hours());
 	}
 
-	// --------------------------------------------------------------------------- investor
+	// ----------------------------------------------------------------------- at the office
 
-	/** Requests a payout. Idempotent per key: a retry returns the original request. */
-	@Transactional
-	public WithdrawalResponse request(UUID userId, WithdrawalRequest request, String idempotencyKey) {
-		String key = IdempotencyKey.require(idempotencyKey);
-		Optional<Withdrawal> replay = withdrawals.findByUserIdAndIdempotencyKey(userId, key);
-		if (replay.isPresent()) {
-			Withdrawal original = replay.get();
-			if (!original.getBankAccountId().equals(request.bankAccountId())
-					|| original.amount().amount().compareTo(request.amount()) != 0) {
-				throw new BusinessException(ErrorCode.CONFLICT,
-						IdempotencyKey.HEADER + " was already used for a different withdrawal");
-			}
-			return WithdrawalResponse.forInvestor(original);
+	/**
+	 * What finance may withdraw in cash for an investor at the office today: their whole rent (cash) balance and, if
+	 * they chose cash this year, their whole referral balance, each once a month from its withdrawal day.
+	 */
+	@Transactional(readOnly = true)
+	public List<OfficeWithdrawalOption> officeOptions(UUID userId) {
+		Currency currency = money.defaultCurrency();
+		List<OfficeWithdrawalOption> options = new ArrayList<>();
+		for (EarningsBalance balance : List.of(EarningsBalance.RENT_CASH, EarningsBalance.REFERRAL)) {
+			Money available = whole(ledger.investorBalance(userId, currency, balance));
+			options.add(new OfficeWithdrawalOption(balance, MoneyResponse.from(available),
+					refusal(userId, balance, available)));
 		}
+		return options;
+	}
 
-		PayoutAccount account = bankAccounts.payoutAccount(request.bankAccountId())
-			.filter(a -> a.userId().equals(userId))
-			.orElseThrow(() -> new ResourceNotFoundException("Bank account", request.bankAccountId()));
-		if (!account.isVerified()) {
+	/**
+	 * Finance withdraws an investor's whole balance in cash at the office, in front of them: the withdrawal is ready
+	 * to hand over ({@link #handOverCash}). Refused unless {@link #officeOptions} allows it.
+	 */
+	@Transactional
+	public WithdrawalResponse atOffice(UUID actorId, UUID userId, EarningsBalance balance) {
+		if (userId.equals(actorId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot withdraw for yourself");
+		}
+		if (balance == EarningsBalance.RENT_BANK) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Withdrawals are paid only to verified bank accounts");
+					"Rent on containers paid by bank is paid into the investor's bank account by the monthly run");
 		}
 		requireMayWithdraw(userId);
-		Currency currency = Currency.getInstance(account.currency());
-		int digits = Math.max(currency.getDefaultFractionDigits(), 0);
-		if (request.amount().stripTrailingZeros().scale() > digits) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-					"Amounts in " + currency.getCurrencyCode() + " allow at most " + digits + " decimals");
-		}
-		Money amount = Money.of(request.amount(), currency);
-		Money minimum = Money.of(properties.minimumAmount(), currency);
-		if (amount.isLessThan(minimum)) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The minimum withdrawal is " + minimum.display());
-		}
-
+		Currency currency = money.defaultCurrency();
 		// Serialises everything that spends this balance; re-checked under the lock.
-		Money balance = ledger.lockInvestorBalance(userId, currency);
-		if (withdrawals.existsByUserIdAndCurrencyAndStatusIn(userId, currency.getCurrencyCode(), WithdrawalStatus.OPEN)) {
-			throw new BusinessException(ErrorCode.CONFLICT,
-					"You already have a " + currency.getCurrencyCode() + " withdrawal in progress");
+		Money available = whole(ledger.lockInvestorBalance(userId, currency, balance));
+		String refusal = refusal(userId, balance, available);
+		if (refusal != null) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, refusal);
 		}
-		if (amount.isGreaterThan(balance)) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Your available balance is " + balance.display());
-		}
-		int approvals = amount.isGreaterThan(Money.of(properties.dualApprovalThreshold(), currency)) ? 2 : 1;
-		Withdrawal withdrawal = withdrawals.saveAndFlush(new Withdrawal("WD-" + withdrawals.nextNumber(), userId, amount,
-				key, account.id(), account.holderName(), account.bankName(), account.last4(), approvals));
+		Withdrawal withdrawal = withdrawals.saveAndFlush(Withdrawal.atOffice("WD-" + withdrawals.nextNumber(), userId,
+				available, "office:" + UUID.randomUUID(), balance, actorId));
 		ledger.post(TransactionType.WITHDRAWAL_RESERVE, withdrawal.getId().toString(),
-				"Withdrawal " + withdrawal.getReference() + " requested", userId,
-				List.of(Posting.debit(AccountType.INVESTOR_EARNINGS, userId, amount),
-						Posting.credit(AccountType.WITHDRAWALS_IN_TRANSIT, null, amount)));
-
-		audit.record(AuditRecord.of(userId, AuditAction.WITHDRAWAL_REQUESTED, ENTITY, withdrawal.getId())
-			.withNewValue(Map.of("reference", withdrawal.getReference(), "amount", amount.toString(),
-					"bankAccountId", account.id().toString(), "requiredApprovals", approvals)));
-		publish(KafkaTopics.WITHDRAWAL_REQUESTED, "WithdrawalRequested", withdrawal, Map.of());
-		return WithdrawalResponse.forInvestor(withdrawal);
+				"Withdrawal " + withdrawal.getReference() + " in cash at the office", actorId,
+				List.of(Posting.debit(balance.account(), userId, available),
+						Posting.credit(AccountType.WITHDRAWALS_IN_TRANSIT, null, available)));
+		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_REQUESTED, ENTITY, withdrawal.getId())
+			.withNewValue(Map.of("reference", withdrawal.getReference(), "amount", available.toString(),
+					"balance", balance, "payoutMethod", withdrawal.getPayoutMethod(), "atOffice", true)));
+		publish(KafkaTopics.WITHDRAWAL_APPROVED, "WithdrawalApproved", withdrawal, Map.of("atOffice", true));
+		return WithdrawalResponse.forStaff(withdrawal);
 	}
 
-	/** The investor withdraws their request while it awaits approval; the money returns to their balance. */
-	@Transactional
-	public WithdrawalResponse cancel(UUID userId, UUID withdrawalId) {
-		Withdrawal withdrawal = lock(withdrawalId);
-		if (!withdrawal.getUserId().equals(userId)) {
-			throw new ResourceNotFoundException("Withdrawal", withdrawalId);
+	/** Why this balance cannot be withdrawn in cash today, or null when it can. */
+	private String refusal(UUID userId, EarningsBalance balance, Money available) {
+		WithdrawalKind kind = balance == EarningsBalance.REFERRAL ? WithdrawalKind.REFERRAL : WithdrawalKind.RENT;
+		LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+		int day = settings.withdrawalDay(kind);
+		if (balance == EarningsBalance.REFERRAL
+				&& referralModes.current(userId).mode() != WithdrawalPayoutMethod.OFFICE_CASH) {
+			return "Referral earnings are paid into this investor's bank account this year";
 		}
-		if (withdrawal.getStatus() != WithdrawalStatus.PENDING_APPROVAL) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Only withdrawals awaiting approval can be cancelled");
+		if (today.getDayOfMonth() < day) {
+			return "Cash is withdrawn from the " + ordinal(day) + " of the month";
 		}
-		withdrawal.cancel(clock.instant());
-		withdrawals.flush();
-		release(withdrawal, userId, "cancelled");
-		audit.record(AuditRecord.of(userId, AuditAction.WITHDRAWAL_CANCELLED, ENTITY, withdrawalId)
-			.withOldValue(Map.of("status", WithdrawalStatus.PENDING_APPROVAL)));
-		publish(KafkaTopics.WITHDRAWAL_FAILED, "WithdrawalCancelled", withdrawal, Map.of());
-		return WithdrawalResponse.forInvestor(withdrawal);
+		if (withdrawals.existsByUserIdAndCurrencyAndBalanceAndStatusIn(userId, available.currency().getCurrencyCode(),
+				balance, WithdrawalStatus.OPEN)) {
+			return "A withdrawal of this balance is already in progress";
+		}
+		Instant monthStart = today.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+		if (withdrawals.existsByUserIdAndBalanceAndOriginAndCreatedAtGreaterThanEqualAndStatusNot(userId, balance,
+				WithdrawalOrigin.OFFICE, monthStart, WithdrawalStatus.REJECTED)) {
+			return "This balance was already withdrawn this month";
+		}
+		if (!available.isPositive()) {
+			return "Nothing to withdraw";
+		}
+		return null;
+	}
+
+	/** Whole minor units only; any fraction stays in the balance. */
+	private static Money whole(Money amount) {
+		int digits = Math.max(amount.currency().getDefaultFractionDigits(), 0);
+		return Money.of(amount.amount().setScale(digits, RoundingMode.DOWN), amount.currency());
+	}
+
+	private static String ordinal(int day) {
+		String suffix = day >= 11 && day <= 13 ? "th" : switch (day % 10) {
+			case 1 -> "st";
+			case 2 -> "nd";
+			case 3 -> "rd";
+			default -> "th";
+		};
+		return day + suffix;
 	}
 
 	/** The investor's withdrawals requested in {@code [from, to)}, for statements. */
@@ -206,42 +241,38 @@ public class WithdrawalService {
 	// ------------------------------------------------------------------------------ staff
 
 	/**
-	 * One approval; amounts above the threshold need a second, from someone else. The final approval
-	 * re-checks that the investor and their bank account still qualify.
+	 * Finance hands the cash of an approved office withdrawal to the investor and records it with the receipt
+	 * number: the withdrawal is paid, out of "withdrawals in transit". Nobody hands cash to themselves.
 	 */
 	@Transactional
-	public WithdrawalResponse approve(UUID actorId, UUID withdrawalId) {
+	public WithdrawalResponse handOverCash(UUID actorId, UUID withdrawalId, String receiptNumber) {
 		Withdrawal withdrawal = lock(withdrawalId);
 		if (withdrawal.getUserId().equals(actorId)) {
-			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot approve your own withdrawal");
+			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot pay out your own withdrawal");
 		}
-		if (withdrawal.getStatus() != WithdrawalStatus.PENDING_APPROVAL) {
+		if (!withdrawal.isOfficeCash()) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"This withdrawal is paid by bank transfer, in a payout batch");
+		}
+		if (withdrawal.getStatus() != WithdrawalStatus.APPROVED) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This withdrawal is already " + withdrawal.getStatus());
 		}
-		if (withdrawal.wasApprovedBy(actorId)) {
-			throw new BusinessException(ErrorCode.FORBIDDEN,
-					"You have already approved this withdrawal; a second approver is needed");
-		}
-		boolean last = withdrawal.approvals() + 1 >= withdrawal.getRequiredApprovals();
-		if (last) {
-			requireMayWithdraw(withdrawal.getUserId());
-			if (!bankAccounts.payoutAccount(withdrawal.getBankAccountId()).map(PayoutAccount::isVerified).orElse(false)) {
-				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						"The investor's bank account is no longer verified; reject this withdrawal");
-			}
-		}
-		withdrawal.approve(actorId, clock.instant());
+		Money amount = withdrawal.amount();
+		String receipt = receiptNumber.strip();
+		withdrawal.markPaid(receipt, clock.instant());
 		withdrawals.flush();
-		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_APPROVED, ENTITY, withdrawalId)
-			.withNewValue(Map.of("approval", withdrawal.approvals() + " of " + withdrawal.getRequiredApprovals(),
-					"status", withdrawal.getStatus())));
-		if (withdrawal.getStatus() == WithdrawalStatus.APPROVED) {
-			publish(KafkaTopics.WITHDRAWAL_APPROVED, "WithdrawalApproved", withdrawal, Map.of());
-		}
+		ledger.post(TransactionType.WITHDRAWAL_PAYOUT, withdrawal.getId().toString(),
+				"Withdrawal " + withdrawal.getReference() + " paid in cash at the office (receipt " + receipt + ")", actorId,
+				List.of(Posting.debit(AccountType.WITHDRAWALS_IN_TRANSIT, null, amount),
+						Posting.credit(AccountType.RENTAL_CASH, null, amount)));
+		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_PAID, ENTITY, withdrawalId)
+			.withNewValue(Map.of("amount", amount.toString(), "payoutMethod", withdrawal.getPayoutMethod(),
+					"payoutReference", receipt)));
+		publish(KafkaTopics.WITHDRAWAL_COMPLETED, "WithdrawalPaid", withdrawal, Map.of());
 		return WithdrawalResponse.forStaff(withdrawal);
 	}
 
-	/** Refuses a withdrawal that has not been batched yet; the money returns to the investor. */
+	/** Cancels a cash withdrawal not handed over (e.g. the investor left); the money returns to their balance. */
 	@Transactional
 	public WithdrawalResponse reject(UUID actorId, UUID withdrawalId, String reason) {
 		Withdrawal withdrawal = lock(withdrawalId);
@@ -250,8 +281,8 @@ public class WithdrawalService {
 		}
 		WithdrawalStatus previous = withdrawal.getStatus();
 		if (previous != WithdrawalStatus.PENDING_APPROVAL && previous != WithdrawalStatus.APPROVED) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, previous == WithdrawalStatus.BATCHED
-					? "Cancel its batch first, then reject the withdrawal"
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, previous == WithdrawalStatus.FAILED
+					? "Resolve the failed payment instead: mark it paid or return it to the balance"
 					: "This withdrawal is already " + previous);
 		}
 		withdrawal.reject(actorId, reason.strip(), clock.instant());
@@ -283,7 +314,7 @@ public class WithdrawalService {
 		ledger.post(TransactionType.WITHDRAWAL_RELEASE, withdrawal.getId().toString(),
 				"Withdrawal " + withdrawal.getReference() + " " + why + ": returned to balance", actorId,
 				List.of(Posting.debit(AccountType.WITHDRAWALS_IN_TRANSIT, null, amount),
-						Posting.credit(AccountType.INVESTOR_EARNINGS, withdrawal.getUserId(), amount)));
+						Posting.credit(withdrawal.getBalance().account(), withdrawal.getUserId(), amount)));
 	}
 
 	void publish(String topic, String type, Withdrawal w, Map<String, ?> extra) {

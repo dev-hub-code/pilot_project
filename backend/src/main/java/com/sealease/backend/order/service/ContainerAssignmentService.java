@@ -1,0 +1,79 @@
+package com.sealease.backend.order.service;
+
+import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.earning.service.PayoutService;
+import com.sealease.backend.investment.dto.PayoutTerms;
+import com.sealease.backend.investment.service.HoldingService;
+import com.sealease.backend.investment.service.HoldingService.AwaitingContainer;
+import com.sealease.backend.notification.service.NotificationService;
+import com.sealease.backend.order.dto.ContainerAssignmentQueue;
+import com.sealease.backend.user.dto.UserAccount;
+import com.sealease.backend.user.service.UserAccountService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number. Assigning leases the
+ * container to the investor and starts the lease and the monthly payout schedule that day; the investor is notified.
+ */
+@Service
+public class ContainerAssignmentService {
+
+	private final HoldingService holdings;
+	private final PayoutService payouts;
+	private final OrderService orders;
+	private final UserAccountService accounts;
+	private final NotificationService notifications;
+	private final Clock clock;
+
+	public ContainerAssignmentService(HoldingService holdings, PayoutService payouts,
+			OrderService orders, UserAccountService accounts, NotificationService notifications, Clock clock) {
+		this.holdings = holdings;
+		this.payouts = payouts;
+		this.orders = orders;
+		this.accounts = accounts;
+		this.notifications = notifications;
+		this.clock = clock;
+	}
+
+	@Transactional(readOnly = true)
+	public ContainerAssignmentQueue queue(Pageable pageable) {
+		Page<AwaitingContainer> page = holdings.awaitingContainer(pageable);
+		Map<UUID, String> orderNumbers = orders.orderNumbers(page.stream().map(AwaitingContainer::orderId).toList());
+		Map<UUID, UserAccount> investors = accounts.getAccounts(page.stream().map(AwaitingContainer::userId).toList());
+		return new ContainerAssignmentQueue(PageResponse.from(page, a -> {
+			UserAccount investor = investors.get(a.userId());
+			return new ContainerAssignmentQueue.Pending(a.holdingId(), a.orderId(), orderNumbers.get(a.orderId()), a.userId(),
+					investor == null ? null : (investor.firstName() + " " + investor.lastName()).strip(),
+					investor == null ? null : investor.email(), a.productCode(), a.productTitle(), a.containerType(),
+					MoneyResponse.from(a.amount()), a.tenureMonths(), a.paidAt());
+		}));
+	}
+
+	@Transactional(readOnly = true)
+	public long pendingCount() {
+		return holdings.awaitingContainerCount();
+	}
+
+	/** Records and leases the container finance typed in, and starts the investment's lease and payouts today. */
+	@Transactional
+	public void assign(UUID actorId, UUID holdingId, String containerNumber, String currentLocation) {
+		Instant now = clock.instant();
+		PayoutTerms terms = holdings.assignContainer(actorId, holdingId, containerNumber, currentLocation,
+				LocalDate.ofInstant(now, ZoneOffset.UTC), now);
+		payouts.schedule(terms);
+		notifications.notify(terms.userId(), "CONTAINER_ASSIGNED", "Container " + terms.containerNumber() + " is now yours",
+				terms.productCode() + ": your lease and monthly payouts start today.", "/portfolio");
+	}
+
+}

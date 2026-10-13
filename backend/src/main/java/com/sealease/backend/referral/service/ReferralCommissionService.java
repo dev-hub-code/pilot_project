@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -64,7 +66,9 @@ public class ReferralCommissionService {
 	@EventListener
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void onPayoutPaid(PayoutPaidEvent event) {
-		if (!event.invested().isPositive()) {
+		// A part-month payout earns the same part of a month's commission.
+		Money base = prorated(event.invested(), event.monthShare());
+		if (!base.isPositive()) {
 			return;
 		}
 		Instant now = clock.instant();
@@ -72,7 +76,7 @@ public class ReferralCommissionService {
 		List<ReferralEarning> commissions = new ArrayList<>();
 		int forfeited = 0;
 		for (Upline upline : referrals.uplines(event.userId())) {
-			Money amount = version.commission(upline.level(), event.invested());
+			Money amount = version.commission(upline.level(), base);
 			if (!amount.isPositive()) {
 				continue;
 			}
@@ -81,7 +85,7 @@ public class ReferralCommissionService {
 				continue;
 			}
 			commissions.add(new ReferralEarning(event.installmentId(), event.userId(), upline.userId(), event.productId(),
-					event.installmentNumber(), upline.level(), event.invested(), version.percentFor(upline.level()), amount,
+					event.installmentNumber(), upline.level(), base, version.percentFor(upline.level()), amount,
 					version.getId(), now));
 		}
 		if (commissions.isEmpty()) {
@@ -93,7 +97,8 @@ public class ReferralCommissionService {
 		commissions.forEach(c -> perBeneficiary.merge(c.getBeneficiaryUserId(), c.amount(), Money::plus));
 		List<Posting> postings = new ArrayList<>();
 		postings.add(Posting.debit(AccountType.PLATFORM_REFERRAL_EXPENSE, null, total));
-		perBeneficiary.forEach((userId, amount) -> postings.add(Posting.credit(AccountType.INVESTOR_EARNINGS, userId, amount)));
+		// Commission has its own balance: the investor chooses at withdrawal whether to be paid by bank or in cash.
+		perBeneficiary.forEach((userId, amount) -> postings.add(Posting.credit(AccountType.INVESTOR_REFERRAL_EARNINGS, userId, amount)));
 		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.installmentId().toString(),
 				"Referral commissions on %s payout %d".formatted(event.productCode(), event.installmentNumber()),
 				null, postings);
@@ -111,6 +116,15 @@ public class ReferralCommissionService {
 							"installmentId", c.getSourceInstallmentId().toString(), "amount", c.amount().amount().toPlainString(),
 							"currency", c.amount().currency().getCurrencyCode())));
 		}
+	}
+
+	/** The invested amount × the payout's share of a month, rounded down to the currency's minor unit. */
+	static Money prorated(Money invested, BigDecimal monthShare) {
+		if (monthShare.compareTo(BigDecimal.ONE) == 0) {
+			return invested;
+		}
+		int digits = Math.max(invested.currency().getDefaultFractionDigits(), 0);
+		return Money.of(invested.amount().multiply(monthShare).setScale(digits, RoundingMode.DOWN), invested.currency());
 	}
 
 }

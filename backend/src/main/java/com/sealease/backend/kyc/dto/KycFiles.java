@@ -2,7 +2,6 @@ package com.sealease.backend.kyc.dto;
 
 import org.springframework.web.multipart.MultipartFile;
 
-/** Uploaded identity evidence. Back image is required for ID cards and licences; proof of address is optional. */
-public record KycFiles(MultipartFile identityFront, MultipartFile identityBack, MultipartFile selfie,
-		MultipartFile proofOfAddress) {
+/** The uploaded documents: the Aadhaar card (one file with both sides), the PAN card, or both; each with its number. */
+public record KycFiles(MultipartFile aadhaarCard, MultipartFile panCard) {
 }

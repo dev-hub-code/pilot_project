@@ -8,9 +8,12 @@ import java.time.Duration;
 
 /**
  * First-response targets per priority: a ticket with no staff reply after its target is overdue.
+ *
+ * @param autoCloseAfter how long a resolved ticket stays resolved before it closes by itself; until then its customer
+ *                       can reopen it (a closed ticket cannot be reopened)
  */
 @ConfigurationProperties(prefix = "app.support")
-public record SupportProperties(@DefaultValue ResponseTargets responseTargets) {
+public record SupportProperties(@DefaultValue ResponseTargets responseTargets, @DefaultValue("24h") Duration autoCloseAfter) {
 
 	public record ResponseTargets(@DefaultValue("48h") Duration low, @DefaultValue("24h") Duration normal,
 			@DefaultValue("8h") Duration high, @DefaultValue("2h") Duration urgent) {

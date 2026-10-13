@@ -24,7 +24,11 @@ export const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
   REFUNDED: "neutral",
 };
 
-export const METHOD_LABEL: Record<PaymentMethod, string> = { BANK_TRANSFER: "Bank payment", CARD: "Card" };
+export const METHOD_LABEL: Record<PaymentMethod, string> = {
+  BANK_TRANSFER: "Bank payment",
+  OFFICE_CASH: "Cash at our office",
+  CARD: "Card",
+};
 
 export const DEPOSIT_MODE_LABEL: Record<DepositMode, string> = {
   ONLINE: "Online transfer",

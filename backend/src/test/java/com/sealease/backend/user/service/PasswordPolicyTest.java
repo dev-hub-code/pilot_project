@@ -12,30 +12,41 @@ class PasswordPolicyTest {
 
 	private final PasswordPolicy policy = new PasswordPolicy();
 
-	@Test
-	void acceptsLongPassphrase() {
-		assertThatCode(() -> policy.validate("correct horse battery staple", "alice@example.com"))
-			.doesNotThrowAnyException();
+	@ParameterizedTest
+	@ValueSource(strings = { "K7#pq2", "Correct-Horse-9", "Eighteen-chars-1k!", "Sea Lease 2026!", "Ünïcode€pw1" })
+	void acceptsSixToEighteenCharactersWithUppercaseNumberAndSpecial(String password) {
+		assertThatCode(() -> policy.validate(password, "alice@example.com")).doesNotThrowAnyException();
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "short", "aaaaaaaaaaaaaaaa", "abababababababab", "            " })
-	void rejectsShortOrTrivial(String password) {
+	@ValueSource(strings = {
+			"K7#pq", // too short
+			"Nineteen-chars-long", // too long
+			"k7#pq2xy", // no uppercase
+			"K7pq2xyZ", // no special character
+			"No-Digits-Here!", // no number
+			"K7 pq2xyZ", // a space is not a special character
+			"AAAAAA!!", // too few different characters
+	})
+	void rejectsPasswordsOutsideTheRules(String password) {
 		assertThatThrownBy(() -> policy.validate(password, "alice@example.com"))
 			.isInstanceOf(BusinessException.class);
 	}
 
 	@Test
-	void rejectsPasswordContainingEmailName() {
-		assertThatThrownBy(() -> policy.validate("my-alicesmith-2026!", "alicesmith@example.com"))
-			.isInstanceOf(BusinessException.class)
-			.hasMessageContaining("email");
+	void explainsTheRules() {
+		assertThatThrownBy(() -> policy.validate("lowercase-only", "alice@example.com"))
+			.hasMessageContaining("6 to 18 characters")
+			.hasMessageContaining("uppercase")
+			.hasMessageContaining("one number")
+			.hasMessageContaining("special character");
 	}
 
 	@Test
-	void rejectsOverlongPassword() {
-		assertThatThrownBy(() -> policy.validate("x1y2z3".repeat(30), "alice@example.com"))
-			.isInstanceOf(BusinessException.class);
+	void rejectsPasswordContainingEmailName() {
+		assertThatThrownBy(() -> policy.validate("My-AliceSmith-26!", "alicesmith@example.com"))
+			.isInstanceOf(BusinessException.class)
+			.hasMessageContaining("email");
 	}
 
 }

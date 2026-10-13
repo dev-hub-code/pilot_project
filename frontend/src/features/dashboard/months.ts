@@ -11,12 +11,12 @@ export function monthKey(offset: number, now = new Date()): string {
 }
 
 /**
- * One column per month from `from` to `to` months around the current one, in the given currency;
- * months without data are zero. January is labelled with its year so the axis reads across a new year.
+ * One column per month from `from` to `to` months around the current one, in the given currency
+ * (plain numbers, such as counts, are taken as they are); months without data are zero. January is labelled with its year so the axis reads across a new year.
  */
 export function monthColumns<T extends { month: string }>(
   rows: readonly T[], from: number, to: number, currency: string,
-  values: (row: T) => Record<string, Money>, now = new Date(),
+  values: (row: T) => Record<string, Money | number>, now = new Date(),
 ): ColumnDatum[] {
   const byMonth = new Map(rows.map((row) => [row.month, row]));
   const columns: ColumnDatum[] = [];
@@ -26,8 +26,9 @@ export function monthColumns<T extends { month: string }>(
     const row = byMonth.get(key);
     const amounts: Record<string, number> = {};
     if (row) {
-      for (const [series, money] of Object.entries(values(row))) {
-        if (money.currency === currency) amounts[series] = Number(money.amount);
+      for (const [series, value] of Object.entries(values(row))) {
+        if (typeof value === "number") amounts[series] = value;
+        else if (value.currency === currency) amounts[series] = Number(value.amount);
       }
     }
     const label = short.format(date);

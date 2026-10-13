@@ -22,7 +22,7 @@ export function ReasonForm({ action, label, submitLabel, variant = "danger", con
     <form action={formAction} className="space-y-3" noValidate>
       <FormFeedback state={state} />
       <div className="space-y-1.5">
-        <label className="block text-xs font-medium uppercase tracking-[0.08em] text-muted" htmlFor={`${submitLabel}-reason`}>{label}</label>
+        <label className="block text-sm font-medium text-foreground" htmlFor={`${submitLabel}-reason`}>{label}</label>
         <textarea id={`${submitLabel}-reason`} name="reason" rows={2} maxLength={500}
           aria-invalid={error ? true : undefined}
           className="w-full rounded-none border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold" />

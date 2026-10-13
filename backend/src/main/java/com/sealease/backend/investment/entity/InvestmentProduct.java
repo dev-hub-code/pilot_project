@@ -43,14 +43,20 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "price", nullable = false, precision = 19, scale = 4)
 	private BigDecimal price;
 
+	@Column(name = "gst_rate_percent", nullable = false, precision = 5, scale = 2)
+	private BigDecimal gstRatePercent;
+
 	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
 	private BigDecimal monthlyRentPercent;
 
 	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 5, scale = 2)
 	private BigDecimal monthlyCapitalReturnPercent;
 
-	@Column(name = "tenure_months", nullable = false)
-	private int tenureMonths;
+	@Column(name = "min_tenure_years", nullable = false)
+	private int minTenureYears;
+
+	@Column(name = "max_tenure_years", nullable = false)
+	private int maxTenureYears;
 
 	@Column(name = "risk_disclosure", nullable = false, columnDefinition = "text")
 	private String riskDisclosure;
@@ -96,9 +102,11 @@ public class InvestmentProduct extends BaseEntity {
 		this.description = t.description();
 		this.currency = t.currency().getCurrencyCode();
 		this.price = t.price();
+		this.gstRatePercent = t.gstRatePercent();
 		this.monthlyRentPercent = t.monthlyRentPercent();
 		this.monthlyCapitalReturnPercent = t.monthlyCapitalReturnPercent();
-		this.tenureMonths = t.tenureMonths();
+		this.minTenureYears = t.minTenureYears();
+		this.maxTenureYears = t.maxTenureYears();
 		this.riskDisclosure = t.riskDisclosure();
 		this.termsAndConditions = t.termsAndConditions();
 	}
@@ -126,8 +134,9 @@ public class InvestmentProduct extends BaseEntity {
 	}
 
 	public ProductTerms terms() {
-		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price, monthlyRentPercent,
-				monthlyCapitalReturnPercent, tenureMonths, riskDisclosure, termsAndConditions);
+		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price, gstRatePercent,
+				monthlyRentPercent,
+				monthlyCapitalReturnPercent, minTenureYears, maxTenureYears, riskDisclosure, termsAndConditions);
 	}
 
 	public Currency currencyUnit() {

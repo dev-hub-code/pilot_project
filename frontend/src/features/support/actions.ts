@@ -56,6 +56,21 @@ export async function replyTicketAction(ticketId: string, _p: FormState, formDat
   return { success: "Sent." };
 }
 
+export async function reopenTicketAction(ticketId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  const input = { body: String(formData.get("body") ?? "") };
+  const parsed = replySchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
+  try {
+    await authFetch(`/api/v1/support/tickets/${encodeURIComponent(ticketId)}/reopen`, {
+      method: "POST", json: { reason: parsed.data.body },
+    });
+  } catch (error) {
+    return failureState(error, input);
+  }
+  revalidatePath("/support", "layout");
+  return { success: "Request reopened. Our support team will get back to you." };
+}
+
 export async function closeTicketAction(ticketId: string): Promise<FormState> {
   try {
     await authFetch(`/api/v1/support/tickets/${encodeURIComponent(ticketId)}/close`, { method: "POST" });

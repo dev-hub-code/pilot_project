@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,8 +100,8 @@ class ReferralIntegrationTest {
 		Account l1 = investors.approve(api.register(codeOf(l2)));
 		Account investor = investors.approve(api.register(codeOf(l1)));
 
-		// ₹50,000 container at 2% over 16 months: each payout is ₹1,000 rent + ₹3,125 capital.
-		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		// ₹50,000 container at 2%, leased for 1 year: each payout is ₹1,000 rent.
+		String orderId = investors.invest(investor, offerings.plan(), 1);
 		String receipt = payFirstPayout(orderId);
 
 		// Commission is on the investment (₹50,000.00), every month, paid by the platform: 2% / 1% / – / 0.25%.
@@ -112,7 +113,7 @@ class ReferralIntegrationTest {
 		balance(l1).andExpect(jsonPath("$.balances[0].amount").value("1000.00"))
 			.andExpect(jsonPath("$.referralEarned[0].amount").value("1000.00"));
 		// The referred investor keeps their full payout.
-		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("4125.00"));
+		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("1000.00"));
 
 		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, l2.bearer()))
 			.andExpect(jsonPath("$.content[0].level").value(2))
@@ -236,13 +237,22 @@ class ReferralIntegrationTest {
 		return mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, account.bearer()));
 	}
 
-	/** Brings the order's first monthly payout due and pays it; returns the installment id. */
+	/**
+	 * Makes the order's first period a whole month that has just ended (a lease bought mid-month starts with a part
+	 * month) and credits it: fully credited, it pays referral commission. Returns the installment id.
+	 */
 	private String payFirstPayout(String orderId) {
 		UUID installment = jdbc.queryForObject("""
 				SELECT p.id FROM payout_installments p JOIN holdings h ON h.id = p.holding_id
 				WHERE h.order_id = ?::uuid AND p.installment_number = 1""", UUID.class, orderId);
-		jdbc.update("UPDATE payout_installments SET due_on = (now() AT TIME ZONE 'UTC')::date WHERE id = ?", installment);
-		payouts.payDue();
+		jdbc.update("""
+				UPDATE payout_installments p
+				SET period_start = today - 31, period_end = today, due_on = today, credited_through = today - 31,
+				    month_share = 1,
+				    rent_amount = (SELECT rent_amount FROM payout_installments WHERE holding_id = p.holding_id AND installment_number = 2)
+				FROM (SELECT (now() AT TIME ZONE 'UTC')::date AS today) t
+				WHERE p.id = ?""", installment);
+		payouts.creditDue();
 		return installment.toString();
 	}
 

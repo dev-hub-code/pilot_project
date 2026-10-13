@@ -1,14 +1,17 @@
 import type { StatusTone } from "@/components/ui/status-badge";
-import type { BatchStatus, WithdrawalStatus } from "@/types/withdrawal";
+import type { BatchStatus, WithdrawalKind, WithdrawalStatus } from "@/types/withdrawal";
+
+export const WITHDRAWAL_KIND_LABEL: Record<WithdrawalKind, string> = { RENT: "Rent", REFERRAL: "Referral" };
 
 export const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
   PENDING_APPROVAL: "Awaiting approval",
-  APPROVED: "Approved",
-  BATCHED: "Scheduled for payout",
+  APPROVED: "Ready to collect",
+  BATCHED: "In this month's file",
   PROCESSING: "Being paid",
   PAID: "Paid",
-  FAILED: "Failed",
-  REJECTED: "Rejected",
+  FAILED: "Payment failed",
+  RETURNED: "Returned to balance",
+  REJECTED: "Cancelled",
   CANCELLED: "Cancelled",
 };
 
@@ -19,7 +22,8 @@ export const WITHDRAWAL_TONE: Record<WithdrawalStatus, StatusTone> = {
   PROCESSING: "warning",
   PAID: "success",
   FAILED: "danger",
-  REJECTED: "danger",
+  RETURNED: "neutral",
+  REJECTED: "neutral",
   CANCELLED: "neutral",
 };
 
@@ -29,3 +33,11 @@ export const BATCH_TONE: Record<BatchStatus, StatusTone> = {
   CLOSED: "success",
   CANCELLED: "neutral",
 };
+
+const MONTH = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+
+/** "2026-10" → "October 2026". */
+export function formatPeriod(period: string): string {
+  return MONTH.format(new Date(`${period}-01T00:00:00Z`));
+}
+

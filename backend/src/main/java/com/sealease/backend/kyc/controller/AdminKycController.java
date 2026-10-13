@@ -43,8 +43,8 @@ public class AdminKycController {
 	}
 
 	@GetMapping("/api/v1/admin/kyc/{submissionId}")
-	public KycReviewDetail detail(@PathVariable UUID submissionId) {
-		return kyc.detail(submissionId);
+	public KycReviewDetail detail(AuthenticatedUser reviewer, @PathVariable UUID submissionId) {
+		return kyc.detail(reviewer.userId(), submissionId);
 	}
 
 	@GetMapping("/api/v1/admin/users/{userId}/kyc")

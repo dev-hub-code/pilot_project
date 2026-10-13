@@ -22,6 +22,28 @@ public interface KycSubmissionRepository extends JpaRepository<KycSubmission, UU
 
 	Page<KycSubmission> findByStatus(KycSubmissionStatus status, Pageable pageable);
 
+	/** Whether another user has a submission under review or approved with this Aadhaar number. */
+	@Query("""
+			select count(s) > 0 from KycSubmission s where s.aadhaarFingerprint = :fingerprint and s.userId <> :userId
+			and s.status in (com.sealease.backend.kyc.entity.KycSubmissionStatus.PENDING,
+			                 com.sealease.backend.kyc.entity.KycSubmissionStatus.APPROVED)""")
+	boolean aadhaarHeldByAnotherUser(@Param("fingerprint") String fingerprint, @Param("userId") UUID userId);
+
+	/** Whether another user has a submission under review or approved with this PAN. */
+	@Query("""
+			select count(s) > 0 from KycSubmission s where s.panFingerprint = :fingerprint and s.userId <> :userId
+			and s.status in (com.sealease.backend.kyc.entity.KycSubmissionStatus.PENDING,
+			                 com.sealease.backend.kyc.entity.KycSubmissionStatus.APPROVED)""")
+	boolean panHeldByAnotherUser(@Param("fingerprint") String fingerprint, @Param("userId") UUID userId);
+
+	@Query("select s from KycSubmission s where s.aadhaarNumberEncrypted is not null and s.aadhaarFingerprint is null")
+	List<KycSubmission> findUnfingerprinted();
+
+	/** The investor's draft (one of Aadhaar and PAN uploaded, the other still to come), locked. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select s from KycSubmission s where s.userId = :userId and s.status = com.sealease.backend.kyc.entity.KycSubmissionStatus.DRAFT")
+	Optional<KycSubmission> findDraftForUpdate(@Param("userId") UUID userId);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select s from KycSubmission s where s.id = :id")
 	Optional<KycSubmission> findByIdForUpdate(@Param("id") UUID id);

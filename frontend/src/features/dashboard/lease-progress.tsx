@@ -21,7 +21,7 @@ export function LeaseProgress({ holdings }: { holdings: readonly HoldingPayouts[
             <li key={h.holdingId} className="space-y-2">
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="font-mono text-xs">{h.containerNumber ?? "Container"}</span>
-                <span className="text-xs text-muted tabular-nums">{h.paid} of {h.installments} months paid</span>
+                <span className="text-xs text-muted tabular-nums">{h.paid} of {h.installments} payouts</span>
               </div>
               <div role="progressbar" aria-label={`${h.containerNumber ?? "Container"} lease paid out`}
                 aria-valuemin={0} aria-valuemax={h.installments} aria-valuenow={h.paid}>

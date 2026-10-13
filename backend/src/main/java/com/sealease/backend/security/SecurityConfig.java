@@ -41,8 +41,12 @@ public class SecurityConfig {
 
 	private static final String[] PUBLIC_ACTUATOR = { "/actuator/health", "/actuator/health/**", "/actuator/info" };
 	private static final String[] PUBLIC_AUTH = { "/api/v1/auth/register", "/api/v1/auth/login",
-			"/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/jwks" };
+			"/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/jwks", "/api/v1/auth/verify-email",
+			"/api/v1/auth/verify-email/resend", "/api/v1/auth/verify-email/code", "/api/v1/auth/password-reset/request",
+			"/api/v1/auth/password-reset/confirm" };
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
+	/** The website's public read-only data: the track record and the open plans. */
+	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans" };
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 
 	@Bean
@@ -73,6 +77,7 @@ public class SecurityConfig {
 				auth.requestMatchers(PUBLIC_ACTUATOR).permitAll();
 				auth.requestMatchers(PUBLIC_AUTH).permitAll();
 				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
+				auth.requestMatchers(HttpMethod.GET, PUBLIC_WEBSITE).permitAll();
 				if (apiDocsEnabled) {
 					auth.requestMatchers(API_DOCS).permitAll();
 				}

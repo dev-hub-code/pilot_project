@@ -91,7 +91,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
                 <span className="block font-mono text-xs text-muted">{l.reference}</span>
               </Cell>
               <Cell className="text-muted">{l.email ?? l.phone}</Cell>
-              <Cell className="text-muted">{l.source === "WEBSITE" ? "Website" : "Staff"}</Cell>
+              <Cell className="text-muted">{l.source === "WEBSITE" ? "Website" : "Employee"}</Cell>
               <Cell><StatusBadge tone={STAGE_TONE[l.stage]}>{STAGE_LABEL[l.stage]}</StatusBadge></Cell>
               <Cell>{l.ownerName ?? <span className="text-muted">Unassigned</span>}</Cell>
               <Cell className="text-muted">{formatDate(l.nextFollowUpAt)}</Cell>

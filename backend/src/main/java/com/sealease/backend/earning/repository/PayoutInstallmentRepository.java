@@ -22,12 +22,13 @@ public interface PayoutInstallmentRepository
 	@Query("select p from PayoutInstallment p where p.id = :id")
 	Optional<PayoutInstallment> findByIdForUpdate(@Param("id") UUID id);
 
+	/** Installments with at least one whole day (before {@code today}) still to credit. */
 	@Query("""
 			select p.id from PayoutInstallment p
-			where p.status = com.sealease.backend.earning.entity.PayoutStatus.SCHEDULED and p.dueOn <= :day
-			order by p.dueOn, p.id
+			where p.status = com.sealease.backend.earning.entity.PayoutStatus.SCHEDULED and p.creditedThrough < :today
+			order by p.creditedThrough, p.id
 			""")
-	List<UUID> findDueIds(@Param("day") LocalDate day, Pageable limit);
+	List<UUID> findUncreditedIds(@Param("today") LocalDate today, Pageable limit);
 
 	boolean existsByHoldingIdAndStatus(UUID holdingId, PayoutStatus status);
 
@@ -37,12 +38,15 @@ public interface PayoutInstallmentRepository
 
 	List<PayoutInstallment> findByUserIdAndDueOnBetweenOrderByDueOn(UUID userId, LocalDate from, LocalDate to);
 
-	/** Scheduled payouts due on or before the day, per currency: count and total. */
-	@Query("""
-			select p.currency, count(p), sum(p.rentAmount + p.capitalAmount) from PayoutInstallment p
-			where p.status = com.sealease.backend.earning.entity.PayoutStatus.SCHEDULED and p.dueOn <= :day
+	/** Installments with whole days still to credit (before {@code today}), per currency: count and amount. */
+	@Query(value = """
+			select p.currency, count(*),
+			       round(sum((p.rent_amount + p.capital_amount) * (least(p.period_end, :today) - p.period_start)
+			           / (p.period_end - p.period_start) - p.credited_rent - p.credited_capital), 2)
+			from payout_installments p
+			where p.status = 'SCHEDULED' and p.credited_through < :today
 			group by p.currency
-			""")
-	List<Object[]> dueTotals(@Param("day") LocalDate day);
+			""", nativeQuery = true)
+	List<Object[]> dueTotals(@Param("today") LocalDate today);
 
 }

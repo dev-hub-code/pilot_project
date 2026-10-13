@@ -10,11 +10,13 @@ import { currencyLabel, formatMoney } from "@/utils/money";
 import { confirmTransferAction, recordRefundAction, rejectPaymentAction, saveCompanyBankAccountAction } from "./payment-actions";
 
 /** @param defaultReference the investor's transaction id, cheque or receipt number, when they gave one */
-export function ConfirmTransferForm({ paymentId, amountDue, currency, defaultReference }: {
+/** Records a bank payment that arrived, or (with {@code officeCash}) cash received at the office with its receipt number. */
+export function ConfirmTransferForm({ paymentId, amountDue, currency, defaultReference, officeCash = false }: {
   paymentId: string;
   amountDue: string;
   currency: string;
   defaultReference?: string;
+  officeCash?: boolean;
 }) {
   const [state, action] = useActionState<FormState, FormData>(confirmTransferAction.bind(null, paymentId), {});
   const e = state.fieldErrors ?? {};
@@ -22,16 +24,18 @@ export function ConfirmTransferForm({ paymentId, amountDue, currency, defaultRef
     <form action={action} className="space-y-3" noValidate>
       <FormFeedback state={state} />
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextField id={`ref-${paymentId}`} label="Bank reference" name="externalReference" autoComplete="off"
+        <TextField id={`ref-${paymentId}`} label={officeCash ? "Cash receipt number" : "Bank reference"} name="externalReference" autoComplete="off"
           defaultValue={state.values?.externalReference ?? defaultReference} error={e.externalReference} />
         <TextField id={`amt-${paymentId}`} label={currencyLabel("Amount received")} name="amountReceived" inputMode="decimal"
           defaultValue={state.values?.amountReceived} placeholder={amountDue} error={e.amountReceived} />
       </div>
       <SubmitButton variant="quiet" confirm={(form) => {
         const entered = String(new FormData(form).get("amountReceived") ?? "").trim();
-        return `Record that ${formatMoney({ amount: entered || amountDue, currency })} arrived? This confirms the order.`;
+        return officeCash
+          ? `Record that ${formatMoney({ amount: entered || amountDue, currency })} was received in cash at the office? This confirms the order.`
+          : `Record that ${formatMoney({ amount: entered || amountDue, currency })} arrived? This confirms the order.`;
       }}>
-        Confirm payment received
+        {officeCash ? "Confirm cash received" : "Confirm payment received"}
       </SubmitButton>
     </form>
   );

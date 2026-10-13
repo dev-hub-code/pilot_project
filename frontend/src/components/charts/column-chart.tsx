@@ -25,7 +25,8 @@ export interface ColumnDatum {
 interface Props {
   series: readonly ColumnSeries[];
   data: readonly ColumnDatum[];
-  currency: string;
+  /** Currency of the values; without one they are counts. */
+  currency?: string;
   /** Marks this column as the current period: a rule at its left edge, labelled "This month". */
   currentIndex?: number;
   /** Accessible name of the chart. */
@@ -58,9 +59,11 @@ export function ColumnChart({ series, data, currency, currentIndex, label }: Pro
     return () => observer.disconnect();
   }, []);
 
-  const money = (amount: number, compact = false) => formatMoney({ amount: amount.toFixed(2), currency }, { compact });
+  const money = (amount: number, compact = false) => currency
+    ? formatMoney({ amount: amount.toFixed(2), currency }, { compact })
+    : (compact ? compactCount : count).format(amount);
   const totals = data.map((d) => series.reduce((sum, s) => sum + (d.values[s.key] ?? 0), 0));
-  const ticks = niceTicks(Math.max(...totals, 0));
+  const ticks = niceTicks(Math.max(...totals, 0), !currency);
   const top = ticks.at(-1)!;
   const plotWidth = Math.max(0, width - LEFT);
   const band = data.length > 0 ? plotWidth / data.length : 0;
@@ -105,7 +108,11 @@ export function ColumnChart({ series, data, currency, currentIndex, label }: Pro
               <g aria-hidden="true">
                 <line x1={LEFT + band * currentIndex} x2={LEFT + band * currentIndex} y1={TOP - 12} y2={TOP + PLOT_HEIGHT}
                   className="stroke-muted/60" strokeWidth={1} shapeRendering="crispEdges" />
-                <text x={LEFT + band * currentIndex + 6} y={TOP - 4} className="fill-muted text-[11px]">This month</text>
+                {/* Beside the rule, on whichever side has room for it. */}
+                <text x={LEFT + band * currentIndex + (LEFT + band * currentIndex + 72 > width ? -6 : 6)} y={TOP - 4}
+                  textAnchor={LEFT + band * currentIndex + 72 > width ? "end" : "start"} className="fill-muted text-[11px]">
+                  This month
+                </text>
               </g>
             )}
 
@@ -129,7 +136,8 @@ export function ColumnChart({ series, data, currency, currentIndex, label }: Pro
                         className={`${s.fill} ${s.scheduled ? "opacity-35" : ""}`} />
                     );
                   })}
-                  {index % labelEvery === 0 && (
+                  {/* Counted back from the latest column, so it always has its label. */}
+                  {(data.length - 1 - index) % labelEvery === 0 && (
                     <text x={centre} y={TOP + PLOT_HEIGHT + 18} textAnchor="middle"
                       className={`text-[11px] ${active === index ? "fill-foreground font-medium" : "fill-muted"}`}>
                       {datum.label}
@@ -229,12 +237,16 @@ function columnPath(x: number, y: number, w: number, h: number, r: number): stri
   return `M${x},${y + h}V${y + radius}Q${x},${y} ${x + radius},${y}H${x + w - radius}Q${x + w},${y} ${x + w},${y + radius}V${y + h}Z`;
 }
 
-/** 0 and up to four round steps (1, 2, 2.5 or 5 × 10ⁿ) that cover max. */
-function niceTicks(max: number): number[] {
+const count = new Intl.NumberFormat("en-IN");
+const compactCount = new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 });
+
+/** 0 and up to four round steps (1, 2, 2.5 or 5 × 10ⁿ) that cover max; whole steps only for counts. */
+function niceTicks(max: number, whole = false): number[] {
   if (max <= 0) return [0, 1];
   const raw = max / 4;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= raw)!;
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude)
+    .find((s) => s >= raw && (!whole || Number.isInteger(s)))!;
   const count = Math.ceil(max / step);
   return Array.from({ length: count + 1 }, (_, i) => i * step);
 }

@@ -22,7 +22,10 @@ export async function createStaffAction(_p: CredentialsState, formData: FormData
   try {
     const credentials = await authFetch<StaffCredentials>("/api/v1/admin/staff", { method: "POST", json: parsed.data });
     revalidatePath("/admin/users", "layout");
-    return { success: "Staff account created.", credentials };
+    return {
+      success: credentials.emailed ? "Employee account created and sign-in details emailed." : "Employee account created.",
+      credentials,
+    };
   } catch (error) {
     return failureState(error, input);
   }
@@ -33,7 +36,10 @@ export async function resetStaffPasswordAction(userId: string): Promise<Credenti
     const credentials = await authFetch<StaffCredentials>(
       `/api/v1/admin/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" });
     revalidatePath(`/admin/users/${userId}`);
-    return { success: "New temporary password issued. They have been signed out everywhere.", credentials };
+    return {
+      success: `New temporary password issued${credentials.emailed ? " and emailed" : ""}. They have been signed out everywhere.`,
+      credentials,
+    };
   } catch (error) {
     return failureState(error);
   }

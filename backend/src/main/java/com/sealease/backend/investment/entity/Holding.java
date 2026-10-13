@@ -34,7 +34,8 @@ public class Holding extends BaseEntity {
 	@Column(name = "order_item_id", nullable = false, updatable = false)
 	private UUID orderItemId;
 
-	@Column(name = "container_id", nullable = false, updatable = false)
+	/** Null while awaiting a container. */
+	@Column(name = "container_id")
 	private UUID containerId;
 
 	@Column(name = "amount", nullable = false, updatable = false, precision = 19, scale = 4)
@@ -52,10 +53,11 @@ public class Holding extends BaseEntity {
 	@Column(name = "tenure_months", nullable = false, updatable = false)
 	private int tenureMonths;
 
-	@Column(name = "lease_starts_on", nullable = false, updatable = false)
+	/** The lease starts when the container is assigned; both null until then. */
+	@Column(name = "lease_starts_on")
 	private LocalDate leaseStartsOn;
 
-	@Column(name = "lease_ends_on", nullable = false, updatable = false)
+	@Column(name = "lease_ends_on")
 	private LocalDate leaseEndsOn;
 
 	@Enumerated(EnumType.STRING)
@@ -65,16 +67,27 @@ public class Holding extends BaseEntity {
 	@Column(name = "confirmed_at", nullable = false, updatable = false)
 	private Instant confirmedAt;
 
+	/** The order was paid in cash at the office: the rent goes to the investor's cash balance, collected there. */
+	@Column(name = "paid_at_office", nullable = false, updatable = false)
+	private boolean paidAtOffice;
+
 	@Column(name = "matured_at")
 	private Instant maturedAt;
+
+	@Column(name = "assigned_at")
+	private Instant assignedAt;
+
+	@Column(name = "assigned_by")
+	private UUID assignedBy;
 
 	protected Holding() {
 	}
 
 	public Holding(UUID userId, UUID productId, UUID orderId, UUID orderItemId, UUID containerId, Money amount,
 			BigDecimal monthlyRentPercent, BigDecimal monthlyCapitalReturnPercent, int tenureMonths,
-			LocalDate leaseStartsOn, Instant confirmedAt) {
+			LocalDate leaseStartsOn, Instant confirmedAt, boolean paidAtOffice) {
 		this.userId = userId;
+		this.paidAtOffice = paidAtOffice;
 		this.productId = productId;
 		this.orderId = orderId;
 		this.orderItemId = orderItemId;
@@ -84,10 +97,28 @@ public class Holding extends BaseEntity {
 		this.monthlyRentPercent = monthlyRentPercent;
 		this.monthlyCapitalReturnPercent = monthlyCapitalReturnPercent;
 		this.tenureMonths = tenureMonths;
+		this.confirmedAt = confirmedAt;
+		if (containerId == null) {
+			this.status = HoldingStatus.AWAITING_CONTAINER;
+		}
+		else {
+			this.leaseStartsOn = leaseStartsOn;
+			this.leaseEndsOn = leaseStartsOn.plusMonths(tenureMonths);
+			this.status = HoldingStatus.ACTIVE;
+		}
+	}
+
+	/** Finance assigned the container: the lease runs from {@code leaseStartsOn} for the tenure. */
+	public void assignContainer(UUID containerId, LocalDate leaseStartsOn, UUID assignedBy, Instant now) {
+		if (status != HoldingStatus.AWAITING_CONTAINER) {
+			throw new IllegalStateException("Holding " + getId() + " is " + status + ", not awaiting a container");
+		}
+		this.containerId = containerId;
 		this.leaseStartsOn = leaseStartsOn;
 		this.leaseEndsOn = leaseStartsOn.plusMonths(tenureMonths);
 		this.status = HoldingStatus.ACTIVE;
-		this.confirmedAt = confirmedAt;
+		this.assignedBy = assignedBy;
+		this.assignedAt = now;
 	}
 
 	/** The last payout of the tenure has been paid. */
@@ -105,9 +136,15 @@ public class Holding extends BaseEntity {
 		return ProductTerms.percentOf(amount(), monthlyRentPercent);
 	}
 
-	/** Capital returned every month of the tenure (the last month absorbs the rounding). */
+	/** Capital returned every month of the tenure: only under terms sold before capital returns ended. */
 	public Money monthlyCapitalReturn() {
-		return ProductTerms.capitalPerMonth(amount(), tenureMonths);
+		return ProductTerms.returnsCapital(monthlyCapitalReturnPercent)
+				? ProductTerms.capitalPerMonth(amount(), tenureMonths) : Money.zero(amount().currency());
+	}
+
+	/** The capital paid back over the whole tenure: the price under earlier terms, otherwise nothing. */
+	public Money capitalReturned() {
+		return ProductTerms.capitalReturned(amount(), monthlyCapitalReturnPercent);
 	}
 
 	public UUID getUserId() {
@@ -124,6 +161,10 @@ public class Holding extends BaseEntity {
 
 	public UUID getOrderItemId() {
 		return orderItemId;
+	}
+
+	public Instant getAssignedAt() {
+		return assignedAt;
 	}
 
 	public UUID getContainerId() {
@@ -156,6 +197,10 @@ public class Holding extends BaseEntity {
 
 	public Instant getConfirmedAt() {
 		return confirmedAt;
+	}
+
+	public boolean isPaidAtOffice() {
+		return paidAtOffice;
 	}
 
 	public Instant getMaturedAt() {

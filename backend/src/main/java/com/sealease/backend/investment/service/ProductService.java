@@ -7,7 +7,6 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.container.entity.ContainerType;
-import com.sealease.backend.container.service.ContainerAllocationService;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.dto.ProductSearchCriteria;
@@ -24,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Currency;
@@ -46,15 +46,12 @@ public class ProductService {
 
 	private final InvestmentProductRepository products;
 	private final HoldingService holdings;
-	private final ContainerAllocationService inventory;
 	private final AuditService audit;
 	private final Clock clock;
 
-	public ProductService(InvestmentProductRepository products, HoldingService holdings,
-			ContainerAllocationService inventory, AuditService audit, Clock clock) {
+	public ProductService(InvestmentProductRepository products, HoldingService holdings, AuditService audit, Clock clock) {
 		this.products = products;
 		this.holdings = holdings;
-		this.inventory = inventory;
 		this.audit = audit;
 		this.clock = clock;
 	}
@@ -158,10 +155,8 @@ public class ProductService {
 
 	private List<ProductResponse> views(Collection<InvestmentProduct> page) {
 		Map<UUID, Long> sold = holdings.containersSold(page.stream().map(InvestmentProduct::getId).toList());
-		Map<ContainerType, Long> available = inventory.availableByType();
 		return page.stream()
-			.map(p -> ProductResponse.from(p, available.getOrDefault(p.getContainerType(), 0L),
-					sold.getOrDefault(p.getId(), 0L)))
+			.map(p -> ProductResponse.from(p, sold.getOrDefault(p.getId(), 0L)))
 			.toList();
 	}
 
@@ -172,20 +167,25 @@ public class ProductService {
 		if (r.price().stripTrailingZeros().scale() > digits) {
 			problems.add("Amounts in " + currency.getCurrencyCode() + " allow at most " + digits + " decimals");
 		}
+		if (r.maxTenureYears() < r.minTenureYears()) {
+			problems.add("The longest lease must be at least the shortest");
+		}
 		if (!problems.isEmpty()) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, String.join("; ", problems));
 		}
 		return new ProductTerms(r.containerType(), r.title().strip(), r.summary().strip(), r.description().strip(),
-				currency, r.price(), r.monthlyRentPercent(), ProductTerms.capitalReturnPercent(r.tenureMonths()), r.tenureMonths(),
+				currency, r.price(), r.gstRatePercent(), r.monthlyRentPercent(), BigDecimal.ZERO, r.minTenureYears(),
+				r.maxTenureYears(),
 				r.riskDisclosure().strip(), r.termsAndConditions().strip());
 	}
 
 	private static Map<String, Object> snapshot(InvestmentProduct p) {
 		ProductTerms t = p.terms();
 		return Map.of("code", p.getCode(), "containerType", t.containerType(), "currency", t.currency().getCurrencyCode(),
-				"price", t.price().toPlainString(), "monthlyRentPercent", t.monthlyRentPercent().toPlainString(),
+				"price", t.price().toPlainString(), "gstRatePercent", t.gstRatePercent().toPlainString(),
+				"monthlyRentPercent", t.monthlyRentPercent().toPlainString(),
 				"monthlyCapitalReturnPercent", t.monthlyCapitalReturnPercent().toPlainString(),
-				"tenureMonths", t.tenureMonths());
+				"minTenureYears", t.minTenureYears(), "maxTenureYears", t.maxTenureYears());
 	}
 
 	private InvestmentProduct load(UUID id) {

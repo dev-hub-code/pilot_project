@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /*
- * Theme: <html data-theme="light|dark"> follows the user's choice in Settings; without it the
- * operating system's preference applies. `dark:` utilities follow the same rule.
+ * Theme: <html data-theme="light|dark"> follows the user's choice in Settings, light by default; without the
+ * attribute (the user chose "System") the operating system's preference applies. `dark:` utilities follow the same rule.
  */
 @custom-variant dark {
   &:where([data-theme="dark"], [data-theme="dark"] *) {

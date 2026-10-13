@@ -62,6 +62,26 @@ public class Invoice {
 	@Column(name = "notes", length = 1000)
 	private String notes;
 
+	/** The total before GST; {@code null} on invoices issued before GST was charged. */
+	@Column(name = "taxable_amount", precision = 19, scale = 4)
+	private BigDecimal taxableAmount;
+
+	@Column(name = "cgst_amount", nullable = false, precision = 19, scale = 4)
+	private BigDecimal cgstAmount;
+
+	@Column(name = "sgst_amount", nullable = false, precision = 19, scale = 4)
+	private BigDecimal sgstAmount;
+
+	@Column(name = "igst_amount", nullable = false, precision = 19, scale = 4)
+	private BigDecimal igstAmount;
+
+	/** The buyer's state, e.g. "Maharashtra (27)"; {@code null} when it could not be told. */
+	@Column(name = "place_of_supply", length = 80)
+	private String placeOfSupply;
+
+	@Column(name = "buyer_gstin", length = 15)
+	private String buyerGstin;
+
 	@Column(name = "issued_at", nullable = false)
 	private Instant issuedAt;
 
@@ -69,7 +89,7 @@ public class Invoice {
 	}
 
 	public Invoice(String invoiceNumber, UUID orderId, UUID userId, UUID paymentId, Money total, Party issuer,
-			String issuerTaxId, Party buyer, String buyerEmail, String notes, Instant issuedAt) {
+			String issuerTaxId, Party buyer, String buyerEmail, Tax tax, String notes, Instant issuedAt) {
 		this.invoiceNumber = invoiceNumber;
 		this.orderId = orderId;
 		this.userId = userId;
@@ -84,9 +104,19 @@ public class Invoice {
 		this.buyerAddress = buyer.address();
 		this.notes = notes;
 		this.issuedAt = issuedAt;
+		this.taxableAmount = tax.taxable().amount();
+		this.cgstAmount = tax.cgst().amount();
+		this.sgstAmount = tax.sgst().amount();
+		this.igstAmount = tax.igst().amount();
+		this.placeOfSupply = tax.placeOfSupply();
+		this.buyerGstin = tax.buyerGstin();
 	}
 
 	public record Party(String name, String address) {
+	}
+
+	/** The GST on an invoice: CGST + SGST within the seller's state, IGST across states. */
+	public record Tax(Money taxable, Money cgst, Money sgst, Money igst, String placeOfSupply, String buyerGstin) {
 	}
 
 	public UUID getId() {
@@ -131,6 +161,13 @@ public class Invoice {
 
 	public String getNotes() {
 		return notes;
+	}
+
+	/** The GST of the invoice; invoices issued before GST was charged show none, on a taxable value of their total. */
+	public Tax tax() {
+		Currency unit = Currency.getInstance(currency);
+		return new Tax(taxableAmount == null ? total() : Money.of(taxableAmount, unit), Money.of(cgstAmount, unit),
+				Money.of(sgstAmount, unit), Money.of(igstAmount, unit), placeOfSupply, buyerGstin);
 	}
 
 	public Instant getIssuedAt() {

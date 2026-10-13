@@ -1,19 +1,35 @@
 import type { StatusTone } from "@/components/ui/status-badge";
-import type { AccountType, PayoutStatus } from "@/types/earning";
+import type { AccountType, EarningsBalance, PayoutStatus } from "@/types/earning";
 import { formatDate } from "@/utils/format";
 
-export const PAYOUT_STATUS_LABEL: Record<PayoutStatus, string> = { SCHEDULED: "Scheduled", PAID: "Paid" };
+/** A payout is one month of a lease, credited day by day; PAID once the whole month has been. */
+export const PAYOUT_STATUS_LABEL: Record<PayoutStatus, string> = { SCHEDULED: "Being credited", PAID: "Credited" };
 
 export const PAYOUT_TONE: Record<PayoutStatus, StatusTone> = { SCHEDULED: "neutral", PAID: "success" };
 
 export const ACCOUNT_LABEL: Record<AccountType, string> = {
   RENTAL_CASH: "Client money (cash)",
-  INVESTOR_EARNINGS: "Investor earnings",
+  INVESTOR_EARNINGS: "Investor rent (bank)",
+  INVESTOR_CASH_EARNINGS: "Investor rent (cash)",
+  INVESTOR_REFERRAL_EARNINGS: "Investor referral earnings",
   PLATFORM_ADJUSTMENTS: "Adjustments",
   PLATFORM_REFERRAL_EXPENSE: "Referral commissions",
   WITHDRAWALS_IN_TRANSIT: "Withdrawals in transit",
   PLATFORM_RENT_EXPENSE: "Rent paid to investors",
   PLATFORM_CAPITAL_RETURNS: "Capital returned to investors",
+};
+
+export const EARNINGS_BALANCE_LABEL: Record<EarningsBalance, string> = {
+  RENT_BANK: "Rent (bank)",
+  RENT_CASH: "Rent (cash)",
+  REFERRAL: "Referral earnings",
+};
+
+/** How each earnings balance may be withdrawn. */
+export const EARNINGS_BALANCE_NOTE: Record<EarningsBalance, string> = {
+  RENT_BANK: "On containers paid by bank; paid into your bank account",
+  RENT_CASH: "On containers paid in cash; collected in cash at our office",
+  REFERRAL: "Paid into your bank account or in cash, as you choose",
 };
 
 /** Adds whole months to an ISO date the way java.time does: the day is clamped to the month's end. */

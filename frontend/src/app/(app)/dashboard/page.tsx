@@ -35,6 +35,9 @@ const PAYOUT_SERIES: readonly ColumnSeries[] = [
   { key: "capitalScheduled", label: "Capital returned", fill: "fill-chart-2", swatch: "bg-chart-2", scheduled: true },
 ];
 
+/** Plans pay rent only; capital appears only for containers bought before that, so its series shows only then. */
+const RENT_SERIES = PAYOUT_SERIES.filter((s) => !s.key.startsWith("capital"));
+
 const REFERRAL_SERIES: readonly ColumnSeries[] = [
   { key: "total", label: "Commission", fill: "fill-chart-3", swatch: "bg-chart-3" },
 ];
@@ -61,11 +64,14 @@ export default async function DashboardPage() {
   const invested = portfolio && portfolio.totalsByCurrency.length > 0
     ? portfolio.totalsByCurrency.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—";
+  // Only containers bought before plans became rent-only return capital.
+  const hasCapital = (earnings?.capitalReturned.length ?? 0) > 0
+    || (payoutMonths ?? []).some((m) => Number(m.capitalPaid.amount) > 0 || Number(m.capitalScheduled.amount) > 0);
   const kpis = [
     { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} container(s) on lease` : "Investor accounts only" },
     { label: "Next payout", value: earnings?.nextPayout ? formatMoney(earnings.nextPayout.total, { compact: true }) : "—",
-      note: earnings?.nextPayout ? `Due ${formatDate(earnings.nextPayout.dueOn)}: rent plus capital back` : earnings ? "Buy a container to start earning" : "Investor accounts only" },
-    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Ready to withdraw to your bank account" : "Investor accounts only" },
+      note: earnings?.nextPayout ? `Due ${formatDate(earnings.nextPayout.dueOn)}` : earnings ? "Buy a container to start earning" : "Investor accounts only" },
+    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Ready to withdraw" : "Investor accounts only" },
   ];
 
   return (
@@ -107,13 +113,14 @@ export default async function DashboardPage() {
       {earnings && (
         <>
           <section className="grid gap-6 lg:grid-cols-3" aria-label="Payouts">
-            <Card title="Monthly payouts" description="Rent plus capital back, by due date" className="lg:col-span-2">
+            <Card title="Monthly rent" description="Credited to your wallet every day, by month"
+              className="lg:col-span-2">
               {payoutMonths === null ? (
                 <EmptyState title="The chart could not be loaded" description="Your payouts are listed on the Earnings page." />
               ) : payoutMonths.length === 0 && earnings.holdings.length === 0 ? (
                 <EmptyState title="No payouts yet" description="Buy a container and its monthly payouts appear here." />
               ) : (
-                <ColumnChart series={PAYOUT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Monthly payouts"
+                <ColumnChart series={hasCapital ? PAYOUT_SERIES : RENT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Monthly payouts"
                   data={monthColumns(payoutMonths, PAST, AHEAD, CURRENCY, (m) => ({
                     rentPaid: m.rentPaid, capitalPaid: m.capitalPaid,
                     rentScheduled: m.rentScheduled, capitalScheduled: m.capitalScheduled,
@@ -123,14 +130,14 @@ export default async function DashboardPage() {
             <Card title="Your returns" description="Everything paid into your wallet">
               <ReturnsBreakdown currency={CURRENCY} parts={[
                 { label: "Rent", amount: sum(earnings.rentPaid), fill: "fill-chart-1", swatch: "bg-chart-1" },
-                { label: "Capital returned", amount: sum(earnings.capitalReturned), fill: "fill-chart-2", swatch: "bg-chart-2" },
+                ...(hasCapital ? [{ label: "Capital returned", amount: sum(earnings.capitalReturned), fill: "fill-chart-2", swatch: "bg-chart-2" }] : []),
                 { label: "Referral commission", amount: sum(earnings.referralEarned), fill: "fill-chart-3", swatch: "bg-chart-3" },
               ]} />
             </Card>
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2" aria-label="Leases and referrals">
-            <Card title="Lease progress" description="Months paid out of each container's tenure"
+            <Card title="Lease progress" description="Months of rent credited over each container's lease"
               actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
               {earnings.holdings.some((h) => h.paid < h.installments)
                 ? <LeaseProgress holdings={earnings.holdings} />

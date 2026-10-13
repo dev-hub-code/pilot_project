@@ -11,18 +11,13 @@ public final class PlanRules {
 	private PlanRules() {
 	}
 
-	public static List<String> quantityProblems(int quantity, long available) {
+	/** Sales are not limited by stock: finance assigns containers after payment. */
+	public static List<String> quantityProblems(int quantity) {
 		if (quantity < 1) {
 			return List.of("Buy at least one container");
 		}
 		if (quantity > MAX_CONTAINERS_PER_LINE) {
 			return List.of("At most " + MAX_CONTAINERS_PER_LINE + " containers per plan in one order");
-		}
-		if (available == 0) {
-			return List.of("No containers are available under this plan right now");
-		}
-		if (quantity > available) {
-			return List.of("Only " + available + " container(s) are available right now");
 		}
 		return List.of();
 	}

@@ -38,6 +38,11 @@ public interface ContainerRepository extends JpaRepository<Container, UUID>, Jpa
 
 	List<Container> findByReservedOrderId(UUID orderId);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select c from Container c where c.containerNumber = :number")
+	Optional<Container> findByContainerNumberForUpdate(@Param("number") String number);
+
+
 	long countByContainerTypeAndStatus(ContainerType type, ContainerStatus status);
 
 	@Query("select c.containerType, count(c) from Container c where c.status = :status group by c.containerType")

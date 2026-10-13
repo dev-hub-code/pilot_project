@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,7 +23,10 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, UUID> 
 
 	long countByUserIdAndStatusNot(UUID userId, BankAccountStatus excluded);
 
-	boolean existsByUserIdAndAccountFingerprintAndStatusNot(UUID userId, String fingerprint, BankAccountStatus excluded);
+	boolean existsByUserIdAndAccountFingerprintAndStatusIn(UUID userId, String fingerprint,
+			Collection<BankAccountStatus> statuses);
+
+	List<BankAccount> findByUserIdAndStatusInOrderByCreatedAtAsc(UUID userId, Collection<BankAccountStatus> statuses);
 
 	Page<BankAccount> findByStatus(BankAccountStatus status, Pageable pageable);
 

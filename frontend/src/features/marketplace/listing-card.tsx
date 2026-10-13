@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ContainerScene } from "@/components/brand/container-scene";
+import { yearsLabel } from "@/features/orders/lease-years";
 import type { MarketplaceListing } from "@/types/marketplace";
 import { formatMoney, formatPercent } from "@/utils/money";
 import { CONTAINER_TYPE_LABEL } from "./labels";
@@ -35,20 +36,20 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <Stat label="Monthly payout" value={formatPercent(listing.monthlyPayoutPercent)} emphasis />
-          <Stat label="Price per container" value={formatMoney(listing.price)} />
-          <Stat label="Paid monthly" value={formatMoney(listing.monthlyPayout)} />
-          <Stat label="Tenure" value={`${listing.tenureMonths} months`} />
+          <Stat label="Monthly rent" value={formatPercent(listing.monthlyRentPercent)} emphasis />
+          <Stat label={Number(listing.gstRatePercent) > 0 ? `Price + ${formatPercent(listing.gstRatePercent)} GST` : "Price per container"}
+            value={formatMoney(listing.priceWithGst)} />
+          <Stat label="Rent paid monthly" value={formatMoney(listing.monthlyPayout)} />
+          <Stat label="Minimum lease" value={yearsLabel(listing.minTenureYears)} />
         </dl>
         <p className="text-xs text-muted">
-          {formatPercent(listing.monthlyRentPercent)} rent + {formatPercent(listing.monthlyCapitalReturnPercent)} of your capital back, every month.
+          {formatPercent(listing.monthlyRentPercent)} of the price ({formatMoney(listing.price)}, before GST) paid to you as rent
+          every month of the lease.
         </p>
 
         <div className="mt-auto flex items-center justify-between text-xs text-muted">
-          <span>
-            <span className="font-medium text-foreground">{listing.availableContainers}</span>{" "}
-            container{listing.availableContainers === 1 ? "" : "s"} available
-          </span>
+          <span>Lease of {listing.minTenureYears === listing.maxTenureYears ? yearsLabel(listing.minTenureYears)
+            : `${listing.minTenureYears}–${listing.maxTenureYears} years`}, your choice · container assigned after payment</span>
         </div>
       </div>
     </article>

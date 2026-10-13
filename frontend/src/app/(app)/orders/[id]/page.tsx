@@ -16,7 +16,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -86,7 +86,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <DataTable columns={["Plan", "Container", "Price", "Paid monthly", "Tenure"]}>
+          <DataTable columns={["Plan", "Container", "Price", "GST", "Paid", "Rent monthly", "Tenure"]}>
             {order.items.map((item) => (
               <tr key={item.id}>
                 <Cell>
@@ -96,10 +96,16 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                 <Cell>
                   {item.containerNumber
                     ? <span className="font-mono font-medium">{item.containerNumber}</span>
-                    : <span className="text-muted">Assigned once paid</span>}
+                    : <span className="text-muted">Assigned by our team after payment</span>}
                   <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</span>
                 </Cell>
                 <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
+                <Cell className="tabular-nums">
+                  {Number(item.gstRatePercent) > 0
+                    ? <>{formatMoney(item.gstAmount)}<span className="block text-xs text-muted">{formatPercent(item.gstRatePercent)}</span></>
+                    : "—"}
+                </Cell>
+                <Cell className="tabular-nums font-medium">{formatMoney(item.amountWithGst)}</Cell>
                 <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
                 <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
               </tr>
@@ -141,7 +147,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
               <p className="mt-2 text-sm text-muted">
                 {awaitingVerification
                   ? `Payment being verified. Reserved until ${formatDateTime(order.expiresAt)}.`
-                  : `Pay by ${formatDateTime(order.expiresAt)}, or the reservation lapses.`}
+                  : pending?.officeCash
+                    ? `Pay at our office by ${formatDateTime(order.expiresAt)}, or the order lapses.`
+                    : `Pay by ${formatDateTime(order.expiresAt)}, or the reservation lapses.`}
               </p>
             )}
           </Card>
@@ -150,9 +158,33 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
             <Card title="Pay">
               <div className="space-y-6">
                 {pending?.bankTransfer && <DepositForm key={pending.id} orderId={order.id} payment={pending} />}
+                {pending?.officeCash && (
+                  <div className="space-y-3 text-sm">
+                    <p className="font-medium">Pay in cash at our office</p>
+                    <dl className="space-y-2">
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Amount</dt>
+                        <dd className="font-display text-xl font-semibold tabular-nums">{formatMoney(pending.officeCash.amount)}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Quote this reference</dt>
+                        <dd className="font-mono text-base">{pending.officeCash.reference}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Office</dt>
+                        <dd className="whitespace-pre-line">{pending.officeCash.address}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Hours</dt><dd>{pending.officeCash.hours}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Pay by</dt><dd>{formatDateTime(pending.officeCash.payBy)}</dd></div>
+                    </dl>
+                    <p className="text-xs text-muted">
+                      Bring the amount in cash and quote the reference. You get a receipt, and your order is confirmed once our
+                      finance team records it.
+                    </p>
+                  </div>
+                )}
                 {pending?.method !== "BANK_TRANSFER" && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "BANK_TRANSFER", key())}
-                    label="Pay by bank (online transfer, cheque or cash deposit)" className="w-full" />
+                    label="Pay by bank (online transfer, cheque or cash deposit)" className="w-full"
+                    variant={pending?.method === "OFFICE_CASH" ? "secondary" : "primary"} />
+                )}
+                {pending?.method !== "OFFICE_CASH" && (
+                  <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
+                    label="Pay in cash at our office" variant="secondary" className="w-full" />
                 )}
                 <div className="border-t border-border pt-4">
                   <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"

@@ -24,6 +24,7 @@ import com.sealease.backend.reporting.engine.ReportDocument.Section;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
+import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
 import com.sealease.backend.withdrawal.service.WithdrawalService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -130,13 +131,18 @@ public class ReportService {
 		}
 		List<HoldingResponse> held = holdings.portfolio(userId).holdings();
 		sections.add(new Section("Containers", List.of("Plan", "Container", "Lease", "Invested"), held.stream()
-			.map(h -> Row.of(h.productCode(), h.container().containerNumber() + " · " + Format.label(h.status().name()),
-					Format.date(h.leaseStartsOn()) + " – " + Format.date(h.leaseEndsOn().minusDays(1)), Format.money(h.amount())))
+			.map(h -> h.container() == null
+					// Paid, awaiting the container finance assigns; the lease starts then.
+					? Row.of(h.productCode(), "To be assigned · " + Format.label(h.status().name()), "Starts on assignment",
+							Format.money(h.amount()))
+					: Row.of(h.productCode(), h.container().containerNumber() + " · " + Format.label(h.status().name()),
+							Format.date(h.leaseStartsOn()) + " – " + Format.date(h.leaseEndsOn().minusDays(1)), Format.money(h.amount())))
 			.toList()));
 		List<WithdrawalResponse> paidOut = withdrawals.forStatement(userId, period.start(), period.end());
 		sections.add(new Section("Withdrawals requested in the period", List.of("Date", "Reference", "Status", "Amount"),
 				paidOut.stream()
-					.map(w -> Row.of(Format.date(w.createdAt()), w.reference() + " · " + w.bankName() + " " + w.bankAccountMasked(),
+					.map(w -> Row.of(Format.date(w.createdAt()), w.reference() + " · " + (w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH ? "cash at the office"
+							: w.bankName() + " " + w.bankAccountMasked()),
 							Format.label(w.status().name()), Format.money(w.amount())))
 					.toList()));
 		return new ReportDocument("Investor statement", investor.firstName() + " " + investor.lastName() + " · "
@@ -149,7 +155,7 @@ public class ReportService {
 	@Transactional(readOnly = true)
 	public ReportDocument financialSummary(Period period) {
 		Map<String, List<PeriodTotal>> totals = ledger.periodTotals(period.start(), period.end());
-		Map<String, Money> owed = ledger.balancesAt(AccountType.INVESTOR_EARNINGS, period.end());
+		Map<String, Money> owed = ledger.investorBalancesAt(period.end());
 		Map<String, Money> inTransit = ledger.balancesAt(AccountType.WITHDRAWALS_IN_TRANSIT, period.end());
 		Set<String> currencies = new TreeSet<>(totals.keySet());
 		currencies.addAll(owed.keySet());
@@ -165,9 +171,10 @@ public class ReportService {
 							Format.money(total(t, zero, TransactionType.INVESTOR_PAYOUT, AccountType.PLATFORM_CAPITAL_RETURNS, Direction.DEBIT))),
 					Row.of("Referral commissions", "Paid by the platform", "",
 							Format.money(total(t, zero, TransactionType.REFERRAL_COMMISSION, AccountType.PLATFORM_REFERRAL_EXPENSE, Direction.DEBIT))),
+					// Booked against platform adjustments, so this covers every earnings balance the adjustment went to.
 					Row.of("Adjustments to investors", "Credits less debits", "",
-							Format.money(total(t, zero, TransactionType.ADJUSTMENT, AccountType.INVESTOR_EARNINGS, Direction.CREDIT)
-								.minus(total(t, zero, TransactionType.ADJUSTMENT, AccountType.INVESTOR_EARNINGS, Direction.DEBIT)))),
+							Format.money(total(t, zero, TransactionType.ADJUSTMENT, AccountType.PLATFORM_ADJUSTMENTS, Direction.DEBIT)
+								.minus(total(t, zero, TransactionType.ADJUSTMENT, AccountType.PLATFORM_ADJUSTMENTS, Direction.CREDIT)))),
 					Row.of("Withdrawals requested", "", "",
 							Format.money(total(t, zero, TransactionType.WITHDRAWAL_RESERVE, AccountType.WITHDRAWALS_IN_TRANSIT, Direction.CREDIT))),
 					Row.of("Withdrawals returned", "Rejected, cancelled or failed", "",
@@ -191,7 +198,7 @@ public class ReportService {
 
 		List<Row> plans = all.stream()
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
-					p.containersSold() + " sold · " + p.availableContainers() + " available · "
+					p.containersSold() + " sold · "
 							+ investors.getOrDefault(p.id(), 0L) + " investor(s)",
 					Format.money(p.price()) + " · " + Format.percent(p.monthlyRentPercent()) + " rent + "
 							+ Format.percent(p.monthlyCapitalReturnPercent()) + " capital a month"))
@@ -212,15 +219,30 @@ public class ReportService {
 		InvoiceResponse.Party issuer = invoice.issuer();
 		InvoiceResponse.Party buyer = invoice.buyer();
 		List<Row> parties = new ArrayList<>();
-		parties.add(Row.of("From", issuer.name(), issuer.taxId() == null ? "" : "Tax ID " + issuer.taxId(), ""));
+		parties.add(Row.of("From", issuer.name(), issuer.taxId() == null ? "" : "GSTIN " + issuer.taxId(), ""));
 		parties.add(Row.of("", issuer.address(), "", ""));
-		parties.add(Row.of("Bill to", buyer.name(), buyer.email(), ""));
+		parties.add(Row.of("Bill to", buyer.name(), buyer.email(), buyer.taxId() == null ? "" : "GSTIN " + buyer.taxId()));
 		if (buyer.address() != null) {
 			parties.add(Row.of("", buyer.address(), "", ""));
 		}
+		parties.add(Row.of("Place of supply", invoice.placeOfSupply() == null ? "Not given" : invoice.placeOfSupply(), "", ""));
 		List<Row> lines = new ArrayList<>(invoice.lines().stream()
-			.map(l -> Row.of(String.valueOf(l.lineNumber()), l.description(), "", Format.money(l.amount())))
+			.map(l -> Row.of(String.valueOf(l.lineNumber()), l.description(),
+					l.gstRatePercent().signum() == 0 ? "" : "GST " + l.gstRatePercent().stripTrailingZeros().toPlainString() + "%",
+					Format.money(l.amount())))
 			.toList());
+		// When GST was charged: the taxable value, then CGST + SGST (within the seller's state) or IGST.
+		boolean intraState = positive(invoice.cgst()) || positive(invoice.sgst());
+		if (intraState || positive(invoice.igst())) {
+			lines.add(Row.of("", "Taxable value", "", Format.money(invoice.taxable())));
+			if (intraState) {
+				lines.add(Row.of("", "CGST", "", Format.money(invoice.cgst())));
+				lines.add(Row.of("", "SGST", "", Format.money(invoice.sgst())));
+			}
+			else {
+				lines.add(Row.of("", "IGST", "", Format.money(invoice.igst())));
+			}
+		}
 		lines.add(Row.total("", "Total", "", Format.money(invoice.total())));
 		return new ReportDocument("Invoice " + invoice.invoiceNumber(), "Order " + invoice.orderNumber() + " · issued "
 				+ Format.date(invoice.issuedAt()), "invoice-" + invoice.invoiceNumber(), clock.instant(),
@@ -231,6 +253,10 @@ public class ReportService {
 	}
 
 	// ----------------------------------------------------------------------------- internal
+
+	private static boolean positive(MoneyResponse m) {
+		return m != null && new java.math.BigDecimal(m.amount()).signum() > 0;
+	}
 
 	private static Money sum(InvestorStatement s, Currency currency, TransactionType type) {
 		return s.entries().stream().filter(e -> e.type() == type).map(InvestorStatement.Entry::amount)

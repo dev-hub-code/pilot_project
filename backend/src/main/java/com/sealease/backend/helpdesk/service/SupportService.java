@@ -22,11 +22,15 @@ import com.sealease.backend.helpdesk.dto.TicketSearchCriteria;
 import com.sealease.backend.helpdesk.entity.RelatedType;
 import com.sealease.backend.helpdesk.entity.SupportTicket;
 import com.sealease.backend.helpdesk.entity.TicketAttachment;
+import com.sealease.backend.helpdesk.entity.TicketCategory;
+import com.sealease.backend.helpdesk.entity.TicketEvent;
+import com.sealease.backend.helpdesk.entity.TicketEventType;
 import com.sealease.backend.helpdesk.entity.TicketMessage;
 import com.sealease.backend.helpdesk.entity.TicketPriority;
 import com.sealease.backend.helpdesk.entity.TicketStatus;
 import com.sealease.backend.helpdesk.repository.SupportTicketRepository;
 import com.sealease.backend.helpdesk.repository.TicketAttachmentRepository;
+import com.sealease.backend.helpdesk.repository.TicketEventRepository;
 import com.sealease.backend.helpdesk.repository.TicketMessageRepository;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
@@ -36,7 +40,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -57,9 +63,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Support tickets: investors open and reply; agents (SUPPORT_TICKET_MANAGE) reply, add internal
- * notes, prioritise, assign, resolve and close. Investors only ever see their own tickets, and never
- * internal notes or the attachments on them.
+ * Support tickets: investors open, reply, close and reopen; agents (SUPPORT_TICKET_MANAGE) reply, add internal
+ * notes, prioritise, assign, resolve and close. Every change is kept as a ticket event, so investors can follow
+ * their request. Investors only ever see their own tickets, and never internal notes, the attachments on them,
+ * priority changes or unassignments.
  */
 @Service
 public class SupportService {
@@ -70,6 +77,7 @@ public class SupportService {
 	private final SupportTicketRepository tickets;
 	private final TicketMessageRepository messages;
 	private final TicketAttachmentRepository attachments;
+	private final TicketEventRepository events;
 	private final DocumentService documents;
 	private final NotificationService notifications;
 	private final OrderService orders;
@@ -79,15 +87,19 @@ public class SupportService {
 	private final UserRoleService roles;
 	private final AuditService audit;
 	private final SupportProperties properties;
+	private final TransactionTemplate transactions;
 	private final Clock clock;
 
 	public SupportService(SupportTicketRepository tickets, TicketMessageRepository messages,
-			TicketAttachmentRepository attachments, DocumentService documents, NotificationService notifications,
+			TicketAttachmentRepository attachments, TicketEventRepository events, DocumentService documents, NotificationService notifications,
 			OrderService orders, WithdrawalService withdrawals, HoldingService holdings, UserAccountService accounts,
-			UserRoleService roles, AuditService audit, SupportProperties properties, Clock clock) {
+			UserRoleService roles, AuditService audit, SupportProperties properties, TransactionTemplate transactions,
+			Clock clock) {
+		this.transactions = transactions;
 		this.tickets = tickets;
 		this.messages = messages;
 		this.attachments = attachments;
+		this.events = events;
 		this.documents = documents;
 		this.notifications = notifications;
 		this.orders = orders;
@@ -120,21 +132,29 @@ public class SupportService {
 				userId, request.subject().strip(), request.category(), request.relatedType(), request.relatedId(),
 				relatedLabel, priority, now.plus(properties.responseTargets().of(priority)), now));
 		post(ticket, userId, false, false, request.message(), files, now);
+		event(ticket, userId, false, TicketEventType.OPENED, null, TicketStatus.OPEN, null, now);
 		audit.record(AuditRecord.of(userId, AuditAction.TICKET_OPENED, ENTITY, ticket.getId())
 			.withNewValue(Map.of("reference", ticket.getReference(), "category", ticket.getCategory())));
 		return customerDetail(userId, ticket.getId());
 	}
 
-	/** The customer writes; a resolved ticket reopens. Closed tickets take no more messages. */
+	/** The customer writes; a resolved ticket reopens. A closed ticket must be reopened first. */
 	@Transactional
 	public TicketDetail customerReply(UUID userId, UUID ticketId, String body, List<MultipartFile> files) {
 		requireFileCount(files);
 		SupportTicket ticket = lockOwn(userId, ticketId);
-		requireNotClosed(ticket);
+		requireReopenable(ticket);
 		Instant now = clock.instant();
+		TicketStatus previous = ticket.getStatus();
 		post(ticket, userId, false, false, body, files, now);
 		ticket.customerReplied(now);
 		tickets.flush();
+		if (previous == TicketStatus.RESOLVED) {
+			event(ticket, userId, false, TicketEventType.REOPENED, previous, TicketStatus.OPEN, null, now);
+		}
+		else if (previous != TicketStatus.OPEN) {
+			event(ticket, userId, false, TicketEventType.STATUS_CHANGED, previous, TicketStatus.OPEN, null, now);
+		}
 		if (ticket.getAssigneeId() != null) {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_CUSTOMER_REPLY", "New reply on " + ticket.getReference(),
 					ticket.getSubject(), "/admin/support/" + ticket.getId());
@@ -147,24 +167,52 @@ public class SupportService {
 		SupportTicket ticket = lockOwn(userId, ticketId);
 		requireNotClosed(ticket);
 		TicketStatus previous = ticket.getStatus();
-		ticket.close(clock.instant());
+		Instant now = clock.instant();
+		ticket.close(now);
 		tickets.flush();
+		event(ticket, userId, false, TicketEventType.STATUS_CHANGED, previous, TicketStatus.CLOSED, null, now);
 		audit.record(AuditRecord.of(userId, AuditAction.TICKET_STATUS_CHANGED, ENTITY, ticketId)
 			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", TicketStatus.CLOSED)));
+		return customerDetail(userId, ticketId);
+	}
+
+	/**
+	 * Reopens a resolved or closed ticket, within the reopen window after it was resolved or closed. The reason is
+	 * posted to the conversation and the ticket goes back in the queue, to its assignee if it has one.
+	 */
+	@Transactional
+	public TicketDetail reopen(UUID userId, UUID ticketId, String reason) {
+		SupportTicket ticket = lockOwn(userId, ticketId);
+		TicketStatus previous = ticket.getStatus();
+		requireReopenable(ticket);
+		if (previous != TicketStatus.RESOLVED) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Only a resolved request can be reopened");
+		}
+		Instant now = clock.instant();
+		post(ticket, userId, false, false, reason, List.of(), now);
+		ticket.reopen(now);
+		tickets.flush();
+		event(ticket, userId, false, TicketEventType.REOPENED, previous, TicketStatus.OPEN, null, now);
+		audit.record(AuditRecord.of(userId, AuditAction.TICKET_REOPENED, ENTITY, ticketId)
+			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", TicketStatus.OPEN)));
+		if (ticket.getAssigneeId() != null) {
+			notifications.notify(ticket.getAssigneeId(), "TICKET_REOPENED", ticket.getReference() + " was reopened",
+					ticket.getSubject(), "/admin/support/" + ticket.getId());
+		}
 		return customerDetail(userId, ticketId);
 	}
 
 	@Transactional(readOnly = true)
 	public Page<TicketResponse> mine(UUID userId, Pageable pageable) {
 		Instant now = clock.instant();
-		return tickets.findByUserIdOrderByLastMessageAtDesc(userId, pageable).map(t -> TicketResponse.forCustomer(t, now));
+		return tickets.findByUserIdOrderByLastMessageAtDesc(userId, pageable).map(t -> TicketResponse.forCustomer(t, now, reopenableUntil(t)));
 	}
 
 	@Transactional(readOnly = true)
 	public TicketDetail customerDetail(UUID userId, UUID ticketId) {
 		SupportTicket ticket = tickets.findById(ticketId).filter(t -> t.getUserId().equals(userId))
 			.orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
-		return detail(ticket, TicketResponse.forCustomer(ticket, clock.instant()), false);
+		return detail(ticket, TicketResponse.forCustomer(ticket, clock.instant(), reopenableUntil(ticket)), false);
 	}
 
 	/** An attachment the customer may see: on their own ticket and not on an internal note. */
@@ -182,6 +230,57 @@ public class SupportService {
 
 	// ------------------------------------------------------------------------------ staff
 
+	/**
+	 * A ticket staff (or the system, on a staff member's action) opens on a customer's behalf about one of their
+	 * records, e.g. a withdrawal the bank did not pay. The opening message is public: the customer is told, and can
+	 * reply. Assigned to {@code assigneeId} when that user can handle tickets. Caller's transaction.
+	 *
+	 * @return the ticket's id
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public UUID openOnBehalf(UUID actorId, UUID customerId, TicketCategory category, RelatedType relatedType,
+			UUID relatedId, String relatedLabel, String subject, String message, TicketPriority priority, UUID assigneeId) {
+		Instant now = clock.instant();
+		SupportTicket ticket = tickets.saveAndFlush(new SupportTicket("TK-" + String.format("%06d", tickets.nextNumber()),
+				customerId, subject, category, relatedType, relatedId, relatedLabel, priority,
+				now.plus(properties.responseTargets().of(priority)), now));
+		post(ticket, actorId, true, false, message, List.of(), now);
+		event(ticket, actorId, true, TicketEventType.OPENED, null, TicketStatus.OPEN, null, now);
+		if (assigneeId != null && !assigneeId.equals(customerId)
+				&& roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name()).contains(assigneeId)) {
+			ticket.assignTo(assigneeId);
+			tickets.flush();
+			event(ticket, actorId, true, TicketEventType.ASSIGNED, null, null, assigneeId, now);
+		}
+		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_OPENED, ENTITY, ticket.getId())
+			.withNewValue(Map.of("reference", ticket.getReference(), "category", category, "onBehalfOf", customerId.toString())));
+		notifications.notify(customerId, "TICKET_REPLY", subject, "We opened " + ticket.getReference() + " to sort this out.",
+				"/support/" + ticket.getId());
+		return ticket.getId();
+	}
+
+	/**
+	 * Tells the customer how a ticket opened on their behalf was settled and marks it resolved (closed tickets are
+	 * left alone). Caller's transaction.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void resolveWithNote(UUID actorId, UUID ticketId, String note) {
+		SupportTicket ticket = lock(ticketId);
+		if (ticket.getStatus() == TicketStatus.CLOSED) {
+			return;
+		}
+		Instant now = clock.instant();
+		post(ticket, actorId, true, false, note, List.of(), now);
+		TicketStatus previous = ticket.getStatus();
+		if (previous != TicketStatus.RESOLVED) {
+			ticket.resolve(now);
+			event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, TicketStatus.RESOLVED, null, now);
+		}
+		tickets.flush();
+		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was resolved", note,
+				"/support/" + ticket.getId());
+	}
+
 	/** A public reply puts the ticket in the customer's court and notifies them; an internal note changes nothing. */
 	@Transactional
 	public TicketDetail staffReply(UUID actorId, UUID ticketId, String body, boolean internal, List<MultipartFile> files) {
@@ -192,9 +291,13 @@ public class SupportService {
 			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot answer your own ticket");
 		}
 		Instant now = clock.instant();
+		TicketStatus previous = ticket.getStatus();
 		post(ticket, actorId, true, internal, body, files, now);
 		if (!internal) {
 			ticket.staffReplied(now);
+			if (previous != TicketStatus.WAITING_ON_CUSTOMER) {
+				event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, TicketStatus.WAITING_ON_CUSTOMER, null, now);
+			}
 			notifications.notify(ticket.getUserId(), "TICKET_REPLY", "Support replied to " + ticket.getReference(),
 					ticket.getSubject(), "/support/" + ticket.getId());
 		}
@@ -205,7 +308,7 @@ public class SupportService {
 	@Transactional
 	public TicketDetail setStatus(UUID actorId, UUID ticketId, TicketStatus target) {
 		if (target != TicketStatus.RESOLVED && target != TicketStatus.CLOSED) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Tickets are resolved or closed by staff; replies reopen them");
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Tickets are resolved or closed by our support team; replies reopen them");
 		}
 		SupportTicket ticket = lock(ticketId);
 		requireNotClosed(ticket);
@@ -221,6 +324,7 @@ public class SupportService {
 			ticket.close(now);
 		}
 		tickets.flush();
+		event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, target, null, now);
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_STATUS_CHANGED, ENTITY, ticketId)
 			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", target)));
 		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was "
@@ -239,6 +343,7 @@ public class SupportService {
 		ticket.reprioritise(priority, ticket.getFirstRespondedAt() != null ? ticket.getFirstResponseDueAt()
 				: ticket.getCreatedAt().plus(properties.responseTargets().of(priority)));
 		tickets.flush();
+		event(ticket, actorId, true, TicketEventType.PRIORITY_CHANGED, previous, priority, null, clock.instant());
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_PRIORITY_CHANGED, ENTITY, ticketId)
 			.withOldValue(Map.of("priority", previous)).withNewValue(Map.of("priority", priority)));
 		return staffDetail(ticketId);
@@ -260,6 +365,8 @@ public class SupportService {
 		}
 		ticket.assignTo(assigneeId);
 		tickets.flush();
+		event(ticket, actorId, true, assigneeId == null ? TicketEventType.UNASSIGNED : TicketEventType.ASSIGNED, null, null,
+				assigneeId, clock.instant());
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_ASSIGNED, ENTITY, ticketId)
 			.withNewValue(assigneeId == null ? null : Map.of("assigneeId", assigneeId.toString())));
 		if (assigneeId != null && !assigneeId.equals(actorId)) {
@@ -274,7 +381,8 @@ public class SupportService {
 		Instant now = clock.instant();
 		Page<SupportTicket> page = tickets.findAll(matching(viewerId, criteria, now), pageable);
 		Map<UUID, String> names = names(page.stream().flatMap(t -> Stream.of(t.getUserId(), t.getAssigneeId())));
-		return page.map(t -> TicketResponse.forStaff(t, names.get(t.getUserId()), names.get(t.getAssigneeId()), now));
+		return page.map(t -> TicketResponse.forStaff(t, names.get(t.getUserId()), names.get(t.getAssigneeId()), now,
+				reopenableUntil(t)));
 	}
 
 	@Transactional(readOnly = true)
@@ -282,7 +390,7 @@ public class SupportService {
 		SupportTicket ticket = tickets.findById(ticketId).orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
 		Map<UUID, String> names = names(Stream.of(ticket.getUserId(), ticket.getAssigneeId()));
 		return detail(ticket, TicketResponse.forStaff(ticket, names.get(ticket.getUserId()),
-				names.get(ticket.getAssigneeId()), clock.instant()), true);
+				names.get(ticket.getAssigneeId()), clock.instant(), reopenableUntil(ticket)), true);
 	}
 
 	/** Staff downloads are audited: attachments can hold personal financial documents. */
@@ -344,7 +452,13 @@ public class SupportService {
 			.toList();
 		Map<UUID, List<TicketAttachment>> files = attachments.findByTicketId(ticket.getId()).stream()
 			.collect(Collectors.groupingBy(TicketAttachment::getMessageId));
-		Map<UUID, UserAccount> authors = accounts.getAccounts(thread.stream().map(TicketMessage::getAuthorId).collect(Collectors.toSet()));
+		List<TicketEvent> history = events.findByTicketIdOrderByCreatedAtAscIdAsc(ticket.getId()).stream()
+			.filter(e -> staff || e.getType().visibleToCustomer())
+			.toList();
+		Set<UUID> people = new HashSet<>();
+		thread.forEach(m -> people.add(m.getAuthorId()));
+		history.forEach(e -> Stream.of(e.getActorId(), e.getSubjectUserId()).filter(Objects::nonNull).forEach(people::add));
+		Map<UUID, UserAccount> authors = accounts.getAccounts(people);
 		List<TicketDetail.Message> out = new ArrayList<>();
 		for (TicketMessage m : thread) {
 			UserAccount author = authors.get(m.getAuthorId());
@@ -356,7 +470,83 @@ public class SupportService {
 						.map(a -> new TicketDetail.Attachment(a.getId(), a.getFilename(), a.getContentType(), a.getSizeBytes()))
 						.toList()));
 		}
-		return new TicketDetail(view, out);
+		List<TicketDetail.Event> timeline = history.stream()
+			.map(e -> new TicketDetail.Event(e.getId(), e.getType(), e.getFromValue(), e.getToValue(), e.isActorIsStaff(),
+					personName(authors.get(e.getActorId()), e.isActorIsStaff(), staff),
+					personName(authors.get(e.getSubjectUserId()), true, staff), e.getCreatedAt()))
+			.toList();
+		return new TicketDetail(view, out, timeline);
+	}
+
+	/** Staff see full names; investors see "You", and staff by first name only. */
+	private static String personName(UserAccount person, boolean isStaff, boolean viewerIsStaff) {
+		if (person == null) {
+			return null;
+		}
+		return viewerIsStaff ? person.firstName() + " " + person.lastName()
+				: isStaff ? person.firstName() + " (SeaLease support)" : "You";
+	}
+
+	private void event(SupportTicket ticket, UUID actorId, boolean byStaff, TicketEventType type, Enum<?> from, Enum<?> to,
+			UUID subjectUserId, Instant now) {
+		events.save(new TicketEvent(ticket.getId(), actorId, byStaff, type, from == null ? null : from.name(),
+				to == null ? null : to.name(), subjectUserId, now));
+	}
+
+	/** Until when the customer can reopen a resolved or closed ticket; null when it is in progress or past the window. */
+	/** For a resolved ticket, until when its customer can reopen it (when it closes by itself); otherwise null. */
+	private Instant reopenableUntil(SupportTicket ticket) {
+		if (ticket.getStatus() != TicketStatus.RESOLVED || ticket.getResolvedAt() == null) {
+			return null;
+		}
+		Instant until = ticket.getResolvedAt().plus(properties.autoCloseAfter());
+		return clock.instant().isAfter(until) ? null : until;
+	}
+
+	/**
+	 * The customer may write on (and so reopen) a ticket that is not closed; a resolved one only until it closes by
+	 * itself, even if the closing job has not run yet.
+	 */
+	private void requireReopenable(SupportTicket ticket) {
+		if (ticket.getStatus() == TicketStatus.CLOSED
+				|| (ticket.getStatus() == TicketStatus.RESOLVED && reopenableUntil(ticket) == null)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"This request is closed and cannot be reopened; please open a new one");
+		}
+	}
+
+	/**
+	 * Closes resolved tickets whose customer has not reopened them within {@code app.support.auto-close-after}, each
+	 * in its own transaction. Safe to run concurrently: each ticket is locked and re-checked.
+	 *
+	 * @return how many were closed
+	 */
+	public int closeResolved() {
+		Instant cutoff = clock.instant().minus(properties.autoCloseAfter());
+		int closed = 0;
+		for (UUID id : tickets.findResolvedBefore(cutoff)) {
+			if (Boolean.TRUE.equals(transactions.execute(status -> autoClose(id, cutoff)))) {
+				closed++;
+			}
+		}
+		return closed;
+	}
+
+	private boolean autoClose(UUID ticketId, Instant cutoff) {
+		SupportTicket ticket = lock(ticketId);
+		if (ticket.getStatus() != TicketStatus.RESOLVED || ticket.getResolvedAt().isAfter(cutoff)) {
+			return false;
+		}
+		Instant now = clock.instant();
+		ticket.close(now);
+		tickets.flush();
+		event(ticket, null, true, TicketEventType.STATUS_CHANGED, TicketStatus.RESOLVED, TicketStatus.CLOSED, null, now);
+		audit.record(AuditRecord.of(null, AuditAction.TICKET_STATUS_CHANGED, ENTITY, ticketId)
+			.withOldValue(Map.of("status", TicketStatus.RESOLVED))
+			.withNewValue(Map.of("status", TicketStatus.CLOSED, "automatic", true)));
+		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was closed", ticket.getSubject(),
+				"/support/" + ticket.getId());
+		return true;
 	}
 
 	private TicketAttachment attachment(SupportTicket ticket, UUID attachmentId) {
@@ -382,7 +572,7 @@ public class SupportService {
 
 	private static void requireNotClosed(SupportTicket ticket) {
 		if (ticket.getStatus() == TicketStatus.CLOSED) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This ticket is closed; open a new one");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This request is closed; reopen it to continue");
 		}
 	}
 

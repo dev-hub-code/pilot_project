@@ -34,18 +34,16 @@ public class KycController {
 	}
 
 	/**
-	 * Multipart: a JSON part {@code submission} plus file parts {@code identityFront},
-	 * {@code identityBack}, {@code selfie} and optionally {@code proofOfAddress}.
+	 * Multipart: a JSON part {@code submission} plus file parts {@code aadhaarCard} (both sides in one file) and
+	 * {@code panCard}.
 	 */
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
 	public KycSubmissionResponse submit(AuthenticatedUser user,
 			@Valid @RequestPart("submission") KycSubmissionRequest submission,
-			@RequestPart(value = "identityFront", required = false) MultipartFile identityFront,
-			@RequestPart(value = "identityBack", required = false) MultipartFile identityBack,
-			@RequestPart(value = "selfie", required = false) MultipartFile selfie,
-			@RequestPart(value = "proofOfAddress", required = false) MultipartFile proofOfAddress) {
-		return kyc.submit(user.userId(), submission, new KycFiles(identityFront, identityBack, selfie, proofOfAddress));
+			@RequestPart(value = "aadhaarCard", required = false) MultipartFile aadhaarCard,
+			@RequestPart(value = "panCard", required = false) MultipartFile panCard) {
+		return kyc.submit(user.userId(), submission, new KycFiles(aadhaarCard, panCard));
 	}
 
 }

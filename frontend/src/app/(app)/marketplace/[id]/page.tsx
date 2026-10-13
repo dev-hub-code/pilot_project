@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
+import { SelectField } from "@/components/ui/select-field";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TextField } from "@/components/ui/text-field";
 import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL } from "@/features/marketplace/labels";
+import { PhotoSlider } from "@/features/marketplace/photo-slider";
 import { AddToCartForm } from "@/features/orders/add-to-cart-form";
+import { leaseOptions, yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
@@ -42,9 +45,16 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   const inCart = cart?.items.find((line) => line.productId === id);
   const requested = typeof query.containers === "string" && CONTAINERS.test(query.containers) && Number(query.containers) >= 1
     ? Number(query.containers) : inCart?.quantity ?? 1;
+  // The lease the investor is looking at: from the calculator, else the cart, else the plan's shortest.
+  const asked = typeof query.years === "string" && CONTAINERS.test(query.years) ? Number(query.years) : null;
+  const years = asked !== null && asked >= listing.minTenureYears && asked <= listing.maxTenureYears
+    ? asked : inCart?.tenureYears ?? listing.minTenureYears;
   const [projection] = await Promise.all([
-    authFetch<ReturnProjection>(`/api/v1/marketplace/${id}/projection?containers=${requested}`),
+    authFetch<ReturnProjection>(`/api/v1/marketplace/${id}/projection?containers=${requested}&years=${years}`),
   ]);
+  const leaseRange = listing.minTenureYears === listing.maxTenureYears
+    ? yearsLabel(listing.minTenureYears)
+    : `${yearsLabel(listing.minTenureYears)} minimum, up to ${yearsLabel(listing.maxTenureYears)}`;
 
   const photos = detail.photoIds;
   const docHref = (documentId: string) => `/marketplace/${id}/documents/${documentId}`;
@@ -56,27 +66,14 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
         <Link href="/marketplace" className="hover:text-foreground">Marketplace</Link> / <span className="font-mono">{listing.code}</span>
       </nav>
 
-      <header className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <header className="grid gap-8 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
         <div className="space-y-3">
-          <div className="relative aspect-[16/9] overflow-hidden bg-ink">
-            {photos[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP
-              <img src={docHref(photos[0])} alt={`A ${type} container`} className="size-full object-cover" />
-            ) : (
+          {photos.length > 0 ? (
+            <PhotoSlider photos={photos.map((photo, i) => ({ src: docHref(photo), alt: `A ${type} container, photo ${i + 1}` }))} />
+          ) : (
+            <div className="relative aspect-[16/9] overflow-hidden bg-ink">
               <ContainerScene focus="side" className="size-full" />
-            )}
-          </div>
-          {photos.length > 1 && (
-            <ul className="grid grid-cols-4 gap-3">
-              {photos.slice(1, 5).map((photo) => (
-                <li key={photo}>
-                  <a href={docHref(photo)} target="_blank" rel="noopener noreferrer" className="block aspect-[4/3] overflow-hidden bg-ink">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- see above */}
-                    <img src={docHref(photo)} alt={`A ${type} container`} loading="lazy" className="size-full object-cover" />
-                  </a>
-                </li>
-              ))}
-            </ul>
+            </div>
           )}
           <p className="text-xs text-muted">Photos show containers of this type; the container assigned to you may differ.</p>
         </div>
@@ -93,46 +90,51 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
           </div>
 
           <dl className="grid grid-cols-2 gap-px border border-border bg-border">
-            <Fact label="Paid to you every month" value={formatPercent(listing.monthlyPayoutPercent)} emphasis />
-            <Fact label="Price per container" value={formatMoney(listing.price)} />
-            <Fact label={`Rent (${formatPercent(listing.monthlyRentPercent)} a month)`} value={formatMoney(detail.monthlyRent)} />
-            <Fact label={`Capital back (${formatPercent(listing.monthlyCapitalReturnPercent)} a month)`} value={formatMoney(detail.monthlyCapitalReturn)} />
-            <Fact label="Lease tenure" value={`${listing.tenureMonths} months`} />
-            <Fact label="Total paid per container" value={formatMoney(listing.totalPayout)} />
+            <Fact label="Rent paid every month" value={formatPercent(listing.monthlyRentPercent)} emphasis />
+            <Fact label="Price per container"
+              value={Number(listing.gstRatePercent) > 0
+                ? `${formatMoney(listing.price)} + ${formatPercent(listing.gstRatePercent)} GST = ${formatMoney(listing.priceWithGst)}`
+                : formatMoney(listing.price)} />
+            <Fact label="Rent per container a month" value={formatMoney(detail.monthlyRent)} />
+            <Fact label="Minimum lease tenure"
+              value={listing.maxTenureYears > listing.minTenureYears
+                ? `${yearsLabel(listing.minTenureYears)} (choose up to ${yearsLabel(listing.maxTenureYears)})`
+                : yearsLabel(listing.minTenureYears)} />
           </dl>
 
           <div className="space-y-1 text-sm">
-            <p>
-              <strong>{listing.availableContainers}</strong>{" "}
-              <span className="text-muted">{type} container{listing.availableContainers === 1 ? "" : "s"} available now</span>
+            <p className="text-muted">
+              Buy as many {type} containers as you like. Once your payment is confirmed, our team assigns each one to you
+              by its container number, and your lease and monthly payouts start that day.
             </p>
           </div>
         </div>
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
         <div className="space-y-8">
           <Card title="About this plan">
-            <div className="space-y-4 text-sm leading-relaxed whitespace-pre-line">{detail.description}</div>
+            <div className="space-y-4 text-sm leading-relaxed whitespace-pre-line wrap-anywhere">{detail.description}</div>
           </Card>
 
           <Card title="How it works">
             <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-              <li>Choose how many containers to buy at {formatMoney(listing.price)} each, and check out.</li>
+              <li>Choose how many containers to buy at {formatMoney(listing.price)} each{Number(listing.gstRatePercent) > 0 ? ` plus ${formatPercent(listing.gstRatePercent)} GST` : ""}, and check out. Rent is on the price without GST.</li>
               <li>Pay by bank within 30 minutes. Online transfer, cheque or cash deposit are all accepted.</li>
-              <li>Once your payment is confirmed, a {type} container is assigned to you by its unique container number and its {listing.tenureMonths}-month lease starts.</li>
-              <li>Every month for {listing.tenureMonths} months you receive {formatMoney(listing.monthlyPayout)} per container in your wallet: {formatMoney(detail.monthlyRent)} rent plus {formatMoney(detail.monthlyCapitalReturn)} of your capital back. You can withdraw it to your bank account.</li>
+              <li>Choose your lease: whole years, from {leaseRange}.</li>
+              <li>Once your payment is confirmed, a {type} container is assigned to you by its unique container number and the lease you chose starts.</li>
+              <li>Every month of your lease you receive {formatMoney(detail.monthlyRent)} rent per container in your wallet. You can withdraw it to your bank account.</li>
             </ol>
           </Card>
 
           <Card title="Risks">
-            <p className="text-sm leading-relaxed whitespace-pre-line">{detail.riskDisclosure}</p>
+            <p className="text-sm leading-relaxed whitespace-pre-line wrap-anywhere">{detail.riskDisclosure}</p>
           </Card>
 
           <Card title="Terms & conditions">
             <details>
               <summary className="cursor-pointer text-sm font-medium">Read the terms</summary>
-              <div className="mt-3 max-h-80 overflow-y-auto text-sm leading-relaxed whitespace-pre-line text-muted">
+              <div className="mt-3 max-h-80 overflow-y-auto text-sm leading-relaxed whitespace-pre-line text-muted wrap-anywhere">
                 {detail.termsAndConditions}
               </div>
             </details>
@@ -140,26 +142,26 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-          <section className="space-y-5 bg-ink p-6 text-on-ink" aria-labelledby="calculator">
-            <Eyebrow tone="light">Estimate your return</Eyebrow>
-            <form className="flex items-end gap-3" action={`/marketplace/${id}`}>
-              <div className="flex-1 [&_input]:border-on-ink/30 [&_input]:bg-transparent [&_input]:text-on-ink [&_label]:text-on-ink/70">
-                <TextField id="calculator" label="Containers" name="containers" type="number" inputMode="numeric" min={1} max={50}
-                  defaultValue={String(requested)} />
-              </div>
-              <Button type="submit">Calculate</Button>
+          <section className="space-y-5 border border-border bg-surface p-6" aria-labelledby="calculator">
+            <Eyebrow>Estimate your return</Eyebrow>
+            <form className="grid grid-cols-2 items-end gap-3 [&>*]:min-w-0" action={`/marketplace/${id}`}>
+              <TextField id="calculator" label="Containers" name="containers" type="number" inputMode="numeric" min={1} max={50}
+                defaultValue={String(requested)} />
+              <SelectField label="Lease" name="years" defaultValue={String(years)}
+                options={leaseOptions(listing.minTenureYears, listing.maxTenureYears)} />
+              <Button type="submit" className="col-span-2">Calculate</Button>
             </form>
             <dl className="grid grid-cols-2 gap-4 text-sm">
-              <Projection label="You invest" value={formatMoney(projection.amount)} />
-              <Projection label="Paid every month" value={formatMoney(projection.monthlyPayout)} />
-              <Projection label={`Rent over ${projection.payouts} months`} value={formatMoney(projection.totalRent)} />
-              <Projection label="Capital returned" value={formatMoney(projection.totalCapitalReturned)} />
+              <Projection label={Number(listing.gstRatePercent) > 0 ? "You pay (incl. GST)" : "You invest"}
+                value={formatMoney(projection.amountWithGst)} />
+              <Projection label="Rent every month" value={formatMoney(projection.monthlyRent)} />
+              <Projection label="Lease" value={`${yearsLabel(projection.tenureYears)} (${projection.payouts} payouts)`} />
             </dl>
-            <p className="border-t border-on-ink/20 pt-3 text-sm">
-              Total over the tenure: <strong className="font-display text-lg">{formatMoney(projection.totalPayout)}</strong>
+            <p className="border-t border-border pt-3 text-sm">
+              Total rent over the tenure: <strong className="font-display text-lg">{formatMoney(projection.totalRent)}</strong>
             </p>
             {projection.problems.length > 0 && (
-              <ul className="space-y-1 text-sm text-amber-300">
+              <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-300">
                 {projection.problems.map((problem) => <li key={problem}>• {problem}</li>)}
               </ul>
             )}
@@ -167,7 +169,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
 
           <Card title="Invest">
             {!investor ? (
-              <Notice tone="info">Staff preview: this is what investors see. Investing needs an investor account.</Notice>
+              <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
             ) : detail.eligibility.eligible ? (
               <div className="space-y-4">
                 <Notice tone="success">
@@ -175,8 +177,8 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
                     ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this plan ${inCart.quantity === 1 ? "is" : "are"} in your cart.`
                     : "You are eligible to invest in this plan."}
                 </Notice>
-                <AddToCartForm productId={id} defaultQuantity={requested} available={listing.availableContainers}
-                  inCart={Boolean(inCart)} />
+                <AddToCartForm productId={id} defaultQuantity={requested} defaultYears={years}
+                  minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={Boolean(inCart)} />
                 {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
               </div>
             ) : (
@@ -186,6 +188,10 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
                 </ul>
                 {detail.eligibility.reasons.some((r) => r.includes("identity")) && (
                   <LinkButton href="/profile/verification" className="w-full">Verify my identity</LinkButton>
+                )}
+                {detail.eligibility.reasons.some((r) => r.includes("bank account")) && (
+                  <LinkButton href="/profile/bank-accounts" variant={detail.eligibility.reasons.some((r) => r.includes("identity")) ? "secondary" : "primary"}
+                    className="w-full">Add a bank account</LinkButton>
                 )}
               </div>
             )}
@@ -208,7 +214,7 @@ function Fact({ label, value, emphasis }: { label: string; value: string; emphas
 function Projection({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-on-ink/60 uppercase">{label}</dt>
+      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
       <dd className="mt-1 font-display text-xl font-semibold">{value}</dd>
     </div>
   );

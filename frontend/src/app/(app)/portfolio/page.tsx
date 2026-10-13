@@ -4,16 +4,28 @@ import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { formatPeriod } from "@/features/earnings/labels";
 import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { EarningsSummary } from "@/types/earning";
-import type { Portfolio } from "@/types/order";
+import type { HoldingStatus, Portfolio } from "@/types/order";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Portfolio" };
+
+const HOLDING_LABEL: Record<HoldingStatus, string> = {
+  AWAITING_CONTAINER: "Awaiting container",
+  ACTIVE: "On lease",
+  MATURED: "Lease completed",
+};
+
+const HOLDING_TONE: Record<HoldingStatus, StatusTone> = {
+  AWAITING_CONTAINER: "warning",
+  ACTIVE: "success",
+  MATURED: "neutral",
+};
 
 export default async function PortfolioPage() {
   const [portfolio, earnings] = await Promise.all([
@@ -45,7 +57,7 @@ export default async function PortfolioPage() {
 
       {portfolio.holdings.length === 0 ? (
         <div className="space-y-4">
-          <EmptyState title="No containers yet" description="Containers are assigned to you here once your payment is confirmed." />
+          <EmptyState title="No containers yet" description="Your investments appear here once your payment is confirmed. Our team then assigns each its container." />
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
@@ -55,8 +67,17 @@ export default async function PortfolioPage() {
             return (
               <tr key={h.id} className="hover:bg-background">
                 <Cell>
-                  <span className="font-mono font-medium">{h.container.containerNumber}</span>
-                  <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[h.container.containerType]} · {h.container.currentLocation}</span>
+                  {h.container ? (
+                    <>
+                      <span className="font-mono font-medium">{h.container.containerNumber}</span>
+                      <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[h.container.containerType]}{h.container.currentLocation ? ` · ${h.container.currentLocation}` : ""}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-muted">Being assigned</span>
+                      <span className="block text-xs text-muted">Our team assigns your container</span>
+                    </>
+                  )}
                 </Cell>
                 <Cell>
                   <Link href={`/marketplace/${h.productId}`} className="font-mono text-gold-text hover:underline">{h.productCode}</Link>
@@ -65,18 +86,22 @@ export default async function PortfolioPage() {
                 <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
                 <Cell className="tabular-nums">
                   {formatMoney(h.monthlyPayout)}
-                  <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
+                  {Number(h.monthlyCapitalReturn.amount) > 0 && (
+                    <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
+                  )}
                 </Cell>
                 <Cell>
                   {h.tenureMonths} months
-                  <span className="block text-xs text-muted">{formatPeriod(h.leaseStartsOn, h.leaseEndsOn)}</span>
+                  <span className="block text-xs text-muted">
+                    {h.leaseStartsOn && h.leaseEndsOn ? formatPeriod(h.leaseStartsOn, h.leaseEndsOn) : "Starts when your container is assigned"}
+                  </span>
                 </Cell>
                 <Cell className="tabular-nums">
                   {p ? `${p.paid} of ${p.installments}` : "—"}
                   {p && <span className="block text-xs text-muted">{formatMoney(p.received)} received</span>}
                 </Cell>
                 <Cell>
-                  <StatusBadge tone={h.status === "ACTIVE" ? "success" : "neutral"}>{h.status === "ACTIVE" ? "On lease" : "Lease completed"}</StatusBadge>
+                  <StatusBadge tone={HOLDING_TONE[h.status]}>{HOLDING_LABEL[h.status]}</StatusBadge>
                 </Cell>
               </tr>
             );
@@ -84,7 +109,7 @@ export default async function PortfolioPage() {
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Payouts are credited to your wallet every month, starting one month after your payment was confirmed. See{" "}
+        Once your payment is confirmed, our team assigns each investment its container; the lease starts that day. Payouts are credited to your wallet on the payout day each month from then on (a part month is paid by the day). See{" "}
         <Link href="/earnings" className="underline">Earnings</Link> for the full schedule.
       </p>
     </div>

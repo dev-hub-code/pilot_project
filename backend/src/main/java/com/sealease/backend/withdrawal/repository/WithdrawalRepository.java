@@ -1,5 +1,6 @@
 package com.sealease.backend.withdrawal.repository;
 
+import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
 import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import jakarta.persistence.LockModeType;
@@ -23,12 +24,6 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, J
 	@Query("select w from Withdrawal w where w.id = :id")
 	Optional<Withdrawal> findByIdForUpdate(@Param("id") UUID id);
 
-	/** Approved withdrawals of one currency, oldest first, locked for batching. */
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select w from Withdrawal w where w.status = :status and w.currency = :currency order by w.createdAt, w.id")
-	List<Withdrawal> findForBatching(@Param("status") WithdrawalStatus status, @Param("currency") String currency,
-			Pageable pageable);
-
 	/** A batch's withdrawals, locked in id order (the same order everywhere, so no deadlocks). */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select w from Withdrawal w where w.batchId = :batchId order by w.id")
@@ -38,7 +33,13 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, J
 
 	Optional<Withdrawal> findByUserIdAndIdempotencyKey(UUID userId, String idempotencyKey);
 
-	boolean existsByUserIdAndCurrencyAndStatusIn(UUID userId, String currency, Collection<WithdrawalStatus> statuses);
+	/** One withdrawal may be in progress per investor, currency and earnings balance. */
+	boolean existsByUserIdAndCurrencyAndBalanceAndStatusIn(UUID userId, String currency, EarningsBalance balance,
+			Collection<WithdrawalStatus> statuses);
+
+	/** Whether finance has already withdrawn this balance at the office since {@code since} (rejected ones aside). */
+	boolean existsByUserIdAndBalanceAndOriginAndCreatedAtGreaterThanEqualAndStatusNot(UUID userId, EarningsBalance balance,
+			com.sealease.backend.withdrawal.entity.WithdrawalOrigin origin, Instant since, WithdrawalStatus status);
 
 	Page<Withdrawal> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 

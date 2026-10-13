@@ -10,8 +10,14 @@ export interface MenuLink {
   label: string;
 }
 
+/** A group of links in the menu; the heading is shown when the menu has more than one group. */
+export interface MenuSection {
+  label?: string;
+  links: readonly MenuLink[];
+}
+
 /** The avatar in the header: opens the site menu as a vertical list, with sign-out at the bottom. */
-export function AccountMenu({ links, name, email }: { links: readonly MenuLink[]; name: string; email: string | null }) {
+export function AccountMenu({ sections, name, email }: { sections: readonly MenuSection[]; name: string; email: string | null }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const root = useRef<HTMLDivElement>(null);
@@ -38,7 +44,7 @@ export function AccountMenu({ links, name, email }: { links: readonly MenuLink[]
     };
   }, [open]);
 
-  const active = links
+  const active = sections.flatMap((section) => section.links)
     .filter((link) => pathname === link.href || pathname.startsWith(`${link.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];
 
@@ -55,22 +61,31 @@ export function AccountMenu({ links, name, email }: { links: readonly MenuLink[]
             <p className="truncate text-sm font-medium">{name}</p>
             {email && <p className="truncate text-xs text-muted">{email}</p>}
           </div>
-          <nav aria-label="Main">
-            <ul className="max-h-[70vh] overflow-y-auto py-1 text-sm">
-              {links.map((link) => {
-                const isActive = link === active;
-                return (
-                  <li key={link.href}>
-                    <Link href={link.href} aria-current={isActive ? "page" : undefined} onClick={() => setOpen(false)}
-                      className={`block border-l-2 px-4 py-2 ${isActive
-                        ? "border-gold bg-background font-medium text-foreground"
-                        : "border-transparent text-muted hover:bg-background hover:text-foreground"}`}>
-                      {link.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+          <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm">
+            {sections.map((section, index) => (
+              <div key={section.label ?? index} className={index > 0 ? "mt-1 border-t border-border pt-1" : ""}>
+                {sections.length > 1 && section.label && (
+                  <p id={`${menuId}-${index}`} className="px-4 pt-2 pb-1 text-[11px] uppercase tracking-[0.1em] text-muted">
+                    {section.label}
+                  </p>
+                )}
+                <ul aria-labelledby={sections.length > 1 && section.label ? `${menuId}-${index}` : undefined}>
+                  {section.links.map((link) => {
+                    const isActive = link === active;
+                    return (
+                      <li key={link.href}>
+                        <Link href={link.href} aria-current={isActive ? "page" : undefined} onClick={() => setOpen(false)}
+                          className={`block border-l-2 px-4 py-1.5 ${isActive
+                            ? "border-gold bg-background font-medium text-foreground"
+                            : "border-transparent text-muted hover:bg-background hover:text-foreground"}`}>
+                          {link.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </nav>
           <form action={logoutAction} className="border-t border-border">
             <button type="submit" className="block w-full px-4 py-3 text-left text-sm text-muted hover:bg-background hover:text-foreground">

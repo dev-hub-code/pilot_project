@@ -37,7 +37,7 @@ export function SelectField({ label, name, options, error, placeholder, id, ...p
 
   return (
     <div className="space-y-1.5">
-      <label htmlFor={selectId} className="block text-xs font-medium uppercase tracking-[0.08em] text-muted">
+      <label htmlFor={selectId} className="block text-sm font-medium text-foreground">
         {label}
       </label>
       <select

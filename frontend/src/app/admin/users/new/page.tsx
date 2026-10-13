@@ -8,7 +8,7 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
 
-export const metadata: Metadata = { title: "New staff member" };
+export const metadata: Metadata = { title: "New employee" };
 
 export default async function NewStaffPage() {
   const session = await requireStaff();
@@ -20,8 +20,8 @@ export default async function NewStaffPage() {
   const staffRoles = roles.content.filter((r) => !r.permissions.includes(Permission.INVESTOR_PORTAL));
   return (
     <div className="space-y-6">
-      <PageHeader title="New staff member"
-        description="They receive a temporary password to replace at first sign-in. You can only grant roles whose permissions you hold." />
+      <PageHeader title="New employee"
+        description="They are emailed a temporary password to replace at first sign-in. You can only grant roles whose permissions you hold." />
       <Card><CreateStaffForm roles={staffRoles} /></Card>
     </div>
   );

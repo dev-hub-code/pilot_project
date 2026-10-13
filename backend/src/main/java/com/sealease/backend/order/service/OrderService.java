@@ -71,11 +71,12 @@ import java.util.stream.Collectors;
 /**
  * Orders: checkout of the cart, cancellation, expiry and confirmation once paid.
  *
- * <p>Containers follow the order: reserved at checkout (one order line per container), returned to
- * inventory when the order expires or is cancelled, and leased to the investor - each becoming a
- * holding with a monthly payout schedule - when it is paid. Every transition locks the order row,
- * so payment settlement, cancellation and the expiry sweep can never act on the same order
- * concurrently.
+ * <p>One order line per container. Checkout reserves no stock: when the order is paid, each line becomes a
+ * holding awaiting its container, and finance assigns one later (see {@link ContainerAssignmentService}),
+ * which starts the lease and payouts. Orders placed before that reserved their containers at checkout; those
+ * are leased on payment, or returned to inventory when the order expires or is cancelled. Every transition
+ * locks the order row, so payment settlement, cancellation and the expiry sweep can never act on the same
+ * order concurrently.
  */
 @Service
 public class OrderService {
@@ -123,8 +124,8 @@ public class OrderService {
 	// ----------------------------------------------------------------------------- checkout
 
 	/**
-	 * Turns the cart into an order and reserves its containers, all or nothing. Retrying with the same
-	 * idempotency key returns the original order instead of placing a second one.
+	 * Turns the cart into an order, one line per container; containers are assigned by finance once it is paid.
+	 * Retrying with the same idempotency key returns the original order instead of placing a second one.
 	 */
 	@Transactional
 	public OrderResponse checkout(UUID userId, String idempotencyKey, CheckoutRequest request) {
@@ -157,14 +158,15 @@ public class OrderService {
 		}
 
 		for (CartLine line : lines) {
-			List<String> problems = offerings.problems(userId, line.productId(), line.quantity());
+			List<String> problems = offerings.problems(userId, line.productId(), line.quantity(), line.tenureYears());
 			if (!problems.isEmpty()) {
 				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 						terms.get(line.productId()).code() + ": " + String.join("; ", problems));
 			}
 		}
+		// What the investor pays: the price plus GST, for every container.
 		Money total = lines.stream()
-			.map(l -> terms.get(l.productId()).terms().pricePerContainer().times(BigDecimal.valueOf(l.quantity())))
+			.map(l -> terms.get(l.productId()).terms().pricePerContainerWithGst().times(BigDecimal.valueOf(l.quantity())))
 			.reduce(Money::plus)
 			.orElseThrow();
 		Instant now = clock.instant();
@@ -175,13 +177,14 @@ public class OrderService {
 		for (CartLine line : lines.stream().sorted(Comparator.comparing(CartLine::productId)).toList()) {
 			OfferingTerms plan = terms.get(line.productId());
 			ProductTerms t = plan.terms();
-			// Binding: locks available containers of the type, or fails if there are too few.
-			for (ContainerSummary container : inventory.reserve(t.containerType(), line.quantity(), order.getId())) {
+			for (int n = 0; n < line.quantity(); n++) {
 				items.save(new OrderItem(order.getId(), line.productId(), plan.code(), t.title(), t.containerType(),
-						container.id(), t.pricePerContainer(), t.monthlyRentPercent(), t.monthlyCapitalReturnPercent(),
-						t.tenureMonths(), now));
+						null, t.pricePerContainer(), t.gstRatePercent(), t.gstPerContainer(), t.monthlyRentPercent(),
+						t.monthlyCapitalReturnPercent(),
+						ProductTerms.monthsOf(line.tenureYears()), now));
 			}
-			itemEvents.add(Map.of("productId", line.productId().toString(), "containers", line.quantity()));
+			itemEvents.add(Map.of("productId", line.productId().toString(), "containers", line.quantity(),
+					"tenureYears", line.tenureYears()));
 		}
 		items.flush();
 		cart.clear(userId);
@@ -271,14 +274,16 @@ public class OrderService {
 	}
 
 	/**
-	 * Called by the payment module, in the transaction that records a successful payment: leases each
-	 * reserved container to the investor (a holding with its payout schedule, from today) and issues
-	 * the invoice.
+	 * Called by the payment module, in the transaction that records a successful payment: each line becomes a
+	 * holding awaiting its container (finance assigns it, which starts the lease and payouts), and the invoice is
+	 * issued. A line that reserved a container at checkout (orders placed before manual assignment) is leased
+	 * at once, with its payout schedule from today.
 	 *
+	 * @param paidAtOffice the order was paid in cash at the office: its containers' rent is collected in cash there
 	 * @return {@code false} when the order is no longer awaiting payment (the money must be refunded)
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public boolean confirmPaid(UUID orderId, UUID paymentId) {
+	public boolean confirmPaid(UUID orderId, UUID paymentId, boolean paidAtOffice) {
 		InvestmentOrder order = lock(orderId);
 		if (!order.isPendingPayment()) {
 			return false;
@@ -289,16 +294,28 @@ public class OrderService {
 		List<InvoiceRequest.Line> invoiceLines = new ArrayList<>();
 		LocalDate leaseStartsOn = LocalDate.ofInstant(now, ZoneOffset.UTC);
 		for (OrderItem item : lines) {
+			if (item.getContainerId() == null) {
+				UUID holdingId = holdings.recordAwaitingContainer(order.getUserId(), item.getProductId(), orderId,
+						item.getId(), item.amount(), item.getMonthlyRentPercent(), item.getMonthlyCapitalReturnPercent(),
+						item.getTenureMonths(), now, paidAtOffice);
+				confirmed.add(Map.of("holdingId", holdingId.toString(), "productId", item.getProductId().toString(),
+						"amount", item.amount().amount().toPlainString()));
+				invoiceLines.add(new InvoiceRequest.Line("%s %s - one %s container, %d-month lease".formatted(
+						item.getProductCode(), item.getProductTitle(), item.getContainerType().label(),
+						item.getTenureMonths()), item.amount(), item.getGstRatePercent(), item.gst()));
+				continue;
+			}
 			ContainerSummary container = inventory.lease(item.getContainerId(), orderId);
 			PayoutTerms holding = holdings.record(order.getUserId(), item.getProductId(), orderId, item.getId(),
 					container.id(), item.amount(), item.getMonthlyRentPercent(), item.getMonthlyCapitalReturnPercent(),
-					item.getTenureMonths(), leaseStartsOn, now);
+					item.getTenureMonths(), leaseStartsOn, now, paidAtOffice);
 			payouts.schedule(holding);
 			confirmed.add(Map.of("holdingId", holding.holdingId().toString(), "productId", item.getProductId().toString(),
 					"containerNumber", container.containerNumber(), "amount", item.amount().amount().toPlainString()));
 			invoiceLines.add(new InvoiceRequest.Line("%s %s - container %s (%s), %d-month lease".formatted(
 					item.getProductCode(), item.getProductTitle(), container.containerNumber(),
-					container.containerType().label(), item.getTenureMonths()), item.amount()));
+					container.containerType().label(), item.getTenureMonths()), item.amount(), item.getGstRatePercent(),
+					item.gst()));
 		}
 		order.confirm(now);
 		orders.flush();
@@ -358,7 +375,7 @@ public class OrderService {
 			.collect(Collectors.toMap(InvestmentOrder::getId, InvestmentOrder::getOrderNumber));
 	}
 
-	/** @param staff staff see the reserved containers; investors see theirs once the order is paid */
+	/** @param staff staff also see containers reserved by unpaid orders; investors see theirs once the order is paid */
 	private Page<OrderResponse> withItems(Page<InvestmentOrder> page, boolean staff) {
 		List<OrderItem> all = items.findByOrderIdIn(page.map(InvestmentOrder::getId).toList());
 		Map<UUID, List<OrderItem>> byOrder = all.stream()
@@ -375,10 +392,17 @@ public class OrderService {
 				staff || order.getStatus() == OrderStatus.CONFIRMED ? containerNumbers(lines) : Map.of());
 	}
 
+	/** Container number per order line: the one assigned to its holding, or the one reserved at checkout. */
 	private Map<UUID, String> containerNumbers(List<OrderItem> lines) {
-		Map<UUID, String> numbers = new HashMap<>();
-		containers.summaries(lines.stream().map(OrderItem::getContainerId).toList())
-			.forEach((id, c) -> numbers.put(id, c.containerNumber()));
+		Map<UUID, String> numbers = new HashMap<>(
+				holdings.containerNumbersByOrderItem(lines.stream().map(OrderItem::getId).toList()));
+		Map<UUID, ContainerSummary> reserved = containers.summaries(lines.stream().map(OrderItem::getContainerId).toList());
+		for (OrderItem line : lines) {
+			ContainerSummary box = line.getContainerId() == null ? null : reserved.get(line.getContainerId());
+			if (box != null) {
+				numbers.putIfAbsent(line.getId(), box.containerNumber());
+			}
+		}
 		return numbers;
 	}
 

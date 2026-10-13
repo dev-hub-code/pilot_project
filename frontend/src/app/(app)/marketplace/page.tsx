@@ -44,7 +44,7 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
         </h1>
         <p className="max-w-2xl text-muted">
           Buy whole shipping containers under a plan. Once your payment is confirmed, a container is assigned to you by
-          its unique number and leased for the plan&apos;s tenure: every month you receive rent plus part of your capital back.
+          its unique number and leased for the plan&apos;s tenure: every month of the lease you receive the plan&apos;s rent.
         </p>
       </header>
 

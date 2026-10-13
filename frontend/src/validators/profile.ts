@@ -1,51 +1,55 @@
 import { z } from "zod";
+import { parseDayMonthYear } from "@/utils/format";
 
 /** Client-side mirrors of backend validation; the backend remains authoritative. */
 const optional = (schema: z.ZodType<string>) =>
   z.preprocess((value) => (typeof value === "string" && value.trim() === "" ? undefined : value), schema.optional());
+/** Nationality and address country when none is chosen. */
+export const DEFAULT_COUNTRY = "IN";
 const country = z.string().regex(/^[A-Z]{2}$/, "Select a country");
+/** A date entered as DD/MM/YYYY, sent on as YYYY-MM-DD. */
+const dayMonthYear = z.string().transform((value, ctx) => {
+  const iso = parseDayMonthYear(value);
+  if (!iso) {
+    ctx.addIssue({ code: "custom", message: "Enter the date as DD/MM/YYYY, e.g. 15/06/1985" });
+    return z.NEVER;
+  }
+  return iso;
+});
 
 export const profileSchema = z.object({
   firstName: z.string().trim().min(1, "Enter your first name").max(100),
   lastName: z.string().trim().min(1, "Enter your last name").max(100),
-  phone: optional(z.string().regex(/^\+[1-9]\d{6,14}$/, "Use international format, e.g. +14155550123")),
-  dateOfBirth: optional(z.iso.date("Enter a valid date")),
-  nationality: optional(country),
-  line1: optional(z.string().max(200)),
+  phone: optional(z.string().regex(/^[+0-9 ()-]{6,20}$/, "Enter a phone number (digits, spaces, +, brackets or dashes)")),
+  dateOfBirth: optional(dayMonthYear),
+  nationality: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
+  gstNumber: optional(z.string().transform((v) => v.replace(/\s/g, "").toUpperCase())
+    .pipe(z.string().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, "Enter a 15-character GSTIN, e.g. 27ABCDE1234F1Z5"))),
+  line1: z.string().trim().min(1, "Enter the first line of your address").max(200),
   line2: optional(z.string().max(200)),
-  city: optional(z.string().max(100)),
-  stateRegion: optional(z.string().max(100)),
-  postalCode: optional(z.string().max(20)),
-  country: optional(country),
-});
-
-export const taxSchema = z.object({
-  taxResidencyCountry: country,
-  taxId: z.string().trim().regex(/^[A-Za-z0-9 -]{4,30}$/, "4–30 letters, digits, spaces or dashes"),
+  city: z.string().trim().min(1, "Enter your city").max(100),
+  stateRegion: z.string().trim().min(1, "Enter your state").max(100),
+  postalCode: z.string().trim().min(1, "Enter your postal code").max(20),
+  country: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
 });
 
 export const bankAccountSchema = z.object({
-  accountHolderName: z.string().trim().min(1, "Enter the account holder's name").max(140),
   bankName: z.string().trim().min(1, "Enter the bank's name").max(140),
   country,
   currency: z.string().regex(/^[A-Z]{3}$/, "Select a currency"),
-  accountNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{4,40}$/, "Enter the account number or IBAN"),
-  routingCode: z.string().trim().regex(/^[A-Za-z0-9 -]{4,20}$/, "Enter the SWIFT/BIC, IFSC, routing or sort code"),
+  accountNumber: z.string().trim().regex(/^\d{8,15}$/, "Enter the account number: 8 to 15 digits, numbers only"),
+  // IFSC: 4 letters (the bank), a zero, then 6 letters or digits (the branch).
+  routingCode: z.string().trim().toUpperCase()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Enter the IFSC code: 4 letters, a zero, then 6 letters or digits (e.g. HDFC0001234)"),
 });
 
-/** Today as YYYY-MM-DD (UTC), comparable with ISO date strings. */
-const today = () => new Date().toISOString().slice(0, 10);
-
-export const kycSchema = z.object({
-  legalFirstName: z.string().trim().min(1, "As shown on your document").max(100),
-  legalLastName: z.string().trim().min(1, "As shown on your document").max(100),
-  dateOfBirth: z.iso.date("Enter a valid date").refine((d) => d < today(), "Must be in the past"),
-  nationality: country,
-  documentType: z.enum(["PASSPORT", "NATIONAL_ID", "DRIVING_LICENSE"], "Select a document type"),
-  documentNumber: z.string().trim().regex(/^[A-Za-z0-9 -]{4,30}$/, "4–30 letters, digits, spaces or dashes"),
-  documentIssuingCountry: country,
-  documentExpiryDate: z.iso.date("Enter a valid date").refine((d) => d > today(), "This document has expired"),
-});
+/** Aadhaar and PAN are uploaded separately, each with its number. */
+export const kycNumberSchema = {
+  AADHAAR: z.string().transform((v) => v.replace(/[\s-]/g, ""))
+    .pipe(z.string().regex(/^\d{12}$/, "An Aadhaar number has exactly 12 digits")),
+  PAN: z.string().transform((v) => v.replace(/\s/g, "").toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{5}\d{4}[A-Z]$/, "Enter your PAN, e.g. ABCDE1234F")),
+} as const;
 
 export const reasonSchema = z.object({
   reason: z.string().trim().min(3, "Give a reason (it is recorded in the audit log)").max(500),

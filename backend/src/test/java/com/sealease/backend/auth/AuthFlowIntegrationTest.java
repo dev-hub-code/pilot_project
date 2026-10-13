@@ -2,6 +2,7 @@ package com.sealease.backend.auth;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.TestApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -33,9 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @IntegrationTest
 class AuthFlowIntegrationTest {
 
-	private static final String PASSWORD = "correct horse battery staple";
+	private static final String PASSWORD = "Correct-Horse-9";
 	private static final String ADMIN_EMAIL = "root-admin@sealease.test";
-	private static final String ADMIN_PASSWORD = "Integration-Test-Admin-2026";
+	private static final String ADMIN_PASSWORD = "Super-Admin-2026!";
 
 	@Autowired
 	private MockMvc mvc;
@@ -83,6 +84,37 @@ class AuthFlowIntegrationTest {
 				.content(registerBody(email.toUpperCase())))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("EMAIL_ALREADY_REGISTERED"));
+	}
+
+	@Test
+	void aMobileNumberIsRequiredAndBelongsToOneAccount() throws Exception {
+		String number = TestApi.mobile();
+		String email = uniqueEmail();
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{"email":"%s","password":"%s","firstName":"Test","lastName":"User"}""".formatted(email, PASSWORD)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.hasItem("phone")));
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"call me"}""".formatted(email, PASSWORD)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.hasItem("phone")));
+
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"%s"}""".formatted(email, PASSWORD,
+				number.substring(0, 5) + " " + number.substring(5))))
+			.andExpect(status().isCreated());
+		assertThat(jdbc.queryForObject("""
+				SELECT p.phone_key FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE u.email = ?""", String.class, email))
+			.isEqualTo(number);
+
+		// The same number, however it is written, cannot open a second account; nothing of that attempt is kept.
+		String other = uniqueEmail();
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"+91 %s"}""".formatted(other, PASSWORD,
+				number)))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("mobile number is already registered")));
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, other)).isZero();
 	}
 
 	@Test
@@ -156,7 +188,7 @@ class AuthFlowIntegrationTest {
 		String email = uniqueEmail();
 		Tokens current = register(email);
 		Tokens otherDevice = tokensOf(login(email, PASSWORD));
-		String newPassword = "a completely new passphrase";
+		String newPassword = "Brand-New-Pass-1";
 
 		mvc.perform(post("/api/v1/auth/password").header(HttpHeaders.AUTHORIZATION, current.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
@@ -364,7 +396,8 @@ class AuthFlowIntegrationTest {
 	}
 
 	private static String registerBody(String email) {
-		return "{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\",\"firstName\":\"Test\",\"lastName\":\"User\"}";
+		return "{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\",\"firstName\":\"Test\",\"lastName\":\"User\","
+				+ "\"phone\":\"" + TestApi.mobile() + "\"}";
 	}
 
 	private static String refreshBody(String refreshToken) {

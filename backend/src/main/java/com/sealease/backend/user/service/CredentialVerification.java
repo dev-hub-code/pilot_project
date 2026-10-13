@@ -19,6 +19,10 @@ public sealed interface CredentialVerification {
 	record Inactive() implements CredentialVerification {
 	}
 
+	/** The right password, but the account's email address has not been confirmed yet. */
+	record EmailNotVerified(UserAccount account) implements CredentialVerification {
+	}
+
 	/** The right temporary password, but past its expiry: an administrator must issue a new one. */
 	record TemporaryPasswordExpired() implements CredentialVerification {
 	}

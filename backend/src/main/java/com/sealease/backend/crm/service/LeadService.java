@@ -121,7 +121,7 @@ public class LeadService {
 		lead.scheduleFollowUp(request.nextFollowUpAt());
 		linkExistingAccount(lead);
 		leads.saveAndFlush(lead);
-		log(lead, ActivityType.SYSTEM, "Lead created by staff", viewer.userId());
+		log(lead, ActivityType.SYSTEM, "Lead created by an employee", viewer.userId());
 		if (lead.getUserId() != null) {
 			log(lead, ActivityType.SYSTEM, "Linked to an existing investor account", null);
 		}

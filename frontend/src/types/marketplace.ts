@@ -7,47 +7,34 @@ export interface Money {
 }
 
 export type ProductStatus = "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED";
-/** RESERVED: held for an order awaiting payment. ON_LEASE: allocated to an investor. */
+/** ON_LEASE: assigned to an investor. RESERVED: held by an order placed before manual assignment. */
 export type ContainerStatus = "AVAILABLE" | "RESERVED" | "ON_LEASE" | "MAINTENANCE" | "RETIRED";
 export type ContainerCondition = "NEW" | "CARGO_WORTHY" | "WIND_WATERTIGHT";
 export type ContainerType =
   | "DRY_20FT" | "DRY_40FT" | "HIGH_CUBE_40FT" | "HIGH_CUBE_45FT" | "REEFER_20FT" | "REEFER_40FT"
   | "OPEN_TOP_20FT" | "OPEN_TOP_40FT" | "FLAT_RACK_20FT" | "FLAT_RACK_40FT" | "TANK_20FT";
-export type ContainerDocumentPurpose =
-  | "CONTAINER_PHOTO" | "CONTAINER_SURVEY_REPORT" | "LEASE_AGREEMENT" | "INSURANCE_CERTIFICATE" | "OFFERING_MEMORANDUM";
 
+/** A container as finance recorded it when assigning it; details beyond number and type may be unknown. */
 export interface ContainerSummary {
   id: string;
   containerNumber: string;
   containerType: ContainerType;
-  condition: ContainerCondition;
+  condition: ContainerCondition | null;
   status: ContainerStatus;
-  capacityCbm: number;
-  maxGrossKg: number;
-  tareKg: number;
-  manufactureYear: number;
+  capacityCbm: number | null;
+  maxGrossKg: number | null;
+  tareKg: number | null;
+  manufactureYear: number | null;
   manufacturer: string | null;
-  currentLocation: string;
-  locationCountry: string;
+  currentLocation: string | null;
+  locationCountry: string | null;
 }
 
-export interface ContainerDocument {
+/** A plan's marketplace photo; the image is served by its document id. */
+export interface PlanPhoto {
+  id: string;
   documentId: string;
-  purpose: ContainerDocumentPurpose;
-  title: string;
-  visibleToInvestors: boolean;
-  uploadedAt: string;
-}
-
-export interface ContainerDetail {
-  container: ContainerSummary;
-  acquisitionCost: number | null;
-  acquisitionCurrency: string | null;
-  notes: string | null;
-  statusReason: string | null;
   createdAt: string;
-  version: number;
-  documents: ContainerDocument[];
 }
 
 /** A plan on the marketplace. Payout figures are per container. */
@@ -58,14 +45,20 @@ export interface MarketplaceListing {
   summary: string;
   status: ProductStatus;
   containerType: ContainerType;
+  /** Per container, without GST (rent is based on it). */
   price: Money;
+  gstRatePercent: number;
+  /** What the investor pays per container: the price plus GST. */
+  priceWithGst: Money;
   monthlyRentPercent: number;
   monthlyCapitalReturnPercent: number;
   monthlyPayoutPercent: number;
-  tenureMonths: number;
+  /** The investor chooses a lease of whole years between these. */
+  minTenureYears: number;
+  maxTenureYears: number;
   monthlyPayout: Money;
+  /** The rent over the shortest lease. */
   totalPayout: Money;
-  availableContainers: number;
   coverPhotoId: string | null;
 }
 
@@ -83,14 +76,20 @@ export interface MarketplaceDetail {
 
 export interface ReturnProjection {
   containers: number;
+  /** The lease the figures are for, in whole years. */
+  tenureYears: number;
+  minTenureYears: number;
+  maxTenureYears: number;
+  /** The price of the containers, without GST. */
   amount: Money;
+  gstAmount: Money;
+  /** What the investor pays: the price plus GST. */
+  amountWithGst: Money;
   monthlyRent: Money;
-  monthlyCapitalReturn: Money;
-  monthlyPayout: Money;
+  /** Monthly payouts over the lease. */
   payouts: number;
+  /** The rent over the whole lease (plans pay rent only). */
   totalRent: Money;
-  totalCapitalReturned: Money;
-  totalPayout: Money;
   valid: boolean;
   problems: string[];
 }
@@ -105,10 +104,15 @@ export interface Product {
   summary: string;
   description: string;
   price: Money;
+  gstRatePercent: number;
+  gstPerContainer: Money;
+  /** What the investor pays per container: the price plus GST. */
+  priceWithGst: Money;
   monthlyRentPercent: number;
   monthlyCapitalReturnPercent: number;
   monthlyPayoutPercent: number;
-  tenureMonths: number;
+  minTenureYears: number;
+  maxTenureYears: number;
   monthlyRent: Money;
   monthlyCapitalReturn: Money;
   monthlyPayout: Money;
@@ -116,7 +120,6 @@ export interface Product {
   riskDisclosure: string;
   termsAndConditions: string;
   /** Containers of the plan's type in stock now (shared by plans of that type). */
-  availableContainers: number;
   containersSold: number;
   publishedAt: string | null;
   closedAt: string | null;

@@ -39,7 +39,7 @@ export function DepositForm({ orderId, payment }: { orderId: string; payment: Pa
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-xs font-medium uppercase tracking-[0.08em] text-muted">1. Account you paid into</legend>
+        <legend className="mb-2 text-sm font-medium text-foreground">1. Account you paid into</legend>
         {instructions.accounts.map((a) => (
           <label key={a.id}
             className="flex cursor-pointer gap-3 border border-border p-3 text-sm has-checked:border-gold has-checked:bg-gold/5">
@@ -58,7 +58,7 @@ export function DepositForm({ orderId, payment }: { orderId: string; payment: Pa
       </fieldset>
 
       <fieldset className="space-y-2">
-        <legend className="mb-2 text-xs font-medium uppercase tracking-[0.08em] text-muted">2. How you paid</legend>
+        <legend className="mb-2 text-sm font-medium text-foreground">2. How you paid</legend>
         <div className="grid grid-cols-3 gap-2">
           {MODES.map((m) => (
             <label key={m}

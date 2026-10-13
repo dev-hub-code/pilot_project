@@ -67,16 +67,27 @@ public class UserAccountService {
 		this.dummyHash = passwordEncoder.encode(UUID.randomUUID().toString());
 	}
 
+	/**
+	 * Self-registration.
+	 *
+	 * @param phone         the mobile number, unique across accounts; saved on the new profile
+	 * @param emailVerified {@code false} when the user must still confirm their address before signing in
+	 */
 	@Transactional
-	public UserAccount register(String email, String rawPassword, String firstName, String lastName) {
+	public UserAccount register(String email, String rawPassword, String firstName, String lastName, String phone,
+			boolean emailVerified) {
 		String normalizedEmail = EmailNormalizer.normalize(email);
 		passwordPolicy.validate(rawPassword, normalizedEmail);
 		if (users.existsByEmail(normalizedEmail)) {
 			throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, "An account with this email already exists");
 		}
-		User user = users.saveAndFlush(new User(normalizedEmail, passwordEncoder.encode(rawPassword),
-				firstName.strip(), lastName.strip(), clock.instant()));
-		profiles.createFor(user);
+		User user = new User(normalizedEmail, passwordEncoder.encode(rawPassword), firstName.strip(), lastName.strip(),
+				clock.instant());
+		if (emailVerified) {
+			user.markEmailVerified(clock.instant());
+		}
+		users.saveAndFlush(user);
+		profiles.createFor(user, phone);
 		audit.record(AuditRecord.of(user.getId(), AuditAction.USER_REGISTERED, ENTITY, user.getId())
 			.withNewValue(Map.of("email", normalizedEmail, "status", user.getStatus())));
 		events.publishEvent(new UserRegisteredEvent(user.getId(), normalizedEmail));
@@ -117,6 +128,9 @@ public class UserAccountService {
 		if (user.temporaryPasswordExpiredAt(now)) {
 			return new CredentialVerification.TemporaryPasswordExpired();
 		}
+		if (!user.isEmailVerified()) {
+			return new CredentialVerification.EmailNotVerified(UserAccount.from(user));
+		}
 		if (passwordEncoder.upgradeEncoding(user.getPasswordHash())) {
 			user.upgradePasswordHash(passwordEncoder.encode(rawPassword));
 		}
@@ -153,6 +167,40 @@ public class UserAccountService {
 			.collect(Collectors.toMap(User::getId, UserAccount::from));
 	}
 
+	/**
+	 * Confirms the user's email address (they followed the link sent to it).
+	 *
+	 * @return {@code true} if it was not confirmed before
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public boolean markEmailVerified(UUID userId) {
+		User user = users.findByIdForUpdate(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+		if (user.isEmailVerified()) {
+			return false;
+		}
+		user.markEmailVerified(clock.instant());
+		audit.record(AuditRecord.of(userId, AuditAction.EMAIL_VERIFIED, ENTITY, userId));
+		return true;
+	}
+
+	/**
+	 * Sets a new password chosen through "forgot password" (the caller verified the emailed code, ends the
+	 * account's sessions and audits it, in the same transaction).
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void resetPassword(UUID userId, String newPassword) {
+		User user = users.findByIdForUpdate(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+		passwordPolicy.validate(newPassword, user.getEmail());
+		user.resetPassword(passwordEncoder.encode(newPassword), clock.instant());
+	}
+
+	/** Whether the account still has to confirm its email address. */
+	@Transactional(readOnly = true)
+	public boolean isEmailVerified(UUID userId) {
+		return users.findById(userId).map(User::isEmailVerified)
+			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
+	}
+
 	@Transactional(readOnly = true)
 	public Optional<UserAccount> findByEmail(String email) {
 		return users.findByEmail(EmailNormalizer.normalize(email)).map(UserAccount::from);
@@ -174,6 +222,8 @@ public class UserAccountService {
 		String temporary = TemporaryPasswords.generate();
 		User user = new User(normalizedEmail, passwordEncoder.encode(temporary), firstName.strip(), lastName.strip(), now);
 		user.issueTemporaryPassword(user.getPasswordHash(), now.plus(staffAccounts.temporaryPasswordValidity()), now);
+		// Entered by an administrator, and the temporary password reaches the holder out of band.
+		user.markEmailVerified(now);
 		users.saveAndFlush(user);
 		profiles.createFor(user);
 		audit.record(AuditRecord.of(actorId, AuditAction.STAFF_ACCOUNT_CREATED, ENTITY, user.getId())
@@ -214,8 +264,9 @@ public class UserAccountService {
 	public UserAccount createSystemAccount(String email, String rawPassword, String firstName, String lastName) {
 		String normalizedEmail = EmailNormalizer.normalize(email);
 		passwordPolicy.validate(rawPassword, normalizedEmail);
-		User user = users.saveAndFlush(new User(normalizedEmail, passwordEncoder.encode(rawPassword),
-				firstName, lastName, clock.instant()));
+		User user = new User(normalizedEmail, passwordEncoder.encode(rawPassword), firstName, lastName, clock.instant());
+		user.markEmailVerified(clock.instant());
+		users.saveAndFlush(user);
 		profiles.createFor(user);
 		audit.record(AuditRecord.of(null, AuditAction.USER_REGISTERED, ENTITY, user.getId())
 			.withNewValue(Map.of("email", normalizedEmail, "source", "BOOTSTRAP")));

@@ -14,6 +14,11 @@ import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { officeWithdrawalAction } from "@/features/admin/withdrawal-actions";
+import { ReferralModeAdminForm } from "@/features/admin/withdrawal-forms";
+import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
+import { ActionButton } from "@/features/orders/action-button";
+import type { OfficeWithdrawalOption, ReferralPayoutMode } from "@/types/withdrawal";
 import { ResetPasswordForm, RolesForm } from "@/features/admin/staff-forms";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
@@ -21,14 +26,17 @@ import type { AdminReferralView } from "@/types/referral";
 import type { UserAuthorities } from "@/types/staff";
 import { formatMoney } from "@/utils/money";
 import type { AdminBankAccount, AdminUserDetail, KycSubmission } from "@/types/user";
-import { formatDate, formatDateTime, humanize } from "@/utils/format";
+import { kycNumbers } from "@/features/profile/kyc-labels";
+import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "User" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function UserDetailPage({ params }: PageProps<"/admin/users/[id]">) {
+export default async function UserDetailPage({ params, searchParams }: PageProps<"/admin/users/[id]">) {
   const { id } = await params;
+  // Opened from bank verification: a focused view without account management (roles, referrals, suspension).
+  const fromBankVerification = (await searchParams).from === "bank-verification";
   if (!UUID.test(id)) notFound();
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
@@ -54,11 +62,22 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
     ])
     : [null, null];
   const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
+  // Withdrawals: how referral earnings are paid this year, and cash finance can withdraw at the office today.
+  const showWithdrawals = !fromBankVerification && !isStaffAccount && can(Permission.WITHDRAWAL_VIEW) && session.userId !== id;
+  const [referralMode, officeOptions] = showWithdrawals
+    ? await Promise.all([
+      authFetch<ReferralPayoutMode>(`/api/v1/admin/users/${id}/referral-mode`),
+      can(Permission.WITHDRAWAL_PROCESS) ? authFetch<OfficeWithdrawalOption[]>(`/api/v1/admin/withdrawals/office?userId=${id}`) : null,
+    ])
+    : [null, null];
   const { summary, profile } = user;
   const isSelf = session.userId === id;
 
   return (
     <div className="space-y-6">
+      {fromBankVerification && (
+        <Link href="/admin/bank-accounts" className="text-sm text-muted hover:underline">← Back to bank verification</Link>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{summary.firstName} {summary.lastName}</h1>
         <StatusBadge tone={toneFor(summary.status)}>{humanize(summary.status)}</StatusBadge>
@@ -71,13 +90,13 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Item label="Email">{summary.email}</Item>
               <Item label="Phone">{profile.phone ?? "—"}</Item>
-              <Item label="Date of birth">{formatDate(profile.dateOfBirth)}</Item>
+              <Item label="Date of birth">{formatDayMonthYear(profile.dateOfBirth) || "—"}</Item>
               <Item label="Nationality">{profile.nationality ?? "—"}</Item>
               <Item label="Address">
                 {[profile.address.line1, profile.address.city, profile.address.postalCode, profile.address.country]
                   .filter(Boolean).join(", ") || "—"}
               </Item>
-              <Item label="Tax">{profile.taxIdMasked ? `${profile.taxIdMasked} (${profile.taxResidencyCountry})` : "—"}</Item>
+              <Item label="GST number">{profile.gstNumber ? <span className="font-mono">{profile.gstNumber}</span> : "—"}</Item>
               <Item label="Joined">{formatDateTime(summary.createdAt)}</Item>
               <Item label="Last sign-in">{formatDateTime(summary.lastLoginAt)}</Item>
               {user.statusReason && (
@@ -95,7 +114,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
                   {kyc.map((s) => (
                     <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                       <Link href={`/admin/kyc/${s.id}`} className="text-brand hover:underline">
-                        {humanize(s.documentType)} {s.documentNumberMasked}
+                        {kycNumbers(s)}
                       </Link>
                       <span className="text-muted">{formatDateTime(s.submittedAt)}</span>
                       <StatusBadge tone={toneFor(s.status)}>{humanize(s.status)}</StatusBadge>
@@ -144,7 +163,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             </Card>
           )}
 
-          {authorities && (
+          {authorities && !fromBankVerification && (
             <Card title="Roles" description={authorities.roles.length === 0 ? "No roles." : authorities.roles.join(", ")}>
               {can(Permission.USER_ROLE_ASSIGN) && !isSelf && allRoles ? (
                 <RolesForm userId={id} roles={allRoles.content} current={authorities.roles} />
@@ -154,6 +173,7 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
             </Card>
           )}
 
+          {!fromBankVerification && (
           <Card title="Referrals" description={referral.code ? `Referral code ${referral.code}` : "Has not opened their referral page yet."}>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Item label="Referred by">
@@ -175,15 +195,45 @@ export default async function UserDetailPage({ params }: PageProps<"/admin/users
               </Item>
             </dl>
           </Card>
+          )}
         </div>
 
         <div className="space-y-6">
+          {referralMode && (
+            <Card title="Cash at the office" description="Withdraw the investor's whole balance in cash, in front of them; then hand it over against a receipt.">
+              <div className="space-y-5 text-sm">
+                {officeOptions?.map((option) => (
+                  <div key={option.balance} className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-medium">{EARNINGS_BALANCE_LABEL[option.balance]}</span>
+                      <span className="tabular-nums">{formatMoney(option.available)}</span>
+                    </div>
+                    {option.refusal ? (
+                      <p className="text-xs text-muted">{option.refusal}</p>
+                    ) : (
+                      <ActionButton action={officeWithdrawalAction.bind(null, id, option.balance)} variant="secondary"
+                        label={`Withdraw ${formatMoney(option.available)} in cash`} pendingLabel="Withdrawing…"
+                        confirm={`Withdraw ${formatMoney(option.available)} from ${EARNINGS_BALANCE_LABEL[option.balance].toLowerCase()} in cash now? The investor must be here to collect it.`} />
+                    )}
+                  </div>
+                ))}
+                <div className="space-y-2 border-t border-border pt-4">
+                  <p>
+                    Referral earnings in {referralMode.year}:{" "}
+                    <span className="font-medium">{referralMode.mode === "OFFICE_CASH" ? "cash at the office" : "into the bank account"}</span>
+                    <span className="text-muted">{referralMode.chosen ? " (chosen by the investor)" : " (default; not chosen yet)"}</span>
+                  </p>
+                  {can(Permission.WITHDRAWAL_PROCESS) && <ReferralModeAdminForm userId={id} mode={referralMode.mode} />}
+                </div>
+              </div>
+            </Card>
+          )}
           {isStaffAccount && can(Permission.USER_ROLE_ASSIGN) && !isSelf && (
-            <Card title="Password" description="For a staff member who forgot their password or whose temporary one expired.">
+            <Card title="Password" description="For an employee who forgot their password or whose temporary one expired. The new temporary password is emailed to them.">
               <ResetPasswordForm userId={id} />
             </Card>
           )}
-          {can(Permission.USER_SUSPEND) && !isSelf && summary.status !== "DISABLED" && (
+          {can(Permission.USER_SUSPEND) && !isSelf && summary.status !== "DISABLED" && !fromBankVerification && (
             <Card title={summary.status === "ACTIVE" ? "Suspend account" : "Reactivate account"}
               description={summary.status === "ACTIVE" ? "Signs the user out everywhere immediately." : undefined}>
               {summary.status === "ACTIVE" ? (

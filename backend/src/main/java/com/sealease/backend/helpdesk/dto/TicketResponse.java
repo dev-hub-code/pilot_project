@@ -13,6 +13,8 @@ import java.util.UUID;
  * A ticket. Staff views name the requester and assignee; investor views leave those {@code null}.
  *
  * @param overdue no staff reply yet and the first-response target has passed
+ * @param reopenableUntil for a resolved or closed ticket still within the reopen window, until when its customer can
+ *                        reopen it
  */
 public record TicketResponse(
 		UUID id,
@@ -34,22 +36,25 @@ public record TicketResponse(
 		Instant lastMessageAt,
 		Instant createdAt,
 		Instant resolvedAt,
-		Instant closedAt) {
+		Instant closedAt,
+		Instant reopenableUntil) {
 
-	public static TicketResponse forStaff(SupportTicket t, String requesterName, String assigneeName, Instant now) {
-		return of(t, requesterName, assigneeName, now, true);
+	public static TicketResponse forStaff(SupportTicket t, String requesterName, String assigneeName, Instant now,
+			Instant reopenableUntil) {
+		return of(t, requesterName, assigneeName, now, true, reopenableUntil);
 	}
 
-	public static TicketResponse forCustomer(SupportTicket t, Instant now) {
-		return of(t, null, null, now, false);
+	public static TicketResponse forCustomer(SupportTicket t, Instant now, Instant reopenableUntil) {
+		return of(t, null, null, now, false, reopenableUntil);
 	}
 
-	private static TicketResponse of(SupportTicket t, String requesterName, String assigneeName, Instant now, boolean staff) {
+	private static TicketResponse of(SupportTicket t, String requesterName, String assigneeName, Instant now, boolean staff,
+			Instant reopenableUntil) {
 		return new TicketResponse(t.getId(), t.getReference(), t.getSubject(), t.getCategory(), t.getRelatedType(),
 				t.getRelatedId(), t.getRelatedLabel(), t.getStatus(), t.getPriority(), staff ? t.getUserId() : null,
 				requesterName, staff ? t.getAssigneeId() : null, assigneeName, staff ? t.getFirstResponseDueAt() : null,
 				t.getFirstRespondedAt(), staff && t.isOverdueAt(now), t.getLastMessageAt(), t.getCreatedAt(),
-				t.getResolvedAt(), t.getClosedAt());
+				t.getResolvedAt(), t.getClosedAt(), reopenableUntil);
 	}
 
 }

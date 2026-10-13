@@ -1,6 +1,7 @@
 package com.sealease.backend.helpdesk;
 
 import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.helpdesk.service.SupportService;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
@@ -42,6 +43,9 @@ class SupportIntegrationTest {
 	@Autowired
 	private JdbcTemplate jdbc;
 
+	@Autowired
+	private SupportService support;
+
 	private TestApi api;
 	private InvestorFixtures investors;
 	private Account agent;
@@ -58,8 +62,11 @@ class SupportIntegrationTest {
 	@Test
 	void aTicketGoesBackAndForthUntilItIsClosed() throws Exception {
 		Account investor = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, api.admin()).plan(1);
+		UUID product = new OfferingFixtures(mvc, api.admin()).plan();
 		String orderId = investors.placeOrder(investor, product, 1);
+		// Setting up the order verified a bank account, which notifies the investor; count ticket notifications only.
+		mvc.perform(post("/api/v1/notifications/read-all").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().is2xxSuccessful());
 
 		String ticketId = JsonPath.read(open(investor, "Payment not showing", "ORDER", orderId, png("receipt.png"))
 			.andExpect(status().isCreated())
@@ -93,7 +100,7 @@ class SupportIntegrationTest {
 		unread(investor).andExpect(jsonPath("$.unread").value(2));
 		setStatus(ticketId, "OPEN").andExpect(status().isBadRequest());
 
-		// Replying reopens a resolved ticket; closing is final.
+		// Replying reopens a resolved ticket; a closed one takes no replies and cannot be reopened.
 		mvc.perform(multipart("/api/v1/support/tickets/{id}/messages", ticketId).param("body", "One more question")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.ticket.status").value("OPEN"))
@@ -106,13 +113,98 @@ class SupportIntegrationTest {
 		assertThat(api.auditCount("TICKET_OPENED", ticketId)).isEqualTo(1);
 	}
 
+	// ----------------------------------------------------------------------- history & reopen
+
+	@Test
+	void customersFollowTheirTicketsHistoryAndCanReopenIt() throws Exception {
+		Account investor = investors.approvedInvestor();
+		String ticketId = id(open(investor, "Where is my payout?", null, null));
+		assign(ticketId, agent.id()).andExpect(status().isOk());
+		mvc.perform(post("/api/v1/admin/support/tickets/{id}/priority", ticketId).header(HttpHeaders.AUTHORIZATION, agent.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"priority\":\"HIGH\"}"))
+			.andExpect(status().isOk());
+		staffReply(ticketId, "It is scheduled for the 5th.", false).andExpect(status().isOk());
+		setStatus(ticketId, "RESOLVED").andExpect(status().isOk());
+
+		// The customer sees every update except priority changes, with staff by first name.
+		detail(investor, ticketId)
+			.andExpect(jsonPath("$.events.length()").value(4))
+			.andExpect(jsonPath("$.events[0].type").value("OPENED"))
+			.andExpect(jsonPath("$.events[0].actorName").value("You"))
+			.andExpect(jsonPath("$.events[1].type").value("ASSIGNED"))
+			.andExpect(jsonPath("$.events[1].agentName").value("Test (SeaLease support)"))
+			.andExpect(jsonPath("$.events[2].toValue").value("WAITING_ON_CUSTOMER"))
+			.andExpect(jsonPath("$.events[3].fromValue").value("WAITING_ON_CUSTOMER"))
+			.andExpect(jsonPath("$.events[3].toValue").value("RESOLVED"))
+			.andExpect(jsonPath("$.ticket.reopenableUntil").isNotEmpty());
+		mvc.perform(get("/api/v1/admin/support/tickets/{id}", ticketId).header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(jsonPath("$.events[?(@.type == 'PRIORITY_CHANGED')].toValue").value(org.hamcrest.Matchers.hasItem("HIGH")));
+
+		// A resolved ticket can be reopened with a reason, which joins the conversation; then replies work again.
+		reopen(investor, ticketId, " ").andExpect(status().isBadRequest());
+		reopen(investor, ticketId, "The payout still has not arrived.")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.ticket.status").value("OPEN"))
+			.andExpect(jsonPath("$.ticket.resolvedAt").doesNotExist())
+			.andExpect(jsonPath("$.ticket.reopenableUntil").doesNotExist())
+			.andExpect(jsonPath("$.messages[-1:].body").value(org.hamcrest.Matchers.hasItem("The payout still has not arrived.")))
+			.andExpect(jsonPath("$.events[-1:].type").value(org.hamcrest.Matchers.hasItem("REOPENED")))
+			.andExpect(jsonPath("$.events[-1:].fromValue").value(org.hamcrest.Matchers.hasItem("RESOLVED")));
+		reopen(investor, ticketId, "Again").andExpect(status().isConflict());
+		mvc.perform(multipart("/api/v1/support/tickets/{id}/messages", ticketId).param("body", "Any news?")
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk());
+		assertThat(api.auditCount("TICKET_REOPENED", ticketId)).isEqualTo(1);
+
+		// A closed ticket cannot be reopened, nor written on: a new one is needed.
+		mvc.perform(post("/api/v1/support/tickets/{id}/close", ticketId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.ticket.status").value("CLOSED"))
+			.andExpect(jsonPath("$.ticket.reopenableUntil").doesNotExist());
+		reopen(investor, ticketId, "Still waiting").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("cannot be reopened")));
+		mvc.perform(multipart("/api/v1/support/tickets/{id}/messages", ticketId).param("body", "Hello?")
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isUnprocessableContent());
+	}
+
+	@Test
+	void resolvedTicketsCloseByThemselvesAfter24Hours() throws Exception {
+		Account investor = investors.approvedInvestor();
+		String stale = id(open(investor, "Old question", null, null));
+		String fresh = id(open(investor, "New question", null, null));
+		setStatus(stale, "RESOLVED").andExpect(status().isOk());
+		setStatus(fresh, "RESOLVED").andExpect(status().isOk());
+
+		// Reopenable for 24 hours after being resolved.
+		String until = JsonPath.read(detail(investor, fresh).andReturn().getResponse().getContentAsString(), "$.ticket.reopenableUntil");
+		String resolved = JsonPath.read(detail(investor, fresh).andReturn().getResponse().getContentAsString(), "$.ticket.resolvedAt");
+		assertThat(java.time.Duration.between(java.time.Instant.parse(resolved), java.time.Instant.parse(until)))
+			.isEqualTo(java.time.Duration.ofHours(24));
+
+		// Past 24 hours it can no longer be reopened or written on, even before the closing job has run.
+		jdbc.update("UPDATE support_tickets SET resolved_at = now() - interval '25 hours' WHERE id = ?::uuid", stale);
+		detail(investor, stale).andExpect(jsonPath("$.ticket.reopenableUntil").doesNotExist());
+		reopen(investor, stale, "Still waiting").andExpect(status().isUnprocessableContent());
+		mvc.perform(multipart("/api/v1/support/tickets/{id}/messages", stale).param("body", "Hello?")
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isUnprocessableContent());
+
+		assertThat(support.closeResolved()).isGreaterThanOrEqualTo(1);
+		detail(investor, stale)
+			.andExpect(jsonPath("$.ticket.status").value("CLOSED"))
+			.andExpect(jsonPath("$.events[-1:].toValue").value(org.hamcrest.Matchers.hasItem("CLOSED")))
+			.andExpect(jsonPath("$.events[-1:].actorName").value(org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.nullValue())));
+		detail(investor, fresh).andExpect(jsonPath("$.ticket.status").value("RESOLVED"));
+		assertThat(support.closeResolved()).as("closing again changes nothing").isZero();
+	}
+
 	// -------------------------------------------------------------------------- visibility
 
 	@Test
 	void investorsSeeOnlyTheirOwnTicketsAndRecords() throws Exception {
 		Account investor = investors.approvedInvestor();
 		Account other = investors.approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, api.admin()).plan(1);
+		UUID product = new OfferingFixtures(mvc, api.admin()).plan();
 		String othersOrder = investors.placeOrder(other, product, 1);
 
 		open(investor, "Not mine", "ORDER", othersOrder).andExpect(status().isBadRequest())
@@ -248,6 +340,11 @@ class SupportIntegrationTest {
 	private ResultActions assign(String ticketId, UUID assigneeId) throws Exception {
 		return mvc.perform(post("/api/v1/admin/support/tickets/{id}/assign", ticketId).header(HttpHeaders.AUTHORIZATION, agent.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("{\"assigneeId\":\"" + assigneeId + "\"}"));
+	}
+
+	private ResultActions reopen(Account investor, String ticketId, String reason) throws Exception {
+		return mvc.perform(post("/api/v1/support/tickets/{id}/reopen", ticketId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"" + reason + "\"}"));
 	}
 
 	private ResultActions unread(Account account) throws Exception {

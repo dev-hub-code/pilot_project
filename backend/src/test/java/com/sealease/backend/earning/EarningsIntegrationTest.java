@@ -1,5 +1,6 @@
 package com.sealease.backend.earning;
 
+import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.InvestorFixtures;
@@ -16,9 +17,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,10 +31,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Monthly payouts (rent plus capital returned), the ledger, and maturity at the end of the tenure. */
+/** Monthly payouts (rent only on current plans), the ledger, and maturity at the end of the tenure. */
 @IntegrationTest
 class EarningsIntegrationTest {
 
@@ -59,85 +65,64 @@ class EarningsIntegrationTest {
 	// ------------------------------------------------------------------------------ payouts
 
 	@Test
-	void payoutsAreCreditedMonthlyAndTheContainerReturnsToStockAfterTheLast() throws Exception {
-		// ₹50,000 container at 2% rent over 16 months: ₹1,000 rent + ₹3,125 capital = ₹4,125 a month.
+	void rentIsCreditedDailyAndTheContainerReturnsToStockAfterTheLastDay() throws Exception {
+		// ₹50,000 container at 2% rent, leased for 1 year (12 months): ₹1,000 a month. Plans pay rent only.
 		Account investor = investors.approvedInvestor();
-		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
 
-		// Nothing is due on the day of purchase: payouts are paid in arrears.
-		payouts.payDue();
-		assertThat(paid(holding)).isZero();
+		// Nothing on the day of purchase: a day is credited once it has ended.
+		assertThat(payouts.creditDue()).isZero();
+		assertThat(credits(holding)).isZero();
 
-		// Three months later.
-		backdate(holding, 3);
-		assertThat(payouts.payDue()).isGreaterThanOrEqualTo(3);
-		assertThat(paid(holding)).isEqualTo(3);
-		payouts.payDue();
-		assertThat(paid(holding)).as("paying again changes nothing").isEqualTo(3);
+		// Three months later: every day since the lease started is credited, one ledger transaction each.
+		int days = backdate(holding, 3);
+		assertThat(payouts.creditDue()).isEqualTo(days);
+		assertThat(credits(holding)).isEqualTo(days);
+		assertThat(payouts.creditDue()).as("crediting again changes nothing").isZero();
+		BigDecimal credited = expectedCredited(holding);
+		assertThat(credited).isGreaterThan(new BigDecimal("2900")).isLessThan(new BigDecimal("3100"));
+		assertThat(jdbc.queryForObject("SELECT sum(rent_amount) FROM rent_credits WHERE holding_id = ?", BigDecimal.class,
+				holding)).isEqualByComparingTo(credited);
+		int paid = paid(holding);
+		assertThat(paid).as("whole periods credited").isBetween(2, 4);
 
 		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balances[0].amount").value("12375.00"))
-			.andExpect(jsonPath("$.rentPaid[0].amount").value("3000.00"))
-			.andExpect(jsonPath("$.capitalReturned[0].amount").value("9375.00"))
-			.andExpect(jsonPath("$.nextPayout.total.amount").value("4125.00"))
-			.andExpect(jsonPath("$.holdings[0].paid").value(3))
-			.andExpect(jsonPath("$.holdings[0].installments").value(16))
-			.andExpect(jsonPath("$.holdings[0].received.amount").value("12375.00"));
-		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(16))
-			.andExpect(jsonPath("$.content[0].status").value("SCHEDULED"))
-			.andExpect(jsonPath("$.content[0].installmentNumber").value(16));
+			.andExpect(jsonPath("$.balances[0].amount").value(credited.setScale(2).toPlainString()))
+			.andExpect(jsonPath("$.capitalReturned.length()").value(0))
+			.andExpect(jsonPath("$.holdings[0].paid").value(paid))
+			.andExpect(jsonPath("$.holdings[0].installments").value(installments(holding)));
 		mvc.perform(get("/api/v1/earnings").param("status", "PAID").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(3))
-			.andExpect(jsonPath("$.content[0].rent.amount").value("1000.00"))
-			.andExpect(jsonPath("$.content[0].capital.amount").value("3125.00"))
-			.andExpect(jsonPath("$.content[0].total.amount").value("4125.00"))
+			.andExpect(jsonPath("$.totalElements").value(paid))
+			.andExpect(jsonPath("$.content[0].capital.amount").value("0.00"))
 			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty());
-		// Per month: the three paid installments, then the next one still scheduled.
-		YearMonth now = YearMonth.now(ZoneOffset.UTC);
-		mvc.perform(get("/api/v1/earnings/monthly").param("from", now.minusMonths(5).toString())
-				.param("to", now.plusMonths(1).toString()).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.length()").value(4))
-			.andExpect(jsonPath("$[0].month").value(now.minusMonths(2).toString()))
-			.andExpect(jsonPath("$[0].rentPaid.amount").value("1000.00"))
-			.andExpect(jsonPath("$[0].capitalPaid.amount").value("3125.00"))
-			.andExpect(jsonPath("$[0].rentScheduled.amount").value("0.00"))
-			.andExpect(jsonPath("$[2].month").value(now.toString()))
-			.andExpect(jsonPath("$[2].rentPaid.amount").value("1000.00"))
-			.andExpect(jsonPath("$[3].month").value(now.plusMonths(1).toString()))
-			.andExpect(jsonPath("$[3].rentPaid.amount").value("0.00"))
-			.andExpect(jsonPath("$[3].rentScheduled.amount").value("1000.00"))
-			.andExpect(jsonPath("$[3].capitalScheduled.amount").value("3125.00"));
-		mvc.perform(get("/api/v1/earnings/monthly").param("from", now.toString()).param("to", now.minusMonths(1).toString())
-				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(status().isBadRequest());
 
-		// Each payout is one balanced ledger transaction: rent and capital are platform expenses.
+		// Each day is one balanced ledger transaction: the rent is a platform expense (no capital posting).
+		Map<String, Object> day = jdbc.queryForMap("""
+				SELECT c.installment_id, c.day, c.rent_amount FROM rent_credits c WHERE c.holding_id = ? ORDER BY c.day LIMIT 1""",
+				holding);
+		String rent = ((BigDecimal) day.get("rent_amount")).setScale(4).toPlainString();
+		assertThat(entries(day.get("installment_id") + ":" + day.get("day"))).containsExactlyInAnyOrder(
+				"DEBIT PLATFORM_RENT_EXPENSE " + rent, "CREDIT INVESTOR_EARNINGS " + rent);
 		UUID first = jdbc.queryForObject("SELECT id FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
 				UUID.class, holding);
-		assertThat(entries(first.toString())).containsExactlyInAnyOrder(
-				"DEBIT PLATFORM_RENT_EXPENSE 1000.0000", "DEBIT PLATFORM_CAPITAL_RETURNS 3125.0000",
-				"CREDIT INVESTOR_EARNINGS 4125.0000");
 		assertThat(api.auditCount("PAYOUT_PAID", first)).isEqualTo(1);
 		assertThat(outboxCount("earning.created", first.toString())).isEqualTo(1);
 
-		// The tenure ends: the last payout matures the holding and the container goes back to stock.
+		// The lease ends: the last day matures the holding and the container goes back to stock.
 		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("ON_LEASE");
-		backdate(holding, 16);
-		payouts.payDue();
-		assertThat(paid(holding)).isEqualTo(16);
+		backdate(holding, 12);
+		payouts.creditDue();
+		assertThat(paid(holding)).isEqualTo(installments(holding));
 		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?", String.class, holding)).isEqualTo("MATURED");
 		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("AVAILABLE");
 		assertThat(api.auditCount("HOLDING_MATURED", holding)).isEqualTo(1);
-		// 16 × ₹4,125: 32% of the price in rent and the whole price back.
+		// The whole lease: 12 × ₹1,000, 24% of the price in rent, and nothing more.
 		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.balances[0].amount").value("66000.00"))
-			.andExpect(jsonPath("$.rentPaid[0].amount").value("16000.00"))
-			.andExpect(jsonPath("$.capitalReturned[0].amount").value("50000.00"))
+			.andExpect(jsonPath("$.balances[0].amount").value("12000.00"))
+			.andExpect(jsonPath("$.rentPaid[0].amount").value("12000.00"))
 			.andExpect(jsonPath("$.nextPayout").doesNotExist());
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.activeHoldings").value(0))
@@ -146,9 +131,58 @@ class EarningsIntegrationTest {
 	}
 
 	@Test
+	void periodsAreCalendarMonthsAndAPartMonthEarnsCommissionInProportion() throws Exception {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		Account referrer = investors.approvedInvestor();
+		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
+			.andReturn().getResponse().getContentAsString(), "$.code");
+		Account investor = investors.approve(api.register(code));
+		// ₹50,000 container at 2% rent, leased for 1 year: ₹1,000 rent a whole month.
+		String orderId = investors.invest(investor, offerings.plan(), 1);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
+
+		// The first period runs to the 1st of next month: its share is its days ÷ the month's days.
+		boolean onTheFirst = today.getDayOfMonth() == 1;
+		LocalDate firstEnd = today.withDayOfMonth(1).plusMonths(1);
+		Map<String, Object> first = jdbc.queryForMap("""
+				SELECT period_start, period_end, month_share, rent_amount, installment_count
+				FROM payout_installments WHERE holding_id = ? AND installment_number = 1""", holding);
+		BigDecimal share = (BigDecimal) first.get("month_share");
+		assertThat(first.get("installment_count")).isEqualTo(onTheFirst ? 12 : 13);
+		assertThat(first.get("period_start").toString()).isEqualTo(today.toString());
+		assertThat(first.get("period_end").toString()).isEqualTo(firstEnd.toString());
+		assertThat(share).isEqualByComparingTo(BigDecimal.valueOf(firstEnd.toEpochDay() - today.toEpochDay())
+			.divide(BigDecimal.valueOf(today.lengthOfMonth()), 6, RoundingMode.HALF_UP));
+		assertThat(jdbc.queryForObject("SELECT sum(month_share) FROM payout_installments WHERE holding_id = ?",
+				BigDecimal.class, holding)).isEqualByComparingTo("12");
+		assertThat(jdbc.queryForObject("SELECT sum(rent_amount) FROM payout_installments WHERE holding_id = ?",
+				BigDecimal.class, holding)).isEqualByComparingTo("12000");
+		// Every later period but the last starts on the 1st.
+		assertThat(jdbc.queryForObject("""
+				SELECT count(*) FROM payout_installments WHERE holding_id = ? AND installment_number > 1
+				AND extract(day FROM period_start) <> 1""", Integer.class, holding)).isZero();
+
+		// Once the first period is fully credited, the referrer earns its share of a month's 2% commission.
+		backdate(holding, firstEnd.toEpochDay() - today.toEpochDay());
+		payouts.creditDue();
+		assertThat(jdbc.queryForObject("SELECT status FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
+				String.class, holding)).isEqualTo("PAID");
+		BigDecimal base = new BigDecimal("50000").multiply(share).setScale(2, RoundingMode.DOWN);
+		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].base.amount").value(base.toPlainString()))
+			.andExpect(jsonPath("$.content[0].amount.amount")
+				.value(base.multiply(new BigDecimal("0.02")).setScale(2, RoundingMode.DOWN).toPlainString()));
+		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
+			.andExpect(jsonPath("$.wallet[?(@.balance == 'REFERRAL')].amount.amount")
+				.value(base.multiply(new BigDecimal("0.02")).setScale(2, RoundingMode.DOWN).toPlainString()));
+		assertLedgerBalanced();
+	}
+
+	@Test
 	void financeCanRunDuePayoutsNow() throws Exception {
 		Account investor = investors.approvedInvestor();
-		String orderId = investors.invest(investor, offerings.plan(1), 1);
+		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 		backdate(holding, 1);
 		Account finance = api.staff("FINANCE");
@@ -158,13 +192,13 @@ class EarningsIntegrationTest {
 			.andExpect(jsonPath("$[0].count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
 		mvc.perform(get("/api/v1/admin/payouts").param("holdingId", holding.toString())
 				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(16))
+			.andExpect(jsonPath("$.totalElements").value(installments(holding)))
 			.andExpect(jsonPath("$.content[0].userId").value(investor.id().toString()));
 
 		run(investor).andExpect(status().isForbidden());
 		run(api.staff("SUPPORT")).andExpect(status().isForbidden());
-		run(finance).andExpect(status().isOk()).andExpect(jsonPath("$.paid").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
-		assertThat(paid(holding)).isEqualTo(1);
+		run(finance).andExpect(status().isOk()).andExpect(jsonPath("$.credited").value(org.hamcrest.Matchers.greaterThanOrEqualTo(28)));
+		assertThat(paid(holding)).isGreaterThanOrEqualTo(1);
 
 		// Investors see their own payouts only.
 		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, investors.approvedInvestor().bearer()))
@@ -226,12 +260,48 @@ class EarningsIntegrationTest {
 
 	// ------------------------------------------------------------------------------ helpers
 
-	/** Moves the holding's schedule into the past, as if the lease had started {@code months} months ago. */
-	private void backdate(UUID holding, int months) {
+	/**
+	 * Moves the holding's schedule into the past, as if the lease had started {@code months} months ago; every date
+	 * moves by the same number of days, so periods keep their lengths.
+	 *
+	 * @return the days from the lease start to today
+	 */
+	private int backdate(UUID holding, int months) {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		return backdate(holding, today.toEpochDay() - today.minusMonths(months).toEpochDay());
+	}
+
+	/** As {@link #backdate(UUID, int)}, the lease starting {@code days} days ago. */
+	private int backdate(UUID holding, long days) {
+		LocalDate start = jdbc.queryForObject(
+				"SELECT period_start FROM payout_installments WHERE holding_id = ? AND installment_number = 1", LocalDate.class, holding);
+		long shift = start.toEpochDay() - (LocalDate.now(ZoneOffset.UTC).toEpochDay() - days);
 		jdbc.update("""
 				UPDATE payout_installments
-				SET due_on = (now() AT TIME ZONE 'UTC')::date - make_interval(months => ? - installment_number)
-				WHERE holding_id = ?""", months, holding);
+				SET period_start = period_start - ?, period_end = period_end - ?, due_on = due_on - ?,
+				    credited_through = credited_through - ?
+				WHERE holding_id = ?""", (int) shift, (int) shift, (int) shift, (int) shift, holding);
+		return (int) days;
+	}
+
+	/** What daily crediting should have credited to the holding by today: each period's rent × its elapsed share. */
+	private BigDecimal expectedCredited(UUID holding) {
+		return jdbc.queryForObject("""
+				SELECT sum(CASE WHEN period_end <= today THEN rent_amount
+				                WHEN period_start >= today THEN 0
+				                ELSE round(rent_amount * (today - period_start) / (period_end - period_start), 2) END)
+				FROM payout_installments, (SELECT (now() AT TIME ZONE 'UTC')::date AS today) t
+				WHERE holding_id = ?""", BigDecimal.class, holding);
+	}
+
+	private int credits(UUID holding) {
+		Integer count = jdbc.queryForObject("SELECT count(*) FROM rent_credits WHERE holding_id = ?", Integer.class, holding);
+		return count == null ? 0 : count;
+	}
+
+	private int installments(UUID holding) {
+		Integer count = jdbc.queryForObject("SELECT count(*) FROM payout_installments WHERE holding_id = ?", Integer.class, holding);
+		return count == null ? 0 : count;
 	}
 
 	private int paid(UUID holding) {

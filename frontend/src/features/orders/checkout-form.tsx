@@ -25,7 +25,7 @@ export function CheckoutForm({ idempotencyKey, terms, total, disabled }: {
       <FormFeedback state={state} />
       <input type="hidden" name="lineCount" value={terms.length} />
       <fieldset className="space-y-3">
-        <legend className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Terms</legend>
+        <legend className="text-sm font-medium text-foreground">Terms</legend>
         {terms.map((t) => (
           <label key={t.productId} className="flex items-start gap-3 text-sm">
             <input type="checkbox" name="accept" value={t.productId} required

@@ -2,6 +2,7 @@ package com.sealease.backend.ledger.dto;
 
 import com.sealease.backend.common.validation.PlatformCurrency;
 import com.sealease.backend.ledger.service.Direction;
+import com.sealease.backend.ledger.service.EarningsBalance;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -15,11 +16,13 @@ import java.util.UUID;
  * A manual correction to an investor's earnings balance, booked against platform adjustments.
  *
  * @param direction CREDIT adds to what the investor is owed, DEBIT recovers an over-payment
+ * @param balance   which of the investor's earnings balances; bank rent ({@code RENT_BANK}) when omitted
  */
 public record AdjustmentRequest(
 		@NotNull UUID userId,
 		@NotBlank @PlatformCurrency String currency,
 		@NotNull Direction direction,
 		@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal amount,
-		@NotBlank @Size(max = 250) String reason) {
+		@NotBlank @Size(max = 250) String reason,
+		EarningsBalance balance) {
 }

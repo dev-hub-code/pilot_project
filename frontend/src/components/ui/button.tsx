@@ -14,7 +14,7 @@ export const buttonVariants = {
 } as const;
 
 export const buttonBase =
-  "inline-flex h-11 items-center justify-center gap-2 px-5 text-sm font-medium tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-11 items-center justify-center gap-2 px-5 py-2 text-center text-sm font-medium tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-60";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: keyof typeof buttonVariants;

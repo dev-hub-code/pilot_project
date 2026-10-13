@@ -64,3 +64,27 @@ export async function rejectBankAccountAction(accountId: string, _p: FormState, 
   revalidatePath("/admin", "layout");
   return result;
 }
+
+/** Assigns the container finance typed in to a paid investment, which starts its lease and payouts today. */
+export async function assignContainerAction(holdingId: string, _state: FormState, formData: FormData): Promise<FormState> {
+  const values = {
+    containerNumber: String(formData.get("containerNumber") ?? "").replace(/[\s-]+/g, "").toUpperCase(),
+    currentLocation: String(formData.get("currentLocation") ?? "").trim(),
+  };
+  if (!values.containerNumber) return { fieldErrors: { containerNumber: "Enter the container number" }, values };
+  if (values.containerNumber.length > 20) {
+    return { fieldErrors: { containerNumber: "Use at most 20 characters" }, values };
+  }
+  if (values.currentLocation.length > 120) {
+    return { fieldErrors: { currentLocation: "Use at most 120 characters" }, values };
+  }
+  try {
+    await authFetch(`/api/v1/admin/container-assignments/${id(holdingId)}`, {
+      method: "POST", json: { containerNumber: values.containerNumber, currentLocation: values.currentLocation || null },
+    });
+  } catch (error) {
+    return failureState(error, values);
+  }
+  revalidatePath("/admin", "layout");
+  return { success: `Container ${values.containerNumber} assigned. The investor's lease and payouts start today.` };
+}

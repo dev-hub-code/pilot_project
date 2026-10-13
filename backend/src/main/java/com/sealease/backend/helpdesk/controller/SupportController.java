@@ -4,6 +4,7 @@ import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.document.web.DocumentResponses;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.helpdesk.dto.OpenTicketRequest;
+import com.sealease.backend.helpdesk.dto.ReopenRequest;
 import com.sealease.backend.helpdesk.dto.TicketDetail;
 import com.sealease.backend.helpdesk.dto.TicketResponse;
 import com.sealease.backend.helpdesk.service.SupportService;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -71,6 +73,13 @@ public class SupportController {
 	@PostMapping("/{ticketId}/close")
 	public TicketDetail close(AuthenticatedUser investor, @PathVariable UUID ticketId) {
 		return support.customerClose(investor.userId(), ticketId);
+	}
+
+	/** Reopens a resolved or closed ticket within the reopen window; the reason is posted as a message. */
+	@PostMapping("/{ticketId}/reopen")
+	public TicketDetail reopen(AuthenticatedUser investor, @PathVariable UUID ticketId,
+			@Valid @RequestBody ReopenRequest request) {
+		return support.reopen(investor.userId(), ticketId, request.reason());
 	}
 
 	@GetMapping("/{ticketId}/attachments/{attachmentId}")

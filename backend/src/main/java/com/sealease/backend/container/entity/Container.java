@@ -15,7 +15,7 @@ import java.util.UUID;
 @Table(name = "containers")
 public class Container extends BaseEntity {
 
-	@Column(name = "container_number", nullable = false, length = 11, updatable = false)
+	@Column(name = "container_number", nullable = false, length = 20, updatable = false)
 	private String containerNumber;
 
 	@Enumerated(EnumType.STRING)
@@ -23,32 +23,32 @@ public class Container extends BaseEntity {
 	private ContainerType containerType;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "condition", nullable = false, length = 20)
+	@Column(name = "condition", length = 20)
 	private ContainerCondition condition;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 20)
 	private ContainerStatus status;
 
-	@Column(name = "capacity_cbm", nullable = false, precision = 8, scale = 2)
+	@Column(name = "capacity_cbm", precision = 8, scale = 2)
 	private BigDecimal capacityCbm;
 
-	@Column(name = "max_gross_kg", nullable = false)
-	private int maxGrossKg;
+	@Column(name = "max_gross_kg")
+	private Integer maxGrossKg;
 
-	@Column(name = "tare_kg", nullable = false)
-	private int tareKg;
+	@Column(name = "tare_kg")
+	private Integer tareKg;
 
-	@Column(name = "manufacture_year", nullable = false)
-	private short manufactureYear;
+	@Column(name = "manufacture_year")
+	private Short manufactureYear;
 
 	@Column(name = "manufacturer", length = 100)
 	private String manufacturer;
 
-	@Column(name = "current_location", nullable = false, length = 120)
+	@Column(name = "current_location", length = 120)
 	private String currentLocation;
 
-	@Column(name = "location_country", nullable = false, length = 2)
+	@Column(name = "location_country", length = 2)
 	private String locationCountry;
 
 	@Column(name = "acquisition_cost", precision = 19, scale = 4)
@@ -79,25 +79,9 @@ public class Container extends BaseEntity {
 		this.status = ContainerStatus.AVAILABLE;
 	}
 
-	public void describe(ContainerCondition condition, BigDecimal capacityCbm, int maxGrossKg, int tareKg,
-			short manufactureYear, String manufacturer, String currentLocation, String locationCountry,
-			BigDecimal acquisitionCost, String acquisitionCurrency, String notes) {
-		this.condition = condition;
-		this.capacityCbm = capacityCbm;
-		this.maxGrossKg = maxGrossKg;
-		this.tareKg = tareKg;
-		this.manufactureYear = manufactureYear;
-		this.manufacturer = manufacturer;
+	/** Where the container is, as finance recorded it when assigning it. */
+	public void locatedAt(String currentLocation) {
 		this.currentLocation = currentLocation;
-		this.locationCountry = locationCountry;
-		this.acquisitionCost = acquisitionCost;
-		this.acquisitionCurrency = acquisitionCurrency;
-		this.notes = notes;
-	}
-
-	public void changeStatus(ContainerStatus status, String reason) {
-		this.status = status;
-		this.statusReason = reason;
 	}
 
 	/** Held for an order awaiting payment. */
@@ -119,6 +103,12 @@ public class Container extends BaseEntity {
 		requireStatus(ContainerStatus.RESERVED);
 		this.status = ContainerStatus.ON_LEASE;
 		this.reservedOrderId = null;
+	}
+
+	/** Finance assigned this available container to a paid investment: it is leased from now. */
+	public void assign() {
+		requireStatus(ContainerStatus.AVAILABLE);
+		this.status = ContainerStatus.ON_LEASE;
 	}
 
 	/** The lease ran its tenure: back to inventory. */
@@ -157,15 +147,15 @@ public class Container extends BaseEntity {
 		return capacityCbm;
 	}
 
-	public int getMaxGrossKg() {
+	public Integer getMaxGrossKg() {
 		return maxGrossKg;
 	}
 
-	public int getTareKg() {
+	public Integer getTareKg() {
 		return tareKg;
 	}
 
-	public short getManufactureYear() {
+	public Short getManufactureYear() {
 		return manufactureYear;
 	}
 

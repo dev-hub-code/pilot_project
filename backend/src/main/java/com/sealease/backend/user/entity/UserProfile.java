@@ -24,6 +24,14 @@ public class UserProfile extends BaseEntity {
 	@Column(name = "phone", length = 20)
 	private String phone;
 
+	/** The phone number in comparable form (unique across accounts); see {@code PhoneNumbers}. */
+	@Column(name = "phone_key", length = 20)
+	private String phoneKey;
+
+	/** Optional GSTIN, upper case. */
+	@Column(name = "gst_number", length = 15)
+	private String gstNumber;
+
 	@Column(name = "date_of_birth")
 	private LocalDate dateOfBirth;
 
@@ -74,10 +82,19 @@ public class UserProfile extends BaseEntity {
 		this.user = user;
 	}
 
-	public void updatePersonal(String phone, LocalDate dateOfBirth, String nationality) {
+	public void updatePersonal(String phone, String phoneKey, LocalDate dateOfBirth, String nationality) {
 		this.phone = phone;
+		this.phoneKey = phoneKey;
 		this.dateOfBirth = dateOfBirth;
 		this.nationality = nationality;
+	}
+
+	public void updateGstNumber(String gstNumber) {
+		this.gstNumber = gstNumber;
+	}
+
+	public String getGstNumber() {
+		return gstNumber;
 	}
 
 	public void updateAddress(String line1, String line2, String city, String stateRegion, String postalCode,

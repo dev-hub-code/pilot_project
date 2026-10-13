@@ -1,24 +1,31 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { Notice } from "@/components/ui/notice";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cancelProductAction, closeProductAction, publishProductAction } from "@/features/admin/investment-actions";
+import {
+  cancelProductAction, closeProductAction, publishProductAction, removePlanPhotoAction, uploadPlanPhotosAction,
+} from "@/features/admin/investment-actions";
+import { PlanPhotoForm } from "@/features/admin/plan-photo-form";
+import { MAX_PLAN_PHOTOS as MAX_PHOTOS } from "@/features/admin/plan-photos";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL, PRODUCT_TONE } from "@/features/marketplace/labels";
+import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Product } from "@/types/marketplace";
+import type { PlanPhoto, Product } from "@/types/marketplace";
 import { formatDateTime } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Plan" };
 
-export default async function ProductPage({ params }: PageProps<"/admin/products/[id]">) {
+
+export default async function ProductPage({ params, searchParams }: PageProps<"/admin/products/[id]">) {
   const { id } = await params;
+  const photosFailed = Number((await searchParams).photosFailed ?? 0);
   if (!isUuid(id)) notFound();
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
@@ -30,6 +37,8 @@ export default async function ProductPage({ params }: PageProps<"/admin/products
     throw error;
   }
   const decisions = can(Permission.INVESTMENT_APPROVE) && (p.status === "DRAFT" || p.status === "OPEN");
+  const canEdit = can(Permission.INVESTMENT_UPDATE) && p.status !== "CANCELLED";
+  const photos = await authFetch<PlanPhoto[]>(`/api/v1/admin/investment-products/${id}/photos`);
 
   return (
     <div className="space-y-6">
@@ -54,25 +63,52 @@ export default async function ProductPage({ params }: PageProps<"/admin/products
           <Card title="Sales">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
               <Item label="Containers sold">{p.containersSold}</Item>
-              <Item label={`${CONTAINER_TYPE_LABEL[p.containerType]} in stock`}>
-                <Link href={`/admin/containers?containerType=${p.containerType}&status=AVAILABLE`} className="text-gold-text hover:underline">
-                  {p.availableContainers}
-                </Link>
-              </Item>
               <Item label="Published">{formatDateTime(p.publishedAt)}</Item>
             </dl>
-            {p.status === "OPEN" && p.availableContainers === 0 && (
-              <p className="mt-4 text-sm text-muted">No {CONTAINER_TYPE_LABEL[p.containerType]} containers are in stock: investors cannot buy until some are registered.</p>
+          </Card>
+          {photosFailed > 0 && (
+            <Notice tone="warning">
+              The plan was saved, but {photosFailed === 1 ? "1 photo" : `${photosFailed} photos`} could not be uploaded. Add
+              {photosFailed === 1 ? " it" : " them"} again below.
+            </Notice>
+          )}
+          <Card title="Photos" description={`Shown in the marketplace, the first as the cover. Up to ${MAX_PHOTOS} photos.`}>
+            {photos.length === 0 ? (
+              <p className="text-sm text-muted">No photos yet: the marketplace shows this plan without a picture.</p>
+            ) : (
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {photos.map((photo, index) => (
+                  <li key={photo.id} className="space-y-2">
+                    <a href={`/admin/products/${p.id}/photos/${photo.documentId}`} target="_blank" rel="noopener noreferrer"
+                      className="block aspect-[4/3] overflow-hidden border border-border bg-ink">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- authenticated document, not an optimisable asset */}
+                      <img src={`/admin/products/${p.id}/photos/${photo.documentId}`} alt={`Photo ${index + 1} of ${p.code}`}
+                        className="size-full object-cover" />
+                    </a>
+                    {index === 0 && <p className="text-xs text-muted">Cover</p>}
+                    {canEdit && (
+                      <ConfirmForm action={removePlanPhotoAction.bind(null, p.id, photo.id)} submitLabel="Remove"
+                        confirm="Remove this photo from the plan?" />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canEdit && photos.length < MAX_PHOTOS && (
+              <div className="mt-4 border-t border-border pt-4">
+                <PlanPhotoForm action={uploadPlanPhotosAction.bind(null, p.id)} room={MAX_PHOTOS - photos.length} />
+              </div>
             )}
           </Card>
-          <Card title="Payout per container" description={`Paid every month for ${p.tenureMonths} months, starting one month after payment.`}>
+          <Card title="Payout per container" description="Paid monthly on the payout day for the lease the investor chooses; part months at the start and end are paid by the day.">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Price">{formatMoney(p.price)}</Item>
+              <Item label="Price (without GST)">{formatMoney(p.price)}</Item>
+              <Item label={`GST (${formatPercent(p.gstRatePercent)})`}>{formatMoney(p.gstPerContainer)}</Item>
+              <Item label="Investor pays">{formatMoney(p.priceWithGst)}</Item>
               <Item label={`Rent (${formatPercent(p.monthlyRentPercent)} a month)`}>{formatMoney(p.monthlyRent)}</Item>
-              <Item label={`Capital back (${formatPercent(p.monthlyCapitalReturnPercent)} a month)`}>{formatMoney(p.monthlyCapitalReturn)}</Item>
-              <Item label="Monthly payout">{formatMoney(p.monthlyPayout)}</Item>
-              <Item label="Payouts">{p.tenureMonths}</Item>
-              <Item label="Total over the tenure">{formatMoney(p.totalPayout)}</Item>
+              <Item label="Lease (investor's choice)">{p.minTenureYears === p.maxTenureYears ? yearsLabel(p.minTenureYears)
+                : `${p.minTenureYears} to ${p.maxTenureYears} years`}</Item>
+              <Item label={`Total rent over ${yearsLabel(p.minTenureYears)} (the shortest)`}>{formatMoney(p.totalPayout)}</Item>
             </dl>
           </Card>
           <Card title="Terms">

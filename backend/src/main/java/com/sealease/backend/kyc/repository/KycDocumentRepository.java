@@ -13,4 +13,10 @@ public interface KycDocumentRepository extends JpaRepository<KycDocument, KycDoc
 
 	boolean existsById(KycDocumentId id);
 
+	/** A draft's document of one kind, replaced when the investor uploads it again. */
+	@org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+	@org.springframework.data.jpa.repository.Query("delete from KycDocument d where d.id.submissionId = :submissionId and d.purpose = :purpose")
+	int deleteFromSubmission(@org.springframework.data.repository.query.Param("submissionId") UUID submissionId,
+			@org.springframework.data.repository.query.Param("purpose") com.sealease.backend.document.entity.DocumentPurpose purpose);
+
 }

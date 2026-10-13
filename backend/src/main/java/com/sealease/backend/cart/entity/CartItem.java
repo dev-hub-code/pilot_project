@@ -21,17 +21,23 @@ public class CartItem extends BaseEntity {
 	@Column(name = "quantity", nullable = false)
 	private int quantity;
 
+	/** The lease the investor chose for these containers, in whole years. */
+	@Column(name = "tenure_years", nullable = false)
+	private int tenureYears;
+
 	protected CartItem() {
 	}
 
-	public CartItem(UUID userId, UUID productId, int quantity) {
+	public CartItem(UUID userId, UUID productId, int quantity, int tenureYears) {
 		this.userId = userId;
 		this.productId = productId;
 		this.quantity = quantity;
+		this.tenureYears = tenureYears;
 	}
 
-	public void changeQuantity(int quantity) {
+	public void change(int quantity, int tenureYears) {
 		this.quantity = quantity;
+		this.tenureYears = tenureYears;
 	}
 
 	public UUID getUserId() {
@@ -44,6 +50,10 @@ public class CartItem extends BaseEntity {
 
 	public int getQuantity() {
 		return quantity;
+	}
+
+	public int getTenureYears() {
+		return tenureYears;
 	}
 
 }

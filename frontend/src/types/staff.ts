@@ -1,4 +1,4 @@
-/** Mirrors of the backend's staff-account DTOs. */
+/** Mirrors of the backend's employee-account DTOs. */
 
 /** Returned once when an account is created or its password reset; the password cannot be fetched again. */
 export interface StaffCredentials {
@@ -9,6 +9,8 @@ export interface StaffCredentials {
   roles: string[];
   temporaryPassword: string;
   expiresAt: string;
+  /** Whether the credentials were also emailed to the employee. */
+  emailed: boolean;
 }
 
 export interface UserAuthorities {

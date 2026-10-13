@@ -42,7 +42,7 @@ public record HoldingResponse(
 				h.getOrderId(), MoneyResponse.from(h.amount()), h.getMonthlyRentPercent(),
 				h.getMonthlyCapitalReturnPercent(), MoneyResponse.from(h.monthlyRent()),
 				MoneyResponse.from(h.monthlyCapitalReturn()), MoneyResponse.from(monthly), h.getTenureMonths(),
-				MoneyResponse.from(h.monthlyRent().times(BigDecimal.valueOf(h.getTenureMonths())).plus(h.amount())), h.getLeaseStartsOn(),
+				MoneyResponse.from(h.monthlyRent().times(BigDecimal.valueOf(h.getTenureMonths())).plus(h.capitalReturned())), h.getLeaseStartsOn(),
 				h.getLeaseEndsOn(), h.getStatus(), h.getConfirmedAt(), h.getMaturedAt());
 	}
 

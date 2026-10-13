@@ -5,6 +5,7 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.order.service.OrderService;
+import com.sealease.backend.reporting.dto.DashboardCharts;
 import com.sealease.backend.reporting.dto.KpiTile;
 import com.sealease.backend.reporting.engine.ReportDocument;
 import com.sealease.backend.reporting.engine.ReportFormat;
@@ -88,6 +89,13 @@ public class AdminReportController {
 	@PreAuthorize("isAuthenticated()")
 	public List<KpiTile> dashboard(AuthenticatedUser viewer) {
 		return dashboard.tiles(viewer);
+	}
+
+	/** Twelve months of trends for the admin overview; series the viewer may not see are null. */
+	@GetMapping("/api/v1/admin/dashboard/charts")
+	@PreAuthorize("isAuthenticated()")
+	public DashboardCharts dashboardCharts(AuthenticatedUser viewer) {
+		return dashboard.charts(viewer);
 	}
 
 	private ResponseEntity<?> produce(AuthenticatedUser actor, String report, String rawFormat, Map<String, String> parameters,

@@ -22,6 +22,8 @@ export interface Profile {
   dateOfBirth: string | null;
   nationality: string | null;
   address: Address;
+  /** Optional GSTIN, e.g. 27ABCDE1234F1Z5. */
+  gstNumber: string | null;
   taxResidencyCountry: string | null;
   taxIdMasked: string | null;
   kycStatus: KycStatus;
@@ -31,8 +33,13 @@ export interface Profile {
 }
 
 export type IdentityDocumentType = "PASSPORT" | "NATIONAL_ID" | "DRIVING_LICENSE";
-export type KycSubmissionStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type DocumentPurpose = "KYC_IDENTITY_FRONT" | "KYC_IDENTITY_BACK" | "KYC_SELFIE" | "KYC_PROOF_OF_ADDRESS";
+/** DRAFT while only one of Aadhaar and PAN is uploaded; PENDING (under review) once both are in. */
+export type KycSubmissionStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
+export type DocumentPurpose =
+  | "KYC_AADHAAR_CARD" | "KYC_PAN_CARD"
+  // Earlier submissions: Aadhaar as two files, or one identity document with selfie and proof of address.
+  | "KYC_AADHAAR_FRONT" | "KYC_AADHAAR_BACK"
+  | "KYC_IDENTITY_FRONT" | "KYC_IDENTITY_BACK" | "KYC_SELFIE" | "KYC_PROOF_OF_ADDRESS";
 
 export interface KycSubmission {
   id: string;
@@ -42,10 +49,15 @@ export interface KycSubmission {
   legalLastName: string;
   dateOfBirth: string;
   nationality: string;
-  documentType: IdentityDocumentType;
-  documentNumberMasked: string;
-  documentIssuingCountry: string;
-  documentExpiryDate: string;
+  /** The full 12 digits; null on submissions made before Aadhaar and PAN. */
+  aadhaarNumber: string | null;
+  /** e.g. "ABCDE1234F". */
+  panNumber: string | null;
+  /** Submissions made before Aadhaar and PAN carried one identity document instead. */
+  documentType: IdentityDocumentType | null;
+  documentNumber: string | null;
+  documentIssuingCountry: string | null;
+  documentExpiryDate: string | null;
   submittedAt: string;
   reviewedAt: string | null;
   reviewedBy: string | null;
@@ -68,6 +80,8 @@ export interface KycReviewDetail {
 
 export type BankAccountStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "REMOVED";
 
+export type BankProofType = "BANK_STATEMENT" | "CANCELLED_CHEQUE";
+
 export interface BankAccount {
   id: string;
   accountHolderName: string;
@@ -80,6 +94,10 @@ export interface BankAccount {
   rejectionReason: string | null;
   createdAt: string;
   verifiedAt: string | null;
+  /** Set when this account was submitted as a change of another account. */
+  replacesAccountId: string | null;
+  /** The proof uploaded with it; null for accounts added before proof was required. */
+  proofType: BankProofType | null;
 }
 
 export interface AdminBankAccount {
@@ -87,6 +105,8 @@ export interface AdminBankAccount {
   account: BankAccount;
   reviewedBy: string | null;
   otherUsersWithSameAccount: number;
+  /** The account a change request would retire once verified. */
+  replaces: BankAccount | null;
 }
 
 export interface AdminUserSummary {

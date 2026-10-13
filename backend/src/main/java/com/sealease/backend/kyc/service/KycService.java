@@ -21,13 +21,19 @@ import com.sealease.backend.kyc.entity.KycSubmission;
 import com.sealease.backend.kyc.entity.KycSubmissionStatus;
 import com.sealease.backend.kyc.repository.KycDocumentRepository;
 import com.sealease.backend.kyc.repository.KycSubmissionRepository;
+import com.sealease.backend.notification.service.NotificationService;
+import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Clock;
@@ -48,8 +54,14 @@ import java.util.UUID;
 @Service
 public class KycService {
 
-	static final String DOCUMENT_NUMBER_CONTEXT = "kyc_submission.document_number";
+	static final String AADHAAR_NUMBER_CONTEXT = "kyc_submission.aadhaar_number";
+	static final String PAN_NUMBER_CONTEXT = "kyc_submission.pan_number";
+	/** The single identity document number of submissions made before Aadhaar and PAN. */
+	static final String LEGACY_DOCUMENT_NUMBER_CONTEXT = "kyc_submission.document_number";
+	static final String AADHAAR_FINGERPRINT_CONTEXT = "kyc_submission.aadhaar_fingerprint";
+	static final String PAN_FINGERPRINT_CONTEXT = "kyc_submission.pan_fingerprint";
 	private static final int MINIMUM_AGE = 18;
+	private static final Logger log = LoggerFactory.getLogger(KycService.class);
 
 	private final KycSubmissionRepository submissions;
 	private final KycDocumentRepository kycDocuments;
@@ -58,12 +70,15 @@ public class KycService {
 	private final UserAccountService accounts;
 	private final FieldEncryptor encryptor;
 	private final AuditService audit;
+	private final NotificationService notifications;
 	private final Clock clock;
 	private final FixedWindowRateLimiter submissionsPerUser;
+	private final TransactionTemplate transactions;
 
 	public KycService(KycSubmissionRepository submissions, KycDocumentRepository kycDocuments,
 			DocumentService documents, UserProfileService profiles, UserAccountService accounts,
-			FieldEncryptor encryptor, AuditService audit, Clock clock) {
+			FieldEncryptor encryptor, AuditService audit, NotificationService notifications, Clock clock,
+			TransactionTemplate transactions) {
 		this.submissions = submissions;
 		this.kycDocuments = kycDocuments;
 		this.documents = documents;
@@ -71,10 +86,17 @@ public class KycService {
 		this.accounts = accounts;
 		this.encryptor = encryptor;
 		this.audit = audit;
+		this.notifications = notifications;
 		this.clock = clock;
 		this.submissionsPerUser = new FixedWindowRateLimiter(5, Duration.ofDays(1), clock);
+		this.transactions = transactions;
 	}
 
+	/**
+	 * Uploads the Aadhaar card, the PAN card, or both, each with its number. They may come at different times: the
+	 * first starts a draft, and the submission goes for review once it holds both. While a draft, a document uploaded
+	 * again replaces the earlier one.
+	 */
 	@Transactional
 	public KycSubmissionResponse submit(UUID userId, KycSubmissionRequest request, KycFiles files) {
 		submissionsPerUser.acquire(userId.toString());
@@ -85,27 +107,96 @@ public class KycService {
 		if (current == KycStatus.APPROVED) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Your identity is already verified");
 		}
+		boolean withAadhaar = given(request.aadhaarNumber(), files.aadhaarCard(), "Aadhaar number", "Aadhaar card");
+		boolean withPan = given(request.panNumber(), files.panCard(), "PAN", "PAN card");
+		if (!withAadhaar && !withPan) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Upload your Aadhaar card or your PAN card");
+		}
+		// Name (as registered), date of birth and nationality come from the profile, recorded with the submission.
+		ProfileResponse profile = profiles.getProfile(userId);
+		List<String> missing = profile.missingPersonalDetails();
+		if (!missing.isEmpty()) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Complete your personal details first (Profile, Personal details): " + String.join(", ", missing));
+		}
 		LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
-		if (request.dateOfBirth().isAfter(today.minusYears(MINIMUM_AGE))) {
+		if (profile.dateOfBirth().isAfter(today.minusYears(MINIMUM_AGE))) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "You must be at least " + MINIMUM_AGE + " years old");
 		}
-		Map<DocumentPurpose, MultipartFile> evidence = evidence(request, files);
+		String aadhaar = null;
+		String pan = null;
+		if (withAadhaar) {
+			aadhaar = IndianIds.normalizeAadhaar(request.aadhaarNumber());
+			if (!IndianIds.isValidAadhaar(aadhaar)) {
+				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "An Aadhaar number has exactly 12 digits");
+			}
+			// Not revealing which account: only that the number is taken.
+			if (submissions.aadhaarHeldByAnotherUser(aadhaarFingerprint(aadhaar), userId)) {
+				throw new BusinessException(ErrorCode.CONFLICT,
+						"This Aadhaar number is already registered with another account. Contact support if it is yours.");
+			}
+		}
+		if (withPan) {
+			pan = IndianIds.normalizePan(request.panNumber());
+			if (!IndianIds.isValidPan(pan)) {
+				throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+						"That PAN is not valid: it has 5 letters, 4 digits and a letter, e.g. ABCDE1234F");
+			}
+			if (submissions.panHeldByAnotherUser(panFingerprint(pan), userId)) {
+				throw new BusinessException(ErrorCode.CONFLICT,
+						"This PAN is already registered with another account. Contact support if it is yours.");
+			}
+		}
 
-		String documentNumber = request.documentNumber().strip().toUpperCase();
-		String compact = documentNumber.replace(" ", "").replace("-", "");
-		KycSubmission submission = submissions.saveAndFlush(new KycSubmission(userId, request.legalFirstName().strip(),
-				request.legalLastName().strip(), request.dateOfBirth(), request.nationality(), request.documentType(),
-				encryptor.encrypt(documentNumber, DOCUMENT_NUMBER_CONTEXT), FieldEncryptor.lastChars(compact, 4),
-				request.documentIssuingCountry(), request.documentExpiryDate(), clock.instant()));
-
-		evidence.forEach((purpose, file) -> {
+		// A new draft is saved once it holds its first document.
+		KycSubmission submission = submissions.findDraftForUpdate(userId).orElseGet(() -> KycSubmission.draft(userId,
+				profile.firstName(), profile.lastName(), profile.dateOfBirth(), profile.nationality(), clock.instant()));
+		Map<DocumentPurpose, MultipartFile> uploaded = new LinkedHashMap<>();
+		if (aadhaar != null) {
+			submission.setAadhaar(encryptor.encrypt(aadhaar, AADHAAR_NUMBER_CONTEXT), FieldEncryptor.lastChars(aadhaar, 4),
+					aadhaarFingerprint(aadhaar));
+			uploaded.put(DocumentPurpose.KYC_AADHAAR_CARD, files.aadhaarCard());
+		}
+		if (pan != null) {
+			submission.setPan(encryptor.encrypt(pan, PAN_NUMBER_CONTEXT), FieldEncryptor.lastChars(pan, 4), panFingerprint(pan));
+			uploaded.put(DocumentPurpose.KYC_PAN_CARD, files.panCard());
+		}
+		submissions.saveAndFlush(submission);
+		uploaded.forEach((purpose, file) -> {
+			kycDocuments.deleteFromSubmission(submission.getId(), purpose);
 			UUID documentId = documents.store(userId, purpose, file);
 			kycDocuments.save(new KycDocument(new KycDocumentId(submission.getId(), documentId), purpose));
 		});
-		profiles.markKycStatus(userId, KycStatus.PENDING);
-		audit.record(AuditRecord.of(userId, AuditAction.KYC_SUBMITTED, "KYC_SUBMISSION", submission.getId())
-			.withNewValue(Map.of("documentType", request.documentType(), "documents", evidence.keySet())));
+		audit.record(AuditRecord.of(userId, AuditAction.KYC_DOCUMENT_UPLOADED, "KYC_SUBMISSION", submission.getId())
+			.withNewValue(Map.of("documents", uploaded.keySet())));
+
+		if (submission.hasAadhaar() && submission.hasPan()) {
+			submission.submitForReview(clock.instant());
+			try {
+				submissions.flush();
+			}
+			catch (DataIntegrityViolationException ex) {
+				// Another account's submission took one of the numbers since they were checked.
+				throw new BusinessException(ErrorCode.CONFLICT,
+						"This Aadhaar number or PAN is already registered with another account. Contact support if it is yours.");
+			}
+			profiles.markKycStatus(userId, KycStatus.PENDING);
+			audit.record(AuditRecord.of(userId, AuditAction.KYC_SUBMITTED, "KYC_SUBMISSION", submission.getId())
+				.withNewValue(Map.of("documents", List.of(DocumentPurpose.KYC_AADHAAR_CARD, DocumentPurpose.KYC_PAN_CARD))));
+		}
+		submissions.flush();
 		return response(submission).forOwner();
+	}
+
+	/** Whether a document is being uploaded now: its number and its file come together, or neither. */
+	private static boolean given(String number, MultipartFile file, String numberLabel, String fileLabel) {
+		boolean hasNumber = number != null && !number.isBlank();
+		if (hasNumber != present(file)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, hasNumber
+					? "Upload your " + fileLabel + " with the " + numberLabel
+					: "Enter your " + numberLabel + " with the " + fileLabel);
+		}
+		return hasNumber;
 	}
 
 	@Transactional(readOnly = true)
@@ -123,9 +214,11 @@ public class KycService {
 		return submissions.findByStatus(status, pageable).map(this::response);
 	}
 
-	@Transactional(readOnly = true)
-	public KycReviewDetail detail(UUID submissionId) {
+	/** A reviewer opens a submission, with its full identity numbers: every view is audited. */
+	@Transactional
+	public KycReviewDetail detail(UUID reviewerId, UUID submissionId) {
 		KycSubmission submission = load(submissionId);
+		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_SUBMISSION_VIEWED, "KYC_SUBMISSION", submissionId));
 		return new KycReviewDetail(response(submission), accounts.getAccount(submission.getUserId()));
 	}
 
@@ -148,6 +241,9 @@ public class KycService {
 		profiles.markKycStatus(submission.getUserId(), KycStatus.APPROVED);
 		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_APPROVED, "KYC_SUBMISSION", submissionId)
 			.withNewValue(Map.of("userId", submission.getUserId().toString())));
+		notifications.notify(submission.getUserId(), "KYC_APPROVED", "Your identity is verified",
+				"Your Aadhaar and PAN were checked and approved. You can now add a bank account for payouts and invest.",
+				"/profile/verification");
 		submissions.flush();
 		return response(submission);
 	}
@@ -159,8 +255,16 @@ public class KycService {
 		profiles.markKycStatus(submission.getUserId(), KycStatus.REJECTED);
 		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_REJECTED, "KYC_SUBMISSION", submissionId)
 			.withNewValue(Map.of("userId", submission.getUserId().toString(), "reason", reason.strip())));
+		notifications.notify(submission.getUserId(), "KYC_REJECTED", "Your identity verification needs attention",
+				"We could not approve your verification. Reason: " + sentence(reason) + " Please correct this and submit it again.",
+				"/profile/verification");
 		submissions.flush();
 		return response(submission);
+	}
+
+	/** The reviewer's reason as one sentence, ending in a full stop. */
+	private static String sentence(String reason) {
+		return reason.strip().replaceAll("[.!?]+$", "") + ".";
 	}
 
 	private KycSubmission pendingForReview(UUID reviewerId, UUID submissionId) {
@@ -175,30 +279,6 @@ public class KycService {
 		return submission;
 	}
 
-	private static Map<DocumentPurpose, MultipartFile> evidence(KycSubmissionRequest request, KycFiles files) {
-		Map<DocumentPurpose, MultipartFile> evidence = new LinkedHashMap<>();
-		require(evidence, DocumentPurpose.KYC_IDENTITY_FRONT, files.identityFront(), "Front image of the document");
-		if (request.documentType().requiresBackImage()) {
-			require(evidence, DocumentPurpose.KYC_IDENTITY_BACK, files.identityBack(), "Back image of the document");
-		}
-		else if (present(files.identityBack())) {
-			evidence.put(DocumentPurpose.KYC_IDENTITY_BACK, files.identityBack());
-		}
-		require(evidence, DocumentPurpose.KYC_SELFIE, files.selfie(), "A selfie holding the document");
-		if (present(files.proofOfAddress())) {
-			evidence.put(DocumentPurpose.KYC_PROOF_OF_ADDRESS, files.proofOfAddress());
-		}
-		return evidence;
-	}
-
-	private static void require(Map<DocumentPurpose, MultipartFile> evidence, DocumentPurpose purpose,
-			MultipartFile file, String label) {
-		if (!present(file)) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, label + " is required");
-		}
-		evidence.put(purpose, file);
-	}
-
 	private static boolean present(MultipartFile file) {
 		return file != null && !file.isEmpty();
 	}
@@ -208,8 +288,46 @@ public class KycService {
 			.orElseThrow(() -> new ResourceNotFoundException("KYC submission", submissionId));
 	}
 
+	/**
+	 * Fingerprints submissions made before fingerprints were kept, so their numbers count as taken. Each in its own
+	 * transaction; one whose number another active submission already holds is left as it is, and logged.
+	 */
+	public int fingerprintEarlierSubmissions() {
+		int done = 0;
+		for (UUID id : transactions.execute(status -> submissions.findUnfingerprinted().stream().map(KycSubmission::getId).toList())) {
+			try {
+				transactions.executeWithoutResult(status -> {
+					KycSubmission s = submissions.findByIdForUpdate(id).orElseThrow();
+					s.fingerprint(aadhaarFingerprint(encryptor.decrypt(s.getAadhaarNumberEncrypted(), AADHAAR_NUMBER_CONTEXT)),
+							panFingerprint(encryptor.decrypt(s.getPanNumberEncrypted(), PAN_NUMBER_CONTEXT)));
+					submissions.flush();
+				});
+				done++;
+			}
+			catch (DataIntegrityViolationException ex) {
+				log.warn("KYC submission {} shares an Aadhaar number or PAN with another active submission; review it", id);
+			}
+		}
+		return done;
+	}
+
+	private String aadhaarFingerprint(String normalizedAadhaar) {
+		return encryptor.fingerprint(normalizedAadhaar, AADHAAR_FINGERPRINT_CONTEXT);
+	}
+
+	private String panFingerprint(String normalizedPan) {
+		return encryptor.fingerprint(normalizedPan, PAN_FINGERPRINT_CONTEXT);
+	}
+
 	private KycSubmissionResponse response(KycSubmission submission) {
-		return KycSubmissionResponse.from(submission, kycDocuments.findByIdSubmissionId(submission.getId()));
+		return KycSubmissionResponse.from(submission, kycDocuments.findByIdSubmissionId(submission.getId()),
+				new KycSubmissionResponse.Numbers(decrypt(submission.getAadhaarNumberEncrypted(), AADHAAR_NUMBER_CONTEXT),
+						decrypt(submission.getPanNumberEncrypted(), PAN_NUMBER_CONTEXT),
+						decrypt(submission.getDocumentNumberEncrypted(), LEGACY_DOCUMENT_NUMBER_CONTEXT)));
+	}
+
+	private String decrypt(String encrypted, String context) {
+		return encrypted == null ? null : encryptor.decrypt(encrypted, context);
 	}
 
 }

@@ -51,11 +51,11 @@ public class AdminPayoutController {
 		return payouts.due();
 	}
 
-	/** Pays everything that has fallen due now, instead of waiting for the next automatic run. */
+	/** Credits every day of rent that has ended now, instead of waiting for the next automatic run. */
 	@PostMapping("/run")
 	@PreAuthorize("hasAuthority('PAYOUT_PROCESS')")
 	public Map<String, Integer> run() {
-		return Map.of("paid", payouts.payDue());
+		return Map.of("credited", payouts.creditDue());
 	}
 
 }

@@ -14,12 +14,13 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 /**
- * Plan terms set by staff. The monthly capital return is not set: it is 100 ÷ tenure % of the price,
- * so the whole price is returned over the lease.
+ * Plan terms set by staff. Plans pay rent only; there is no capital return to set.
  *
- * @param price              per container
+ * @param price              per container, without GST
+ * @param gstRatePercent     GST charged on the price at purchase (0 to 28%); rent is on the price without it
  * @param monthlyRentPercent rent paid to the investor every month, as a percentage of the price
- * @param tenureMonths       how long each container is leased, and so how many monthly payouts there are
+ * @param minTenureYears     the shortest lease an investor may choose, in whole years
+ * @param maxTenureYears     the longest lease an investor may choose, in whole years (at least the minimum)
  */
 public record ProductRequest(
 		@NotNull ContainerType containerType,
@@ -28,8 +29,10 @@ public record ProductRequest(
 		@NotBlank @Size(max = 10_000) String description,
 		@NotBlank @PlatformCurrency String currency,
 		@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal price,
+		@NotNull @DecimalMin("0") @DecimalMax("28") @Digits(integer = 2, fraction = 2) BigDecimal gstRatePercent,
 		@NotNull @DecimalMin("0.01") @DecimalMax("20") @Digits(integer = 2, fraction = 2) BigDecimal monthlyRentPercent,
-		@NotNull @Min(1) @Max(120) Integer tenureMonths,
+		@NotNull @Min(1) @Max(30) Integer minTenureYears,
+		@NotNull @Min(1) @Max(30) Integer maxTenureYears,
 		@NotBlank @Size(max = 10_000) String riskDisclosure,
 		@NotBlank @Size(max = 50_000) String termsAndConditions) {
 }

@@ -14,7 +14,7 @@ import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
 import type { AdminUserDetail } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -68,17 +68,31 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </dl>
       </Card>
 
-      <DataTable columns={["Plan", "Container", "Price", "Paid monthly", "Tenure"]}>
+      <DataTable columns={["Plan", "Container", "Price", "GST", "Paid", "Rent monthly", "Tenure"]}>
         {order.items.map((item) => (
           <tr key={item.id}>
             <Cell><Link href={`/admin/products/${item.productId}`} className="font-mono text-gold-text hover:underline">{item.productCode}</Link></Cell>
             <Cell>
-              <span className="font-mono">{item.containerNumber}</span>
-              <span className="block text-xs text-muted">
-                {order.status === "CONFIRMED" ? "Leased to the investor" : order.status === "PENDING_PAYMENT" ? "Reserved for this order" : "Released"}
-              </span>
+              {item.containerNumber ? (
+                <>
+                  <span className="font-mono">{item.containerNumber}</span>
+                  <span className="block text-xs text-muted">
+                    {order.status === "CONFIRMED" ? "Leased to the investor" : order.status === "PENDING_PAYMENT" ? "Reserved for this order" : "Released"}
+                  </span>
+                </>
+              ) : order.status === "CONFIRMED" ? (
+                <Link href="/admin/container-assignments" className="text-gold-text hover:underline">To be assigned</Link>
+              ) : (
+                <span className="text-muted">Assigned after payment</span>
+              )}
             </Cell>
             <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
+                <Cell className="tabular-nums">
+                  {Number(item.gstRatePercent) > 0
+                    ? <>{formatMoney(item.gstAmount)}<span className="block text-xs text-muted">{formatPercent(item.gstRatePercent)}</span></>
+                    : "—"}
+                </Cell>
+                <Cell className="tabular-nums font-medium">{formatMoney(item.amountWithGst)}</Cell>
             <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
             <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
           </tr>
@@ -102,7 +116,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 <dl className="grid gap-3 text-xs text-muted sm:grid-cols-3">
                   <Item label="Started">{formatDateTime(p.createdAt)}</Item>
                   <Item label="Settled">{formatDateTime(p.settledAt)}</Item>
-                  <Item label="Bank / gateway reference">{p.externalReference ?? "—"}</Item>
+                  <Item label={p.method === "OFFICE_CASH" ? "Cash receipt number" : "Bank / gateway reference"}>{p.externalReference ?? "—"}</Item>
                   {p.deposit && (
                     <>
                       <Item label="Investor paid by">{`${DEPOSIT_MODE_LABEL[p.deposit.mode]} · ${formatDateTime(p.deposit.submittedAt)}`}</Item>
@@ -113,10 +127,11 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                   {p.failureReason && <Item label="Note">{p.failureReason}</Item>}
                   {p.refundedAt && <Item label="Refunded">{`${formatDateTime(p.refundedAt)} · ${p.refundReference}`}</Item>}
                 </dl>
-                {p.method === "BANK_TRANSFER" && (p.status === "PENDING" || p.status === "CANCELLED") && can(Permission.PAYMENT_CONFIRM) && !ownOrder && (
+                {(p.method === "BANK_TRANSFER" || p.method === "OFFICE_CASH") && (p.status === "PENDING" || p.status === "CANCELLED")
+                  && can(Permission.PAYMENT_CONFIRM) && !ownOrder && (
                   <div className="grid gap-6 border-t border-border pt-4 lg:grid-cols-2">
                     <ConfirmTransferForm paymentId={p.id} amountDue={p.amount.amount} currency={p.amount.currency}
-                      defaultReference={p.deposit?.reference} />
+                      defaultReference={p.deposit?.reference} officeCash={p.method === "OFFICE_CASH"} />
                     {p.status === "PENDING" && <RejectPaymentForm paymentId={p.id} />}
                   </div>
                 )}

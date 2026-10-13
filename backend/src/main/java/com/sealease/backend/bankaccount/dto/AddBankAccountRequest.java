@@ -7,17 +7,20 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * @param accountNumber local account number or IBAN (IBANs are checksum-validated)
- * @param routingCode   bank identifier: SWIFT/BIC, IFSC, ABA routing number, sort code, ...
+ * The account holder is not part of the request: it is always the investor's own registered name, so
+ * payouts only go to accounts in their name.
+ *
+ * @param accountNumber the account number: 8 to 15 digits, nothing else
+ * @param routingCode   the branch's IFSC code: 4 letters, a zero, then 6 letters or digits (e.g. HDFC0001234)
  */
 public record AddBankAccountRequest(
-		@NotBlank @Size(max = 140) String accountHolderName,
 		@NotBlank @Size(max = 140) String bankName,
 		@NotBlank @IsoCountry String country,
 		@NotBlank @PlatformCurrency String currency,
-		@NotBlank @Pattern(regexp = "^[A-Za-z0-9 -]{4,40}$", message = "must be 4-40 letters, digits, spaces or dashes")
+		@NotBlank @Pattern(regexp = "^[0-9]{8,15}$", message = "must be 8 to 15 digits, with no spaces or other characters")
 		String accountNumber,
-		@NotBlank @Pattern(regexp = "^[A-Za-z0-9 -]{4,20}$", message = "must be 4-20 letters, digits, spaces or dashes")
+		@NotBlank @Pattern(regexp = "^[A-Za-z]{4}0[A-Za-z0-9]{6}$",
+				message = "must be an IFSC code: 4 letters, a zero, then 6 letters or digits (e.g. HDFC0001234)")
 		String routingCode) {
 
 	@Override

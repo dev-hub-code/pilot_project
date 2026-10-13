@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +31,13 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> 
 
 	@Query("select count(distinct ur.id.userId) from UserRole ur where ur.role.name = :roleName")
 	long countUsersWithRole(@Param("roleName") String roleName);
+
+	/** Rows of ("yyyy-MM", count) of a role's assignments since {@code from}, by UTC month. */
+	@Query(value = """
+			select to_char(ur.assigned_at at time zone 'UTC', 'YYYY-MM'), count(*) from user_roles ur
+			join roles r on r.id = ur.role_id where r.name = :roleName and ur.assigned_at >= :from
+			group by 1 order by 1""", nativeQuery = true)
+	List<Object[]> countAssignmentsByMonth(@Param("roleName") String roleName, @Param("from") Instant from);
 
 	@Query("select count(ur) > 0 from UserRole ur where ur.role.name = :roleName")
 	boolean existsByRoleName(@Param("roleName") String roleName);

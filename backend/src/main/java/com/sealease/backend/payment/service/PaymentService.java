@@ -20,6 +20,7 @@ import com.sealease.backend.payment.dto.BankTransferInstructions;
 import com.sealease.backend.payment.dto.CompanyBankAccountResponse;
 import com.sealease.backend.payment.dto.ConfirmTransferRequest;
 import com.sealease.backend.payment.dto.DepositDetails;
+import com.sealease.backend.payment.dto.OfficeCashInstructions;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
 import com.sealease.backend.payment.dto.RefundRequest;
@@ -29,6 +30,7 @@ import com.sealease.backend.payment.entity.Payment;
 import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
 import com.sealease.backend.payment.provider.BankTransferProperties;
+import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
 import com.sealease.backend.payment.repository.PaymentRepository;
 import jakarta.persistence.criteria.Predicate;
@@ -73,13 +75,14 @@ public class PaymentService {
 	private final Map<PaymentMethod, PaymentProvider> providersByMethod = new EnumMap<>(PaymentMethod.class);
 	private final CompanyBankAccountService companyAccounts;
 	private final BankTransferProperties bankTransfer;
+	private final OfficeProperties office;
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
-			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OutboxPublisher outbox,
-			AuditService audit, Clock clock) {
+			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
+			OutboxPublisher outbox, AuditService audit, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -89,6 +92,7 @@ public class PaymentService {
 		}
 		this.companyAccounts = companyAccounts;
 		this.bankTransfer = bankTransfer;
+		this.office = office;
 		this.outbox = outbox;
 		this.audit = audit;
 		this.clock = clock;
@@ -97,8 +101,9 @@ public class PaymentService {
 	// --------------------------------------------------------------------------- investor
 
 	/**
-	 * Starts paying an order by bank (the only method offered). Idempotent per key; asking again while
-	 * a bank payment is in flight resumes it, and an earlier card attempt still in flight is cancelled.
+	 * Starts paying an order by bank or in cash at the office. Idempotent per key; asking again while a
+	 * payment of the same method is in flight resumes it, and one of another method still in flight is
+	 * cancelled. Paying at the office holds the order for the office window, as the investor has to come in.
 	 */
 	@Transactional
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
@@ -120,11 +125,11 @@ public class PaymentService {
 					? "The payment window for this order has passed" : "This order is no longer awaiting payment");
 		}
 		PaymentProvider provider = providersByMethod.get(method);
-		if (method != PaymentMethod.BANK_TRANSFER) {
+		if (method == PaymentMethod.CARD) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Card payments are not accepted; please pay by bank");
+					"Card payments are not accepted; please pay by bank or at our office");
 		}
-		if (provider == null || !companyAccounts.anyActive()) {
+		if (provider == null || (method == PaymentMethod.BANK_TRANSFER && !companyAccounts.anyActive())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					humanize(method) + " payments are not available");
 		}
@@ -138,8 +143,12 @@ public class PaymentService {
 
 		Payment payment = payments.saveAndFlush(new Payment(orderId, userId, method, provider.name(),
 				provider.open(order.orderNumber(), order.total()), order.total(), key));
+		if (method == PaymentMethod.OFFICE_CASH) {
+			order = orders.holdForVerification(orderId, clock.instant().plus(office.holdWindow()));
+		}
 		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
-			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", order.total().toString())));
+			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", order.total().toString(),
+					"orderExpiresAt", order.expiresAt().toString())));
 		return view(payment, order.orderNumber());
 	}
 
@@ -191,12 +200,16 @@ public class PaymentService {
 
 	// -------------------------------------------------------------------------------- staff
 
-	/** Finance records that a bank transfer arrived. Nobody may confirm a payment for their own order. */
+	/**
+	 * Finance records that a bank transfer arrived, or that cash was received at the office ({@code externalReference}
+	 * is then the receipt number). Nobody may confirm a payment for their own order.
+	 */
 	@Transactional
 	public PaymentResponse confirmBankTransfer(UUID actorId, UUID paymentId, ConfirmTransferRequest request) {
 		Payment payment = load(paymentId);
-		if (payment.getMethod() != PaymentMethod.BANK_TRANSFER) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank transfers are confirmed manually");
+		if (!isManual(payment.getMethod())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Only bank and office payments are confirmed manually");
 		}
 		if (payment.getUserId().equals(actorId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot confirm a payment for your own order");
@@ -222,8 +235,8 @@ public class PaymentService {
 	@Transactional
 	public PaymentResponse rejectBankPayment(UUID actorId, UUID paymentId, String reason) {
 		Payment payment = load(paymentId);
-		if (payment.getMethod() != PaymentMethod.BANK_TRANSFER) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank payments are rejected manually");
+		if (!isManual(payment.getMethod())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank and office payments are rejected manually");
 		}
 		if (payment.getUserId().equals(actorId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot decide on a payment for your own order");
@@ -308,7 +321,7 @@ public class PaymentService {
 		Instant now = clock.instant();
 		payment.settle(accepted, externalReference, actorId, note, now);
 		payments.flush();
-		if (accepted && !orders.confirmPaid(order.id(), payment.getId())) {
+		if (accepted && !orders.confirmPaid(order.id(), payment.getId(), payment.getMethod() == PaymentMethod.OFFICE_CASH)) {
 			throw new IllegalStateException("Order " + order.orderNumber() + " could not be confirmed while locked");
 		}
 
@@ -333,8 +346,13 @@ public class PaymentService {
 		return view(payment, orderNumber, accounts, companyAccounts.active());
 	}
 
-	private static PaymentResponse view(Payment payment, String orderNumber, Map<UUID, CompanyBankAccount> accounts,
+	private PaymentResponse view(Payment payment, String orderNumber, Map<UUID, CompanyBankAccount> accounts,
 			List<CompanyBankAccountResponse> activeAccounts) {
+		OfficeCashInstructions officeCash = payment.getMethod() == PaymentMethod.OFFICE_CASH
+				&& payment.getStatus() == PaymentStatus.PENDING
+				? new OfficeCashInstructions(payment.getProviderReference(), MoneyResponse.from(payment.amount()),
+						office.address(), office.hours(), payment.getCreatedAt().plus(office.holdWindow()))
+				: null;
 		BankTransferInstructions instructions = payment.getMethod() == PaymentMethod.BANK_TRANSFER
 				&& payment.getStatus() == PaymentStatus.PENDING
 				? new BankTransferInstructions(payment.getProviderReference(), MoneyResponse.from(payment.amount()),
@@ -347,11 +365,16 @@ public class PaymentService {
 					payment.getDepositSubmittedAt(), payment.getCompanyBankAccountId(),
 					account == null ? null : account.getBankName(), account == null ? null : account.getAccountNumber());
 		}
-		return PaymentResponse.from(payment, orderNumber, instructions, deposit);
+		return PaymentResponse.from(payment, orderNumber, instructions, deposit, officeCash);
 	}
 
 	private static List<UUID> depositAccountIds(List<Payment> found) {
 		return found.stream().map(Payment::getCompanyBankAccountId).filter(Objects::nonNull).distinct().toList();
+	}
+
+	/** Payments finance confirms or rejects by hand: bank transfers and cash at the office. */
+	private static boolean isManual(PaymentMethod method) {
+		return method == PaymentMethod.BANK_TRANSFER || method == PaymentMethod.OFFICE_CASH;
 	}
 
 	private Payment load(UUID paymentId) {

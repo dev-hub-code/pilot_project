@@ -13,7 +13,7 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { DuePayouts, Payout } from "@/types/earning";
-import { formatDate, formatDateTime } from "@/utils/format";
+import { formatDate, formatDateTime, formatPeriod } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Payouts" };
@@ -21,9 +21,9 @@ export const metadata: Metadata = { title: "Payouts" };
 type View = { key: string; label: string; query: Record<string, string> };
 
 const VIEWS: readonly [View, ...View[]] = [
-  { key: "due", label: "Due now", query: { status: "SCHEDULED", dueBy: "" } },
-  { key: "scheduled", label: "Upcoming", query: { status: "SCHEDULED", sort: "dueOn,asc" } },
-  { key: "paid", label: "Paid", query: { status: "PAID", sort: "dueOn,desc" } },
+  { key: "due", label: "Ended", query: { status: "SCHEDULED", dueBy: "" } },
+  { key: "scheduled", label: "In progress and upcoming", query: { status: "SCHEDULED", sort: "dueOn,asc" } },
+  { key: "paid", label: "Fully credited", query: { status: "PAID", sort: "dueOn,desc" } },
 ];
 
 export default async function PayoutsPage({ searchParams }: PageProps<"/admin/payouts">) {
@@ -42,18 +42,18 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
   return (
     <div className="space-y-6">
       <PageHeader title="Payouts"
-        description="Every container pays its investor monthly rent plus part of the price back, for the plan's tenure. Due payouts are credited to investors' wallets automatically every hour." />
+        description="Every container's rent is credited to its investor's wallet every day: each day gets that month's rent ÷ its days. Each row is one calendar month of a lease (a part month at each end); it is fully credited when the month ends, and referral commission on it is paid then. Containers bought before plans became rent-only also get part of the price back, the same way." />
 
-      <Card title="Due and not yet paid">
+      <Card title="Rent not yet credited" description="Days that have ended are credited automatically every hour.">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-sm">
             {dueCount === 0
-              ? "Nothing is waiting: every payout due so far has been paid."
-              : due.map((d) => `${d.count} payout(s) · ${formatMoney(d.total)}`).join(" · ")}
+              ? "Nothing is waiting: every day of rent so far has been credited."
+              : due.map((d) => `${d.count} month(s) · ${formatMoney(d.total)}`).join(" · ")}
           </p>
           {dueCount > 0 && hasPermission(session.permissions, Permission.PAYOUT_PROCESS) && (
-            <ActionButton action={runPayoutsAction} label="Pay due payouts now" pendingLabel="Paying…"
-              confirm={`Credit ${dueCount} due payout(s) to investors' wallets now?`} />
+            <ActionButton action={runPayoutsAction} label="Credit rent now" pendingLabel="Crediting…"
+              confirm="Credit every day of rent that has ended to investors' wallets now?" />
           )}
         </div>
       </Card>
@@ -70,7 +70,7 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
       {payouts.content.length === 0 ? (
         <EmptyState title="No payouts here" />
       ) : (
-        <DataTable columns={["Due", "Investor", "Plan", "Container", "Payout", "Rent", "Capital", "Total", "Status"]}>
+        <DataTable columns={["Due", "Investor", "Plan", "Container", "Payout", "Period", "Rent", "Capital", "Total", "Status"]}>
           {payouts.content.map((p) => (
             <tr key={p.id}>
               <Cell className="text-muted">{formatDate(p.dueOn)}</Cell>
@@ -78,6 +78,10 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
               <Cell className="font-mono text-xs">{p.productCode}</Cell>
               <Cell className="font-mono text-xs">{p.containerNumber}</Cell>
               <Cell className="tabular-nums">{p.installmentNumber} of {p.installmentCount}</Cell>
+              <Cell className="whitespace-nowrap text-xs text-muted">
+                {formatPeriod(p.periodStart, p.periodEnd)}
+                {p.monthShare < 1 && <span className="block">Part month</span>}
+              </Cell>
               <Cell className="tabular-nums">{formatMoney(p.rent)}</Cell>
               <Cell className="tabular-nums">{formatMoney(p.capital)}</Cell>
               <Cell className="tabular-nums font-medium">{formatMoney(p.total)}</Cell>

@@ -1,5 +1,7 @@
 /** Mirrors of the backend's report documents (Phase 11). */
 
+import type { Money } from "@/types/marketplace";
+
 export interface ReportRow {
   c1: string;
   c2: string;
@@ -29,4 +31,12 @@ export interface KpiTile {
   values: string[];
   note: string;
   link: string;
+}
+
+/** Twelve months of trends for the admin overview; a series the viewer may not see is null. */
+export interface DashboardCharts {
+  payouts: { month: string; rent: Money; capital: Money; referral: Money }[] | null;
+  invested: { month: string; amount: Money }[] | null;
+  investors: { month: string; count: number }[] | null;
+  pipeline: { stage: string; leads: number }[] | null;
 }

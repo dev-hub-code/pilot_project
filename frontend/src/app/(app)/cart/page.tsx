@@ -6,6 +6,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { CartLineForm } from "@/features/orders/cart-line-form";
 import { CheckoutForm } from "@/features/orders/checkout-form";
+import { yearsLabel } from "@/features/orders/lease-years";
 import { authFetch } from "@/lib/server/auth/session";
 import type { Cart } from "@/types/order";
 import { formatMoney, formatPercent } from "@/utils/money";
@@ -53,13 +54,20 @@ export default async function CartPage() {
                     </p>
                   )}
                 </div>
-                <p className="font-display text-2xl font-semibold tabular-nums">{formatMoney(line.amount)}</p>
+                <div className="text-right">
+                  <p className="font-display text-2xl font-semibold tabular-nums">{formatMoney(line.amountWithGst ?? line.amount)}</p>
+                  {line.gstAmount && Number(line.gstRatePercent) > 0 && (
+                    <p className="text-xs text-muted tabular-nums">
+                      {formatMoney(line.amount)} + {formatPercent(line.gstRatePercent)} GST {formatMoney(line.gstAmount)}
+                    </p>
+                  )}
+                </div>
               </div>
               {line.monthlyPayout && (
                 <dl className="grid gap-4 text-sm sm:grid-cols-3">
-                  <Fact label="Paid to you monthly" value={formatMoney(line.monthlyPayout)} />
-                  <Fact label="Rent + capital back" value={`${formatPercent(line.monthlyRentPercent)} + ${formatPercent(line.monthlyCapitalReturnPercent)} a month`} />
-                  <Fact label={`Total over ${line.tenureMonths} months`} value={formatMoney(line.totalPayout)} />
+                  <Fact label="Rent paid to you monthly" value={formatMoney(line.monthlyPayout)} />
+                  <Fact label="Rent" value={`${formatPercent(line.monthlyRentPercent)} of the price a month`} />
+                  <Fact label={`Total rent over ${yearsLabel(line.tenureYears)}`} value={formatMoney(line.totalPayout)} />
                 </dl>
               )}
               {line.problems.length > 0 && (
@@ -67,16 +75,25 @@ export default async function CartPage() {
                   {line.problems.map((problem) => <li key={problem}>{problem}</li>)}
                 </ul>
               )}
-              <CartLineForm productId={line.productId} quantity={line.quantity} />
+              <CartLineForm productId={line.productId} quantity={line.quantity} tenureYears={line.tenureYears}
+                minYears={line.minTenureYears} maxYears={line.maxTenureYears} />
             </li>
           ))}
         </ul>
 
         <aside className="lg:sticky lg:top-6 lg:self-start">
           <Card title="Checkout">
-            <dl className="mb-6 flex items-baseline justify-between border-b border-border pb-4">
-              <dt className="text-sm text-muted">Total</dt>
-              <dd className="font-display text-3xl font-semibold tabular-nums">{formatMoney(cart.total)}</dd>
+            <dl className="mb-6 space-y-2 border-b border-border pb-4 text-sm">
+              {cart.gstTotal && Number(cart.gstTotal.amount) > 0 && (
+                <>
+                  <div className="flex justify-between"><dt className="text-muted">Price</dt><dd className="tabular-nums">{formatMoney(cart.subtotal)}</dd></div>
+                  <div className="flex justify-between"><dt className="text-muted">GST</dt><dd className="tabular-nums">{formatMoney(cart.gstTotal)}</dd></div>
+                </>
+              )}
+              <div className="flex items-baseline justify-between">
+                <dt className="text-muted">Total</dt>
+                <dd className="font-display text-3xl font-semibold tabular-nums">{formatMoney(cart.total)}</dd>
+              </div>
             </dl>
             <CheckoutForm idempotencyKey={idempotencyKey} terms={terms} total={formatMoney(cart.total)} disabled={!cart.checkoutReady} />
           </Card>

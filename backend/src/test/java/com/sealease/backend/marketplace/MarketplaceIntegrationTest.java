@@ -1,8 +1,8 @@
 package com.sealease.backend.marketplace;
 
 import com.jayway.jsonpath.JsonPath;
-import com.sealease.backend.container.service.ContainerNumbers;
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
 import com.sealease.backend.support.TestApi;
 import com.sealease.backend.support.TestApi.Account;
@@ -18,13 +18,13 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -58,60 +58,26 @@ class MarketplaceIntegrationTest {
 
 	// -------------------------------------------------------------------------- containers
 
-	@Test
-	void containerRegistrationValidatesIdentityAndPhysics() throws Exception {
-		String number = randomContainerNumber();
-		String wrongCheckDigit = number.substring(0, 10) + ((number.charAt(10) - '0' + 1) % 10);
-
-		createContainer(wrongCheckDigit, 2300, 30480, admin).andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("ISO 6346")));
-		createContainer(number, 31000, 30480, admin).andExpect(status().isBadRequest());
-		createContainer(number.toLowerCase(), 2300, 30480, admin).andExpect(status().isCreated())
-			.andExpect(jsonPath("$.container.containerNumber").value(number))
-			.andExpect(jsonPath("$.container.status").value("AVAILABLE"));
-		createContainer(number, 2300, 30480, admin).andExpect(status().isConflict());
-	}
-
-	@Test
-	void reservedAndLeasedContainersChangeStatusOnlyThroughOrders() throws Exception {
-		UUID product = offerings.plan(1);
-		Account investor = approvedInvestor();
-		mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
-			.andExpect(status().isOk());
-		String orderId = JsonPath.read(mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"acceptedTerms":["%s"]}""".formatted(product)))
-			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
-		UUID reserved = jdbc.queryForObject("SELECT container_id FROM order_items WHERE order_id = ?::uuid", UUID.class, orderId);
-
-		changeStatus(reserved, "RETIRED").andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("reserved for an order")));
-		UUID spare = offerings.containers(OfferingFixtures.TYPE, 1).getFirst();
-		changeStatus(spare, "ON_LEASE").andExpect(status().isUnprocessableContent());
-		changeStatus(spare, "MAINTENANCE").andExpect(status().isOk())
-			.andExpect(jsonPath("$.container.status").value("MAINTENANCE"));
-	}
-
 	// -------------------------------------------------------------------------- plan lifecycle
 
 	@Test
 	void planLifecycleDraftPublishCloseWithFrozenTerms() throws Exception {
 		String created = mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2.25", 16)))
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2.25", 2, 5)))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("DRAFT"))
 			.andExpect(jsonPath("$.code").value(matchesPattern("PLAN-\\d{5,}")))
 			.andExpect(jsonPath("$.price.amount").value("300000.00"))
-			// 16 months: 100/16 = 6.25% of the price back each month on top of 2.25% rent.
-			.andExpect(jsonPath("$.tenureMonths").value(16))
-			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(6.25))
-			.andExpect(jsonPath("$.monthlyPayoutPercent").value(8.5))
+			// Rent only: 2.25% of the price a month, for a lease of 2 to 5 years the investor chooses.
+			.andExpect(jsonPath("$.minTenureYears").value(2))
+			.andExpect(jsonPath("$.maxTenureYears").value(5))
+			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(0))
+			.andExpect(jsonPath("$.monthlyPayoutPercent").value(2.25))
 			.andExpect(jsonPath("$.monthlyRent.amount").value("6750.00"))
-			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("18750.00"))
-			.andExpect(jsonPath("$.monthlyPayout.amount").value("25500.00"))
-			.andExpect(jsonPath("$.totalPayout.amount").value("408000.00"))
+			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("0.00"))
+			.andExpect(jsonPath("$.monthlyPayout.amount").value("6750.00"))
+			// Shown for the shortest lease: 24 months of rent.
+			.andExpect(jsonPath("$.totalPayout.amount").value("162000.00"))
 			.andReturn().getResponse().getContentAsString();
 		String productId = JsonPath.read(created, "$.id");
 
@@ -119,16 +85,18 @@ class MarketplaceIntegrationTest {
 		Account investor = approvedInvestor();
 		mvc.perform(get("/api/v1/marketplace/{id}", productId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isNotFound());
-		// The tenure is the plan's own: 12 months returns 100/12 = 8.3333% a month.
-		update(productId, planBody("DRY_20FT", "300000", "2.5", 12)).andExpect(status().isOk())
+		// The lease limits are the plan's own; whatever they are, the plan pays rent only.
+		update(productId, planBody("DRY_20FT", "300000", "2.5", 1, 3)).andExpect(status().isOk())
 			.andExpect(jsonPath("$.monthlyRentPercent").value(2.5))
-			.andExpect(jsonPath("$.tenureMonths").value(12))
-			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(8.3333))
-			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("25000.00"));
+			.andExpect(jsonPath("$.minTenureYears").value(1))
+			.andExpect(jsonPath("$.maxTenureYears").value(3))
+			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(0))
+			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("0.00"))
+			.andExpect(jsonPath("$.totalPayout.amount").value("90000.00"));
 
 		publish(productId).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OPEN"));
 		publish(productId).andExpect(status().isConflict());
-		update(productId, planBody("DRY_20FT", "300000", "9", 12)).andExpect(status().isUnprocessableContent());
+		update(productId, planBody("DRY_20FT", "300000", "9", 1, 3)).andExpect(status().isUnprocessableContent());
 		cancel(productId).andExpect(status().isUnprocessableContent());
 
 		mvc.perform(post("/api/v1/admin/investment-products/{id}/close", productId).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
@@ -145,11 +113,19 @@ class MarketplaceIntegrationTest {
 	@Test
 	void draftPlansCanBeCancelledAndRentAndTenureAreBounded() throws Exception {
 		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "25", 16)))
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "25", 1, 3)))
 			.andExpect(status().isBadRequest());
 		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2", 0)))
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2", 0, 3)))
 			.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2", 1, 31)))
+			.andExpect(status().isBadRequest());
+		// The longest lease cannot be shorter than the shortest.
+		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2", 4, 2)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("longest lease")));
 		String productId = offerings.draft("DRY_20FT", "300000", "2").toString();
 		cancel(productId).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
 		publish(productId).andExpect(status().isConflict());
@@ -160,57 +136,84 @@ class MarketplaceIntegrationTest {
 		Account administration = api.staff("ADMINISTRATION");
 		String productId = JsonPath.read(mvc.perform(post("/api/v1/admin/investment-products")
 				.header(HttpHeaders.AUTHORIZATION, administration.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "200000", "2", 16)))
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "200000", "2", 1, 3)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 		mvc.perform(post("/api/v1/admin/investment-products/{id}/publish", productId)
 				.header(HttpHeaders.AUTHORIZATION, administration.bearer()))
 			.andExpect(status().isForbidden());
 
 		Account investor = approvedInvestor();
-		createContainer(randomContainerNumber(), 2300, 30480, investor).andExpect(status().isForbidden());
+		mvc.perform(multipart("/api/v1/admin/investment-products/{id}/photos", productId)
+				.file(new MockMultipartFile("file", "photo.png", "image/png", PNG)).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isForbidden());
 	}
 
 	// --------------------------------------------------------------------------- marketplace
 
 	@Test
-	void marketplaceShowsOpenPlansWithPhotosOfTheirContainerType() throws Exception {
-		// The only test using 20ft open tops, so their photos are known.
-		UUID container = offerings.containers("OPEN_TOP_20FT", 2).getFirst();
-		UUID photo = jdbc.queryForObject("SELECT document_id FROM container_documents WHERE container_id = ?", UUID.class, container);
-		UUID hidden = uploadPhoto(container, false);
-		UUID otherType = uploadPhoto(offerings.containers(OfferingFixtures.TYPE, 1).getFirst(), true);
+	void marketplaceShowsOpenPlansWithTheirOwnPhotos() throws Exception {
 		String productId = offerings.published("OPEN_TOP_20FT", "180000", "2").toString();
+		String sibling = offerings.published("OPEN_TOP_20FT", "190000", "2").toString();
+		UUID cover = uploadPhoto(productId);
+		UUID second = uploadPhoto(productId);
+		UUID siblingPhoto = uploadPhoto(sibling);
+		mvc.perform(multipart("/api/v1/admin/investment-products/{id}/photos", productId)
+				.file(new MockMultipartFile("file", "photo.png", "image/png", "not an image".getBytes()))
+				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isBadRequest());
 		Account investor = approvedInvestor();
 
 		mvc.perform(get("/api/v1/marketplace").param("size", "100").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.content[*].id", hasItem(productId)))
-			.andExpect(jsonPath("$.content[?(@.id == '%s')].availableContainers".formatted(productId)).value(2))
-			.andExpect(jsonPath("$.content[?(@.id == '%s')].coverPhotoId".formatted(productId)).value(photo.toString()));
+			.andExpect(jsonPath("$.content[?(@.id == '%s')].coverPhotoId".formatted(productId)).value(cover.toString()));
 		mvc.perform(get("/api/v1/marketplace").param("containerType", "OPEN_TOP_20FT")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.content[*].containerType", not(hasItem(OfferingFixtures.TYPE))));
 
 		String detail = mvc.perform(get("/api/v1/marketplace/{id}", productId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.photoIds", hasItem(photo.toString())))
-			.andExpect(jsonPath("$.photoIds", not(hasItem(hidden.toString()))))
+			.andExpect(jsonPath("$.photoIds", contains(cover.toString(), second.toString())))
 			.andExpect(jsonPath("$.eligibility.eligible").value(true))
 			.andReturn().getResponse().getContentAsString();
-		assertThat(detail).doesNotContain("acquisitionCost").doesNotContain("containerNumber");
+		assertThat(detail).doesNotContain("containerNumber");
 
-		photo(productId, photo, investor).andExpect(status().isOk()).andExpect(content().bytes(PNG));
-		photo(productId, hidden, investor).andExpect(status().isNotFound());
-		photo(productId, otherType, investor).andExpect(status().isNotFound());
+		photo(productId, cover, investor).andExpect(status().isOk()).andExpect(content().bytes(PNG));
+		photo(productId, siblingPhoto, investor).andExpect(status().isNotFound());
+
+		// Removing the cover makes the next photo the cover.
+		String photoId = JsonPath.read(mvc.perform(get("/api/v1/admin/investment-products/{id}/photos", productId)
+				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(jsonPath("$.length()").value(2))
+			.andReturn().getResponse().getContentAsString(), "$[0].id");
+		mvc.perform(delete("/api/v1/admin/investment-products/{id}/photos/{photo}", productId, photoId)
+				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isNoContent());
+		mvc.perform(get("/api/v1/marketplace/{id}", productId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.photoIds", contains(second.toString())))
+			.andExpect(jsonPath("$.listing.coverPhotoId").value(second.toString()));
+		photo(productId, cover, investor).andExpect(status().isNotFound());
+		assertThat(api.auditCount("PLAN_PHOTO_ADDED", productId)).isEqualTo(2);
 	}
 
 	@Test
 	void eligibilityExplainsWhyAnInvestorCannotInvest() throws Exception {
-		UUID product = offerings.plan(1);
+		UUID product = offerings.plan();
 		Account unverified = api.register();
 		mvc.perform(get("/api/v1/marketplace/{id}", product).header(HttpHeaders.AUTHORIZATION, unverified.bearer()))
 			.andExpect(jsonPath("$.eligibility.eligible").value(false))
 			.andExpect(jsonPath("$.eligibility.reasons", hasItem("Verify your identity before investing")));
+
+		// Verified identity alone is not enough: a verified bank account is needed too, also to add to the cart.
+		Account noBankAccount = api.register();
+		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", noBankAccount.id());
+		mvc.perform(get("/api/v1/marketplace/{id}", product).header(HttpHeaders.AUTHORIZATION, noBankAccount.bearer()))
+			.andExpect(jsonPath("$.eligibility.eligible").value(false))
+			.andExpect(jsonPath("$.eligibility.reasons", contains("Add a bank account and have it verified before investing")));
+		mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, noBankAccount.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
+			.andExpect(status().isUnprocessableContent());
+
 		Account investor = approvedInvestor();
 		mvc.perform(get("/api/v1/marketplace/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.eligibility.eligible").value(true));
@@ -218,27 +221,55 @@ class MarketplaceIntegrationTest {
 
 	@Test
 	void projectionShowsWhatSeveralContainersCostAndPay() throws Exception {
-		UUID product = offerings.plan(3);
+		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 
-		// 3 × ₹50,000; each pays 2% rent + 6.25% capital a month for 16 months: the price comes back in full.
+		// 3 × ₹50,000; each pays 2% rent a month. Without a lease chosen, the plan's shortest: 1 year.
 		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.valid").value(true))
+			.andExpect(jsonPath("$.tenureYears").value(1))
+			.andExpect(jsonPath("$.minTenureYears").value(1))
+			.andExpect(jsonPath("$.maxTenureYears").value(5))
 			.andExpect(jsonPath("$.amount.amount").value("150000.00"))
 			.andExpect(jsonPath("$.monthlyRent.amount").value("3000.00"))
-			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("9375.00"))
-			.andExpect(jsonPath("$.monthlyPayout.amount").value("12375.00"))
-			.andExpect(jsonPath("$.payouts").value(16))
-			.andExpect(jsonPath("$.totalRent.amount").value("48000.00"))
-			.andExpect(jsonPath("$.totalCapitalReturned.amount").value("150000.00"))
-			.andExpect(jsonPath("$.totalPayout.amount").value("198000.00"));
+			.andExpect(jsonPath("$.payouts").value(12))
+			.andExpect(jsonPath("$.totalRent.amount").value("36000.00"));
+		// The investor chooses a longer lease: 3 years of rent.
+		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3").param("years", "3")
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.valid").value(true))
+			.andExpect(jsonPath("$.payouts").value(36))
+			.andExpect(jsonPath("$.totalRent.amount").value("108000.00"));
+		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3").param("years", "6")
+				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.valid").value(false))
+			.andExpect(jsonPath("$.problems[0]").value("Choose a lease of 1 to 5 years"));
 
 		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "0")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.valid").value(false))
 			.andExpect(jsonPath("$.problems[0]").value("Buy at least one container"));
+	}
+
+	@Test
+	void theWebsiteListsOpenPlansWithoutSigningIn() throws Exception {
+		offerings.published("DRY_40FT", "300000", "2", 2, 5);
+		offerings.draft("DRY_40FT", "999000", "2");
+		mvc.perform(get("/api/v1/public/plans"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.lessThanOrEqualTo(6)))
+			// Newest first: the plan just published, with its terms per container and nothing else.
+			.andExpect(jsonPath("$[0].containerType").value("DRY_40FT"))
+			.andExpect(jsonPath("$[0].containerTypeLabel").value("40ft dry"))
+			.andExpect(jsonPath("$[0].price.amount").value("300000.00"))
+			.andExpect(jsonPath("$[0].monthlyRent.amount").value("6000.00"))
+			.andExpect(jsonPath("$[0].minTenureYears").value(2))
+			.andExpect(jsonPath("$[0].maxTenureYears").value(5))
+			.andExpect(jsonPath("$[0].id").doesNotExist())
+			.andExpect(jsonPath("$[*].price.amount", not(hasItem("999000.00"))));
+		mvc.perform(post("/api/v1/public/plans")).andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -254,32 +285,18 @@ class MarketplaceIntegrationTest {
 
 	// ------------------------------------------------------------------------------ helpers
 
+	/** Identity verified and a verified bank account: able to buy. */
 	private Account approvedInvestor() throws Exception {
 		Account investor = api.register();
 		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
+		new InvestorFixtures(mvc, jdbc, api).ensureVerifiedBankAccount(investor);
 		return investor;
 	}
 
-	private ResultActions createContainer(String number, int tare, int maxGross, Account actor) throws Exception {
-		return mvc.perform(post("/api/v1/admin/containers").header(HttpHeaders.AUTHORIZATION, actor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("""
-					{"containerNumber":"%s","containerType":"DRY_40FT","condition":"CARGO_WORTHY","capacityCbm":67.7,
-					 "maxGrossKg":%d,"tareKg":%d,"manufactureYear":2022,"manufacturer":"CIMC",
-					 "currentLocation":"Nhava Sheva, Mumbai","locationCountry":"IN",
-					 "acquisitionCost":420000,"acquisitionCurrency":"INR"}
-					""".formatted(number, maxGross, tare)));
-	}
-
-	private ResultActions changeStatus(UUID containerId, String status) throws Exception {
-		return mvc.perform(post("/api/v1/admin/containers/{id}/status", containerId).header(HttpHeaders.AUTHORIZATION, admin.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"" + status + "\",\"reason\":\"Inspection\"}"));
-	}
-
-	private UUID uploadPhoto(UUID containerId, boolean visible) throws Exception {
-		String body = mvc.perform(multipart("/api/v1/admin/containers/{id}/documents", containerId)
+	/** Uploads a PNG photo to the plan as the admin; returns its document id. */
+	private UUID uploadPhoto(String productId) throws Exception {
+		String body = mvc.perform(multipart("/api/v1/admin/investment-products/{id}/photos", productId)
 				.file(new MockMultipartFile("file", "photo.png", "image/png", PNG))
-				.param("purpose", "CONTAINER_PHOTO").param("title", "Side view")
-				.param("visibleToInvestors", String.valueOf(visible))
 				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JsonPath.read(body, "$.documentId"));
@@ -306,17 +323,13 @@ class MarketplaceIntegrationTest {
 			.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Not going ahead\"}"));
 	}
 
-	private static String planBody(String type, String price, String rentPercent, int tenureMonths) {
+	private static String planBody(String type, String price, String rentPercent, int minYears, int maxYears) {
 		return """
 				{"containerType":"%s","title":"20ft dry container plan","summary":"Own a container, earn monthly",
-				 "description":"Buy a container and lease it out for 16 months.","currency":"INR","price":"%s",
-				 "monthlyRentPercent":"%s","tenureMonths":%d,
+				 "description":"Buy a container and lease it out.","currency":"INR","price":"%s","gstRatePercent":"0",
+				 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d,
 				 "riskDisclosure":"Payouts depend on the platform.","termsAndConditions":"Standard terms."}
-				""".formatted(type, price, rentPercent, tenureMonths);
-	}
-
-	private static String randomContainerNumber() {
-		return ContainerNumbers.withCheckDigit("SLSU" + ThreadLocalRandom.current().nextInt(100000, 1000000));
+				""".formatted(type, price, rentPercent, minYears, maxYears);
 	}
 
 }

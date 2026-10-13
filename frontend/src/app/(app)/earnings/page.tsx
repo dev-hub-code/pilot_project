@@ -10,7 +10,7 @@ import { PAYOUT_STATUS_LABEL, PAYOUT_TONE } from "@/features/earnings/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { EarningsSummary, Payout, PayoutStatus } from "@/types/earning";
-import { formatDate } from "@/utils/format";
+import { formatDate, formatPeriod } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Earnings" };
@@ -28,26 +28,31 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
     authFetch<EarningsSummary>("/api/v1/earnings/summary"),
     authFetch<PageResponse<Payout>>(`/api/v1/earnings?status=${view.status}&sort=${view.sort}&page=${page}&size=20`),
   ]);
+  // Plans pay rent only; capital shows only for containers bought before that.
+  const hasCapital = summary.capitalReturned.length > 0 || payouts.content.some((p) => Number(p.capital.amount) > 0);
   const totals = (list: EarningsSummary["balances"]) => (list.length === 0 ? "—" : list.map((m) => formatMoney(m)).join(" · "));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Earnings" description="Every month each of your containers pays you rent plus part of your capital back, straight into your wallet."
+      <PageHeader title="Earnings"
+        description="Each of your containers earns its rent every day: that month's rent ÷ its days is credited to your wallet daily. Your balance is paid out once a month (see Withdrawals)."
         actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
-      <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-5" aria-label="Earnings summary">
+      <section className={`grid gap-px bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Wallet balance</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.balances)}</p>
-          <Link href="/withdrawals" className="text-sm text-gold-text hover:underline">Withdraw to your bank account →</Link>
+          <Link href="/withdrawals" className="text-sm text-gold-text hover:underline">Withdraw →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Rent received</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.rentPaid)}</p>
         </div>
-        <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Capital returned</p>
-          <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.capitalReturned)}</p>
-        </div>
+        {hasCapital && (
+          <div className="space-y-2 bg-surface p-6">
+            <p className="text-xs uppercase tracking-[0.1em] text-muted">Capital returned</p>
+            <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.capitalReturned)}</p>
+          </div>
+        )}
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Referral earnings</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.referralEarned)}</p>
@@ -72,12 +77,13 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
       {payouts.content.length === 0 ? (
         <div className="space-y-4">
           <EmptyState title={view.status === "PAID" ? "No payouts yet" : "Nothing scheduled"}
-            description="Each container you buy pays you every month for its lease, starting one month after your payment is confirmed." />
+            description="Each container you buy earns rent every day of its lease, from the day its container is assigned to you." />
           <LinkButton href="/portfolio" variant="secondary">View portfolio</LinkButton>
         </div>
       ) : (
         <>
-          <DataTable columns={[view.status === "PAID" ? "Paid" : "Due", "Container", "Payout", "Rent", "Capital back", "Total", "Status"]}>
+          <DataTable columns={[view.status === "PAID" ? "Paid" : "Due", "Container", "Payout", "Period", "Rent",
+            ...(hasCapital ? ["Capital back"] : []), "Total", "Status"]}>
             {payouts.content.map((p) => (
               <tr key={p.id} className="hover:bg-background">
                 <Cell className="text-muted">{formatDate(p.paidAt ?? p.dueOn)}</Cell>
@@ -86,8 +92,12 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
                   <span className="block text-xs text-muted">{p.productCode}</span>
                 </Cell>
                 <Cell className="tabular-nums">{p.installmentNumber} of {p.installmentCount}</Cell>
+                <Cell className="whitespace-nowrap text-xs text-muted">
+                  {formatPeriod(p.periodStart, p.periodEnd)}
+                  {p.monthShare < 1 && <span className="block">Part month</span>}
+                </Cell>
                 <Cell className="tabular-nums">{formatMoney(p.rent)}</Cell>
-                <Cell className="tabular-nums">{formatMoney(p.capital)}</Cell>
+                {hasCapital && <Cell className="tabular-nums">{formatMoney(p.capital)}</Cell>}
                 <Cell className="tabular-nums font-medium">{formatMoney(p.total)}</Cell>
                 <Cell><StatusBadge tone={PAYOUT_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</StatusBadge></Cell>
               </tr>

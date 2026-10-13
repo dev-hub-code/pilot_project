@@ -141,7 +141,7 @@ public class RoleService {
 	private static void requireNotMixed(Set<String> codes) {
 		if (PermissionCode.mixesInvestorAndStaff(codes)) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-					"A role cannot combine the investor portal with staff permissions");
+					"A role cannot combine the investor portal with employee permissions");
 		}
 	}
 

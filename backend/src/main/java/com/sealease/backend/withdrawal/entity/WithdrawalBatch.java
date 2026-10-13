@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -34,8 +35,18 @@ public class WithdrawalBatch extends BaseEntity {
 	@Column(name = "total_amount", nullable = false, updatable = false, precision = 19, scale = 4)
 	private BigDecimal totalAmount;
 
-	@Column(name = "created_by", nullable = false, updatable = false)
+	/** Null for a batch made by the monthly withdrawal run. */
+	@Column(name = "created_by", updatable = false)
 	private UUID createdBy;
+
+	/** The month ("yyyy-MM") of a batch made by the monthly withdrawal run; null for batches made by hand. */
+	@Column(name = "period", updatable = false, length = 7)
+	private String period;
+
+	/** Which monthly run made it: rent or referral; null for batches made by hand before the runs. */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "kind", updatable = false, length = 20)
+	private WithdrawalKind kind;
 
 	@Column(name = "sent_by")
 	private UUID sentBy;
@@ -56,6 +67,15 @@ public class WithdrawalBatch extends BaseEntity {
 		this.itemCount = itemCount;
 		this.createdBy = createdBy;
 		this.status = BatchStatus.CREATED;
+	}
+
+	/** The batch of one month's scheduled withdrawals. */
+	public static WithdrawalBatch scheduled(String reference, Money total, int itemCount, WithdrawalKind kind,
+			YearMonth period) {
+		WithdrawalBatch batch = new WithdrawalBatch(reference, total, itemCount, null);
+		batch.kind = kind;
+		batch.period = period.toString();
+		return batch;
 	}
 
 	public void markSent(UUID actorId, Instant now) {
@@ -95,6 +115,14 @@ public class WithdrawalBatch extends BaseEntity {
 
 	public UUID getCreatedBy() {
 		return createdBy;
+	}
+
+	public WithdrawalKind getKind() {
+		return kind;
+	}
+
+	public String getPeriod() {
+		return period;
 	}
 
 	public UUID getSentBy() {

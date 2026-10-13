@@ -5,6 +5,8 @@ import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /** The caller's own profile. The tax id is only ever returned masked. */
@@ -18,6 +20,7 @@ public record ProfileResponse(
 		LocalDate dateOfBirth,
 		String nationality,
 		Address address,
+		String gstNumber,
 		String taxResidencyCountry,
 		String taxIdMasked,
 		KycStatus kycStatus,
@@ -35,8 +38,35 @@ public record ProfileResponse(
 				p.getPhone(), p.getDateOfBirth(), p.getNationality(),
 				new Address(p.getAddressLine1(), p.getAddressLine2(), p.getCity(), p.getStateRegion(),
 						p.getPostalCode(), p.getCountry()),
+				p.getGstNumber(),
 				p.getTaxResidencyCountry(), mask(p.getTaxIdLast4()), p.getKycStatus(),
 				p.isEmailNotifications(), p.isSmsNotifications(), u.isMfaEnabled());
+	}
+
+	/**
+	 * The personal details still to fill in before identity verification can be submitted, by name; empty when
+	 * complete. Address line 2 is optional.
+	 */
+	public List<String> missingPersonalDetails() {
+		List<String> missing = new ArrayList<>();
+		if (blank(phone)) {
+			missing.add("mobile phone");
+		}
+		if (dateOfBirth == null) {
+			missing.add("date of birth");
+		}
+		if (blank(nationality)) {
+			missing.add("nationality");
+		}
+		if (address == null || blank(address.line1()) || blank(address.city()) || blank(address.stateRegion())
+				|| blank(address.postalCode()) || blank(address.country())) {
+			missing.add("address");
+		}
+		return missing;
+	}
+
+	private static boolean blank(String value) {
+		return value == null || value.isBlank();
 	}
 
 	static String mask(String last4) {

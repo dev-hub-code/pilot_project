@@ -49,14 +49,14 @@ public class StaffAccountService {
 			.anyMatch(PermissionCode.INVESTOR_PORTAL.name()::equals);
 		if (investorRole) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-					"Staff accounts cannot hold investor roles; investors register themselves");
+					"Employee accounts cannot hold investor roles; investors register themselves");
 		}
 		IssuedCredentials issued = accounts.createStaffAccount(request.email(), request.firstName(), request.lastName(),
 				actorId);
 		// Validates the role names and applies the escalation guard; a refusal rolls the account back too.
 		UserAuthorities granted = userRoles.replaceRoles(actorId, issued.account().id(), request.roles());
 		if (granted.permissions().stream().noneMatch(PermissionCode::isAdministrative)) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Give the staff member at least one staff role");
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Give the employee at least one employee role");
 		}
 		return view(issued, granted);
 	}
@@ -73,7 +73,7 @@ public class StaffAccountService {
 		UserAuthorities authorities = userRoles.authoritiesOf(userId);
 		if (authorities.permissions().stream().noneMatch(PermissionCode::isAdministrative)) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Temporary passwords are only issued to staff accounts");
+					"Temporary passwords are only issued to employee accounts");
 		}
 		userRoles.requireActorCovers(actorId, userId);
 		IssuedCredentials issued = accounts.issueTemporaryPassword(userId, actorId);
@@ -83,7 +83,7 @@ public class StaffAccountService {
 
 	private static StaffCredentialsResponse view(IssuedCredentials issued, UserAuthorities authorities) {
 		return new StaffCredentialsResponse(issued.account().id(), issued.account().email(), issued.account().firstName(),
-				issued.account().lastName(), authorities.roles(), issued.temporaryPassword(), issued.expiresAt());
+				issued.account().lastName(), authorities.roles(), issued.temporaryPassword(), issued.expiresAt(), false);
 	}
 
 }

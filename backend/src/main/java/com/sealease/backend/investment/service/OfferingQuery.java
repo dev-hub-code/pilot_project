@@ -1,7 +1,6 @@
 package com.sealease.backend.investment.service;
 
 import com.sealease.backend.common.exception.ResourceNotFoundException;
-import com.sealease.backend.container.service.ContainerAllocationService;
 import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.entity.InvestmentProduct;
 import com.sealease.backend.investment.repository.InvestmentProductRepository;
@@ -17,21 +16,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Read access to plans for the cart and order modules, and a non-binding pre-check of a purchase.
- * The binding check runs again when containers are reserved at checkout.
+ * Read access to plans for the cart and order modules, and the check of a purchase (eligibility and quantity),
+ * run when adding to the cart and again at checkout. Stock does not limit sales: finance assigns containers after
+ * payment.
  */
 @Service
 public class OfferingQuery {
 
 	private final InvestmentProductRepository products;
 	private final EligibilityService eligibility;
-	private final ContainerAllocationService inventory;
 
-	public OfferingQuery(InvestmentProductRepository products, EligibilityService eligibility,
-			ContainerAllocationService inventory) {
+	public OfferingQuery(InvestmentProductRepository products, EligibilityService eligibility) {
 		this.products = products;
 		this.eligibility = eligibility;
-		this.inventory = inventory;
 	}
 
 	@Transactional(readOnly = true)
@@ -46,12 +43,13 @@ public class OfferingQuery {
 			.collect(Collectors.toMap(OfferingTerms::id, Function.identity()));
 	}
 
-	/** Why the investor cannot (currently) buy this many containers under the plan; empty when they can. */
+	/** Why the investor cannot (currently) buy this many containers under the plan for this lease; empty when they can. */
 	@Transactional(readOnly = true)
-	public List<String> problems(UUID investorId, UUID productId, int quantity) {
+	public List<String> problems(UUID investorId, UUID productId, int quantity, int tenureYears) {
 		InvestmentProduct product = load(productId);
 		List<String> problems = new ArrayList<>(eligibility.evaluate(investorId, product).reasons());
-		problems.addAll(PlanRules.quantityProblems(quantity, inventory.available(product.getContainerType())));
+		problems.addAll(PlanRules.quantityProblems(quantity));
+		problems.addAll(product.terms().tenureProblems(tenureYears));
 		return problems;
 	}
 

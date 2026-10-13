@@ -15,6 +15,7 @@ import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.User;
 import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.repository.UserProfileRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -33,6 +35,8 @@ import java.util.UUID;
 public class UserProfileService {
 
 	static final String TAX_ID_CONTEXT = "user_profile.tax_id";
+	/** Nationality and address country when the investor does not choose one. */
+	static final String DEFAULT_COUNTRY = "IN";
 	private static final int MINIMUM_AGE = 18;
 
 	private final UserProfileRepository profiles;
@@ -53,6 +57,24 @@ public class UserProfileService {
 		profiles.save(new UserProfile(user));
 	}
 
+	/** A self-registered investor's profile, with the mobile number they signed up with (unique across accounts). */
+	@Transactional(propagation = Propagation.MANDATORY)
+	void createFor(User user, String phone) {
+		String number = blankToNull(phone);
+		String key = PhoneNumbers.key(number);
+		if (key != null && profiles.phoneTakenByAnother(key, user.getId())) {
+			throw phoneTaken();
+		}
+		UserProfile profile = new UserProfile(user);
+		profile.updatePersonal(number, key, null, null);
+		try {
+			profiles.saveAndFlush(profile);
+		}
+		catch (DataIntegrityViolationException ex) {
+			throw phoneTaken();
+		}
+	}
+
 	@Transactional(readOnly = true)
 	public ProfileResponse getProfile(UUID userId) {
 		return ProfileResponse.from(load(userId));
@@ -65,11 +87,10 @@ public class UserProfileService {
 		User user = profile.getUser();
 		String firstName = request.firstName().strip();
 		String lastName = request.lastName().strip();
-		boolean renaming = !firstName.equals(user.getFirstName()) || !lastName.equals(user.getLastName());
-		if (renaming && profile.getKycStatus() != KycStatus.NOT_SUBMITTED
-				&& profile.getKycStatus() != KycStatus.REJECTED) {
+		// The name is the one given at registration and cannot be changed afterwards.
+		if (!firstName.equals(user.getFirstName()) || !lastName.equals(user.getLastName())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Your name is locked while identity verification is pending or approved; contact support to change it");
+					"Your name cannot be changed after registration; contact support if it needs correcting");
 		}
 		if (request.dateOfBirth() != null
 				&& request.dateOfBirth().isAfter(LocalDate.now(clock.withZone(ZoneOffset.UTC)).minusYears(MINIMUM_AGE))) {
@@ -77,17 +98,26 @@ public class UserProfileService {
 		}
 
 		List<String> changed = new ArrayList<>();
-		if (renaming) {
-			changed.add("name");
-		}
 		ProfileResponse before = ProfileResponse.from(profile);
-		var address = request.address() == null
-				? new UpdateProfileRequest.AddressRequest(null, null, null, null, null, null) : request.address();
+		var address = request.address();
+		String phone = blankToNull(request.phone());
+		String phoneKey = PhoneNumbers.key(phone);
+		if (phoneKey != null && profiles.phoneTakenByAnother(phoneKey, userId)) {
+			throw phoneTaken();
+		}
 
-		user.rename(firstName, lastName);
-		profile.updatePersonal(blankToNull(request.phone()), request.dateOfBirth(), request.nationality());
+		profile.updatePersonal(phone, phoneKey, request.dateOfBirth(), orIndia(request.nationality()));
+		String gst = blankToNull(request.gstNumber());
+		profile.updateGstNumber(gst == null ? null : gst.strip().toUpperCase(Locale.ROOT));
 		profile.updateAddress(trim(address.line1()), trim(address.line2()), trim(address.city()),
-				trim(address.stateRegion()), trim(address.postalCode()), address.country());
+				trim(address.stateRegion()), trim(address.postalCode()), orIndia(address.country()));
+		try {
+			// The unique index settles two accounts saving the same number at once.
+			profiles.saveAndFlush(profile);
+		}
+		catch (DataIntegrityViolationException ex) {
+			throw phoneTaken();
+		}
 
 		ProfileResponse after = ProfileResponse.from(profile);
 		if (!Objects.equals(before.phone(), after.phone())) {
@@ -100,12 +130,21 @@ public class UserProfileService {
 		if (!Objects.equals(before.address(), after.address())) {
 			changed.add("address");
 		}
+		if (!Objects.equals(before.gstNumber(), after.gstNumber())) {
+			changed.add("gstNumber");
+		}
 		if (!changed.isEmpty()) {
 			// Field names only: personal data does not belong in the audit log.
 			audit.record(AuditRecord.of(userId, AuditAction.PROFILE_UPDATED, "USER", userId)
 				.withNewValue(Map.of("changed", changed)));
 		}
 		return after;
+	}
+
+	/** Whether the user wants notifications by email; accounts without a profile (staff) get them. */
+	@Transactional(readOnly = true)
+	public boolean wantsEmailNotifications(UUID userId) {
+		return profiles.findByUserId(userId).map(UserProfile::isEmailNotifications).orElse(true);
 	}
 
 	@Transactional
@@ -150,6 +189,15 @@ public class UserProfileService {
 
 	private UserProfile load(UUID userId) {
 		return profiles.findByUserId(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+	}
+
+	private static BusinessException phoneTaken() {
+		return new BusinessException(ErrorCode.CONFLICT,
+				"This mobile number is already registered with another account. Contact support if it is yours.");
+	}
+
+	private static String orIndia(String country) {
+		return country == null || country.isBlank() ? DEFAULT_COUNTRY : country;
 	}
 
 	private static String trim(String value) {

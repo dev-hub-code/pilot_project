@@ -37,15 +37,15 @@ export async function adjustBalanceAction(idempotencyKey: string, _p: FormState,
   redirect(`/admin/ledger/${account.id}`);
 }
 
-/** Pays every monthly payout that has fallen due now, instead of waiting for the next automatic run. */
+/** Credits every day of rent that has ended now, instead of waiting for the next automatic run. */
 export async function runPayoutsAction(): Promise<FormState> {
-  let result: { paid: number };
+  let result: { credited: number };
   try {
-    result = await authFetch<{ paid: number }>("/api/v1/admin/payouts/run", { method: "POST" });
+    result = await authFetch<{ credited: number }>("/api/v1/admin/payouts/run", { method: "POST" });
   } catch (error) {
     return failureState(error);
   }
   revalidatePath("/admin/payouts");
   revalidatePath("/admin/ledger", "layout");
-  return { success: result.paid === 0 ? "Nothing was due." : `Paid ${result.paid} payout(s) into investors' wallets.` };
+  return { success: result.credited === 0 ? "Nothing was due." : `Credited ${result.credited} day(s) of rent to investors' wallets.` };
 }

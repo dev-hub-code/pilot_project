@@ -60,14 +60,14 @@ export default async function AdminTicketPage({ params }: PageProps<"/admin/supp
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <Thread messages={detail.messages} attachmentHref={(a) => `/admin/support/${t.id}/attachments/${a}`} />
+          <Thread messages={detail.messages} events={detail.events} viewer="staff" attachmentHref={(a) => `/admin/support/${t.id}/attachments/${a}`} />
           {canManage && open && (
             <Card title="Reply">
               <ReplyForm action={staffReplyAction.bind(null, t.id)} submitLabel="Send"
                 extra={
                   <label className="flex items-center gap-3 text-sm">
                     <input type="checkbox" name="internal" className="size-4" />
-                    Internal note: visible to staff only, the customer is not notified
+                    Internal note: visible to employees only, the customer is not notified
                   </label>
                 } />
             </Card>
@@ -83,7 +83,7 @@ export default async function AdminTicketPage({ params }: PageProps<"/admin/supp
               <SettingForm action={ticketSettingAction.bind(null, t.id, "priority")} label="Priority" defaultValue={t.priority}
                 options={["LOW", "NORMAL", "HIGH", "URGENT"].map((p) => ({ value: p, label: humanize(p) }))} submitLabel="Set priority" />
             </Card>
-            <Card title="Status" description="The customer is notified. Replies reopen a resolved request; closed is final.">
+            <Card title="Status" description="The customer is notified. They can reopen a resolved request for 24 hours, after which it closes automatically. A closed request cannot be reopened.">
               <SettingForm action={ticketSettingAction.bind(null, t.id, "status")} label="Mark as"
                 defaultValue={t.status === "RESOLVED" ? "CLOSED" : "RESOLVED"}
                 options={[{ value: "RESOLVED", label: "Resolved" }, { value: "CLOSED", label: "Closed" }]} submitLabel="Update" />

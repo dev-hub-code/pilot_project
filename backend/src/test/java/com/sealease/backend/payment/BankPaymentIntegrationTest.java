@@ -2,6 +2,7 @@ package com.sealease.backend.payment;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
 import com.sealease.backend.support.TestApi;
 import com.sealease.backend.support.TestApi.Account;
@@ -77,7 +78,7 @@ class BankPaymentIntegrationTest {
 		assertThat(api.auditCount("COMPANY_BANK_ACCOUNT_UPDATED", id)).isEqualTo(1);
 
 		// Investors are offered active accounts only.
-		String orderId = placeOrder(investor, offerings.plan(1));
+		String orderId = placeOrder(investor, offerings.plan());
 		startBankPayment(investor, orderId).andExpect(jsonPath("$.bankTransfer.accounts[*].id", hasItem(id)));
 		mvc.perform(post(ACCOUNTS + "/{id}/deactivate", id).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
@@ -95,7 +96,7 @@ class BankPaymentIntegrationTest {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
 		Account finance = api.staff("FINANCE");
-		String orderId = placeOrder(investor, offerings.plan(1));
+		String orderId = placeOrder(investor, offerings.plan());
 		String payment = paymentId(startBankPayment(investor, orderId));
 
 		Account stranger = approvedInvestor();
@@ -137,7 +138,7 @@ class BankPaymentIntegrationTest {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
 		Account finance = api.staff("FINANCE");
-		String orderId = placeOrder(investor, offerings.plan(1));
+		String orderId = placeOrder(investor, offerings.plan());
 		String payment = paymentId(startBankPayment(investor, orderId));
 		submit(investor, payment, account, "CASH_DEPOSIT", "RCPT-7781").andExpect(status().isOk());
 
@@ -158,9 +159,11 @@ class BankPaymentIntegrationTest {
 
 	// ------------------------------------------------------------------------------ helpers
 
+	/** Identity verified and a verified bank account: able to buy. */
 	private Account approvedInvestor() throws Exception {
 		Account investor = api.register();
 		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
+		new InvestorFixtures(mvc, jdbc, api).ensureVerifiedBankAccount(investor);
 		return investor;
 	}
 

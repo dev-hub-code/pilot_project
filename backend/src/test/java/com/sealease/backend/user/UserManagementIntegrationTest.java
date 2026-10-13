@@ -1,6 +1,8 @@
 package com.sealease.backend.user;
 
 import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.support.BankAccountUploads;
+import com.sealease.backend.support.IndianIdFixtures;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.TestApi;
 import com.sealease.backend.support.TestApi.Account;
@@ -37,8 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserManagementIntegrationTest {
 
 	private static final byte[] PNG_HEADER = { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
-	private static final String SECRET_MARKER = "PASSPORT-SCAN-SECRET-MARKER";
-	private static final String VALID_IBAN = "GB82 WEST 1234 5698 7654 32";
+	private static final String SECRET_MARKER = "AADHAAR-SCAN-SECRET-MARKER";
+	private static final String VALID_ACCOUNT = "100098765432";
 
 	@Autowired
 	private MockMvc mvc;
@@ -58,6 +60,7 @@ class UserManagementIntegrationTest {
 	@Test
 	void profileIsCreatedAtRegistrationAndEditable() throws Exception {
 		Account investor = api.register();
+		String phone = mobile();
 
 		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
@@ -65,12 +68,18 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.twoFactorEnabled").value(false));
 
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", "+447700900123", "1990-04-01")))
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", phone, "1990-04-01")))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.firstName").value("Ada"))
+			.andExpect(jsonPath("$.firstName").value("Test"))
 			.andExpect(jsonPath("$.address.city").value("London"))
 			.andExpect(jsonPath("$.emailNotifications").value(true))
 			.andExpect(jsonPath("$.smsNotifications").value(false));
+
+		// The name given at registration cannot be changed.
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", phone, "1990-04-01")))
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("cannot be changed after registration")));
 
 		// Notification preferences are settings of their own; saving the profile leaves them alone.
 		mvc.perform(put("/api/v1/users/me/notification-preferences").header(HttpHeaders.AUTHORIZATION, investor.bearer())
@@ -79,7 +88,7 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.emailNotifications").value(false))
 			.andExpect(jsonPath("$.smsNotifications").value(true));
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", "+447700900123", "1990-04-01")))
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", phone, "1990-04-01")))
 			.andExpect(jsonPath("$.emailNotifications").value(false))
 			.andExpect(jsonPath("$.smsNotifications").value(true));
 		mvc.perform(put("/api/v1/users/me/notification-preferences").header(HttpHeaders.AUTHORIZATION, investor.bearer())
@@ -89,14 +98,96 @@ class UserManagementIntegrationTest {
 		String changes = jdbc.queryForObject("""
 				SELECT string_agg(new_value::text, ' ') FROM audit_logs WHERE action = 'PROFILE_UPDATED' AND entity_id = ?
 				""", String.class, investor.id().toString());
-		assertThat(changes).contains("address", "phone", "notificationPreferences").doesNotContain("+447700900123", "London");
+		assertThat(changes).contains("address", "phone", "notificationPreferences").doesNotContain(phone, "London");
+	}
+
+	@Test
+	void gstNumberIsOptionalAndChecked() throws Exception {
+		Account investor = api.register();
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(gstBody("27ABCDE1234F1Z")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("gstNumber")));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(gstBody("27abcde1234f1z5")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.gstNumber").value("27ABCDE1234F1Z5"));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(gstBody("")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.gstNumber").doesNotExist());
+	}
+
+	private static String gstBody(String gst) {
+		return """
+				{"firstName":"Test","lastName":"Investor","gstNumber":"%s",
+				 "address":{"line1":"12 Marine Drive","city":"Mumbai","stateRegion":"Maharashtra","postalCode":"400020"}}
+				""".formatted(gst);
+	}
+
+	@Test
+	void addressIsRequiredAndCountriesDefaultToIndia() throws Exception {
+		Account investor = api.register();
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"firstName":"Test","lastName":"Investor","address":{"line1":" ","line2":"Flat 4"}}"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field",
+					org.hamcrest.Matchers.hasItems("address.line1", "address.city", "address.stateRegion", "address.postalCode")))
+			.andExpect(jsonPath("$.fieldErrors[*].field", org.hamcrest.Matchers.not(hasItem("address.line2"))));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"firstName\":\"Test\",\"lastName\":\"Investor\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("address")));
+
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(gstBody("")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.nationality").value("IN"))
+			.andExpect(jsonPath("$.address.country").value("IN"));
+	}
+
+	@Test
+	void aMobileNumberBelongsToOneAccount() throws Exception {
+		Account first = api.register();
+		Account second = api.register();
+		String number = mobile();
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, first.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", number, "1990-04-01")))
+			.andExpect(status().isOk());
+		// Saving again keeps your own number.
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, first.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", number, "1990-04-01")))
+			.andExpect(status().isOk());
+
+		// The same number written differently is still the same number.
+		String spaced = number.substring(0, 5) + " " + number.substring(5);
+		for (String same : List.of(number, "+91 " + spaced, "0" + number, "+91-" + number)) {
+			mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, second.bearer())
+					.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", same, "1990-04-01")))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("already registered with another account")));
+		}
+
+		// Once the first account changes its number, the old one is free.
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, first.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", mobile(), "1990-04-01")))
+			.andExpect(status().isOk());
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, second.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", "+91 " + spaced, "1990-04-01")))
+			.andExpect(status().isOk());
+	}
+
+	/** A random Indian mobile number: tests share a database, and a number may belong to one account only. */
+	private static String mobile() {
+		return "9" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1_000_000_000));
 	}
 
 	@Test
 	void profileValidationRejectsBadInput() throws Exception {
 		Account investor = api.register();
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", "07700 900123", "1990-04-01")
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", "call me maybe", "1990-04-01")
 					.replace("\"GB\"", "\"XX\"")))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("phone")))
@@ -104,7 +195,7 @@ class UserManagementIntegrationTest {
 
 		String minor = java.time.LocalDate.now().minusYears(17).toString();
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Ada", null, minor)))
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", null, minor)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.message").value("You must be at least 18 years old"));
 	}
@@ -126,45 +217,137 @@ class UserManagementIntegrationTest {
 	// ------------------------------------------------------------------------------- KYC
 
 	@Test
+	void kycNeedsCompletePersonalDetailsFirst() throws Exception {
+		// The mobile number was given at sign-up; the rest is still to fill in.
+		Account investor = api.register();
+		submitValidKyc(investor, false)
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(
+					"Complete your personal details first (Profile, Personal details): date of birth, nationality, address"));
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"));
+
+		completePersonalDetails(investor);
+		submitValidKyc(investor, false).andExpect(status().isCreated());
+	}
+
+	@Test
 	void kycRequiresEvidenceAndRejectsDisguisedFiles() throws Exception {
 		Account investor = api.register();
+		completePersonalDetails(investor);
 
-		submitKyc(investor, Map.of("identityFront", png()))
+		// Each number comes with its card.
+		submitKyc(investor, Map.of("panCard", jpeg()))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("A selfie holding the document is required"));
+			.andExpect(jsonPath("$.message").value("Upload your Aadhaar card with the Aadhaar number"));
+		submitKyc(investor, null, null, Map.of())
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("Upload your Aadhaar card or your PAN card"));
 
-		var html = new MockMultipartFile("selfie", "selfie.png", "image/png",
+		var html = new MockMultipartFile("panCard", "pan.png", "image/png",
 				"<html><script>alert(1)</script></html>".getBytes(StandardCharsets.UTF_8));
-		submitKyc(investor, Map.of("identityFront", png(), "selfie", html))
+		submitKyc(investor, Map.of("aadhaarCard", png(), "panCard", html))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("Document KYC_SELFIE must be a PDF, JPEG or PNG file"));
+			.andExpect(jsonPath("$.message").value("Document KYC_PAN_CARD must be a PDF, JPEG or PNG file"));
+
+		// Numbers are checked: 12 digits for Aadhaar, and the PAN format.
+		submitKyc(investor, "2345 6789 012", IndianIdFixtures.pan(), validKycFiles())
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("An Aadhaar number has exactly 12 digits"));
+		submitKyc(investor, IndianIdFixtures.aadhaar(), "ABCD1234EF", validKycFiles())
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("PAN is not valid")));
 
 		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"));
 	}
 
 	@Test
+	void aadhaarAndPanCanBeUploadedAtDifferentTimesAndAreReviewedOnceBothAreIn() throws Exception {
+		Account investor = api.register();
+		completePersonalDetails(investor);
+		Account reviewer = api.staff("ADMINISTRATION");
+
+		// PAN first: a draft, not under review yet.
+		String draft = JsonPath.read(submitKyc(investor, null, IndianIdFixtures.pan(), Map.of("panCard", jpeg()))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.status").value("DRAFT"))
+			.andExpect(jsonPath("$.panNumber").exists())
+			.andExpect(jsonPath("$.aadhaarNumber").doesNotExist())
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"));
+		mvc.perform(get("/api/v1/users/me/kyc").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.id").value(draft)).andExpect(jsonPath("$.status").value("DRAFT"));
+		mvc.perform(get("/api/v1/admin/kyc").param("size", "200").header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
+			.andExpect(jsonPath("$.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(draft))));
+		mvc.perform(post("/api/v1/admin/kyc/{id}/approve", draft).header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
+			.andExpect(status().isConflict());
+
+		// Sent again while a draft, the PAN replaces the earlier one.
+		String pan = IndianIdFixtures.pan();
+		submitKyc(investor, null, pan, Map.of("panCard", jpeg()))
+			.andExpect(jsonPath("$.id").value(draft))
+			.andExpect(jsonPath("$.panNumber").value(pan))
+			.andExpect(jsonPath("$.documents.length()").value(1));
+
+		// The Aadhaar later: now it holds both and goes for review, as one submission.
+		submitKyc(investor, IndianIdFixtures.aadhaar(), null, Map.of("aadhaarCard", png()))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").value(draft))
+			.andExpect(jsonPath("$.status").value("PENDING"))
+			.andExpect(jsonPath("$.documents[*].purpose",
+					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD")));
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.kycStatus").value("PENDING"));
+		mvc.perform(get("/api/v1/admin/kyc").param("size", "200").header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
+			.andExpect(jsonPath("$.content[*].id", hasItem(draft)));
+		submitKyc(investor, null, IndianIdFixtures.pan(), Map.of("panCard", jpeg())).andExpect(status().isConflict());
+
+		// After a rejection, the next upload starts a new draft.
+		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", draft).header(HttpHeaders.AUTHORIZATION, reviewer.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"The PAN card photo is blurred\"}"))
+			.andExpect(status().isOk());
+		submitKyc(investor, null, IndianIdFixtures.pan(), Map.of("panCard", jpeg()))
+			.andExpect(jsonPath("$.status").value("DRAFT"))
+			.andExpect(jsonPath("$.id", org.hamcrest.Matchers.not(draft)));
+	}
+
+	@Test
 	void kycSubmissionReviewAndApproval() throws Exception {
 		Account investor = api.register();
-		String submissionId = JsonPath.read(submitValidKyc(investor)
+		completePersonalDetails(investor);
+		String aadhaar = IndianIdFixtures.aadhaar();
+		String pan = IndianIdFixtures.pan();
+		// Typed with spaces and in lower case: stored normalised.
+		String submissionId = JsonPath.read(submitKyc(investor,
+				aadhaar.substring(0, 4) + " " + aadhaar.substring(4, 8) + " " + aadhaar.substring(8), pan.toLowerCase(),
+				validKycFiles())
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("PENDING"))
-			.andExpect(jsonPath("$.documentNumberMasked").value("•••• 4321"))
+			// Full numbers, normalised: digits only, PAN in capitals.
+			.andExpect(jsonPath("$.aadhaarNumber").value(aadhaar))
+			.andExpect(jsonPath("$.panNumber").value(pan))
+			.andExpect(jsonPath("$.documentType").doesNotExist())
 			.andExpect(jsonPath("$.reviewedBy").doesNotExist())
-			.andExpect(jsonPath("$.documents.length()").value(2))
+			.andExpect(jsonPath("$.documents[*].purpose",
+					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD")))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
 		// Only one submission under review at a time.
 		submitValidKyc(investor).andExpect(status().isConflict());
-		// Legal name is locked while under review.
+		// The name cannot be changed (at any time).
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Someone", null, null)))
 			.andExpect(status().isUnprocessableContent());
 
-		// Evidence is encrypted at rest.
+		// Numbers and evidence are encrypted at rest.
+		Map<String, Object> numbers = jdbc.queryForMap(
+				"SELECT aadhaar_number_encrypted, pan_number_encrypted FROM kyc_submissions WHERE id = ?::uuid", submissionId);
+		assertThat(numbers.values()).allSatisfy(v -> assertThat((String) v).doesNotContain(aadhaar).doesNotContain(pan));
 		byte[] stored = jdbc.queryForObject("""
 				SELECT d.content FROM stored_documents d JOIN kyc_documents k ON k.document_id = d.id
-				WHERE k.submission_id = ?::uuid AND k.purpose = 'KYC_IDENTITY_FRONT'
+				WHERE k.submission_id = ?::uuid AND k.purpose = 'KYC_AADHAAR_CARD'
 				""", byte[].class, submissionId);
 		assertThat(new String(stored, StandardCharsets.ISO_8859_1)).doesNotContain(SECRET_MARKER);
 		assertThat(Arrays.equals(stored, 0, PNG_HEADER.length, PNG_HEADER, 0, PNG_HEADER.length)).isFalse();
@@ -177,9 +360,11 @@ class UserManagementIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.account.email").value(investor.email()))
+			.andExpect(jsonPath("$.submission.aadhaarNumber").value(aadhaar))
+			.andExpect(jsonPath("$.submission.panNumber").value(pan))
 			.andReturn().getResponse().getContentAsString();
 		String frontId = ((List<String>) JsonPath.read(detail,
-				"$.submission.documents[?(@.purpose == 'KYC_IDENTITY_FRONT')].id")).getFirst();
+				"$.submission.documents[?(@.purpose == 'KYC_AADHAAR_CARD')].id")).getFirst();
 
 		byte[] downloaded = mvc.perform(get("/api/v1/admin/kyc/{id}/documents/{doc}", submissionId, frontId)
 				.header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
@@ -191,6 +376,7 @@ class UserManagementIntegrationTest {
 			.andReturn().getResponse().getContentAsByteArray();
 		assertThat(downloaded).isEqualTo(png().getBytes());
 		assertThat(api.auditCount("KYC_DOCUMENT_VIEWED", submissionId)).isEqualTo(1);
+		assertThat(api.auditCount("KYC_SUBMISSION_VIEWED", submissionId)).isEqualTo(1);
 
 		// A document id from another submission cannot be fetched through this one.
 		mvc.perform(get("/api/v1/admin/kyc/{id}/documents/{doc}", submissionId, UUID.randomUUID())
@@ -204,7 +390,39 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isConflict());
 		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.kycStatus").value("APPROVED"));
+		// The investor is told (in the app, and by email to those who keep email notifications on).
+		assertThat(notifications(investor, "KYC_APPROVED")).containsExactly("Your identity is verified");
 		submitValidKyc(investor).andExpect(status().isUnprocessableContent());
+	}
+
+	@Test
+	void anAadhaarNumberOrPanBelongsToOneAccount() throws Exception {
+		String aadhaar = IndianIdFixtures.aadhaar();
+		String pan = IndianIdFixtures.pan();
+		Account first = api.register();
+		completePersonalDetails(first);
+		String firstSubmission = JsonPath.read(submitKyc(first, aadhaar, pan, validKycFiles())
+			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+
+		// Another account cannot use either number while the first is under review (or approved).
+		Account second = api.register();
+		completePersonalDetails(second);
+		submitKyc(second, aadhaar, IndianIdFixtures.pan(), validKycFiles())
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Aadhaar number is already registered")));
+		submitKyc(second, IndianIdFixtures.aadhaar(), pan.toLowerCase(), validKycFiles())
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("PAN is already registered")));
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, second.bearer()))
+			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"));
+
+		// Rejecting the first submission frees the numbers.
+		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", firstSubmission).header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Not the account holder\"}"))
+			.andExpect(status().isOk());
+		assertThat(notificationBodies(first, "KYC_REJECTED")).singleElement().asString()
+			.contains("Reason: Not the account holder.");
+		submitKyc(second, aadhaar, pan, validKycFiles()).andExpect(status().isCreated());
 	}
 
 	@Test
@@ -255,22 +473,37 @@ class UserManagementIntegrationTest {
 	@Test
 	void bankAccountLifecycle() throws Exception {
 		Account investor = api.register();
-		String first = JsonPath.read(addBank(investor, VALID_IBAN, "NWBKGB2L")
+		String first = JsonPath.read(addBank(investor, VALID_ACCOUNT, "HDFC0000001")
 			.andExpect(status().isCreated())
+			// The holder is the investor's registered name; a different name in the request is ignored.
+			.andExpect(jsonPath("$.accountHolderName").value("Test Investor"))
 			.andExpect(jsonPath("$.accountNumberMasked").value("•••• 5432"))
 			.andExpect(jsonPath("$.primary").value(true))
 			.andExpect(jsonPath("$.status").value("PENDING_VERIFICATION"))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
-		addBank(investor, "GB82 WEST 1234 5698 7654 33", "NWBKGB2L")
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("The IBAN checksum is invalid; please check the number"));
-		addBank(investor, "gb82west12345698765432", "nwbk-gb2l").andExpect(status().isConflict());
+		// Account numbers are 8 to 15 digits and nothing else.
+		for (String invalid : List.of("1234567", "1234567890123456", "GB82WEST12345698", "1000-9876-5432", "12345678a")) {
+			addBank(investor, invalid, "HDFC0000001")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("accountNumber"));
+		}
+		// The routing code is an IFSC code: 4 letters, a zero, then 6 letters or digits (any case).
+		for (String invalid : List.of("HDFC000001", "HDFC1000001", "HDF00001234", "HDFC-000001", "026009593", "NWBKGB2L")) {
+			addBank(investor, "200098765432", invalid)
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("routingCode"));
+		}
+		addBank(investor, VALID_ACCOUNT, "hdfc0000001").andExpect(status().isConflict());
 
-		String second = JsonPath.read(addBank(investor, "12345678", "40-47-84")
+		String second = JsonPath.read(addBank(investor, "12345678", "SBIN0000001")
 			.andExpect(jsonPath("$.primary").value(false))
 			.andReturn().getResponse().getContentAsString(), "$.id");
-		mvc.perform(put("/api/v1/users/me/bank-accounts/{id}/primary", second).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+		// Only a verified account can be primary.
+		makePrimary(investor, second).andExpect(status().isUnprocessableContent());
+		approveKyc(investor);
+		verifyBank(api.staff("FINANCE"), second).andExpect(status().isOk());
+		makePrimary(investor, second)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + second + "')].primary").value(hasItem(true)))
 			.andExpect(jsonPath("$[?(@.id == '" + first + "')].primary").value(hasItem(false)));
@@ -291,9 +524,50 @@ class UserManagementIntegrationTest {
 	}
 
 	@Test
+	void bankAccountsNeedABankStatementOrCancelledCheque() throws Exception {
+		Account investor = api.register();
+		approveKyc(investor);
+		Account finance = api.staff("FINANCE");
+
+		// No proof, or no proof type: refused.
+		var withoutProof = multipart("/api/v1/users/me/bank-accounts").file(new MockMultipartFile("account", "",
+				MediaType.APPLICATION_JSON_VALUE, """
+						{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"IN","currency":"INR",
+						 "accountNumber":"50100012345678","routingCode":"HDFC0001234"}""".getBytes(StandardCharsets.UTF_8)));
+		mvc.perform(withoutProof.param("proofType", "CANCELLED_CHEQUE").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("Upload a bank statement or a cancelled cheque for this account"));
+
+		String accountId = JsonPath.read(addBank(investor, "50100012345678", "HDFC0001234")
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.proofType").value("BANK_STATEMENT"))
+			.andReturn().getResponse().getContentAsString(), "$.id");
+
+		// The verifier opens the statement; each view is audited. Investors cannot open it through this route.
+		mvc.perform(get("/api/v1/admin/bank-accounts/{id}/proof", accountId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isForbidden());
+		byte[] proof = mvc.perform(get("/api/v1/admin/bank-accounts/{id}/proof", accountId)
+				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsByteArray();
+		assertThat(proof).isEqualTo(BankAccountUploads.STATEMENT_PDF);
+		assertThat(api.auditCount("BANK_ACCOUNT_PROOF_VIEWED", accountId)).isEqualTo(1);
+
+		// An account without proof (added before proofs were required) cannot be verified.
+		String older = JsonPath.read(addBank(investor, "50100087654321", "HDFC0001234").andReturn().getResponse()
+			.getContentAsString(), "$.id");
+		jdbc.update("UPDATE bank_accounts SET proof_type = NULL, proof_document_id = NULL WHERE id = ?::uuid", older);
+		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", older).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no bank statement or cancelled cheque")));
+		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isOk());
+	}
+
+	@Test
 	void bankVerificationRequiresApprovedKycAndFlagsSharedAccounts() throws Exception {
 		Account investor = api.register();
-		String accountId = JsonPath.read(addBank(investor, "DE89 3704 0044 0532 0130 00", "COBADEFFXXX")
+		String accountId = JsonPath.read(addBank(investor, "370400440532", "COBA0000001")
 			.andReturn().getResponse().getContentAsString(), "$.id");
 		Account finance = api.staff("FINANCE");
 
@@ -302,19 +576,97 @@ class UserManagementIntegrationTest {
 
 		approveKyc(investor);
 		Account sibling = api.register();
-		addBank(sibling, "DE89 3704 0044 0532 0130 00", "COBADEFFXXX").andExpect(status().isCreated());
+		addBank(sibling, "370400440532", "COBA0000001").andExpect(status().isCreated());
 
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.account.status").value("VERIFIED"))
 			.andExpect(jsonPath("$.otherUsersWithSameAccount").value(1));
 		assertThat(api.auditCount("BANK_ACCOUNT_VERIFIED", accountId)).isEqualTo(1);
+		assertThat(notifications(investor, "BANK_ACCOUNT_VERIFIED")).containsExactly("Your bank account is verified");
+	}
+
+	@Test
+	void verifiedAccountsCannotBeChangedSoTheInvestorAddsAnotherAndSwitchesPrimary() throws Exception {
+		Account investor = api.register();
+		approveKyc(investor);
+		Account finance = api.staff("FINANCE");
+		String old = JsonPath.read(addBank(investor, "11112222", "HDFC0000001").andReturn().getResponse().getContentAsString(), "$.id");
+		verifyBank(finance, old).andExpect(status().isOk());
+
+		// There is no way to edit a verified account's details.
+		mvc.perform(post("/api/v1/users/me/bank-accounts/{id}/change", old).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().is4xxClientError());
+
+		// Instead the investor adds a new account. It is not primary, and cannot be until it is verified.
+		String added = JsonPath.read(addBank(investor, "33334444", "ICIC0000001")
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.primary").value(false))
+			.andExpect(jsonPath("$.replacesAccountId").doesNotExist())
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		makePrimary(investor, added).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Only a verified account")));
+
+		// A rejected account is never primary either; the investor is told why.
+		String rejected = JsonPath.read(addBank(investor, "55556666", "SBIN0000001").andReturn().getResponse()
+			.getContentAsString(), "$.id");
+		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/reject", rejected).header(HttpHeaders.AUTHORIZATION, finance.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Name does not match\"}"))
+			.andExpect(status().isOk());
+		assertThat(notificationBodies(investor, "BANK_ACCOUNT_REJECTED")).singleElement().asString()
+			.contains("account ending 6666").contains("Reason: Name does not match.").doesNotContain("55556666");
+		makePrimary(investor, rejected).andExpect(status().isUnprocessableContent());
+		// The investor no longer sees it, and can add the same account again with the right details.
+		mvc.perform(get("/api/v1/users/me/bank-accounts").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$[?(@.id == '" + rejected + "')]").isEmpty())
+			.andExpect(jsonPath("$.length()").value(2));
+		String readded = JsonPath.read(addBank(investor, "55556666", "SBIN0000001").andExpect(status().isCreated())
+			.andExpect(jsonPath("$.status").value("PENDING_VERIFICATION"))
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		addBank(investor, "55556666", "SBIN0000001").andExpect(status().isConflict());
+		// Finance still sees the rejected one.
+		mvc.perform(get("/api/v1/admin/users/{id}/bank-accounts", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(jsonPath("$[?(@.account.id == '" + rejected + "')].account.status").value(hasItem("REJECTED")));
+
+		// Once verified, the investor switches primary to it; the old account stays verified and can be switched back to.
+		verifyBank(finance, added).andExpect(status().isOk()).andExpect(jsonPath("$.account.primary").value(false));
+		makePrimary(investor, added).andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.id == '" + added + "')].primary").value(hasItem(true)))
+			.andExpect(jsonPath("$[?(@.id == '" + old + "')].primary").value(hasItem(false)))
+			.andExpect(jsonPath("$[?(@.id == '" + old + "')].status").value(hasItem("VERIFIED")));
+		assertThat(api.auditCount("BANK_ACCOUNT_PRIMARY_CHANGED", added)).isEqualTo(1);
+		makePrimary(investor, old).andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.id == '" + old + "')].primary").value(hasItem(true)));
+
+		// The investor always keeps a verified account: not the primary one, and not the last verified one.
+		removeBank(investor, old).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("primary account")));
+		removeBank(investor, added).andExpect(status().isNoContent());
+		removeBank(investor, old).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("at least one verified bank account")));
+		// An account still waiting for verification can always be removed.
+		removeBank(investor, readded).andExpect(status().isNoContent());
+	}
+
+	private ResultActions removeBank(Account owner, String accountId) throws Exception {
+		return mvc.perform(delete("/api/v1/users/me/bank-accounts/{id}", accountId)
+			.header(HttpHeaders.AUTHORIZATION, owner.bearer()));
+	}
+
+	private ResultActions verifyBank(Account finance, String accountId) throws Exception {
+		return mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId)
+			.header(HttpHeaders.AUTHORIZATION, finance.bearer()));
+	}
+
+	private ResultActions makePrimary(Account owner, String accountId) throws Exception {
+		return mvc.perform(put("/api/v1/users/me/bank-accounts/{id}/primary", accountId)
+			.header(HttpHeaders.AUTHORIZATION, owner.bearer()));
 	}
 
 	@Test
 	void staffWithoutInvestorPortalCannotRegisterPayoutAccounts() throws Exception {
 		Account finance = api.staff("FINANCE");
-		addBank(finance, VALID_IBAN, "NWBKGB2L").andExpect(status().isForbidden());
+		addBank(finance, VALID_ACCOUNT, "HDFC0000001").andExpect(status().isForbidden());
 	}
 
 	// --------------------------------------------------------------------------- suspension
@@ -384,26 +736,47 @@ class UserManagementIntegrationTest {
 	}
 
 	private ResultActions addBank(Account owner, String accountNumber, String routingCode) throws Exception {
-		return mvc.perform(post("/api/v1/users/me/bank-accounts").header(HttpHeaders.AUTHORIZATION, owner.bearer())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("""
-					{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"GB","currency":"INR",
+		return mvc.perform(BankAccountUploads.addAccount("""
+					{"accountHolderName":"Someone Else","bankName":"Test Bank","country":"GB","currency":"INR",
 					 "accountNumber":"%s","routingCode":"%s"}
-					""".formatted(accountNumber, routingCode)));
+					""".formatted(accountNumber, routingCode)).header(HttpHeaders.AUTHORIZATION, owner.bearer()));
 	}
 
 	private ResultActions submitValidKyc(Account investor) throws Exception {
-		return submitKyc(investor, Map.of("identityFront", png(), "selfie", jpeg()));
+		return submitValidKyc(investor, true);
+	}
+
+	/** Submits valid KYC; first fills in the personal details it requires, unless told not to. */
+	private ResultActions submitValidKyc(Account investor, boolean completeProfileFirst) throws Exception {
+		if (completeProfileFirst) {
+			completePersonalDetails(investor);
+		}
+		return submitKyc(investor, validKycFiles());
+	}
+
+	private void completePersonalDetails(Account investor) throws Exception {
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"firstName":"Test","lastName":"Investor","phone":"%s","dateOfBirth":"1985-06-15","nationality":"IN",
+						 "address":{"line1":"12 Marine Drive","city":"Mumbai","stateRegion":"Maharashtra","postalCode":"400020",
+						 "country":"IN"}}""".formatted(mobile())))
+			.andExpect(status().isOk());
+	}
+
+	private static Map<String, MockMultipartFile> validKycFiles() {
+		return Map.of("aadhaarCard", png(), "panCard", jpeg());
 	}
 
 	private ResultActions submitKyc(Account investor, Map<String, MockMultipartFile> files) throws Exception {
-		String expiry = java.time.LocalDate.now().plusYears(5).toString();
+		return submitKyc(investor, IndianIdFixtures.aadhaar(), IndianIdFixtures.pan(), files);
+	}
+
+	private ResultActions submitKyc(Account investor, String aadhaar, String pan, Map<String, MockMultipartFile> files)
+			throws Exception {
 		MockMultipartHttpServletRequestBuilder request = multipart("/api/v1/users/me/kyc");
 		request.file(new MockMultipartFile("submission", "", MediaType.APPLICATION_JSON_VALUE, """
-				{"legalFirstName":"Test","legalLastName":"Investor","dateOfBirth":"1985-06-15","nationality":"GB",
-				 "documentType":"PASSPORT","documentNumber":"P 987-654-321","documentIssuingCountry":"GB",
-				 "documentExpiryDate":"%s"}
-				""".formatted(expiry).getBytes(StandardCharsets.UTF_8)));
+				{"aadhaarNumber":"%s","panNumber":"%s"}
+				""".formatted(aadhaar == null ? "" : aadhaar, pan == null ? "" : pan).getBytes(StandardCharsets.UTF_8)));
 		files.forEach((part, file) -> request.file(new MockMultipartFile(part, file.getOriginalFilename(),
 				file.getContentType(), getBytes(file))));
 		return mvc.perform(request.header(HttpHeaders.AUTHORIZATION, investor.bearer()));
@@ -432,9 +805,19 @@ class UserManagementIntegrationTest {
 	private static String profileBody(String firstName, String phone, String dateOfBirth) {
 		return """
 				{"firstName":"%s","lastName":"Investor",%s"dateOfBirth":%s,"nationality":"GB",
-				 "address":{"line1":"1 Dock Road","city":"London","postalCode":"E14 5AB","country":"GB"}}
+				 "address":{"line1":"1 Dock Road","city":"London","stateRegion":"Greater London","postalCode":"E14 5AB","country":"GB"}}
 				""".formatted(firstName, phone == null ? "" : "\"phone\":\"" + phone + "\",",
 				dateOfBirth == null ? "null" : "\"" + dateOfBirth + "\"");
+	}
+
+	private List<String> notifications(Account user, String type) {
+		return jdbc.queryForList("SELECT title FROM notifications WHERE user_id = ? AND type = ?", String.class,
+				user.id(), type);
+	}
+
+	private List<String> notificationBodies(Account user, String type) {
+		return jdbc.queryForList("SELECT body FROM notifications WHERE user_id = ? AND type = ?", String.class,
+				user.id(), type);
 	}
 
 }

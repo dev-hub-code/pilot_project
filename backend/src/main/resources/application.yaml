@@ -57,6 +57,21 @@ spring:
     template:
       observation-enabled: true
 
+  # SMTP for notification emails (app.notifications.email).
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+      # Refuse to send the password over an unencrypted connection when STARTTLS is on.
+      mail.smtp.starttls.required: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
   data:
     web:
       pageable:
@@ -86,6 +101,10 @@ server:
     include-message: never
 
 management:
+  health:
+    # Emails are retried or can be requested again; an SMTP outage must not mark the app unhealthy.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -140,6 +159,24 @@ app:
       register-per-ip: { requests: 5, window: 1h }
       refresh-per-ip: { requests: 60, window: 1m }
       password-change-per-user: { requests: 10, window: 15m }
+      verification-email-per-ip: { requests: 10, window: 1h }
+      verification-email-per-address: { requests: 3, window: 1h }
+      verification-code-per-ip: { requests: 30, window: 15m }
+      password-reset-per-ip: { requests: 10, window: 1h }
+      password-reset-per-address: { requests: 3, window: 1h }
+      password-reset-code-per-ip: { requests: 30, window: 15m }
+    email-verification:
+      # New accounts confirm their email address (a link is emailed) before they can sign in.
+      required: ${APP_EMAIL_VERIFICATION_REQUIRED:true}
+      link-ttl: ${APP_EMAIL_VERIFICATION_LINK_TTL:24h}
+      # Wrong 6-digit codes allowed per email; then the user asks for a new one.
+      max-code-attempts: 5
+    password-reset:
+      # A forgot-password code works this long, and stops after this many wrong guesses.
+      code-ttl: ${APP_PASSWORD_RESET_CODE_TTL:15m}
+      max-attempts: 5
+      from: ${app.notifications.email.from}
+      app-url: ${app.notifications.email.app-url}
   crypto:
     # Field-level AES-256-GCM keys, "keyId:base64Key[,keyId:base64Key...]". Generate with
     # scripts/generate-encryption-keys.sh. Keep retired keys listed so old data stays readable.
@@ -164,6 +201,10 @@ app:
   support:
     # First-response targets per priority; tickets past them without a staff reply are overdue.
     response-targets: { low: 48h, normal: 24h, high: 8h, urgent: 2h }
+    # A resolved ticket closes by itself after this; until then its customer can reopen it. Closed tickets stay closed.
+    auto-close-after: ${APP_SUPPORT_AUTO_CLOSE_AFTER:24h}
+    # How often resolved tickets are checked for closing.
+    auto-close-interval: ${APP_SUPPORT_AUTO_CLOSE_INTERVAL:15m}
   crm:
     # Public interest form: submissions accepted per client IP.
     public-form-per-ip: { requests: 5, window: 1h }
@@ -172,6 +213,8 @@ app:
     minimum-amount: ${APP_WITHDRAWAL_MINIMUM:500}
     dual-approval-threshold: ${APP_WITHDRAWAL_DUAL_APPROVAL_THRESHOLD:100000}
     max-batch-size: 500
+    # How often the job checks whether the month's scheduled withdrawals are due (the day is set by an admin).
+    schedule-interval: ${APP_WITHDRAWAL_SCHEDULE_INTERVAL:1h}
   payouts:
     # How often due monthly payouts are credited to investors' wallets.
     sweep-interval: ${APP_PAYOUT_SWEEP_INTERVAL:1h}
@@ -180,17 +223,34 @@ app:
     expiry-sweep-interval: 60s
   outbox:
     poll-interval: ${APP_OUTBOX_POLL_INTERVAL:1s}
+  office:
+    # Where investors pay for orders and collect withdrawals in cash (defaults to the invoice address).
+    address: ${APP_OFFICE_ADDRESS:${app.invoice.issuer-address}}
+    hours: ${APP_OFFICE_HOURS:Monday to Friday, 10:00 to 17:00}
+    # An order paid at the office is held this long for the investor to come in.
+    hold-window: ${APP_OFFICE_HOLD_WINDOW:3d}
   payments:
     # The accounts investors pay into are managed in the admin console (Company bank accounts).
     bank-transfer:
       # Once an investor has submitted their payment details, the order waits this long for
       # finance to verify the money (a cheque takes days to clear) instead of lapsing at checkout.
       verification-window: ${APP_BANK_PAYMENT_VERIFICATION_WINDOW:7d}
+  notifications:
+    email:
+      # Also email each notification to users who keep email notifications on (Settings).
+      enabled: ${APP_NOTIFICATION_EMAIL_ENABLED:false}
+      # Gmail only sends as the signed-in account, so the sender defaults to MAIL_USERNAME.
+      from: ${APP_NOTIFICATION_EMAIL_FROM:SeaLease <${MAIL_USERNAME:no-reply@sealease.local}>}
+      # Public address of the web app; links in emails point here.
+      app-url: ${APP_PUBLIC_URL:http://localhost:3000}
   invoice:
     # Printed on (and copied into) every invoice. Required: startup fails when unset.
     issuer-name: ${INVOICE_ISSUER_NAME:}
     issuer-address: ${INVOICE_ISSUER_ADDRESS:}
+    # The seller's GSTIN; its first two digits give the seller's state for GST (CGST + SGST vs IGST).
     issuer-tax-id: ${INVOICE_ISSUER_TAX_ID:}
+    # Only when INVOICE_ISSUER_TAX_ID is not a GSTIN: the seller's state, by name or GST code (e.g. Maharashtra).
+    issuer-state: ${INVOICE_ISSUER_STATE:}
     notes: ${INVOICE_NOTES:}
   kafka:
     create-topics: false

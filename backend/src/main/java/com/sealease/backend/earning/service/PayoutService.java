@@ -18,11 +18,11 @@ import com.sealease.backend.earning.event.PayoutPaidEvent;
 import com.sealease.backend.earning.repository.PayoutInstallmentRepository;
 import com.sealease.backend.investment.dto.HoldingLabel;
 import com.sealease.backend.investment.dto.PayoutTerms;
-import com.sealease.backend.investment.entity.ProductTerms;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.dto.LedgerAccountResponse;
 import com.sealease.backend.ledger.service.AccountType;
+import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.service.LedgerService;
 import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
@@ -35,6 +35,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,17 +59,20 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Monthly payouts to investors. Each holding gets one installment per month of its tenure, due one
- * month after the previous (in arrears from the lease start): the month's rent plus price ÷ tenure
- * of capital returned (the last installment absorbs the rounding, so the whole price comes back). Due installments are credited to the investor's wallet, each in its own
- * balanced ledger transaction (idempotent on the installment id); after the last one the holding
- * matures and its container returns to inventory.
+ * Rent to investors, credited to their wallet every day. Each holding gets one installment per calendar month of its
+ * lease (a part month at each end): the month's rent. Holdings sold before capital returns ended also get price ÷
+ * tenure of capital back. Each whole day of an installment is credited the next day, in its own balanced ledger
+ * transaction (unique per installment and day): the month's amount ÷ its days. Once a month is fully credited it is
+ * PAID and referral commission on it is paid; after the last one the holding matures and its container returns to
+ * inventory.
  */
 @Service
 public class PayoutService {
 
 	private static final String ENTITY = "PAYOUT";
 	private static final int BATCH_SIZE = 200;
+	/** Payout periods start on the 1st: each is a calendar month. */
+	private static final int CALENDAR_MONTHS = 1;
 	/** The longest range {@link #monthly} answers: three years. */
 	static final int MAX_MONTHS = 36;
 
@@ -78,13 +82,18 @@ public class PayoutService {
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final ReferralEarningService referralEarnings;
+	private final PayoutSettingsService settings;
 	private final ApplicationEventPublisher events;
 	private final TransactionTemplate transactions;
+	private final JdbcTemplate jdbc;
 	private final Clock clock;
 
 	public PayoutService(PayoutInstallmentRepository installments, HoldingService holdings, LedgerService ledger,
 			OutboxPublisher outbox, AuditService audit, ReferralEarningService referralEarnings,
-			ApplicationEventPublisher events, TransactionTemplate transactions, Clock clock) {
+			PayoutSettingsService settings, ApplicationEventPublisher events, TransactionTemplate transactions,
+			JdbcTemplate jdbc, Clock clock) {
+		this.jdbc = jdbc;
+		this.settings = settings;
 		this.installments = installments;
 		this.holdings = holdings;
 		this.ledger = ledger;
@@ -99,69 +108,101 @@ public class PayoutService {
 	/** Called by order confirmation for each new holding, in its transaction. */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void schedule(PayoutTerms terms) {
-		List<PayoutInstallment> schedule = new ArrayList<>();
-		for (int n = 1; n <= terms.tenureMonths(); n++) {
-			schedule.add(new PayoutInstallment(terms.holdingId(), terms.userId(), terms.productId(), n,
-					terms.leaseStartsOn().plusMonths(n), terms.monthlyRent(),
-					ProductTerms.capitalInstallment(terms.amount(), terms.tenureMonths(), n)));
-		}
+		// Periods are calendar months (a part month at each end), so a day's rent is the month's rent ÷ its days.
+		List<PayoutSchedule.Entry> plan = PayoutSchedule.plan(terms.leaseStartsOn(), terms.tenureMonths(),
+				CALENDAR_MONTHS, terms.monthlyRent(), terms.capitalReturned());
+		List<PayoutInstallment> schedule = plan.stream()
+			.map(e -> new PayoutInstallment(terms.holdingId(), terms.userId(), terms.productId(), e.number(), plan.size(),
+					// Fully credited when the period ends (each day is credited the day after).
+				e.periodStart(), e.periodEnd(), e.monthShare(), e.periodEnd(), e.rent(), e.capital()))
+			.toList();
 		installments.saveAll(schedule);
 		installments.flush();
 	}
 
 	/**
-	 * Pays every installment that has fallen due, each in its own transaction so one failure does not
-	 * hold back the rest. Safe to run concurrently and repeatedly.
+	 * Credits every whole day of rent not yet credited (every day before today), each installment in its own
+	 * transaction so one failure does not hold back the rest. Safe to run concurrently and repeatedly: a day is
+	 * credited once (the ledger transaction is unique per installment and day).
 	 *
-	 * @return the number of installments paid
+	 * @return the number of days credited, over all installments
 	 */
-	public int payDue() {
+	public int creditDue() {
 		LocalDate today = today();
-		int paid = 0;
+		int credited = 0;
 		List<UUID> due;
 		do {
-			due = installments.findDueIds(today, PageRequest.of(0, BATCH_SIZE));
-			int before = paid;
+			due = installments.findUncreditedIds(today, PageRequest.of(0, BATCH_SIZE));
+			int before = credited;
 			for (UUID id : due) {
-				if (Boolean.TRUE.equals(transactions.execute(status -> pay(id, today)))) {
-					paid++;
-				}
+				Integer days = transactions.execute(status -> credit(id, today));
+				credited += days == null ? 0 : days;
 			}
-			if (paid == before) {
+			if (credited == before) {
 				break;
 			}
 		}
 		while (due.size() == BATCH_SIZE);
-		return paid;
+		return credited;
 	}
 
-	private boolean pay(UUID installmentId, LocalDate today) {
+	/** Credits the installment's uncredited days before {@code today}, one ledger transaction per day. */
+	private int credit(UUID installmentId, LocalDate today) {
 		PayoutInstallment installment = installments.findByIdForUpdate(installmentId).orElse(null);
-		// Re-checked under the lock: another run may have paid it since it was selected.
-		if (installment == null || installment.getStatus() != PayoutStatus.SCHEDULED || !installment.isDueOn(today)) {
-			return false;
+		// Re-checked under the lock: another run may have credited it since it was selected.
+		if (installment == null || installment.getStatus() != PayoutStatus.SCHEDULED
+				|| !installment.getCreditedThrough().isBefore(today)) {
+			return 0;
 		}
 		HoldingLabel label = holdings.labels(List.of(installment.getHoldingId())).get(installment.getHoldingId());
-		List<Posting> postings = new ArrayList<>();
-		if (installment.rent().isPositive()) {
-			postings.add(Posting.debit(AccountType.PLATFORM_RENT_EXPENSE, null, installment.rent()));
-		}
-		if (installment.capital().isPositive()) {
-			postings.add(Posting.debit(AccountType.PLATFORM_CAPITAL_RETURNS, null, installment.capital()));
-		}
-		postings.add(Posting.credit(AccountType.INVESTOR_EARNINGS, installment.getUserId(), installment.total()));
-		UUID transactionId = ledger.post(TransactionType.INVESTOR_PAYOUT, installmentId.toString(),
-				"Payout %d of %d · %s · container %s".formatted(installment.getInstallmentNumber(), label.tenureMonths(),
-						label.productCode(), label.containerNumber()),
-				null, postings);
+		// Rent on a container paid in cash at the office is collected in cash there; otherwise it is paid by bank.
+		EarningsBalance balance = label.paidAtOffice() ? EarningsBalance.RENT_CASH : EarningsBalance.RENT_BANK;
 		Instant now = clock.instant();
-		installment.markPaid(transactionId, now);
+		int days = 0;
+		UUID transactionId = null;
+		while (installment.getStatus() == PayoutStatus.SCHEDULED && installment.getCreditedThrough().isBefore(today)) {
+			LocalDate day = installment.getCreditedThrough();
+			Money[] amounts = installment.nextDay();
+			Money rent = amounts[0];
+			Money capital = amounts[1];
+			List<Posting> postings = new ArrayList<>();
+			if (rent.isPositive()) {
+				postings.add(Posting.debit(AccountType.PLATFORM_RENT_EXPENSE, null, rent));
+			}
+			if (capital.isPositive()) {
+				postings.add(Posting.debit(AccountType.PLATFORM_CAPITAL_RETURNS, null, capital));
+			}
+			Money total = rent.plus(capital);
+			if (total.isPositive()) {
+				postings.add(Posting.credit(balance.account(), installment.getUserId(), total));
+				transactionId = ledger.post(TransactionType.INVESTOR_PAYOUT, installmentId + ":" + day,
+						"Rent for %s · %s · container %s".formatted(day, label.productCode(), label.containerNumber()),
+						null, postings);
+				jdbc.update("""
+						INSERT INTO rent_credits (id, installment_id, holding_id, user_id, day, rent_amount, capital_amount,
+						                          currency, ledger_transaction_id, created_at)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						""", UUID.randomUUID(), installmentId, installment.getHoldingId(), installment.getUserId(), day,
+						rent.amount(), capital.amount(), total.currency().getCurrencyCode(), transactionId,
+						java.sql.Timestamp.from(now));
+			}
+			installment.creditDay(rent, capital, transactionId, now);
+			days++;
+		}
 		installments.flush();
+		if (installment.getStatus() == PayoutStatus.PAID) {
+			completed(installment, label, now);
+		}
+		return days;
+	}
 
+	/** A period fully credited: recorded, announced, and referral commission on it paid; the last one matures the holding. */
+	private void completed(PayoutInstallment installment, HoldingLabel label, Instant now) {
+		UUID installmentId = installment.getId();
 		audit.record(AuditRecord.of(null, AuditAction.PAYOUT_PAID, ENTITY, installmentId)
 			.withNewValue(Map.of("holdingId", installment.getHoldingId().toString(),
 					"installment", installment.getInstallmentNumber(), "rent", installment.rent().toString(),
-					"capital", installment.capital().toString(), "ledgerTransactionId", transactionId.toString())));
+					"capital", installment.capital().toString(), "days", installment.days())));
 		outbox.publish(DomainEvent.of(KafkaTopics.EARNING_CREATED, "PayoutPaid", ENTITY, installmentId,
 				Map.of("installmentId", installmentId.toString(), "userId", installment.getUserId().toString(),
 						"holdingId", installment.getHoldingId().toString(),
@@ -170,19 +211,26 @@ public class PayoutService {
 						"capital", installment.capital().amount().toPlainString(),
 						"currency", installment.rent().currency().getCurrencyCode())));
 		events.publishEvent(new PayoutPaidEvent(installmentId, installment.getUserId(), installment.getProductId(),
-				label.productCode(), installment.getInstallmentNumber(), label.amount()));
+				label.productCode(), installment.getInstallmentNumber(), label.amount(), installment.getMonthShare()));
 
 		if (!installments.existsByHoldingIdAndStatus(installment.getHoldingId(), PayoutStatus.SCHEDULED)) {
 			holdings.mature(installment.getHoldingId(), now);
 		}
-		return true;
 	}
 
 	// ----------------------------------------------------------------------------- investor
 
 	@Transactional(readOnly = true)
 	public EarningsSummary summary(UUID userId) {
-		List<MoneyResponse> balances = ledger.investorAccounts(userId).stream().map(LedgerAccountResponse::balance).toList();
+		// One account per earnings balance and currency; the wallet total adds them up per currency.
+		List<LedgerAccountResponse> accounts = ledger.investorAccounts(userId);
+		List<EarningsSummary.WalletBalance> wallet = accounts.stream()
+			.map(a -> new EarningsSummary.WalletBalance(EarningsBalance.of(a.accountType()), a.balance()))
+			.sorted(java.util.Comparator.comparing(EarningsSummary.WalletBalance::balance))
+			.toList();
+		Map<String, Money> totals = new TreeMap<>();
+		accounts.forEach(a -> totals.merge(a.balance().currency(), Money.of(a.balance().amount(), a.balance().currency()), Money::plus));
+		List<MoneyResponse> balances = totals.values().stream().map(MoneyResponse::from).toList();
 		List<PayoutInstallment> all = installments.findByUserIdOrderByDueOnAscInstallmentNumberAsc(userId);
 		Map<UUID, HoldingLabel> labels = holdings.labels(all.stream().map(PayoutInstallment::getHoldingId).distinct().toList());
 
@@ -193,7 +241,10 @@ public class PayoutService {
 			byHolding.computeIfAbsent(p.getHoldingId(), id -> new ArrayList<>()).add(p);
 			if (p.getStatus() == PayoutStatus.PAID) {
 				rent.merge(p.rent().currency().getCurrencyCode(), p.rent(), Money::plus);
-				capital.merge(p.capital().currency().getCurrencyCode(), p.capital(), Money::plus);
+				// Only holdings sold before capital returns ended have any.
+				if (p.capital().isPositive()) {
+					capital.merge(p.capital().currency().getCurrencyCode(), p.capital(), Money::plus);
+				}
 			}
 		}
 
@@ -220,8 +271,8 @@ public class PayoutService {
 					MoneyResponse.from(received), following == null ? null : following.getDueOn(),
 					following == null ? null : MoneyResponse.from(following.total()), lastPaidAt));
 		});
-		return new EarningsSummary(balances, responses(rent), responses(capital), referralEarnings.totalEarned(userId),
-				next, perHolding);
+		return new EarningsSummary(balances, wallet, responses(rent), responses(capital), referralEarnings.totalEarned(userId),
+				next, perHolding, settings.payoutDay());
 	}
 
 	/** The investor's payouts, paid and scheduled. */

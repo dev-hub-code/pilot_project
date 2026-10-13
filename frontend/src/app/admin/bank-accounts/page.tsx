@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import { rejectBankAccountAction, verifyBankAccountAction } from "@/features/admin/actions";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
+import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AdminBankAccount } from "@/types/user";
@@ -28,7 +29,7 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
         <EmptyState title="No bank accounts awaiting verification" />
       ) : (
         <ul className="space-y-4">
-          {queue.content.map(({ userId, account, otherUsersWithSameAccount }) => (
+          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces }) => (
             <li key={account.id} className="space-y-4 border border-border bg-surface p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
                 <div>
@@ -38,10 +39,33 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                   <p className="text-muted">
                     {account.accountHolderName} · {account.country} · added {formatDateTime(account.createdAt)}
                   </p>
-                  <Link href={`/admin/users/${userId}`} className="text-brand hover:underline">View account owner</Link>
+                  <Link href={`/admin/users/${userId}?from=bank-verification`} className="text-brand hover:underline">View account owner</Link>
                 </div>
-                <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
+                <div className="flex items-center gap-2">
+                  {account.replacesAccountId && <StatusBadge tone="warning">Change of account</StatusBadge>}
+                  <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
+                </div>
               </div>
+              {replaces && (
+                <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
+                  Replaces <span className="font-medium">{replaces.bankName}</span>{" "}
+                  <span className="font-mono">{replaces.accountNumberMasked}</span> ({replaces.accountHolderName},{" "}
+                  {humanize(replaces.status).toLowerCase()}{replaces.primary ? ", primary" : ""}). Verifying retires that
+                  account and moves payouts to this one; rejecting leaves it in use.
+                </p>
+              )}
+              <p className="text-sm">
+                {account.proofType ? (
+                  <a href={`/admin/bank-accounts/${account.id}/proof`} target="_blank" rel="noopener noreferrer"
+                    className="text-brand hover:underline">
+                    Open {BANK_PROOF_LABEL[account.proofType].toLowerCase()} (each view is recorded)
+                  </a>
+                ) : (
+                  <span className="font-medium text-rose-600 dark:text-rose-400">
+                    No bank statement or cancelled cheque: reject so the investor can add the account again with one.
+                  </span>
+                )}
+              </p>
               {otherUsersWithSameAccount > 0 && (
                 <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
                   Warning: also registered by {otherUsersWithSameAccount} other user(s).
@@ -50,7 +74,9 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
               {userId !== session.userId && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
-                    confirm={`Verify ${account.bankName} ${account.accountNumberMasked}?`} />
+                    confirm={replaces
+                      ? `Verify ${account.bankName} ${account.accountNumberMasked}? It replaces ${replaces.bankName} ${replaces.accountNumberMasked}, which is retired.`
+                      : `Verify ${account.bankName} ${account.accountNumberMasked}?`} />
                   <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
                     submitLabel="Reject" />
                 </div>

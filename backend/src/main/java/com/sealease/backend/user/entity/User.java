@@ -80,6 +80,16 @@ public class User extends BaseEntity {
 		this.passwordChangedAt = now;
 	}
 
+	public void markEmailVerified(Instant now) {
+		if (emailVerifiedAt == null) {
+			emailVerifiedAt = now;
+		}
+	}
+
+	public boolean isEmailVerified() {
+		return emailVerifiedAt != null;
+	}
+
 	public boolean isLockedAt(Instant now) {
 		return lockedUntil != null && now.isBefore(lockedUntil);
 	}
@@ -111,11 +121,6 @@ public class User extends BaseEntity {
 		this.statusChangedAt = now;
 	}
 
-	public void rename(String firstName, String lastName) {
-		this.firstName = firstName;
-		this.lastName = lastName;
-	}
-
 	public void changePasswordHash(String newHash, Instant now) {
 		this.passwordHash = newHash;
 		this.passwordChangedAt = now;
@@ -124,6 +129,17 @@ public class User extends BaseEntity {
 	}
 
 	/** An administrator issued a temporary password: it must be replaced at sign-in, before it expires. */
+	/**
+	 * A new password chosen through "forgot password": it replaces any temporary one and lifts a lockout. Receiving
+	 * the code at the account's address also proves the address.
+	 */
+	public void resetPassword(String newHash, Instant now) {
+		changePasswordHash(newHash, now);
+		failedLoginAttempts = 0;
+		lockedUntil = null;
+		markEmailVerified(now);
+	}
+
 	public void issueTemporaryPassword(String hash, Instant expiresAt, Instant now) {
 		this.passwordHash = hash;
 		this.passwordChangedAt = now;

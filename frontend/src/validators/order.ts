@@ -7,6 +7,8 @@ const amount = z.string().trim().regex(/^\d{1,13}(\.\d{1,2})?$/, "Enter an amoun
 export const cartItemSchema = z.object({
   quantity: z.coerce.number({ message: "Enter how many containers" }).int("Enter a whole number of containers")
     .min(1, "Buy at least one container").max(50, "At most 50 containers per plan in one order"),
+  /** The lease in whole years, within the plan's limits (checked by the backend); omitted keeps the current one. */
+  tenureYears: z.coerce.number({ message: "Choose the lease" }).int("Choose whole years").min(1).max(30).optional(),
 });
 
 export const idempotencyKeySchema = z.string().regex(/^[A-Za-z0-9_-]{8,100}$/);

@@ -9,6 +9,7 @@ import com.sealease.backend.auth.dto.ChangePasswordRequest;
 import com.sealease.backend.auth.dto.CurrentUserResponse;
 import com.sealease.backend.auth.dto.LoginRequest;
 import com.sealease.backend.auth.dto.RegisterRequest;
+import com.sealease.backend.auth.dto.RegistrationResponse;
 import com.sealease.backend.auth.entity.SessionRevocationReason;
 import com.sealease.backend.auth.jwt.AccessTokenService;
 import com.sealease.backend.common.exception.BusinessException;
@@ -47,6 +48,7 @@ public class AuthService {
 	private static final String ENTITY_SESSION = "AUTH_SESSION";
 
 	private final UserAccountService accounts;
+	private final EmailVerificationService emailVerification;
 	private final UserRoleService userRoles;
 	private final ReferralService referrals;
 	private final SessionService sessions;
@@ -61,10 +63,11 @@ public class AuthService {
 	private final FixedWindowRateLimiter refreshPerIp;
 	private final FixedWindowRateLimiter passwordChangePerUser;
 
-	public AuthService(UserAccountService accounts, UserRoleService userRoles, ReferralService referrals,
-			SessionService sessions, AccessTokenService accessTokens, AuditService audit, AuthProperties properties,
-			PlatformTransactionManager transactionManager, Clock clock) {
+	public AuthService(UserAccountService accounts, EmailVerificationService emailVerification, UserRoleService userRoles,
+			ReferralService referrals, SessionService sessions, AccessTokenService accessTokens, AuditService audit,
+			AuthProperties properties, PlatformTransactionManager transactionManager, Clock clock) {
 		this.accounts = accounts;
+		this.emailVerification = emailVerification;
 		this.userRoles = userRoles;
 		this.referrals = referrals;
 		this.sessions = sessions;
@@ -81,17 +84,40 @@ public class AuthService {
 		this.passwordChangePerUser = limiter(limits.passwordChangePerUser(), clock);
 	}
 
-	public AuthTokensResponse register(RegisterRequest request, ClientInfo client) {
+	/**
+	 * Creates an investor account. When email verification is required the user is emailed a link and
+	 * signed in only after following it ({@link RegistrationResponse}); otherwise they are signed in at once.
+	 *
+	 * @return {@link AuthTokensResponse} or {@link RegistrationResponse}
+	 */
+	public Object register(RegisterRequest request, ClientInfo client) {
 		registerPerIp.acquire(keyOf(client));
+		boolean verify = emailVerification.isRequired();
 		return tx.execute(status -> {
 			UserAccount account = accounts.register(request.email(), request.password(), request.firstName(),
-					request.lastName());
+					request.lastName(), request.phone(), !verify);
 			userRoles.grantSystemRole(account.id(), properties.defaultRole());
 			if (request.referralCode() != null && !request.referralCode().isBlank()) {
 				referrals.link(account.id(), request.referralCode());
 			}
+			if (verify) {
+				emailVerification.sendLink(account);
+				return new RegistrationResponse(true, account.email());
+			}
 			return openSession(account.id(), client);
 		});
+	}
+
+	public void verifyEmail(String token) {
+		emailVerification.verify(token);
+	}
+
+	public void verifyEmailCode(String email, String code, ClientInfo client) {
+		emailVerification.verifyCode(email, code, client);
+	}
+
+	public void resendVerificationEmail(String email, ClientInfo client) {
+		emailVerification.resend(email, client);
 	}
 
 	public AuthTokensResponse login(LoginRequest request, ClientInfo client) {
@@ -112,6 +138,8 @@ public class AuthService {
 					"Account temporarily locked after repeated failed sign-in attempts; try again later");
 			case CredentialVerification.Inactive ignored ->
 				throw new BusinessException(ErrorCode.ACCOUNT_DISABLED, "This account is not active");
+			case CredentialVerification.EmailNotVerified ignored -> throw new BusinessException(
+					ErrorCode.EMAIL_NOT_VERIFIED, "Confirm your email address first; we sent you a link when you signed up");
 			case CredentialVerification.TemporaryPasswordExpired ignored ->
 				throw new BusinessException(ErrorCode.TEMPORARY_PASSWORD_EXPIRED,
 						"Your temporary password has expired; ask an administrator for a new one");

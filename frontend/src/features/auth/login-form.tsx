@@ -13,7 +13,22 @@ export function LoginForm({ next }: { next?: string }) {
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
-      {state.error && <Alert>{state.error}</Alert>}
+      {state.error && (
+        <Alert>
+          {state.error}
+          {state.code === "EMAIL_NOT_VERIFIED" && (
+            <>
+              {" "}
+              <Link
+                href={`/verify-email?email=${encodeURIComponent(state.values?.email ?? "")}`}
+                className="font-medium underline underline-offset-4"
+              >
+                Verify now
+              </Link>
+            </>
+          )}
+        </Alert>
+      )}
       {next && <input type="hidden" name="next" value={next} />}
       <TextField
         label="Email"
@@ -32,6 +47,11 @@ export function LoginForm({ next }: { next?: string }) {
         required
         error={state.fieldErrors?.password}
       />
+      <p className="-mt-2 text-right text-sm">
+        <Link href="/forgot-password" className="text-muted underline underline-offset-4 hover:text-foreground">
+          Forgot password?
+        </Link>
+      </p>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </Button>

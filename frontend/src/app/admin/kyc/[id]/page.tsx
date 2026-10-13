@@ -10,7 +10,8 @@ import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { KycReviewDetail } from "@/types/user";
-import { formatDate, formatDateTime, humanize } from "@/utils/format";
+import { formatAadhaar, KYC_DOCUMENT_LABEL, kycNumbers } from "@/features/profile/kyc-labels";
+import { formatDate, formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "KYC review" };
 
@@ -43,29 +44,18 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card title="Evidence" description="Each document you open is recorded in the audit log.">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {s.documents.map((doc) => {
-                const href = `/admin/kyc/${s.id}/documents/${doc.id}`;
-                return (
-                  <figure key={doc.id} className="space-y-2">
-                    <figcaption className="text-sm font-medium">{humanize(doc.purpose.replace("KYC_", ""))}</figcaption>
-                    <a href={href} target="_blank" rel="noopener noreferrer"
-                      className="block border border-border bg-background p-3 text-sm text-brand hover:underline">
-                      Open document in a new tab
-                    </a>
-                  </figure>
-                );
-              })}
-            </div>
-          </Card>
-
           <Card title="Submitted details">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <Item label="Document">{humanize(s.documentType)} {s.documentNumberMasked}</Item>
-              <Item label="Issued by">{s.documentIssuingCountry}</Item>
-              <Item label="Expires">{formatDate(s.documentExpiryDate)}</Item>
-              <Item label="Date of birth">{formatDate(s.dateOfBirth)}</Item>
+              {s.aadhaarNumber && <Item label="Aadhaar number"><span className="font-mono">{formatAadhaar(s.aadhaarNumber)}</span></Item>}
+              {s.panNumber && <Item label="PAN"><span className="font-mono">{s.panNumber}</span></Item>}
+              {s.documentType && (
+                <>
+                  <Item label="Document">{kycNumbers(s)}</Item>
+                  <Item label="Issued by">{s.documentIssuingCountry}</Item>
+                  <Item label="Expires">{formatDate(s.documentExpiryDate)}</Item>
+                </>
+              )}
+              <Item label="Date of birth">{formatDayMonthYear(s.dateOfBirth)}</Item>
               <Item label="Nationality">{s.nationality}</Item>
               <Item label="Submitted">{formatDateTime(s.submittedAt)}</Item>
               <Item label="Account">
@@ -81,6 +71,23 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
                 <Notice tone="warning">The legal name differs from the account name. Check the document carefully.</Notice>
               </div>
             )}
+          </Card>
+
+          <Card title="Evidence" description="Each document you open is recorded in the audit log.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {s.documents.map((doc) => {
+                const href = `/admin/kyc/${s.id}/documents/${doc.id}`;
+                return (
+                  <figure key={doc.id} className="space-y-2">
+                    <figcaption className="text-sm font-medium">{KYC_DOCUMENT_LABEL[doc.purpose]}</figcaption>
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      className="block border border-border bg-background p-3 text-sm text-brand hover:underline">
+                      Open document in a new tab
+                    </a>
+                  </figure>
+                );
+              })}
+            </div>
           </Card>
         </div>
 

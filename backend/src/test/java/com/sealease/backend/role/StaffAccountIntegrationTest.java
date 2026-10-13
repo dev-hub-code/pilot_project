@@ -9,7 +9,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -21,6 +25,8 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -28,11 +34,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Staff accounts created by administrators, with a temporary password that must be replaced first. */
+/**
+ * Employee accounts created by administrators, with a temporary password that must be replaced first and that
+ * is emailed to the employee.
+ */
 @IntegrationTest
 class StaffAccountIntegrationTest {
 
-	private static final String NEW_PASSWORD = "a brand new staff passphrase";
+	@MockitoBean
+	private JavaMailSender mail;
+
+	private static final String NEW_PASSWORD = "Staff-New-Pass-1";
 
 	@Autowired
 	private MockMvc mvc;
@@ -57,9 +69,15 @@ class StaffAccountIntegrationTest {
 			.andExpect(jsonPath("$.roles[0]").value("SUPPORT"))
 			.andExpect(jsonPath("$.temporaryPassword").value(matchesPattern("([2-9A-HJ-NP-Z]{4}-){3}[2-9A-HJ-NP-Z]{4}")))
 			.andExpect(jsonPath("$.expiresAt").isNotEmpty())
+			.andExpect(jsonPath("$.emailed").value(true))
 			.andReturn().getResponse().getContentAsString(), "$.temporaryPassword");
 		UUID userId = api.userIdByEmail(email);
 		assertThat(api.auditCount("STAFF_ACCOUNT_CREATED", userId)).isEqualTo(1);
+
+		// The employee is emailed how to sign in.
+		SimpleMailMessage sent = lastEmailTo(email);
+		assertThat(sent.getSubject()).isEqualTo("Your SeaLease employee account");
+		assertThat(sent.getText()).contains("Email: " + email, "Temporary password: " + temporary, "/login", "SUPPORT");
 
 		String body = login(email, temporary).getResponse().getContentAsString();
 		String access = JsonPath.read(body, "$.accessToken");
@@ -112,6 +130,9 @@ class StaffAccountIntegrationTest {
 		String second = JsonPath.read(reset(admin, userId).andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString(), "$.temporaryPassword");
 		assertThat(second).isNotEqualTo(first);
+		SimpleMailMessage resetEmail = lastEmailTo(email);
+		assertThat(resetEmail.getSubject()).isEqualTo("Your new SeaLease temporary password");
+		assertThat(resetEmail.getText()).contains("Temporary password: " + second);
 		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + session))
 			.andExpect(status().isUnauthorized());
 		assertThat(api.loginResult(email, NEW_PASSWORD).getResponse().getStatus()).isEqualTo(401);
@@ -119,7 +140,7 @@ class StaffAccountIntegrationTest {
 		assertThat(api.auditCount("TEMPORARY_PASSWORD_ISSUED", userId)).isEqualTo(1);
 
 		reset(admin, api.register().id()).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("only issued to staff")));
+			.andExpect(jsonPath("$.message").value(containsString("only issued to employee")));
 		reset(admin, api.userIdByEmail(TestApi.ADMIN_EMAIL)).andExpect(status().isForbidden());
 	}
 
@@ -132,7 +153,7 @@ class StaffAccountIntegrationTest {
 		mvc.perform(put("/api/v1/admin/users/{id}/roles", investor.id()).header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"roles\":[\"INVESTOR\",\"FINANCE\"]}"))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("either an investor or staff")));
+			.andExpect(jsonPath("$.message").value(containsString("either an investor or an employee")));
 
 		mvc.perform(post("/api/v1/admin/roles").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("""
@@ -182,6 +203,12 @@ class StaffAccountIntegrationTest {
 		return mvc.perform(post("/api/v1/auth/password").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"currentPassword\":\"" + current + "\",\"newPassword\":\"" + next + "\"}"));
+	}
+
+	private SimpleMailMessage lastEmailTo(String address) {
+		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(mail, atLeastOnce()).send(sent.capture());
+		return sent.getAllValues().stream().filter(m -> java.util.List.of(m.getTo()).contains(address)).toList().getLast();
 	}
 
 }

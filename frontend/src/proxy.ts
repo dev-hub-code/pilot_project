@@ -15,7 +15,9 @@ const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals"
 const GUEST_ONLY = ["/login", "/register"];
 /** Route handlers that send their own, stricter CSP (sandboxed file downloads). */
 const OWN_CSP = [
-  /^\/(?:admin\/kyc|admin\/containers|marketplace)\/[^/]+\/documents\/[^/]+$/,
+  /^\/(?:admin\/kyc|marketplace)\/[^/]+\/documents\/[^/]+$/,
+  /^\/admin\/products\/[^/]+\/photos\/[^/]+$/,
+  /^\/admin\/bank-accounts\/[^/]+\/proof$/,
   /^\/admin\/withdrawals\/batches\/[^/]+\/file$/,
   /^\/(?:admin\/)?support\/[^/]+\/attachments\/[^/]+$/,
   /^\/(?:admin\/reports|statements)\/download$/,

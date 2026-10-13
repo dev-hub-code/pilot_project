@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,6 +32,14 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, UU
 			  and t.status <> com.sealease.backend.helpdesk.entity.TicketStatus.CLOSED
 			""")
 	long countOverdue(@Param("now") Instant now);
+
+	/** Resolved tickets resolved at or before {@code cutoff}: due to close by themselves. */
+	@Query("""
+			select t.id from SupportTicket t
+			where t.status = com.sealease.backend.helpdesk.entity.TicketStatus.RESOLVED and t.resolvedAt <= :cutoff
+			order by t.resolvedAt
+			""")
+	List<UUID> findResolvedBefore(@Param("cutoff") Instant cutoff);
 
 	@Query(value = "select nextval('ticket_number_seq')", nativeQuery = true)
 	long nextNumber();
