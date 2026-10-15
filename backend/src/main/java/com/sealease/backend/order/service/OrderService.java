@@ -385,6 +385,12 @@ public class OrderService {
 		return lines.stream().map(OrderItem::amount).reduce(Money::plus).orElseThrow();
 	}
 
+	/** The order with this whole order number ("ORD-…"), any case. */
+	@Transactional(readOnly = true)
+	public Optional<UUID> idByNumber(String orderNumber) {
+		return orderNumber == null || orderNumber.isBlank() ? Optional.empty() : orders.findIdByOrderNumber(orderNumber.strip());
+	}
+
 	@Transactional(readOnly = true)
 	public Map<UUID, String> orderNumbers(Collection<UUID> orderIds) {
 		return orders.findAllById(orderIds).stream()
@@ -458,10 +464,19 @@ public class OrderService {
 	private static Specification<InvestmentOrder> matching(OrderSearchCriteria c) {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
-			if (c.q() != null && !c.q().isBlank()) {
+			if (c.exact()) {
+				// Without browsing: only a whole order number, or the orders of the investor the search names.
+				if (c.q() == null || c.q().isBlank()) {
+					return cb.disjunction();
+				}
+				Predicate number = cb.equal(cb.lower(root.get("orderNumber")), c.q().strip().toLowerCase(Locale.ROOT));
+				predicates.add(c.qInvestorId() == null ? number : cb.or(number, cb.equal(root.get("userId"), c.qInvestorId())));
+			}
+			else if (c.q() != null && !c.q().isBlank()) {
 				String like = "%" + c.q().strip().toLowerCase(Locale.ROOT)
 					.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-				predicates.add(cb.like(cb.lower(root.get("orderNumber")), like, '\\'));
+				Predicate number = cb.like(cb.lower(root.get("orderNumber")), like, '\\');
+				predicates.add(c.qInvestorId() == null ? number : cb.or(number, cb.equal(root.get("userId"), c.qInvestorId())));
 			}
 			if (c.status() != null) {
 				predicates.add(cb.equal(root.get("status"), c.status()));

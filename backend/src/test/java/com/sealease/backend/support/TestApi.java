@@ -73,6 +73,30 @@ public final class TestApi {
 			.andReturn();
 	}
 
+	/**
+	 * Assigns a review to the reviewer, as they must before deciding it: {@code queue} is "kyc" or "bank-accounts".
+	 * Not asserted, so the decision that follows is what a test checks.
+	 */
+	public void assignReview(String queue, Object id, Account reviewer) throws Exception {
+		mvc.perform(post("/api/v1/admin/{queue}/{id}/assign", queue, id).header(HttpHeaders.AUTHORIZATION, reviewer.bearer()));
+	}
+
+	/** Takes the task of assigning a paid investment's container, as finance must before assigning it. Not asserted. */
+	public void takeContainerTask(Object holdingId, Account actor) throws Exception {
+		mvc.perform(post("/api/v1/admin/container-assignments/{id}/take", holdingId)
+			.header(HttpHeaders.AUTHORIZATION, actor.bearer()));
+	}
+
+	/** Takes the task of confirming or rejecting a payment, as finance must before deciding it. Not asserted. */
+	public void takePayment(Object paymentId, Account actor) throws Exception {
+		mvc.perform(post("/api/v1/admin/payments/{id}/take", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer()));
+	}
+
+	/** Takes a finance task (a withdrawal to pay), as finance must before marking it. Not asserted. */
+	public void takeFinanceTask(Object withdrawalId, Account actor) throws Exception {
+		mvc.perform(post("/api/v1/admin/finance-tasks/{id}/take", withdrawalId).header(HttpHeaders.AUTHORIZATION, actor.bearer()));
+	}
+
 	public Account admin() throws Exception {
 		return login(ADMIN_EMAIL, ADMIN_PASSWORD);
 	}

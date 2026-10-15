@@ -80,6 +80,12 @@ export function RegisterForm({ referralCode }: { referralCode?: string }) {
         autoComplete="off"
         autoCapitalize="characters"
         maxLength={8}
+        onInput={(event) => {
+          const input = event.currentTarget;
+          const caret = input.selectionStart;
+          input.value = input.value.toUpperCase();
+          input.setSelectionRange(caret, caret);
+        }}
         defaultValue={state.values?.referralCode ?? referralCode}
         error={errors.referralCode}
       />

@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ConfirmTransferForm, RefundForm, RejectPaymentForm } from "@/features/admin/payment-forms";
+import { RefundForm } from "@/features/admin/payment-forms";
+import { PaymentDecision } from "@/features/admin/payment-decision";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
@@ -135,10 +136,8 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 {(p.method === "BANK_TRANSFER" || p.method === "OFFICE_CASH")
                   && (p.status === "PENDING" || (p.status === "CANCELLED" && !livePayment))
                   && can(Permission.PAYMENT_CONFIRM) && !ownOrder && (
-                  <div className="grid gap-6 border-t border-border pt-4 lg:grid-cols-2">
-                    <ConfirmTransferForm paymentId={p.id} amountDue={p.amount.amount} currency={p.amount.currency}
-                      defaultReference={p.deposit?.reference} officeCash={p.method === "OFFICE_CASH"} />
-                    {p.status === "PENDING" && <RejectPaymentForm paymentId={p.id} />}
+                  <div className="border-t border-border pt-4">
+                    <PaymentDecision payment={p} viewerId={session.userId} />
                   </div>
                 )}
                 {p.status === "REFUND_REQUIRED" && can(Permission.FINANCE_ADJUST) && !ownOrder && <RefundForm paymentId={p.id} />}

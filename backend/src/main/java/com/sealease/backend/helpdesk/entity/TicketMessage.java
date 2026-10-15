@@ -23,7 +23,8 @@ public class TicketMessage {
 	@Column(name = "ticket_id", nullable = false)
 	private UUID ticketId;
 
-	@Column(name = "author_id", nullable = false)
+	/** Null when the system wrote it. */
+	@Column(name = "author_id")
 	private UUID authorId;
 
 	@Column(name = "from_staff", nullable = false)

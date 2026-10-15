@@ -80,6 +80,13 @@ public class Holding extends BaseEntity {
 	@Column(name = "assigned_by")
 	private UUID assignedBy;
 
+	/** The finance member who took the task of assigning the container; only they may assign it. */
+	@Column(name = "task_assignee_id")
+	private UUID taskAssigneeId;
+
+	@Column(name = "task_assigned_at")
+	private Instant taskAssignedAt;
+
 	protected Holding() {
 	}
 
@@ -145,6 +152,26 @@ public class Holding extends BaseEntity {
 	/** The capital paid back over the whole tenure: the price under earlier terms, otherwise nothing. */
 	public Money capitalReturned() {
 		return ProductTerms.capitalReturned(amount(), monthlyCapitalReturnPercent);
+	}
+
+	/** A finance member takes the task of assigning this investment's container. */
+	public void takeTask(UUID assignee, Instant now) {
+		this.taskAssigneeId = assignee;
+		this.taskAssignedAt = now;
+	}
+
+	/** The task goes back to the queue, for another finance member to take. */
+	public void releaseTask() {
+		this.taskAssigneeId = null;
+		this.taskAssignedAt = null;
+	}
+
+	public UUID getTaskAssigneeId() {
+		return taskAssigneeId;
+	}
+
+	public Instant getTaskAssignedAt() {
+		return taskAssignedAt;
 	}
 
 	public UUID getUserId() {

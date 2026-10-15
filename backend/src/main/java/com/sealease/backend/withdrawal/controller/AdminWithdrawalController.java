@@ -2,6 +2,7 @@ package com.sealease.backend.withdrawal.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.withdrawal.dto.BatchDetail;
 import com.sealease.backend.withdrawal.dto.BatchFileResponse;
 import com.sealease.backend.withdrawal.dto.BatchResponse;
@@ -23,6 +24,7 @@ import com.sealease.backend.withdrawal.service.WithdrawalRunService;
 import com.sealease.backend.withdrawal.service.WithdrawalService;
 import com.sealease.backend.withdrawal.service.WithdrawalSettingsService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -57,9 +59,11 @@ public class AdminWithdrawalController {
 	private final WithdrawalRunService runs;
 	private final ReferralPayoutModeService referralModes;
 	private final WithdrawalSettingsService settings;
+	private final UserAccountService accounts;
 
 	public AdminWithdrawalController(WithdrawalService withdrawals, PayoutBatchService batches, WithdrawalRunService runs,
-			ReferralPayoutModeService referralModes, WithdrawalSettingsService settings) {
+			ReferralPayoutModeService referralModes, WithdrawalSettingsService settings, UserAccountService accounts) {
+		this.accounts = accounts;
 		this.withdrawals = withdrawals;
 		this.batches = batches;
 		this.runs = runs;
@@ -73,8 +77,11 @@ public class AdminWithdrawalController {
 	@PreAuthorize("hasAuthority('WITHDRAWAL_VIEW')")
 	public PageResponse<WithdrawalResponse> search(@RequestParam(required = false) WithdrawalStatus status,
 			@RequestParam(required = false) String currency, @RequestParam(required = false) UUID userId,
+			@RequestParam(required = false) @Size(max = 100) String q,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(withdrawals.search(new WithdrawalSearchCriteria(status, currency, userId), pageable));
+		// A search: a whole reference, or an investor's readable ID or email.
+		return PageResponse.from(withdrawals.search(new WithdrawalSearchCriteria(status, currency, userId, q,
+				accounts.findIdExactly(q).orElse(null)), pageable));
 	}
 
 	@GetMapping("/api/v1/admin/withdrawals/{withdrawalId}")
@@ -170,9 +177,9 @@ public class AdminWithdrawalController {
 		return settings.get();
 	}
 
-	/** Applies from the next withdrawal run. */
+	/** Applies from the next withdrawal run. Set by whoever generates the runs (admins), or system settings. */
 	@PutMapping("/api/v1/admin/settings/withdrawals")
-	@PreAuthorize("hasAuthority('SYSTEM_SETTINGS_MANAGE')")
+	@PreAuthorize("hasAnyAuthority('SYSTEM_SETTINGS_MANAGE', 'WITHDRAWAL_PROCESS')")
 	public WithdrawalSettingsResponse updateSettings(AuthenticatedUser admin,
 			@Valid @RequestBody WithdrawalSettingsRequest request) {
 		return settings.update(admin.userId(), request.minimumAmount());

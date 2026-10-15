@@ -49,6 +49,10 @@ public class SupportTicket extends BaseEntity {
 	@Column(name = "assignee_id")
 	private UUID assigneeId;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "team", nullable = false, length = 20)
+	private SupportTeam team = SupportTeam.SUPPORT;
+
 	@Column(name = "first_response_due_at", nullable = false)
 	private Instant firstResponseDueAt;
 
@@ -123,6 +127,16 @@ public class SupportTicket extends BaseEntity {
 
 	public void assignTo(UUID assigneeId) {
 		this.assigneeId = assigneeId;
+	}
+
+	/** Hands the ticket to another team, unassigned, for one of its members to take. */
+	public void handTo(SupportTeam team) {
+		this.team = team;
+		this.assigneeId = null;
+	}
+
+	public SupportTeam getTeam() {
+		return team;
 	}
 
 	public boolean isOverdueAt(Instant now) {

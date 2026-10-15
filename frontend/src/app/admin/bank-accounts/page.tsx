@@ -5,8 +5,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
-import { rejectBankAccountAction, verifyBankAccountAction } from "@/features/admin/actions";
+import {
+  assignBankAccountAction, rejectBankAccountAction, unassignBankAccountAction, verifyBankAccountAction,
+} from "@/features/admin/actions";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
+import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
@@ -24,12 +27,12 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
   return (
     <div className="space-y-6">
       <PageHeader title="Bank accounts to verify"
-        description="Compare the holder name with the verified identity before approving payouts." />
+        description="Assign an account to yourself, then compare the holder name with the verified identity before approving payouts." />
       {queue.content.length === 0 ? (
         <EmptyState title="No bank accounts awaiting verification" />
       ) : (
         <ul className="space-y-4">
-          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces }) => (
+          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces, assignee }) => (
             <li key={account.id} className="space-y-4 border border-border bg-surface p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
                 <div>
@@ -72,14 +75,18 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                 </p>
               )}
               {userId !== session.userId && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
-                    confirm={replaces
-                      ? `Verify ${account.bankName} ${account.accountNumberMasked}? It replaces ${replaces.bankName} ${replaces.accountNumberMasked}, which is retired.`
-                      : `Verify ${account.bankName} ${account.accountNumberMasked}?`} />
-                  <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
-                    submitLabel="Reject" />
-                </div>
+                <ReviewAssignment assignee={assignee} viewerId={session.userId}
+                  assign={assignBankAccountAction.bind(null, account.id)}
+                  unassign={unassignBankAccountAction.bind(null, account.id)}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
+                      confirm={replaces
+                        ? `Verify ${account.bankName} ${account.accountNumberMasked}? It replaces ${replaces.bankName} ${replaces.accountNumberMasked}, which is retired.`
+                        : `Verify ${account.bankName} ${account.accountNumberMasked}?`} />
+                    <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
+                      submitLabel="Reject" />
+                  </div>
+                </ReviewAssignment>
               )}
             </li>
           ))}

@@ -29,7 +29,7 @@ public class AdminCompanyBankAccountController {
 	}
 
 	@GetMapping("/api/v1/admin/company-bank-accounts")
-	@PreAuthorize("hasAnyAuthority('COMPANY_BANK_ACCOUNT_MANAGE', 'FINANCE_VIEW')")
+	@PreAuthorize("hasAnyAuthority('COMPANY_BANK_ACCOUNT_MANAGE', 'COMPANY_BANK_ACCOUNT_VIEW', 'FINANCE_VIEW')")
 	public List<CompanyBankAccountResponse> list() {
 		return accounts.list();
 	}

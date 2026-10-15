@@ -24,7 +24,7 @@ import java.util.UUID;
 /** Finance tasks: the withdrawals to pay (by bank or in cash at the office) and mark paid or failed. */
 @RestController
 @RequestMapping("/api/v1/admin/finance-tasks")
-@PreAuthorize("hasAuthority('WITHDRAWAL_PROCESS')")
+@PreAuthorize("hasAnyAuthority('WITHDRAWAL_PROCESS', 'FINANCE_TASK_PROCESS')")
 public class AdminFinanceTaskController {
 
 	private final FinanceTaskService tasks;
@@ -41,6 +41,17 @@ public class AdminFinanceTaskController {
 			@RequestParam(required = false) UUID batchId, @RequestParam(required = false) String q,
 			@PageableDefault(size = 50) Pageable pageable) {
 		return PageResponse.from(tasks.search(actor.userId(), view, method, kind, batchId, q, pageable));
+	}
+
+	/** Takes the task: only the finance member it is assigned to may mark it paid or failed. */
+	@PostMapping("/{withdrawalId}/take")
+	public FinanceTaskResponse take(AuthenticatedUser actor, @PathVariable UUID withdrawalId) {
+		return tasks.take(actor.userId(), withdrawalId);
+	}
+
+	@PostMapping("/{withdrawalId}/release")
+	public FinanceTaskResponse release(AuthenticatedUser actor, @PathVariable UUID withdrawalId) {
+		return tasks.release(actor.userId(), withdrawalId);
 	}
 
 	/** Paid (with the bank reference or cash receipt) or failed (with the reason). */

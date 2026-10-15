@@ -1,3 +1,4 @@
+import type { Assignee } from "@/types/user";
 /** Mirrors of the backend's cart, order, payment, invoice and portfolio DTOs. */
 import type { ContainerSummary, ContainerType, Money, ProductStatus } from "./marketplace";
 
@@ -150,6 +151,8 @@ export interface Payment {
   gstIncluded: boolean;
   /** Added to every container's monthly rent once this pays the order (office cash); 0 for none. */
   rentBonusPercent: number;
+  /** Staff views: the finance member confirming it, who alone may confirm or reject it. */
+  assignee?: Assignee | null;
 }
 
 export interface InvoiceParty {

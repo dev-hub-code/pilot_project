@@ -174,7 +174,7 @@ class EarningsIntegrationTest {
 		assertThat(referralBalance(referrer)).isEqualByComparingTo("2000");
 		// Staff's commission history adds the hourly commissions up: one entry for the referred container this month.
 		mvc.perform(get("/api/v1/admin/referral-earnings").param("beneficiaryId", referrer.id().toString())
-				.header(HttpHeaders.AUTHORIZATION, api.staff("FINANCE").bearer()))
+				.header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
 			.andExpect(jsonPath("$.content.length()").value(1))
 			.andExpect(jsonPath("$.content[0].month").value(YearMonth.now(ZoneOffset.UTC).toString()))
 			.andExpect(jsonPath("$.content[0].base.amount").value("100000.00"))
@@ -188,7 +188,7 @@ class EarningsIntegrationTest {
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 		backdate(holding, 1);
-		Account finance = api.staff("FINANCE");
+		Account finance = api.admin();
 
 		mvc.perform(get("/api/v1/admin/payouts/due").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
@@ -214,7 +214,7 @@ class EarningsIntegrationTest {
 	@Test
 	void adjustmentsAreIdempotentAndNeverOverdrawABalance() throws Exception {
 		Account investor = investors.approvedInvestor();
-		Account finance = api.staff("FINANCE");
+		Account finance = api.admin();
 		String key = UUID.randomUUID().toString();
 
 		adjust(finance, investor, "CREDIT", "25", key).andExpect(status().isCreated())
@@ -238,7 +238,7 @@ class EarningsIntegrationTest {
 
 	@Test
 	void theDatabaseRejectsUnbalancedTransactionsAndChangesToHistory() throws Exception {
-		adjust(api.staff("FINANCE"), investors.approvedInvestor(), "CREDIT", "5", UUID.randomUUID().toString())
+		adjust(api.admin(), investors.approvedInvestor(), "CREDIT", "5", UUID.randomUUID().toString())
 			.andExpect(status().isCreated());
 
 		assertThatThrownBy(() -> transactions.executeWithoutResult(s -> {

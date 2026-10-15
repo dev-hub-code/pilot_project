@@ -100,6 +100,7 @@ public class HoldingService {
 		if (holding.getStatus() != HoldingStatus.AWAITING_CONTAINER) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This investment already has a container");
 		}
+		requireTaskOf(actorId, holding);
 		ContainerType type = offerings.terms(holding.getProductId()).terms().containerType();
 		ContainerSummary container = inventory.assign(containerNumber, type, currentLocation, actorId);
 		holding.assignContainer(container.id(), leaseStartsOn, actorId, now);
@@ -110,16 +111,69 @@ public class HoldingService {
 		return payoutTerms(holding, leaseStartsAt);
 	}
 
+	/**
+	 * A finance member takes the task of assigning an investment's container: from now on only they may assign it.
+	 * Taking one already assigned to you changes nothing; one another member holds must be given back by them first.
+	 */
+	@Transactional
+	public AwaitingContainer takeContainerTask(UUID actorId, UUID holdingId, Instant now) {
+		Holding holding = awaiting(holdingId);
+		if (actorId.equals(holding.getTaskAssigneeId())) {
+			return awaitingView(holding);
+		}
+		if (holding.getTaskAssigneeId() != null) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Another finance member is already assigning this container");
+		}
+		holding.takeTask(actorId, now);
+		holdings.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.CONTAINER_TASK_ASSIGNED, ENTITY, holdingId));
+		return awaitingView(holding);
+	}
+
+	/** The member holding the task gives it back to the queue, for another finance member to take. */
+	@Transactional
+	public AwaitingContainer releaseContainerTask(UUID actorId, UUID holdingId) {
+		Holding holding = awaiting(holdingId);
+		requireTaskOf(actorId, holding);
+		holding.releaseTask();
+		holdings.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.CONTAINER_TASK_UNASSIGNED, ENTITY, holdingId));
+		return awaitingView(holding);
+	}
+
+	private Holding awaiting(UUID holdingId) {
+		Holding holding = holdings.findByIdForUpdate(holdingId)
+			.orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
+		if (holding.getStatus() != HoldingStatus.AWAITING_CONTAINER) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This investment already has a container");
+		}
+		return holding;
+	}
+
+	private static void requireTaskOf(UUID actorId, Holding holding) {
+		if (!actorId.equals(holding.getTaskAssigneeId())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, holding.getTaskAssigneeId() == null
+					? "Assign this task to yourself before assigning the container"
+					: "Another finance member is assigning this container");
+		}
+	}
+
+	private AwaitingContainer awaitingView(Holding h) {
+		return awaitingView(h, offerings.terms(h.getProductId()));
+	}
+
+	private static AwaitingContainer awaitingView(Holding h, OfferingTerms plan) {
+		return new AwaitingContainer(h.getId(), h.getUserId(), h.getOrderId(), h.getProductId(), plan.code(),
+				plan.terms().title(), plan.terms().containerType(), h.amount(), h.getTenureMonths(), h.getConfirmedAt(),
+				h.getTaskAssigneeId(), h.getTaskAssignedAt());
+	}
+
 	/** Paid investments awaiting a container, oldest first. */
 	@Transactional(readOnly = true)
 	public Page<AwaitingContainer> awaitingContainer(Pageable pageable) {
 		Page<Holding> page = holdings.findByStatusOrderByConfirmedAtAscIdAsc(HoldingStatus.AWAITING_CONTAINER, pageable);
 		Map<UUID, OfferingTerms> plans = offerings.terms(page.stream().map(Holding::getProductId).distinct().toList());
-		return page.map(h -> {
-			OfferingTerms plan = plans.get(h.getProductId());
-			return new AwaitingContainer(h.getId(), h.getUserId(), h.getOrderId(), h.getProductId(), plan.code(),
-					plan.terms().title(), plan.terms().containerType(), h.amount(), h.getTenureMonths(), h.getConfirmedAt());
-		});
+		return page.map(h -> awaitingView(h, plans.get(h.getProductId())));
 	}
 
 	@Transactional(readOnly = true)
@@ -127,9 +181,10 @@ public class HoldingService {
 		return holdings.countByStatus(HoldingStatus.AWAITING_CONTAINER);
 	}
 
-	/** A paid investment awaiting its container. */
+	/** A paid investment awaiting its container, and the finance member who took the task (if anyone has). */
 	public record AwaitingContainer(UUID holdingId, UUID userId, UUID orderId, UUID productId, String productCode,
-			String productTitle, ContainerType containerType, Money amount, int tenureMonths, Instant paidAt) {
+			String productTitle, ContainerType containerType, Money amount, int tenureMonths, Instant paidAt,
+			UUID taskAssigneeId, Instant taskAssignedAt) {
 	}
 
 	/** The last payout has been paid: the holding matures and its container returns to inventory. */

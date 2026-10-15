@@ -1,6 +1,6 @@
 package com.sealease.backend.helpdesk.entity;
 
-/** What happened to a ticket. Customers see all but priority changes and unassignment. */
+/** What happened to a ticket. Customers see all but priority changes, unassignment and hand-overs between teams. */
 public enum TicketEventType {
 	OPENED,
 	STATUS_CHANGED,
@@ -8,9 +8,11 @@ public enum TicketEventType {
 	REOPENED,
 	ASSIGNED,
 	UNASSIGNED,
-	PRIORITY_CHANGED;
+	PRIORITY_CHANGED,
+	/** Handed from support to finance, or back. */
+	TEAM_CHANGED;
 
 	public boolean visibleToCustomer() {
-		return this != PRIORITY_CHANGED && this != UNASSIGNED;
+		return this != PRIORITY_CHANGED && this != UNASSIGNED && this != TEAM_CHANGED;
 	}
 }

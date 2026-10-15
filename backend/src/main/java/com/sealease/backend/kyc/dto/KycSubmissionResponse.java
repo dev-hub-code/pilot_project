@@ -1,5 +1,6 @@
 package com.sealease.backend.kyc.dto;
 
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.document.entity.DocumentPurpose;
 import com.sealease.backend.kyc.entity.IdentityDocumentType;
 import com.sealease.backend.kyc.entity.KycDocument;
@@ -15,7 +16,8 @@ import java.util.UUID;
 /**
  * A KYC submission, with the full (decrypted) identity numbers, for its owner and for reviewers; reviewers' views are
  * audited. Submissions carry the Aadhaar and PAN numbers; those made before carry a single identity document
- * ({@code documentType} and the fields after it).
+ * ({@code documentType} and the fields after it). {@code assignee} is the reviewer the review is assigned to; null
+ * in the investor's own view.
  */
 public record KycSubmissionResponse(
 		UUID id,
@@ -35,6 +37,7 @@ public record KycSubmissionResponse(
 		Instant reviewedAt,
 		UUID reviewedBy,
 		String rejectionReason,
+		Assignee assignee,
 		List<DocumentRef> documents) {
 
 	public record DocumentRef(UUID id, DocumentPurpose purpose) {
@@ -44,7 +47,8 @@ public record KycSubmissionResponse(
 	public record Numbers(String aadhaar, String pan, String document) {
 	}
 
-	public static KycSubmissionResponse from(KycSubmission s, List<KycDocument> documents, Numbers numbers) {
+	public static KycSubmissionResponse from(KycSubmission s, List<KycDocument> documents, Numbers numbers,
+			Assignee assignee) {
 		List<DocumentRef> refs = documents.stream()
 			.sorted(Comparator.comparing(KycDocument::getPurpose))
 			.map(d -> new DocumentRef(d.getId().documentId(), d.getPurpose()))
@@ -53,14 +57,14 @@ public record KycSubmissionResponse(
 				s.getLegalLastName(), s.getDateOfBirth(), s.getNationality(),
 				numbers.aadhaar(), numbers.pan(), s.getDocumentType(), numbers.document(),
 				s.getDocumentIssuingCountry(), s.getDocumentExpiryDate(),
-				s.getSubmittedAt(), s.getReviewedAt(), s.getReviewedBy(), s.getRejectionReason(), refs);
+				s.getSubmittedAt(), s.getReviewedAt(), s.getReviewedBy(), s.getRejectionReason(), assignee, refs);
 	}
 
-	/** The investor's own view omits reviewer identity. */
+	/** The investor's own view omits reviewer identity, and who the review is assigned to. */
 	public KycSubmissionResponse forOwner() {
 		return new KycSubmissionResponse(id, userId, status, legalFirstName, legalLastName, dateOfBirth, nationality,
 				aadhaarNumber, panNumber, documentType, documentNumber, documentIssuingCountry, documentExpiryDate, submittedAt,
-				reviewedAt, null, rejectionReason, documents);
+				reviewedAt, null, rejectionReason, null, documents);
 	}
 
 }

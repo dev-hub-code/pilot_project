@@ -92,6 +92,13 @@ public class Payment extends BaseEntity {
 	@Column(name = "rent_bonus_percent", nullable = false, updatable = false, precision = 5, scale = 2)
 	private BigDecimal rentBonusPercent;
 
+	/** The finance member who took the task of confirming or rejecting this payment; only they may decide it. */
+	@Column(name = "task_assignee_id")
+	private UUID taskAssigneeId;
+
+	@Column(name = "task_assigned_at")
+	private Instant taskAssignedAt;
+
 	protected Payment() {
 	}
 
@@ -180,6 +187,26 @@ public class Payment extends BaseEntity {
 
 	public UUID getOrderId() {
 		return orderId;
+	}
+
+	/** A finance member takes the task of confirming or rejecting this payment. */
+	public void takeTask(UUID assignee, Instant now) {
+		this.taskAssigneeId = assignee;
+		this.taskAssignedAt = now;
+	}
+
+	/** The task goes back to the queue, for another finance member to take. */
+	public void releaseTask() {
+		this.taskAssigneeId = null;
+		this.taskAssignedAt = null;
+	}
+
+	public UUID getTaskAssigneeId() {
+		return taskAssigneeId;
+	}
+
+	public Instant getTaskAssignedAt() {
+		return taskAssignedAt;
 	}
 
 	public UUID getUserId() {

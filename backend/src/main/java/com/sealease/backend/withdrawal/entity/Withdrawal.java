@@ -105,6 +105,17 @@ public class Withdrawal extends BaseEntity {
 	@Column(name = "closed_at")
 	private Instant closedAt;
 
+	/** The finance member who took this finance task (paying it); only they may mark it paid or failed. */
+	@Column(name = "task_assignee_id")
+	private UUID taskAssigneeId;
+
+	@Column(name = "task_assigned_at")
+	private Instant taskAssignedAt;
+
+	/** When the finance task was first marked paid or failed. */
+	@Column(name = "task_done_at")
+	private Instant taskDoneAt;
+
 	protected Withdrawal() {
 	}
 
@@ -255,6 +266,33 @@ public class Withdrawal extends BaseEntity {
 
 	public String getReference() {
 		return reference;
+	}
+
+	/** A finance member takes the task of paying this withdrawal. */
+	public void takeTask(UUID assignee, Instant now) {
+		this.taskAssigneeId = assignee;
+		this.taskAssignedAt = now;
+	}
+
+	/** The task goes back to the queue, for another finance member to take. */
+	public void releaseTask() {
+		this.taskAssigneeId = null;
+		this.taskAssignedAt = null;
+	}
+
+	/** The finance task was marked paid or failed; the first time counts. */
+	public void taskDone(Instant now) {
+		if (taskDoneAt == null) {
+			taskDoneAt = now;
+		}
+	}
+
+	public UUID getTaskAssigneeId() {
+		return taskAssigneeId;
+	}
+
+	public Instant getTaskAssignedAt() {
+		return taskAssignedAt;
 	}
 
 	public UUID getUserId() {

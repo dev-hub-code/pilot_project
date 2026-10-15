@@ -33,17 +33,18 @@ export function ReasonForm({ action, label, submitLabel, variant = "danger", con
   );
 }
 
-/** A one-click decision (approve, verify) with confirmation. */
-export function ConfirmForm({ action, submitLabel, confirm }: {
+/** A one-click decision (approve, verify, assign), confirmed first when {@code confirm} is given. */
+export function ConfirmForm({ action, submitLabel, confirm, variant }: {
   action: PlainAction;
   submitLabel: string;
-  confirm: string;
+  confirm?: string;
+  variant?: "primary" | "secondary" | "danger";
 }) {
   const [state, formAction] = useActionState<FormState>(action, {});
   return (
     <form action={formAction} className="space-y-3">
       <FormFeedback state={state} />
-      <SubmitButton confirm={confirm}>{submitLabel}</SubmitButton>
+      <SubmitButton variant={variant} confirm={confirm}>{submitLabel}</SubmitButton>
     </form>
   );
 }

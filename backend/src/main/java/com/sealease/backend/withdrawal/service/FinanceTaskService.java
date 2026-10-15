@@ -1,6 +1,7 @@
 package com.sealease.backend.withdrawal.service;
 
 import com.sealease.backend.audit.AuditAction;
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.bankaccount.dto.PayoutInstruction;
@@ -13,6 +14,7 @@ import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
+import com.sealease.backend.reporting.dto.Workload;
 import com.sealease.backend.withdrawal.dto.FinanceTaskResponse;
 import com.sealease.backend.withdrawal.dto.FinanceTaskUpdateRequest;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
@@ -32,6 +34,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +46,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Finance tasks: every withdrawal a withdrawal run makes is a task for finance - pay it into the investor's bank
@@ -74,10 +79,11 @@ public class FinanceTaskService {
 	private final UserAccountService accounts;
 	private final UserProfileService profiles;
 	private final AuditService audit;
+	private final Clock clock;
 
 	public FinanceTaskService(WithdrawalRepository withdrawals, WithdrawalBatchRepository batches,
 			PayoutBatchService payouts, BankAccountService bankAccounts, UserAccountService accounts,
-			UserProfileService profiles, AuditService audit) {
+			UserProfileService profiles, AuditService audit, Clock clock) {
 		this.withdrawals = withdrawals;
 		this.batches = batches;
 		this.payouts = payouts;
@@ -85,6 +91,7 @@ public class FinanceTaskService {
 		this.accounts = accounts;
 		this.profiles = profiles;
 		this.audit = audit;
+		this.clock = clock;
 	}
 
 	/** Open tasks oldest first (in the order to pay them); done tasks latest first. Every filter but the view is optional. */
@@ -102,12 +109,70 @@ public class FinanceTaskService {
 		return new PageImpl<>(tasks, page.getPageable(), page.getTotalElements());
 	}
 
+	/**
+	 * A finance member takes an open task: from now on only they may mark it paid or failed. Taking one already
+	 * assigned to you changes nothing; one another member holds must be given back by them first.
+	 */
+	@Transactional
+	public FinanceTaskResponse take(UUID actorId, UUID withdrawalId) {
+		Withdrawal withdrawal = open(withdrawalId);
+		if (!actorId.equals(withdrawal.getTaskAssigneeId())) {
+			if (withdrawal.getTaskAssigneeId() != null) {
+				throw new BusinessException(ErrorCode.CONFLICT, "Another finance member is already paying this withdrawal");
+			}
+			withdrawal.takeTask(actorId, clock.instant());
+			withdrawals.flush();
+			audit.record(AuditRecord.of(actorId, AuditAction.FINANCE_TASK_ASSIGNED, ENTITY, withdrawalId));
+		}
+		return responses(List.of(withdrawal)).getFirst();
+	}
+
+	/** The member holding the task gives it back to the queue, unpaid, for another finance member to take. */
+	@Transactional
+	public FinanceTaskResponse release(UUID actorId, UUID withdrawalId) {
+		Withdrawal withdrawal = open(withdrawalId);
+		requireTaskOf(actorId, withdrawal);
+		withdrawal.releaseTask();
+		withdrawals.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.FINANCE_TASK_UNASSIGNED, ENTITY, withdrawalId));
+		return responses(List.of(withdrawal)).getFirst();
+	}
+
+	private Withdrawal open(UUID withdrawalId) {
+		Withdrawal withdrawal = withdrawals.findByIdForUpdate(withdrawalId)
+			.filter(w -> w.getBatchId() != null)
+			.orElseThrow(() -> new ResourceNotFoundException("Finance task", withdrawalId));
+		if (!View.OPEN.statuses.contains(withdrawal.getStatus())) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This finance task is already done");
+		}
+		return withdrawal;
+	}
+
+	private static void requireTaskOf(UUID actorId, Withdrawal withdrawal) {
+		if (!actorId.equals(withdrawal.getTaskAssigneeId())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, withdrawal.getTaskAssigneeId() == null
+					? "Assign this task to yourself before marking it"
+					: "Another finance member is paying this withdrawal");
+		}
+	}
+
+	/** Finance tasks open, the viewer's among them, and done in each period ({@code [from, to)}) by anyone and by the viewer. */
+	@Transactional(readOnly = true)
+	public Workload.Counts workload(UUID viewerId, Instant today, Instant month, Instant to) {
+		return new Workload.Counts(withdrawals.countOpenTasks(null), null, withdrawals.countOpenTasks(viewerId),
+				withdrawals.countTasksDone(null, today, to), withdrawals.countTasksDone(viewerId, today, to),
+				withdrawals.countTasksDone(null, month, to), withdrawals.countTasksDone(viewerId, month, to));
+	}
+
 	/** Marks the task paid (with the bank reference or cash receipt) or failed (with the reason). */
 	@Transactional
 	public FinanceTaskResponse update(UUID actorId, UUID withdrawalId, FinanceTaskUpdateRequest request) {
 		Withdrawal withdrawal = withdrawals.findById(withdrawalId)
 			.filter(w -> w.getBatchId() != null)
 			.orElseThrow(() -> new ResourceNotFoundException("Finance task", withdrawalId));
+		if (View.OPEN.statuses.contains(withdrawal.getStatus())) {
+			requireTaskOf(actorId, withdrawal);
+		}
 		if (request.outcome() == FinanceTaskUpdateRequest.Outcome.PAID) {
 			payouts.markPaid(actorId, withdrawal.getBatchId(), withdrawalId, request.reference());
 		}
@@ -117,7 +182,10 @@ public class FinanceTaskService {
 			}
 			payouts.markFailed(actorId, withdrawal.getBatchId(), withdrawalId, request.reason());
 		}
-		return responses(List.of(withdrawals.findById(withdrawalId).orElseThrow())).getFirst();
+		Withdrawal done = withdrawals.findById(withdrawalId).orElseThrow();
+		done.taskDone(clock.instant());
+		withdrawals.flush();
+		return responses(List.of(done)).getFirst();
 	}
 
 	private List<FinanceTaskResponse> responses(List<Withdrawal> items) {
@@ -127,12 +195,14 @@ public class FinanceTaskService {
 		Map<UUID, PayoutInstruction> payees = bankAccounts.payoutInstructions(items.stream()
 			.filter(w -> !w.isOfficeCash() && w.getBankAccountId() != null).map(Withdrawal::getBankAccountId).distinct()
 			.toList());
-		Map<UUID, UserAccount> people = accounts.getAccounts(items.stream().map(Withdrawal::getUserId).distinct().toList());
+		Map<UUID, UserAccount> people = accounts.getAccounts(items.stream()
+			.flatMap(w -> Stream.of(w.getUserId(), w.getTaskAssigneeId())).filter(Objects::nonNull).distinct().toList());
 		Map<UUID, String> phones = new HashMap<>();
 		Function<UUID, String> phone = userId -> phones.computeIfAbsent(userId, id -> profiles.getProfile(id).phone());
 		List<FinanceTaskResponse> tasks = new ArrayList<>();
 		for (Withdrawal w : items) {
 			UserAccount person = people.get(w.getUserId());
+			UserAccount assignee = w.getTaskAssigneeId() == null ? null : people.get(w.getTaskAssigneeId());
 			PayoutInstruction payee = w.getBankAccountId() == null ? null : payees.get(w.getBankAccountId());
 			boolean open = w.getStatus() == WithdrawalStatus.BATCHED || w.getStatus() == WithdrawalStatus.PROCESSING;
 			String accountNumber = w.isOfficeCash() ? null
@@ -144,7 +214,9 @@ public class FinanceTaskService {
 					person == null ? null : (person.firstName() + " " + person.lastName()).strip(),
 					w.isOfficeCash() ? phone.apply(w.getUserId()) : null, w.getBankName(), w.getBankHolderName(),
 					accountNumber, payee == null ? null : payee.routingCode(), MoneyResponse.from(w.amount()), w.getStatus(),
-					w.getPayoutReference(), w.getFailureReason(), w.getTicketId(), w.getCreatedAt(), w.getClosedAt()));
+					w.getPayoutReference(), w.getFailureReason(), w.getTicketId(), w.getCreatedAt(), w.getClosedAt(),
+					assignee == null ? null : new Assignee(assignee.id(),
+							(assignee.firstName() + " " + assignee.lastName()).strip(), w.getTaskAssignedAt())));
 		}
 		return tasks;
 	}

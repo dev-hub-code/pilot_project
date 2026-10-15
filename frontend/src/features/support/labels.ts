@@ -53,6 +53,8 @@ export function describeEvent(e: TicketEvent, viewer: "customer" | "staff"): str
         : `${actor} assigned the ticket to ${e.agentName ?? "an agent"}`;
     case "UNASSIGNED":
       return `${actor} unassigned the ticket`;
+    case "TEAM_CHANGED":
+      return `${actor} handed the ticket to ${e.toValue === "FINANCE" ? "the finance team" : "the support team"}`;
     case "PRIORITY_CHANGED":
       return `${actor} changed priority from ${PRIORITY_LABEL[e.fromValue as TicketPriority] ?? e.fromValue} to ${PRIORITY_LABEL[e.toValue as TicketPriority] ?? e.toValue}`;
     case "STATUS_CHANGED":

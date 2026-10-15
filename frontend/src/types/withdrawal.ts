@@ -1,3 +1,4 @@
+import type { Assignee } from "@/types/user";
 /** Mirrors of the backend's Phase 8 DTOs (withdrawals and payout batches). */
 import type { EarningsBalance } from "./earning";
 import type { Money } from "./marketplace";
@@ -148,6 +149,8 @@ export interface FinanceTask {
   ticketId: string | null;
   createdAt: string;
   closedAt: string | null;
+  /** The finance member who took the task; only they may mark it paid or failed. */
+  assignee: Assignee | null;
 }
 
 /** One withdrawal run: every eligible investor's rent and referral balances, in a bank sheet and a cash sheet. */

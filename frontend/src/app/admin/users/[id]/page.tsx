@@ -6,11 +6,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import {
   reactivateUserAction,
+  assignBankAccountAction,
   rejectBankAccountAction,
+  unassignBankAccountAction,
   suspendUserAction,
   verifyBankAccountAction,
 } from "@/features/admin/actions";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
+import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -124,7 +127,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 <p className="text-sm text-muted">No bank accounts.</p>
               ) : (
                 <ul className="space-y-4">
-                  {banks.map(({ account, otherUsersWithSameAccount }) => (
+                  {banks.map(({ account, otherUsersWithSameAccount, assignee }) => (
                     <li key={account.id} className="space-y-3 border border-border p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="font-medium">
@@ -142,12 +145,16 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                         </p>
                       )}
                       {account.status === "PENDING_VERIFICATION" && can(Permission.BANK_ACCOUNT_VERIFY) && !isSelf && (
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
-                            confirm={`Verify ${account.bankName} ${account.accountNumberMasked} for payouts?`} />
-                          <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
-                            submitLabel="Reject" />
-                        </div>
+                        <ReviewAssignment assignee={assignee} viewerId={session.userId}
+                          assign={assignBankAccountAction.bind(null, account.id)}
+                          unassign={unassignBankAccountAction.bind(null, account.id)}>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
+                              confirm={`Verify ${account.bankName} ${account.accountNumberMasked} for payouts?`} />
+                            <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
+                              submitLabel="Reject" />
+                          </div>
+                        </ReviewAssignment>
                       )}
                     </li>
                   ))}

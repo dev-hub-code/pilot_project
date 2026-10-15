@@ -57,6 +57,7 @@ public final class InvestorFixtures {
 						 "accountNumber":"%s","routingCode":"HDFC0001234"}""".formatted(number))
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+		api.assignReview("bank-accounts", accountId, api.admin());
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
 			.andExpect(status().isOk());
 	}
@@ -80,6 +81,13 @@ public final class InvestorFixtures {
 	 * of the plan's type to each (starting the leases and payouts); returns the confirmed order id.
 	 */
 	public String invest(Account investor, UUID product, int containers) throws Exception {
+		String orderId = paidOrder(investor, product, containers);
+		assignContainers(orderId);
+		return orderId;
+	}
+
+	/** Buys containers under the plan, paid by bank and confirmed by the admin; they await their containers. */
+	public String paidOrder(Account investor, UUID product, int containers) throws Exception {
 		String orderId = placeOrder(investor, product, containers);
 		// Bank payments are only offered while the company has an active account to pay into.
 		if (companyAccount == null) {
@@ -98,12 +106,13 @@ public final class InvestorFixtures {
 						{"companyBankAccountId":"%s","mode":"ONLINE","reference":"UTR%s"}"""
 					.formatted(companyAccount, paymentId.replace("-", "").substring(0, 12))))
 			.andExpect(status().isOk());
-		mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+		Account admin = api.admin();
+		api.takePayment(paymentId, admin);
+		mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"externalReference\":\"STATEMENT-1\",\"amountReceived\":\"" + amount + "\"}"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("SUCCEEDED"));
-		assignContainers(orderId);
 		return orderId;
 	}
 
@@ -112,9 +121,11 @@ public final class InvestorFixtures {
 		List<UUID> awaiting = jdbc.queryForList(
 				"SELECT id FROM holdings WHERE order_id = ?::uuid AND status = 'AWAITING_CONTAINER' ORDER BY created_at",
 				UUID.class, orderId);
+		Account admin = api.admin();
 		for (UUID holding : awaiting) {
+			api.takeContainerTask(holding, admin);
 			mvc.perform(post("/api/v1/admin/container-assignments/{id}", holding)
-					.header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+					.header(HttpHeaders.AUTHORIZATION, admin.bearer())
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("{\"containerNumber\":\"" + OfferingFixtures.containerNumber() + "\"}"))
 				.andExpect(status().isNoContent());

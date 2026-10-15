@@ -1,6 +1,7 @@
 package com.sealease.backend.user;
 
 import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.kyc.service.KycFollowUpService;
 import com.sealease.backend.support.BankAccountUploads;
 import com.sealease.backend.support.IndianIdFixtures;
 import com.sealease.backend.support.IntegrationTest;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -47,6 +49,9 @@ class UserManagementIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private KycFollowUpService kycFollowUps;
 
 	private TestApi api;
 
@@ -217,6 +222,90 @@ class UserManagementIntegrationTest {
 	// ------------------------------------------------------------------------------- KYC
 
 	@Test
+	void onlyAdminsSeeTheFullMobileNumberOnUserDetails() throws Exception {
+		Account investor = api.register();
+		String phone = jdbc.queryForObject("SELECT phone FROM user_profiles WHERE user_id = ?", String.class, investor.id());
+		String digits = phone.replaceAll("\\D", "");
+		String masked = "•••••• " + digits.substring(digits.length() - 4);
+
+		for (Account admin : List.of(api.admin(), api.staff("ADMIN"))) {
+			mvc.perform(get("/api/v1/admin/users/{id}", investor.id()).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andExpect(jsonPath("$.profile.phone").value(phone));
+		}
+		for (String role : List.of("SUPPORT", "FINANCE", "VERIFICATION", "ADMINISTRATION")) {
+			mvc.perform(get("/api/v1/admin/users/{id}", investor.id()).header(HttpHeaders.AUTHORIZATION, api.staff(role).bearer()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.profile.phone").value(masked));
+		}
+		// The investor still sees their own number in full.
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.phone").value(phone));
+	}
+
+	@Test
+	void onlyAdminsSeeEmployeesInTheUserDirectory() throws Exception {
+		Account investor = api.register();
+		Account employee = api.staff("SALES");
+
+		for (Account admin : List.of(api.admin(), api.staff("ADMIN"))) {
+			for (Account who : List.of(investor, employee)) {
+				mvc.perform(get("/api/v1/admin/users").param("q", who.email()).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+					.andExpect(jsonPath("$.content.length()").value(1));
+			}
+			mvc.perform(get("/api/v1/admin/users/{id}", employee.id()).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andExpect(status().isOk());
+		}
+		for (String role : List.of("SUPPORT", "FINANCE", "VERIFICATION", "ADMINISTRATION")) {
+			Account viewer = api.staff(role);
+			mvc.perform(get("/api/v1/admin/users").param("q", investor.email()).header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
+				.andExpect(jsonPath("$.content.length()").value(1));
+			mvc.perform(get("/api/v1/admin/users").param("q", employee.email()).header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
+				.andExpect(jsonPath("$.content.length()").value(0))
+				.andExpect(jsonPath("$.totalElements").value(0));
+			mvc.perform(get("/api/v1/admin/users").param("size", "200").header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
+				.andExpect(jsonPath("$.content[*].id", not(hasItem(viewer.id().toString()))));
+			mvc.perform(get("/api/v1/admin/users/{id}", investor.id()).header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
+				.andExpect(status().isOk());
+			mvc.perform(get("/api/v1/admin/users/{id}", employee.id()).header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
+				.andExpect(status().isNotFound());
+		}
+	}
+
+	@Test
+	void investorsWhoHaveNotVerifiedTheirIdentityADayAfterRegisteringGetOneTicket() throws Exception {
+		Account late = api.register();
+		Account recent = api.register();
+		Account submitted = api.register();
+		submitValidKyc(submitted).andExpect(status().isCreated());
+		Account staff = api.staff("SUPPORT");
+		for (Account a : List.of(late, submitted, staff)) {
+			jdbc.update("UPDATE users SET created_at = now() - interval '25 hours' WHERE id = ?", a.id());
+		}
+
+		kycFollowUps.openDue();
+		kycFollowUps.openDue();
+
+		String ticketId = JsonPath.read(mvc.perform(get("/api/v1/support/tickets").header(HttpHeaders.AUTHORIZATION, late.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].subject").value("Verify your identity to start investing"))
+			.andExpect(jsonPath("$.content[0].status").value("OPEN"))
+			.andReturn().getResponse().getContentAsString(), "$.content[0].id");
+		mvc.perform(get("/api/v1/support/tickets/{id}", ticketId).header(HttpHeaders.AUTHORIZATION, late.bearer()))
+			.andExpect(jsonPath("$.messages[0].authorName").value("SeaLease support"))
+			.andExpect(jsonPath("$.messages[0].fromStaff").value(true));
+		for (Account a : List.of(recent, submitted, staff)) {
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM support_tickets WHERE user_id = ?", Integer.class, a.id()))
+				.as(a.email()).isZero();
+		}
+
+		// Submitting the documents resolves it.
+		submitValidKyc(late).andExpect(status().isCreated());
+		mvc.perform(get("/api/v1/support/tickets/{id}", ticketId).header(HttpHeaders.AUTHORIZATION, late.bearer()))
+			.andExpect(jsonPath("$.ticket.status").value("RESOLVED"));
+	}
+
+	@Test
 	void kycNeedsCompletePersonalDetailsFirst() throws Exception {
 		// The mobile number was given at sign-up; the rest is still to fill in.
 		Account investor = api.register();
@@ -305,6 +394,7 @@ class UserManagementIntegrationTest {
 		submitKyc(investor, null, IndianIdFixtures.pan(), Map.of("panCard", jpeg())).andExpect(status().isConflict());
 
 		// After a rejection, the next upload starts a new draft.
+		api.assignReview("kyc", draft, reviewer);
 		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", draft).header(HttpHeaders.AUTHORIZATION, reviewer.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"The PAN card photo is blurred\"}"))
 			.andExpect(status().isOk());
@@ -383,6 +473,7 @@ class UserManagementIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
 			.andExpect(status().isNotFound());
 
+		api.assignReview("kyc", submissionId, reviewer);
 		mvc.perform(post("/api/v1/admin/kyc/{id}/approve", submissionId).header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("APPROVED"));
@@ -417,6 +508,7 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.kycStatus").value("NOT_SUBMITTED"));
 
 		// Rejecting the first submission frees the numbers.
+		api.assignReview("kyc", firstSubmission, api.admin());
 		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", firstSubmission).header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Not the account holder\"}"))
 			.andExpect(status().isOk());
@@ -431,6 +523,7 @@ class UserManagementIntegrationTest {
 		String submissionId = JsonPath.read(submitValidKyc(investor).andReturn().getResponse().getContentAsString(), "$.id");
 		Account reviewer = api.staff("ADMINISTRATION");
 
+		api.assignReview("kyc", submissionId, reviewer);
 		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", submissionId).header(HttpHeaders.AUTHORIZATION, reviewer.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Image is blurred\"}"))
 			.andExpect(status().isOk())
@@ -443,6 +536,64 @@ class UserManagementIntegrationTest {
 		Integer submissions = jdbc.queryForObject("SELECT count(*) FROM kyc_submissions WHERE user_id = ?",
 				Integer.class, investor.id());
 		assertThat(submissions).isEqualTo(2);
+	}
+
+	@Test
+	void verifiersAssignAReviewToThemselvesBeforeDecidingIt() throws Exception {
+		Account investor = api.register();
+		String submissionId = JsonPath.read(submitValidKyc(investor).andReturn().getResponse().getContentAsString(), "$.id");
+		Account verifier = api.staff("VERIFICATION");
+		Account colleague = api.staff("VERIFICATION");
+
+		// The verification team sees users and the review queue, but not money.
+		mvc.perform(get("/api/v1/admin/users/{id}", investor.id()).header(HttpHeaders.AUTHORIZATION, verifier.bearer()))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/v1/admin/kyc").param("size", "200").header(HttpHeaders.AUTHORIZATION, verifier.bearer()))
+			.andExpect(jsonPath("$.content[*].id", hasItem(submissionId)));
+		mvc.perform(get("/api/v1/admin/withdrawals").header(HttpHeaders.AUTHORIZATION, verifier.bearer()))
+			.andExpect(status().isForbidden());
+
+		// Nobody may decide a review that is not assigned to them.
+		kycDecision(verifier, submissionId, "approve").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Assign this review to yourself")));
+		kycDecision(verifier, submissionId, "assign").andExpect(status().isOk())
+			.andExpect(jsonPath("$.assignee.id").value(verifier.id().toString()));
+		kycDecision(verifier, submissionId, "assign").andExpect(status().isOk());
+		kycDecision(colleague, submissionId, "assign").andExpect(status().isConflict());
+		kycDecision(colleague, submissionId, "approve").andExpect(status().isUnprocessableContent());
+		kycDecision(colleague, submissionId, "unassign").andExpect(status().isUnprocessableContent());
+		// The investor does not see who is reviewing them.
+		mvc.perform(get("/api/v1/users/me/kyc").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.assignee").doesNotExist());
+
+		// Given back to the queue, a colleague takes it and decides it.
+		kycDecision(verifier, submissionId, "unassign").andExpect(status().isOk())
+			.andExpect(jsonPath("$.assignee").doesNotExist());
+		kycDecision(colleague, submissionId, "assign").andExpect(status().isOk());
+		kycDecision(colleague, submissionId, "approve").andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("APPROVED"))
+			.andExpect(jsonPath("$.assignee.id").value(colleague.id().toString()));
+		kycDecision(colleague, submissionId, "assign").andExpect(status().isConflict());
+		assertThat(api.auditCount("KYC_ASSIGNED", submissionId)).isEqualTo(2);
+		assertThat(api.auditCount("KYC_UNASSIGNED", submissionId)).isEqualTo(1);
+
+		// Bank accounts the same way.
+		String accountId = JsonPath.read(addBank(investor, "50100099887766", "HDFC0001234")
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		verifyBank(verifier, accountId).andExpect(status().isUnprocessableContent());
+		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/assign", accountId).header(HttpHeaders.AUTHORIZATION, verifier.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.assignee.id").value(verifier.id().toString()));
+		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/assign", accountId).header(HttpHeaders.AUTHORIZATION, colleague.bearer()))
+			.andExpect(status().isConflict());
+		verifyBank(verifier, accountId).andExpect(status().isOk())
+			.andExpect(jsonPath("$.account.status").value("VERIFIED"));
+		assertThat(api.auditCount("BANK_ACCOUNT_ASSIGNED", accountId)).isEqualTo(1);
+	}
+
+	private ResultActions kycDecision(Account reviewer, String submissionId, String decision) throws Exception {
+		return mvc.perform(post("/api/v1/admin/kyc/{id}/" + decision, submissionId)
+			.header(HttpHeaders.AUTHORIZATION, reviewer.bearer()));
 	}
 
 	@Test
@@ -502,7 +653,9 @@ class UserManagementIntegrationTest {
 		// Only a verified account can be primary.
 		makePrimary(investor, second).andExpect(status().isUnprocessableContent());
 		approveKyc(investor);
-		verifyBank(api.staff("FINANCE"), second).andExpect(status().isOk());
+		Account verifier = api.staff("FINANCE");
+		api.assignReview("bank-accounts", second, verifier);
+		verifyBank(verifier, second).andExpect(status().isOk());
 		makePrimary(investor, second)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + second + "')].primary").value(hasItem(true)))
@@ -557,9 +710,11 @@ class UserManagementIntegrationTest {
 		String older = JsonPath.read(addBank(investor, "50100087654321", "HDFC0001234").andReturn().getResponse()
 			.getContentAsString(), "$.id");
 		jdbc.update("UPDATE bank_accounts SET proof_type = NULL, proof_document_id = NULL WHERE id = ?::uuid", older);
+		api.assignReview("bank-accounts", older, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", older).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no bank statement or cancelled cheque")));
+		api.assignReview("bank-accounts", accountId, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk());
 	}
@@ -571,6 +726,7 @@ class UserManagementIntegrationTest {
 			.andReturn().getResponse().getContentAsString(), "$.id");
 		Account finance = api.staff("FINANCE");
 
+		api.assignReview("bank-accounts", accountId, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isUnprocessableContent());
 
@@ -592,6 +748,7 @@ class UserManagementIntegrationTest {
 		approveKyc(investor);
 		Account finance = api.staff("FINANCE");
 		String old = JsonPath.read(addBank(investor, "11112222", "HDFC0000001").andReturn().getResponse().getContentAsString(), "$.id");
+		api.assignReview("bank-accounts", old, finance);
 		verifyBank(finance, old).andExpect(status().isOk());
 
 		// There is no way to edit a verified account's details.
@@ -610,6 +767,7 @@ class UserManagementIntegrationTest {
 		// A rejected account is never primary either; the investor is told why.
 		String rejected = JsonPath.read(addBank(investor, "55556666", "SBIN0000001").andReturn().getResponse()
 			.getContentAsString(), "$.id");
+		api.assignReview("bank-accounts", rejected, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/reject", rejected).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Name does not match\"}"))
 			.andExpect(status().isOk());
@@ -629,6 +787,7 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$[?(@.account.id == '" + rejected + "')].account.status").value(hasItem("REJECTED")));
 
 		// Once verified, the investor switches primary to it; the old account stays verified and can be switched back to.
+		api.assignReview("bank-accounts", added, finance);
 		verifyBank(finance, added).andExpect(status().isOk()).andExpect(jsonPath("$.account.primary").value(false));
 		makePrimary(investor, added).andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + added + "')].primary").value(hasItem(true)))
@@ -755,6 +914,7 @@ class UserManagementIntegrationTest {
 
 	private void approveKyc(Account investor) throws Exception {
 		String submissionId = JsonPath.read(submitValidKyc(investor).andReturn().getResponse().getContentAsString(), "$.id");
+		api.assignReview("kyc", submissionId, api.admin());
 		mvc.perform(post("/api/v1/admin/kyc/{id}/approve", submissionId).header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
 			.andExpect(status().isOk());
 	}

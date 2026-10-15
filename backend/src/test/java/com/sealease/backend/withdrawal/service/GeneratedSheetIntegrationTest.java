@@ -35,13 +35,13 @@ class GeneratedSheetIntegrationTest {
 	@Test
 	void aCashBatchHasNoSheetAndIsReadyToMarkByHand() throws Exception {
 		TestApi api = new TestApi(mvc, jdbc);
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		Account investor = new InvestorFixtures(mvc, jdbc, api).approvedInvestor();
 		// Referral paid in cash at the office: no bank account needed.
 		mvc.perform(put("/api/v1/withdrawals/referral-mode").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"OFFICE_CASH\"}"))
 			.andExpect(status().isOk());
-		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, finance.bearer())
+		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
 						{"userId":"%s","currency":"INR","direction":"CREDIT","amount":"400","reason":"Test funding","balance":"REFERRAL"}
 						""".formatted(investor.id())))

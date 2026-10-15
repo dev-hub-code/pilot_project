@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
-import { approveKycAction, rejectKycAction } from "@/features/admin/actions";
+import { approveKycAction, assignKycAction, rejectKycAction, unassignKycAction } from "@/features/admin/actions";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
+import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { KycReviewDetail } from "@/types/user";
@@ -63,6 +64,7 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
                   {account.firstName} {account.lastName} ({account.email})
                 </Link>
               </Item>
+              {s.status !== "PENDING" && s.assignee && <Item label="Reviewed by">{s.assignee.name}</Item>}
               {s.reviewedAt && <Item label="Reviewed">{formatDateTime(s.reviewedAt)}</Item>}
               {s.rejectionReason && <Item label="Rejection reason">{s.rejectionReason}</Item>}
             </dl>
@@ -96,12 +98,13 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
             {ownSubmission ? (
               <Notice tone="warning">You cannot review your own verification.</Notice>
             ) : (
-              <div className="space-y-6">
+              <ReviewAssignment assignee={s.assignee} viewerId={session.userId}
+                assign={assignKycAction.bind(null, s.id)} unassign={unassignKycAction.bind(null, s.id)}>
                 <ConfirmForm action={approveKycAction.bind(null, s.id)} submitLabel="Approve identity"
                   confirm="Approve this identity verification?" />
                 <ReasonForm action={rejectKycAction.bind(null, s.id)} label="Rejection reason (shown to the investor)"
                   submitLabel="Reject" />
-              </div>
+              </ReviewAssignment>
             )}
           </Card>
         )}

@@ -54,6 +54,19 @@ public class AdminBankAccountController {
 		return DocumentResponses.inline(bankAccounts.proof(reviewer.userId(), accountId));
 	}
 
+	/** Takes the verification: only the reviewer it is assigned to may verify or reject the account. */
+	@PostMapping("/api/v1/admin/bank-accounts/{accountId}/assign")
+	@PreAuthorize("hasAuthority('BANK_ACCOUNT_VERIFY')")
+	public AdminBankAccountResponse assign(AuthenticatedUser reviewer, @PathVariable UUID accountId) {
+		return bankAccounts.assign(reviewer.userId(), accountId);
+	}
+
+	@PostMapping("/api/v1/admin/bank-accounts/{accountId}/unassign")
+	@PreAuthorize("hasAuthority('BANK_ACCOUNT_VERIFY')")
+	public AdminBankAccountResponse unassign(AuthenticatedUser reviewer, @PathVariable UUID accountId) {
+		return bankAccounts.unassign(reviewer.userId(), accountId);
+	}
+
 	@PostMapping("/api/v1/admin/bank-accounts/{accountId}/verify")
 	@PreAuthorize("hasAuthority('BANK_ACCOUNT_VERIFY')")
 	public AdminBankAccountResponse verify(AuthenticatedUser reviewer, @PathVariable UUID accountId) {

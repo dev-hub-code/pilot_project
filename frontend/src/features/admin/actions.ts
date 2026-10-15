@@ -32,6 +32,33 @@ export async function reactivateUserAction(userId: string, _p: FormState, formDa
     "Account reactivated.");
 }
 
+/** Takes a KYC review or bank-account verification, or gives it back: only the assignee may decide it. */
+async function assignment(path: string, success: string, revalidate: string): Promise<FormState> {
+  try {
+    await authFetch(path, { method: "POST" });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath(revalidate, "layout");
+  return { success };
+}
+
+export async function assignKycAction(submissionId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/assign`, "Assigned to you.", "/admin/kyc");
+}
+
+export async function unassignKycAction(submissionId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/unassign`, "Returned to the queue.", "/admin/kyc");
+}
+
+export async function assignBankAccountAction(accountId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/assign`, "Assigned to you.", "/admin");
+}
+
+export async function unassignBankAccountAction(accountId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/unassign`, "Returned to the queue.", "/admin");
+}
+
 export async function approveKycAction(submissionId: string): Promise<FormState> {
   try {
     await authFetch(`/api/v1/admin/kyc/${id(submissionId)}/approve`, { method: "POST" });
@@ -63,6 +90,16 @@ export async function rejectBankAccountAction(accountId: string, _p: FormState, 
     "Bank account rejected.");
   revalidatePath("/admin", "layout");
   return result;
+}
+
+export async function takeContainerTaskAction(holdingId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/container-assignments/${id(holdingId)}/take`, "Assigned to you.",
+    "/admin/container-assignments");
+}
+
+export async function releaseContainerTaskAction(holdingId: string): Promise<FormState> {
+  return assignment(`/api/v1/admin/container-assignments/${id(holdingId)}/release`, "Returned to the queue.",
+    "/admin/container-assignments");
 }
 
 /** Assigns the container finance typed in to a paid investment, which starts its lease and payouts today. */

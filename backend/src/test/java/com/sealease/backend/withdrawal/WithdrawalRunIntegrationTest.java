@@ -58,7 +58,7 @@ class WithdrawalRunIntegrationTest {
 	void setUp() throws Exception {
 		api = new TestApi(mvc, jdbc);
 		investors = new InvestorFixtures(mvc, jdbc, api);
-		finance = api.staff("FINANCE");
+		finance = api.staff("ADMIN", "FINANCE");
 	}
 
 	@Test
@@ -256,6 +256,7 @@ class WithdrawalRunIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()).header("Idempotency-Key", key())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"OFFICE_CASH\"}"))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+		api.takePayment(paymentId, finance);
 		mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"externalReference\":\"CR-ORDER-1\",\"amountReceived\":\"50000\"}"))
 			.andExpect(status().isOk());
@@ -296,10 +297,12 @@ class WithdrawalRunIntegrationTest {
 		Account investor = withBank("Erin Minimum");
 		credit(investor, "1500", "RENT_BANK");
 		try {
-			minimum(finance, "2000").andExpect(status().isForbidden());
+			// Admins set it (they generate the runs); finance and support do not.
+			minimum(api.staff("FINANCE"), "2000").andExpect(status().isForbidden());
+			minimum(api.staff("SUPPORT"), "2000").andExpect(status().isForbidden());
 			minimum(admin, "0").andExpect(status().isBadRequest());
 			minimum(admin, "12.345").andExpect(status().isBadRequest());
-			minimum(admin, "2000").andExpect(status().isOk())
+			minimum(api.staff("ADMIN"), "2000").andExpect(status().isOk())
 				.andExpect(jsonPath("$.minimumAmount").value(2000))
 				.andExpect(jsonPath("$.defaultAmount").value(50))
 				.andExpect(jsonPath("$.updatedAt").isNotEmpty());
@@ -369,13 +372,14 @@ class WithdrawalRunIntegrationTest {
 						 "accountNumber":"%s","routingCode":"HDFC0001234"}
 						""".formatted(name, number)).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+		api.assignReview("bank-accounts", bankAccountId, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", bankAccountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk());
 		return investor;
 	}
 
 	private void credit(Account investor, String amount, String balance) throws Exception {
-		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, finance.bearer())
+		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
 				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON).content("""
 						{"userId":"%s","currency":"INR","direction":"CREDIT","amount":"%s","reason":"Test funding","balance":"%s"}
 						""".formatted(investor.id(), amount, balance)))
@@ -401,6 +405,7 @@ class WithdrawalRunIntegrationTest {
 	private ResultActions updateTask(String withdrawalId, String outcome, String reference, String reason) throws Exception {
 		String body = "{\"outcome\":\"" + outcome + "\"" + (reference == null ? "" : ",\"reference\":\"" + reference + "\"")
 				+ (reason == null ? "" : ",\"reason\":\"" + reason + "\"") + "}";
+		api.takeFinanceTask(withdrawalId, finance);
 		return mvc.perform(post("/api/v1/admin/finance-tasks/{id}", withdrawalId).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content(body));
 	}

@@ -32,7 +32,8 @@ public enum AuditCategory {
 			AuditAction.KYC_REJECTED, AuditAction.BANK_ACCOUNT_ADDED, AuditAction.BANK_ACCOUNT_REMOVED,
 			AuditAction.BANK_ACCOUNT_PRIMARY_CHANGED, AuditAction.BANK_ACCOUNT_VERIFIED,
 			AuditAction.BANK_ACCOUNT_REJECTED, AuditAction.BANK_ACCOUNT_CHANGE_REQUESTED,
-			AuditAction.BANK_ACCOUNT_CHANGED)),
+			AuditAction.BANK_ACCOUNT_CHANGED, AuditAction.KYC_ASSIGNED, AuditAction.KYC_UNASSIGNED,
+			AuditAction.BANK_ACCOUNT_ASSIGNED, AuditAction.BANK_ACCOUNT_UNASSIGNED)),
 
 	/** Money moving: payments, payouts, ledger, withdrawals, commissions and the accounts behind them. */
 	MONEY(EnumSet.of(AuditAction.PAYMENT_STARTED, AuditAction.PAYMENT_DETAILS_SUBMITTED,

@@ -6,6 +6,7 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.reporting.dto.DashboardCharts;
+import com.sealease.backend.reporting.dto.Workload;
 import com.sealease.backend.reporting.dto.KpiTile;
 import com.sealease.backend.reporting.engine.ReportDocument;
 import com.sealease.backend.reporting.engine.ReportFormat;
@@ -96,6 +97,13 @@ public class AdminReportController {
 	@PreAuthorize("isAuthenticated()")
 	public DashboardCharts dashboardCharts(AuthenticatedUser viewer) {
 		return dashboard.charts(viewer);
+	}
+
+	/** The viewer's task and ticket queues for the overview; queues they do not work on are null. */
+	@GetMapping("/api/v1/admin/dashboard/workload")
+	@PreAuthorize("isAuthenticated()")
+	public Workload workload(AuthenticatedUser viewer) {
+		return dashboard.workload(viewer);
 	}
 
 	private ResponseEntity<?> produce(AuthenticatedUser actor, String report, String rawFormat, Map<String, String> parameters,

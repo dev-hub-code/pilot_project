@@ -55,4 +55,18 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, J
 	@Query(value = "select nextval('withdrawal_number_seq')", nativeQuery = true)
 	long nextNumber();
 
+	/** Finance tasks (withdrawals in a batch) still to pay; only {@code assigneeId}'s when it is given. */
+	@Query("""
+			select count(w) from Withdrawal w where w.batchId is not null
+			and w.status in (com.sealease.backend.withdrawal.entity.WithdrawalStatus.BATCHED,
+			                 com.sealease.backend.withdrawal.entity.WithdrawalStatus.PROCESSING)
+			and (:assigneeId is null or w.taskAssigneeId = :assigneeId)""")
+	long countOpenTasks(@Param("assigneeId") UUID assigneeId);
+
+	/** Finance tasks marked paid or failed in {@code [from, to)}; only {@code assigneeId}'s when it is given. */
+	@Query("""
+			select count(w) from Withdrawal w where w.taskDoneAt >= :from and w.taskDoneAt < :to
+			and (:assigneeId is null or w.taskAssigneeId = :assigneeId)""")
+	long countTasksDone(@Param("assigneeId") UUID assigneeId, @Param("from") Instant from, @Param("to") Instant to);
+
 }

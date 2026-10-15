@@ -6,6 +6,7 @@ import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.crm.dto.PipelineStage;
 import com.sealease.backend.crm.entity.LeadStage;
 import com.sealease.backend.crm.service.LeadService;
+import com.sealease.backend.helpdesk.entity.SupportTeam;
 import com.sealease.backend.helpdesk.service.SupportService;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.ledger.dto.PeriodTotal;
@@ -18,11 +19,15 @@ import com.sealease.backend.reporting.dto.DashboardCharts;
 import com.sealease.backend.reporting.dto.KpiTile;
 import com.sealease.backend.role.service.UserRoleService;
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.withdrawal.service.FinanceTaskService;
 import com.sealease.backend.withdrawal.service.WithdrawalService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sealease.backend.common.time.DisplayTimeZone;
+import com.sealease.backend.reporting.dto.Workload;
 import java.time.Clock;
+import java.time.ZoneId;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -55,11 +60,13 @@ public class DashboardService {
 	private final LeadService leads;
 	private final SecurityDashboardService security;
 	private final MoneyProperties moneyProperties;
+	private final FinanceTaskService financeTasks;
+	private final DisplayTimeZone display;
 	private final Clock clock;
 
 	public DashboardService(UserRoleService roles, HoldingService holdings, LedgerService ledger,
 			WithdrawalService withdrawals, SupportService support, LeadService leads, SecurityDashboardService security,
-			MoneyProperties moneyProperties, Clock clock) {
+			MoneyProperties moneyProperties, FinanceTaskService financeTasks, DisplayTimeZone display, Clock clock) {
 		this.roles = roles;
 		this.holdings = holdings;
 		this.ledger = ledger;
@@ -68,17 +75,21 @@ public class DashboardService {
 		this.leads = leads;
 		this.security = security;
 		this.moneyProperties = moneyProperties;
+		this.financeTasks = financeTasks;
+		this.display = display;
 		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
 	public List<KpiTile> tiles(AuthenticatedUser viewer) {
 		List<KpiTile> tiles = new ArrayList<>();
-		if (viewer.hasPermission("USER_VIEW")) {
+		// Business figures need their own permission too: support views these records to answer tickets only.
+		boolean figures = viewer.hasPermission("DASHBOARD_FIGURES_VIEW");
+		if (figures && viewer.hasPermission("USER_VIEW")) {
 			tiles.add(new KpiTile("investors", "Investors", List.of(String.valueOf(roles.countUsersWithRole("INVESTOR"))),
 					"Registered investor accounts", "/admin/users"));
 		}
-		if (viewer.hasPermission("INVESTMENT_VIEW")) {
+		if (figures && viewer.hasPermission("INVESTMENT_VIEW")) {
 			tiles.add(new KpiTile("capital", "Capital invested", money(holdings.totalInvested().values()),
 					"Containers bought by investors", "/admin/products"));
 		}
@@ -97,15 +108,11 @@ public class DashboardService {
 					money(ledger.investorBalancesAt(clock.instant()).values()),
 					"Earnings balances not yet withdrawn", "/admin/ledger"));
 		}
-		if (viewer.hasPermission("WITHDRAWAL_VIEW")) {
+		if (figures && viewer.hasPermission("WITHDRAWAL_VIEW")) {
 			tiles.add(new KpiTile("withdrawals", "Withdrawals in progress", money(withdrawals.openAmounts().values()),
 					withdrawals.openCount() + " awaiting approval or payout", "/admin/withdrawals"));
 		}
-		if (viewer.hasPermission("SUPPORT_TICKET_VIEW")) {
-			SupportService.QueueCounts queue = support.queueCounts();
-			tiles.add(new KpiTile("support", "Support requests waiting", List.of(String.valueOf(queue.open())),
-					queue.overdue() + " overdue", "/admin/support"));
-		}
+		// Ticket queues are in the workload instead.
 		if (viewer.hasPermission("LEAD_VIEW")) {
 			List<PipelineStage> pipeline = leads.pipeline(new LeadService.Viewer(viewer.userId(),
 					viewer.hasPermission("LEAD_ASSIGN")), null);
@@ -118,6 +125,28 @@ public class DashboardService {
 					"In the last 24 hours", "/admin/security?hours=24"));
 		}
 		return tiles;
+	}
+
+	/**
+	 * The queues the viewer works: finance tasks and tickets handed to finance for finance, support tickets for
+	 * support agents. Today and this month are in the business's time zone.
+	 */
+	@Transactional(readOnly = true)
+	public Workload workload(AuthenticatedUser viewer) {
+		ZoneId zone = display.zone();
+		LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
+		Instant dayStart = today.atStartOfDay(zone).toInstant();
+		Instant monthStart = today.withDayOfMonth(1).atStartOfDay(zone).toInstant();
+		Instant to = today.plusDays(1).atStartOfDay(zone).toInstant();
+		return new Workload(
+				viewer.hasPermission("FINANCE_TASK_PROCESS")
+						? financeTasks.workload(viewer.userId(), dayStart, monthStart, to) : null,
+				viewer.hasPermission("FINANCE_TICKET_HANDLE")
+						? support.workload(SupportTeam.FINANCE, viewer.userId(), dayStart, monthStart, to) : null,
+				viewer.hasPermission("SUPPORT_TICKET_MANAGE")
+						? support.workload(SupportTeam.SUPPORT, viewer.userId(), dayStart, monthStart, to) : null,
+				viewer.hasPermission("SUPPORT_TICKET_MANAGE")
+						? support.pendingByPriority(SupportTeam.SUPPORT, viewer.userId()) : null);
 	}
 
 	/** Twelve months of trends for the overview, each series gated like the tile over the same data. */
@@ -140,10 +169,11 @@ public class DashboardService {
 					MoneyResponse.from(e.getValue().getOrDefault(AccountType.PLATFORM_CAPITAL_RETURNS, zero)),
 					MoneyResponse.from(e.getValue().getOrDefault(AccountType.PLATFORM_REFERRAL_EXPENSE, zero)))).toList();
 		}
-		List<DashboardCharts.AmountMonth> invested = !viewer.hasPermission("INVESTMENT_VIEW") ? null
+		boolean figures = viewer.hasPermission("DASHBOARD_FIGURES_VIEW");
+		List<DashboardCharts.AmountMonth> invested = !figures || !viewer.hasPermission("INVESTMENT_VIEW") ? null
 				: holdings.investedByMonth(currency, from).entrySet().stream()
 					.map(e -> new DashboardCharts.AmountMonth(e.getKey().toString(), MoneyResponse.from(e.getValue()))).toList();
-		List<DashboardCharts.CountMonth> investors = !viewer.hasPermission("USER_VIEW") ? null
+		List<DashboardCharts.CountMonth> investors = !figures || !viewer.hasPermission("USER_VIEW") ? null
 				: roles.roleAssignmentsByMonth("INVESTOR", from).entrySet().stream()
 					.map(e -> new DashboardCharts.CountMonth(e.getKey().toString(), e.getValue())).toList();
 		List<DashboardCharts.StageCount> pipeline = null;

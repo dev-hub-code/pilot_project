@@ -11,11 +11,24 @@ const id = (value: string) => encodeURIComponent(value);
 
 function refresh() {
   revalidatePath("/admin/withdrawals", "layout");
+  revalidatePath("/admin/withdrawal-runs");
   revalidatePath("/admin/finance-tasks");
   revalidatePath("/admin/ledger", "layout");
 }
 
 /** Finance's update of a task: paid (with the bank reference or cash receipt), or failed (with the reason). */
+/** Takes a finance task (only the member who took it may mark it), or gives it back to the queue. */
+export async function financeTaskAssignmentAction(withdrawalId: string, take: boolean): Promise<FormState> {
+  try {
+    await authFetch(`/api/v1/admin/finance-tasks/${encodeURIComponent(withdrawalId)}/${take ? "take" : "release"}`,
+      { method: "POST" });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath("/admin/finance-tasks");
+  return { success: take ? "Assigned to you." : "Returned to the queue." };
+}
+
 export async function updateFinanceTaskAction(withdrawalId: string, outcome: "PAID" | "FAILED", _p: FormState,
   formData: FormData): Promise<FormState> {
   const parsed = financeTaskSchema.safeParse({

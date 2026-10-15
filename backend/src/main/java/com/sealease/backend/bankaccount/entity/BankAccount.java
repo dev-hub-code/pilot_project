@@ -72,6 +72,13 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "replaces_account_id", updatable = false)
 	private UUID replacesAccountId;
 
+	/** The reviewer the review is assigned to; only they may decide it. Kept after the decision. */
+	@Column(name = "assigned_to")
+	private UUID assignedTo;
+
+	@Column(name = "assigned_at")
+	private Instant assignedAt;
+
 	protected BankAccount() {
 	}
 
@@ -130,6 +137,30 @@ public class BankAccount extends BaseEntity {
 
 	public void setPrimary(boolean primary) {
 		this.primary = primary;
+	}
+
+	/** Assigns the review to a reviewer, who alone may now decide it. */
+	public void assignTo(UUID reviewer, Instant now) {
+		this.assignedTo = reviewer;
+		this.assignedAt = now;
+	}
+
+	/** Gives the review back to the queue, for another reviewer to take. */
+	public void unassign() {
+		this.assignedTo = null;
+		this.assignedAt = null;
+	}
+
+	public boolean isAssignedTo(UUID reviewer) {
+		return reviewer.equals(assignedTo);
+	}
+
+	public UUID getAssignedTo() {
+		return assignedTo;
+	}
+
+	public Instant getAssignedAt() {
+		return assignedAt;
 	}
 
 	public UUID getUserId() {

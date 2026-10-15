@@ -30,6 +30,18 @@ export async function confirmTransferAction(paymentId: string, _p: FormState, fo
   return { success: "Transfer recorded." };
 }
 
+/** Takes a payment to confirm or reject it (only the member who took it may), or gives it back to the queue. */
+export async function paymentTaskAction(paymentId: string, take: boolean): Promise<FormState> {
+  try {
+    await authFetch(`/api/v1/admin/payments/${id(paymentId)}/${take ? "take" : "release"}`, { method: "POST" });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath("/admin/payments");
+  revalidatePath("/admin/orders", "layout");
+  return { success: take ? "Assigned to you." : "Returned to the queue." };
+}
+
 export async function rejectPaymentAction(paymentId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const input = values(formData);
   const parsed = rejectPaymentSchema.safeParse(input);

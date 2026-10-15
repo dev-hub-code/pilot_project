@@ -58,6 +58,17 @@ public class AdminKycController {
 		return DocumentResponses.inline(kyc.viewDocument(reviewer.userId(), submissionId, documentId));
 	}
 
+	/** Takes the review: only the reviewer it is assigned to may approve or reject it. */
+	@PostMapping("/api/v1/admin/kyc/{submissionId}/assign")
+	public KycSubmissionResponse assign(AuthenticatedUser reviewer, @PathVariable UUID submissionId) {
+		return kyc.assign(reviewer.userId(), submissionId);
+	}
+
+	@PostMapping("/api/v1/admin/kyc/{submissionId}/unassign")
+	public KycSubmissionResponse unassign(AuthenticatedUser reviewer, @PathVariable UUID submissionId) {
+		return kyc.unassign(reviewer.userId(), submissionId);
+	}
+
 	@PostMapping("/api/v1/admin/kyc/{submissionId}/approve")
 	public KycSubmissionResponse approve(AuthenticatedUser reviewer, @PathVariable UUID submissionId) {
 		return kyc.approve(reviewer.userId(), submissionId);

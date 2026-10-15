@@ -9,6 +9,9 @@ import com.sealease.backend.order.dto.OrderResponse;
 import com.sealease.backend.order.dto.OrderSearchCriteria;
 import com.sealease.backend.order.entity.OrderStatus;
 import com.sealease.backend.order.service.OrderService;
+import com.sealease.backend.permission.PermissionCode;
+import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.user.service.UserAccountService;
 import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -31,18 +34,24 @@ public class AdminOrderController {
 	private final OrderService orders;
 	private final InvoiceService invoices;
 	private final HoldingService holdings;
+	private final UserAccountService accounts;
 
-	public AdminOrderController(OrderService orders, InvoiceService invoices, HoldingService holdings) {
+	public AdminOrderController(OrderService orders, InvoiceService invoices, HoldingService holdings,
+			UserAccountService accounts) {
+		this.accounts = accounts;
 		this.orders = orders;
 		this.invoices = invoices;
 		this.holdings = holdings;
 	}
 
+	/** Without RECORD_BROWSE, only an exact search: a whole order number, or an investor's readable ID or email. */
 	@GetMapping
-	public PageResponse<OrderResponse> search(@RequestParam(required = false) @Size(max = 30) String q,
+	public PageResponse<OrderResponse> search(@RequestParam(required = false) @Size(max = 100) String q,
 			@RequestParam(required = false) OrderStatus status, @RequestParam(required = false) UUID userId,
-			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(orders.search(new OrderSearchCriteria(q, status, userId), pageable));
+			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable, AuthenticatedUser viewer) {
+		boolean exact = !viewer.hasPermission(PermissionCode.RECORD_BROWSE.name());
+		return PageResponse.from(orders.search(new OrderSearchCriteria(q, status, exact ? null : userId, exact,
+				accounts.findIdExactly(q).orElse(null)), pageable));
 	}
 
 	@GetMapping("/{orderId}")

@@ -8,12 +8,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { monthColumns } from "@/features/dashboard/months";
+import { PRIORITY_TONE } from "@/features/support/labels";
 import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
-import type { DashboardCharts, KpiTile } from "@/types/report";
+import type { DashboardCharts, KpiTile, PriorityRow, Workload, WorkloadCounts } from "@/types/report";
 import { humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -37,7 +38,7 @@ export default async function AdminOverviewPage() {
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
 
-  const [tiles, charts, pendingKyc, pendingBanks, roles, toAssign] = await Promise.all([
+  const [tiles, charts, pendingKyc, pendingBanks, roles, toAssign, toConfirm, workload] = await Promise.all([
     authFetch<KpiTile[]>("/api/v1/admin/dashboard"),
     authFetch<DashboardCharts>("/api/v1/admin/dashboard/charts"),
     can(Permission.KYC_REVIEW) ? authFetch<PageResponse<unknown>>("/api/v1/admin/kyc?size=1") : null,
@@ -46,11 +47,30 @@ export default async function AdminOverviewPage() {
     can(Permission.CONTAINER_ASSIGN)
       ? authFetch<{ pending: PageResponse<unknown> }>("/api/v1/admin/container-assignments?size=1").then((q) => q.pending)
       : null,
+    can(Permission.PAYMENT_CONFIRM) ? authFetch<PageResponse<unknown>>("/api/v1/admin/payments?status=PENDING&size=1") : null,
+    authFetch<Workload>("/api/v1/admin/dashboard/workload"),
   ]);
 
   return (
     <div className="space-y-8">
       <PageHeader title="Administration" description={`Signed in as ${session.roles.join(", ")}`} />
+
+      {workload.supportTickets && (
+        <WorkloadSection title="Support tickets" counts={workload.supportTickets} noun="tickets" links={{
+          pending: "/admin/support", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved",
+        }} />
+      )}
+      {workload.supportByPriority && <PriorityTable rows={workload.supportByPriority} />}
+      {workload.financeTasks && (
+        <WorkloadSection title="Finance tasks" counts={workload.financeTasks} noun="tasks" links={{
+          pending: "/admin/finance-tasks", mine: "/admin/finance-tasks", done: "/admin/finance-tasks?view=DONE",
+        }} />
+      )}
+      {workload.financeTickets && (
+        <WorkloadSection title="Tickets handed to finance" counts={workload.financeTickets} noun="tickets" links={{
+          pending: "/admin/support?view=finance", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved",
+        }} />
+      )}
 
       {tiles.length > 0 && (
         <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Key figures">
@@ -120,6 +140,9 @@ export default async function AdminOverviewPage() {
         {pendingBanks && (
           <QueueCard href="/admin/bank-accounts" label="Bank accounts to verify" count={pendingBanks.totalElements} />
         )}
+        {toConfirm && (
+          <QueueCard href="/admin/payments" label="Payments to confirm" count={toConfirm.totalElements} />
+        )}
         {toAssign && (
           <QueueCard href="/admin/container-assignments" label="Paid investments awaiting a container" count={toAssign.totalElements} />
         )}
@@ -146,11 +169,57 @@ export default async function AdminOverviewPage() {
   );
 }
 
-function QueueCard({ href, label, count }: { href: string; label: string; count: number }) {
+function QueueCard({ href, label, count, note }: { href: string; label: string; count: number; note?: string }) {
   return (
     <Link href={href} className="border border-border bg-surface p-6 hover:border-brand">
       <p className="text-sm text-muted">{label}</p>
       <p className="mt-2 text-3xl font-semibold tabular-nums">{count}</p>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </Link>
+  );
+}
+
+/** Pending support tickets by priority, most urgent first; each count opens the matching tickets. */
+function PriorityTable({ rows }: { rows: PriorityRow[] }) {
+  const count = (value: number, view: string, priority: string) => value === 0
+    ? <span className="text-muted">0</span>
+    : <Link href={`/admin/support?view=${view}&priority=${priority}`} className="font-medium text-gold-text hover:underline">{value}</Link>;
+  return (
+    <section className="space-y-3" aria-label="Support tickets by priority">
+      <h2 className="font-medium">Pending tickets by priority</h2>
+      <DataTable columns={["Priority", "Pending", "Overdue", "Unassigned", "Assigned to me"]}>
+        {rows.map((r) => (
+          <tr key={r.priority}>
+            <Cell><StatusBadge tone={PRIORITY_TONE[r.priority]}>{humanize(r.priority)}</StatusBadge></Cell>
+            <Cell className="tabular-nums">{count(r.pending, "queue", r.priority)}</Cell>
+            <Cell className="tabular-nums">{count(r.overdue, "overdue", r.priority)}</Cell>
+            <Cell className="tabular-nums">{count(r.unassigned, "unassigned", r.priority)}</Cell>
+            <Cell className="tabular-nums">{count(r.assignedToMe, "mine", r.priority)}</Cell>
+          </tr>
+        ))}
+      </DataTable>
+    </section>
+  );
+}
+
+/** Pending, assigned to the viewer, completed today (by everyone) and completed by the viewer this month. */
+function WorkloadSection({ title, counts, noun, links }: {
+  title: string;
+  counts: WorkloadCounts;
+  noun: string;
+  links: { pending: string; mine: string; done: string };
+}) {
+  return (
+    <section className="space-y-3" aria-label={title}>
+      <h2 className="font-medium">{title}</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <QueueCard href={links.pending} label={`All pending ${noun}`} count={counts.pending}
+          note={counts.overdue === null ? undefined : `${counts.overdue} overdue`} />
+        <QueueCard href={links.mine} label="Assigned to me" count={counts.assignedToMe} note="Pending, assigned to you" />
+        <QueueCard href={links.done} label="Completed today" count={counts.doneToday} note={`${counts.doneTodayByMe} by you`} />
+        <QueueCard href={links.done} label="Completed by me this month" count={counts.doneThisMonthByMe}
+          note={`${counts.doneThisMonth} by everyone`} />
+      </div>
+    </section>
   );
 }

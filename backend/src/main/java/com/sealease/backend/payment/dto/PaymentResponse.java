@@ -1,5 +1,6 @@
 package com.sealease.backend.payment.dto;
 
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.payment.entity.Payment;
 import com.sealease.backend.payment.entity.PaymentMethod;
@@ -37,14 +38,22 @@ public record PaymentResponse(
 		DepositDetails deposit,
 		OfficeCashInstructions officeCash,
 		boolean gstIncluded,
-		BigDecimal rentBonusPercent) {
+		BigDecimal rentBonusPercent,
+		Assignee assignee) {
 
 	public static PaymentResponse from(Payment p, String orderNumber, BankTransferInstructions bankTransfer,
 			DepositDetails deposit, OfficeCashInstructions officeCash) {
 		return new PaymentResponse(p.getId(), p.getOrderId(), orderNumber, p.getUserId(), p.getMethod(), p.getProvider(),
 				p.getProviderReference(), MoneyResponse.from(p.amount()), p.getStatus(), p.getFailureReason(),
 				p.getExternalReference(), p.getSettledAt(), p.getRefundedAt(), p.getRefundReference(), p.getRefundReason(),
-				p.getCreatedAt(), bankTransfer, deposit, officeCash, p.isGstIncluded(), p.getRentBonusPercent());
+				p.getCreatedAt(), bankTransfer, deposit, officeCash, p.isGstIncluded(), p.getRentBonusPercent(), null);
+	}
+
+	/** Staff views say which finance member is confirming the payment; investors' views do not. */
+	public PaymentResponse withAssignee(Assignee assignee) {
+		return new PaymentResponse(id, orderId, orderNumber, userId, method, provider, providerReference, amount, status,
+				failureReason, externalReference, settledAt, refundedAt, refundReference, refundReason, createdAt,
+				bankTransfer, deposit, officeCash, gstIncluded, rentBonusPercent, assignee);
 	}
 
 }

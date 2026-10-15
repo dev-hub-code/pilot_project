@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -107,8 +106,7 @@ public class ReferralService {
 	 * code, or the code of an account that is no longer active, fails the registration.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public void link(UUID newUserId, String rawCode) {
-		String code = normalize(rawCode);
+	public void link(UUID newUserId, String code) {
 		UUID referrerId = jdbc.query("SELECT user_id FROM referral_codes WHERE code = ?",
 				(rs, i) -> rs.getObject("user_id", UUID.class), code).stream().findFirst()
 			.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED, "Referral code not recognised"));
@@ -289,10 +287,6 @@ public class ReferralService {
 			code[i] = ALPHABET[random.nextInt(ALPHABET.length)];
 		}
 		return new String(code);
-	}
-
-	private static String normalize(String code) {
-		return code.strip().toUpperCase(Locale.ROOT);
 	}
 
 	/** "Ada L." - enough to recognise a referral without disclosing their full name. */

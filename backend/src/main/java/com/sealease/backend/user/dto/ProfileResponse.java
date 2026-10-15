@@ -45,6 +45,14 @@ public record ProfileResponse(
 				p.isEmailNotifications(), p.isSmsNotifications(), u.isMfaEnabled());
 	}
 
+	/** The same, with the mobile number cut to its last four digits ("•••••• 3210"). */
+	public ProfileResponse withMaskedPhone() {
+		String digits = phone == null ? "" : phone.replaceAll("\\D", "");
+		String masked = digits.isEmpty() ? phone : "•••••• " + digits.substring(Math.max(0, digits.length() - 4));
+		return new ProfileResponse(id, userCode, email, firstName, lastName, status, masked, dateOfBirth, nationality, address,
+				gstNumber, taxResidencyCountry, taxIdMasked, kycStatus, emailNotifications, smsNotifications, twoFactorEnabled);
+	}
+
 	/**
 	 * The personal details still to fill in before identity verification can be submitted, by name; empty when
 	 * complete. Address line 2 is optional.

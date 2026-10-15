@@ -41,7 +41,8 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" description="Investors and employees."
+      <PageHeader title="Users"
+        description={hasPermission(session.permissions, Permission.STAFF_ACCOUNT_VIEW) ? "Investors and employees." : "Investors."}
         actions={hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
           ? <LinkButton href="/admin/users/new">New employee</LinkButton> : undefined} />
       <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-5" role="search">

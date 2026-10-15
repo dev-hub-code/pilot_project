@@ -209,6 +209,10 @@ public class WithdrawalService {
 			if (c.userId() != null) {
 				predicates.add(cb.equal(root.get("userId"), c.userId()));
 			}
+			if (c.q() != null && !c.q().isBlank()) {
+				Predicate reference = cb.equal(cb.upper(root.get("reference")), c.q().strip().toUpperCase(Locale.ROOT));
+				predicates.add(c.qInvestorId() == null ? reference : cb.or(reference, cb.equal(root.get("userId"), c.qInvestorId())));
+			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};
 	}

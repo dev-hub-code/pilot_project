@@ -2,6 +2,7 @@ package com.sealease.backend.user.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
+import com.sealease.backend.permission.PermissionCode;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
@@ -41,28 +42,40 @@ public class AdminUserController {
 			@RequestParam(required = false) @Size(max = 100) String q,
 			@RequestParam(required = false) UserStatus status,
 			@RequestParam(required = false) KycStatus kycStatus,
-			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus), pageable));
+			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+			AuthenticatedUser viewer) {
+		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, investorsOnly(viewer)),
+				pageable));
 	}
 
+	/** A viewer who may not see employees gets 404 for a staff account, as if it did not exist. */
 	@GetMapping("/{userId}")
 	@PreAuthorize("hasAuthority('USER_VIEW')")
-	public AdminUserDetail detail(@PathVariable UUID userId) {
-		return administration.detail(userId);
+	public AdminUserDetail detail(AuthenticatedUser viewer, @PathVariable UUID userId) {
+		return forViewer(viewer, administration.detail(userId, investorsOnly(viewer)));
+	}
+
+	/** Only admins see the full mobile number. */
+	private static AdminUserDetail forViewer(AuthenticatedUser viewer, AdminUserDetail detail) {
+		return viewer.hasPermission(PermissionCode.PHONE_NUMBER_VIEW.name()) ? detail : detail.withMaskedPhone();
+	}
+
+	private static boolean investorsOnly(AuthenticatedUser viewer) {
+		return !viewer.hasPermission(PermissionCode.STAFF_ACCOUNT_VIEW.name());
 	}
 
 	@PostMapping("/{userId}/suspend")
 	@PreAuthorize("hasAuthority('USER_SUSPEND')")
 	public AdminUserDetail suspend(AuthenticatedUser actor, @PathVariable UUID userId,
 			@Valid @RequestBody ReasonRequest request) {
-		return administration.suspend(actor.userId(), userId, request.reason());
+		return forViewer(actor, administration.suspend(actor.userId(), userId, request.reason()));
 	}
 
 	@PostMapping("/{userId}/reactivate")
 	@PreAuthorize("hasAuthority('USER_SUSPEND')")
 	public AdminUserDetail reactivate(AuthenticatedUser actor, @PathVariable UUID userId,
 			@Valid @RequestBody ReasonRequest request) {
-		return administration.reactivate(actor.userId(), userId, request.reason());
+		return forViewer(actor, administration.reactivate(actor.userId(), userId, request.reason()));
 	}
 
 }

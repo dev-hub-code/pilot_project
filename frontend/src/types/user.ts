@@ -43,6 +43,13 @@ export type DocumentPurpose =
   | "KYC_AADHAAR_FRONT" | "KYC_AADHAAR_BACK"
   | "KYC_IDENTITY_FRONT" | "KYC_IDENTITY_BACK" | "KYC_SELFIE" | "KYC_PROOF_OF_ADDRESS";
 
+/** The reviewer a KYC review or bank-account verification is assigned to; only they may decide it. */
+export interface Assignee {
+  id: string;
+  name: string;
+  assignedAt: string;
+}
+
 export interface KycSubmission {
   id: string;
   userId: string;
@@ -64,6 +71,8 @@ export interface KycSubmission {
   reviewedAt: string | null;
   reviewedBy: string | null;
   rejectionReason: string | null;
+  /** Null in the investor's own view, and while nobody has taken the review. */
+  assignee: Assignee | null;
   documents: { id: string; purpose: DocumentPurpose }[];
 }
 
@@ -109,6 +118,7 @@ export interface AdminBankAccount {
   otherUsersWithSameAccount: number;
   /** The account a change request would retire once verified. */
   replaces: BankAccount | null;
+  assignee: Assignee | null;
 }
 
 export interface AdminUserSummary {

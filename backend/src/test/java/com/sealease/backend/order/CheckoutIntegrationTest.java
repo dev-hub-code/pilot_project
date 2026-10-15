@@ -271,7 +271,7 @@ class CheckoutIntegrationTest {
 	void paidInvestmentsAwaitTheContainersFinanceAssignsWhichStartsTheLeaseAndPayouts() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		// Leased for 2 years, as the investor chose.
 		String orderId = placeOrder(investor, product, 2, 2);
 
@@ -328,6 +328,7 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.message").value(containsString("Enter the container number")));
 		assign(finance, holdings.get(0), flatRack).andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("needs a")));
+		api.takeContainerTask(holdings.get(0), finance);
 		mvc.perform(post("/api/v1/admin/container-assignments/{id}", holdings.get(0)).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"containerNumber\":\"" + first.toLowerCase() + "\",\"currentLocation\":\"Mundra Port, Gujarat\"}"))
@@ -417,7 +418,7 @@ class CheckoutIntegrationTest {
 		String orderId = placeOrder(investor, product, 1);
 		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andReturn().getResponse().getContentAsString(), "$.id");
-		Account finance = api.becomeStaff(investor, "FINANCE");
+		Account finance = api.becomeStaff(investor, "ADMIN", "FINANCE");
 
 		confirmTransfer(finance, bank, "50000").andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.message").value(containsString("own order")));
@@ -427,7 +428,7 @@ class CheckoutIntegrationTest {
 	void unpaidOrdersExpireAndLatePaymentsAreRefunded() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		String orderId = placeOrder(investor, product, 1);
 		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andReturn().getResponse().getContentAsString(), "$.id");
@@ -447,7 +448,7 @@ class CheckoutIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM holdings WHERE order_id = ?::uuid", Integer.class, orderId)).isZero();
 
 		refund(investor, bank).andExpect(status().isForbidden());
-		refund(finance, bank).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+		refund(api.admin(), bank).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
 	}
 
 	// ------------------------------------------------------------------------------- outbox
@@ -526,7 +527,7 @@ class CheckoutIntegrationTest {
 		submitDeposit(investor, paymentId).andExpect(status().isUnprocessableContent());
 
 		// Finance confirms the cash with the receipt number; the amount must match.
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		confirmTransfer(finance, paymentId, "40000").andExpect(status().isUnprocessableContent());
 		confirmTransfer(investor, paymentId, "50000").andExpect(status().isForbidden());
 		confirmTransfer(finance, paymentId, "50000").andExpect(status().isOk())
@@ -615,7 +616,7 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.officeCash.amount.amount").value("50000.00"))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		confirmTransfer(finance, paymentId, "59000").andExpect(status().isUnprocessableContent());
 		confirmTransfer(finance, paymentId, "50000").andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("SUCCEEDED"));
@@ -671,7 +672,7 @@ class CheckoutIntegrationTest {
 			.isEqualTo("PENDING");
 
 		// Finance cannot confirm the replaced bank payment while the cash one is pending; the cash one confirms.
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		confirmTransfer(finance, bank, "59000").andExpect(status().isConflict())
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("confirm that one instead")));
 		confirmTransfer(finance, cash, "50000").andExpect(status().isOk());
@@ -685,7 +686,7 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.bankTransfer.amount.amount").value(new java.math.BigDecimal(amount).setScale(2).toPlainString()))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 		submitDeposit(investor, paymentId).andExpect(status().isOk());
-		confirmTransfer(api.staff("FINANCE"), paymentId, amount).andExpect(status().isOk());
+		confirmTransfer(api.staff("ADMIN", "FINANCE"), paymentId, amount).andExpect(status().isOk());
 	}
 
 	private Account approvedInvestor() throws Exception {
@@ -730,6 +731,7 @@ class CheckoutIntegrationTest {
 	}
 
 	private ResultActions assign(Account actor, String holdingId, String containerNumber) throws Exception {
+		api.takeContainerTask(holdingId, actor);
 		return mvc.perform(post("/api/v1/admin/container-assignments/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("{\"containerNumber\":\"" + containerNumber + "\"}"));
 	}
@@ -773,6 +775,7 @@ class CheckoutIntegrationTest {
 	}
 
 	private ResultActions confirmTransfer(Account actor, String paymentId, String amount) throws Exception {
+		api.takePayment(paymentId, actor);
 		return mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"externalReference\":\"BANK-REF-1\",\"amountReceived\":\"" + amount + "\"}"));

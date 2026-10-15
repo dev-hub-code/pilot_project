@@ -28,6 +28,28 @@ export async function staffReplyAction(ticketId: string, _p: FormState, formData
   return { success: internal ? "Internal note added." : "Reply sent; the customer has been notified." };
 }
 
+/** Support hands a ticket to the finance team, or finance hands it back to support. */
+export async function ticketTeamAction(ticketId: string, team: "SUPPORT" | "FINANCE"): Promise<FormState> {
+  try {
+    await authFetch(`${path(ticketId)}/team`, { method: "POST", json: { team } });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath("/admin/support", "layout");
+  return { success: team === "FINANCE" ? "Handed to the finance team." : "Handed back to the support team." };
+}
+
+/** A finance member takes a ticket handed to finance ({@code assigneeId} is themselves), or gives it back (null). */
+export async function ticketTakeAction(ticketId: string, assigneeId: string | null): Promise<FormState> {
+  try {
+    await authFetch(`${path(ticketId)}/assign`, { method: "POST", json: { assigneeId } });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath("/admin/support", "layout");
+  return { success: assigneeId ? "Assigned to you." : "Returned to the finance queue." };
+}
+
 export async function ticketSettingAction(ticketId: string, setting: "status" | "priority" | "assign", _p: FormState,
   formData: FormData): Promise<FormState> {
   const value = String(formData.get("value") ?? "");

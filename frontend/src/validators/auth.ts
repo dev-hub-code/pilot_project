@@ -52,8 +52,9 @@ export const registerSchema = z
       .regex(/^[+0-9 ()-]{6,20}$/, "Enter a mobile number (digits, spaces, +, brackets or dashes)"),
     password: newPassword,
     confirmPassword: z.string(),
-    referralCode: z.string().trim().toUpperCase()
-      .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 letters and digits"),
+    referralCode: z.string().trim()
+      .regex(/^[^a-z]*$/, "Referral codes are in capital letters")
+      .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 capital letters and digits"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],

@@ -1,5 +1,6 @@
 package com.sealease.backend.order.service;
 
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.earning.service.PayoutService;
@@ -17,11 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
- * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number. Assigning leases the
+ * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number, once a finance member
+ * has taken the task (only they may then assign it). Assigning leases the
  * container to the investor and starts the lease and the monthly payout schedule that day; the investor is notified.
  */
 @Service
@@ -48,14 +53,41 @@ public class ContainerAssignmentService {
 	public ContainerAssignmentQueue queue(Pageable pageable) {
 		Page<AwaitingContainer> page = holdings.awaitingContainer(pageable);
 		Map<UUID, String> orderNumbers = orders.orderNumbers(page.stream().map(AwaitingContainer::orderId).toList());
-		Map<UUID, UserAccount> investors = accounts.getAccounts(page.stream().map(AwaitingContainer::userId).toList());
-		return new ContainerAssignmentQueue(PageResponse.from(page, a -> {
-			UserAccount investor = investors.get(a.userId());
-			return new ContainerAssignmentQueue.Pending(a.holdingId(), a.orderId(), orderNumbers.get(a.orderId()), a.userId(),
-					investor == null ? null : (investor.firstName() + " " + investor.lastName()).strip(),
-					investor == null ? null : investor.email(), a.productCode(), a.productTitle(), a.containerType(),
-					MoneyResponse.from(a.amount()), a.tenureMonths(), a.paidAt());
-		}));
+		Map<UUID, UserAccount> people = accounts.getAccounts(page.stream()
+			.flatMap(a -> Stream.of(a.userId(), a.taskAssigneeId())).filter(Objects::nonNull).distinct().toList());
+		return new ContainerAssignmentQueue(PageResponse.from(page, a -> pending(a, orderNumbers.get(a.orderId()), people)));
+	}
+
+	/**
+	 * A finance member takes the task of assigning an investment's container, as they must before assigning it.
+	 */
+	@Transactional
+	public ContainerAssignmentQueue.Pending take(UUID actorId, UUID holdingId) {
+		return view(holdings.takeContainerTask(actorId, holdingId, clock.instant()));
+	}
+
+	/** Gives the task back to the queue, unassigned, for another finance member. */
+	@Transactional
+	public ContainerAssignmentQueue.Pending release(UUID actorId, UUID holdingId) {
+		return view(holdings.releaseContainerTask(actorId, holdingId));
+	}
+
+	private ContainerAssignmentQueue.Pending view(AwaitingContainer a) {
+		Map<UUID, UserAccount> people = accounts.getAccounts(Stream.of(a.userId(), a.taskAssigneeId())
+			.filter(Objects::nonNull).distinct().toList());
+		return pending(a, orders.orderNumbers(List.of(a.orderId())).get(a.orderId()), people);
+	}
+
+	private static ContainerAssignmentQueue.Pending pending(AwaitingContainer a, String orderNumber,
+			Map<UUID, UserAccount> people) {
+		UserAccount investor = people.get(a.userId());
+		UserAccount assignee = a.taskAssigneeId() == null ? null : people.get(a.taskAssigneeId());
+		return new ContainerAssignmentQueue.Pending(a.holdingId(), a.orderId(), orderNumber, a.userId(),
+				investor == null ? null : (investor.firstName() + " " + investor.lastName()).strip(),
+				investor == null ? null : investor.email(), a.productCode(), a.productTitle(), a.containerType(),
+				MoneyResponse.from(a.amount()), a.tenureMonths(), a.paidAt(),
+				assignee == null ? null : new Assignee(assignee.id(),
+						(assignee.firstName() + " " + assignee.lastName()).strip(), a.taskAssignedAt()));
 	}
 
 	@Transactional(readOnly = true)

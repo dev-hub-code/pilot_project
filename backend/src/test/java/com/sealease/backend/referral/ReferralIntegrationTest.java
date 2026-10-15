@@ -67,7 +67,7 @@ class ReferralIntegrationTest {
 		assertThat(code).matches("[2-9A-HJ-NP-Z]{8}");
 		assertThat(codeOf(referrer)).isEqualTo(code);
 
-		Account referred = api.register(" " + code.toLowerCase() + " ");
+		Account referred = api.register(code);
 		overview(referred).andExpect(jsonPath("$.referredBy").value("Test I."));
 		overview(referrer)
 			.andExpect(jsonPath("$.levels[0].members").value(1))
@@ -76,6 +76,12 @@ class ReferralIntegrationTest {
 			.andExpect(jsonPath("$.eligible").value(false))
 			.andExpect(jsonPath("$.ineligibleReason").value(containsString("Verify your identity")));
 		assertThat(api.auditCount("REFERRAL_LINKED", referred.id())).isEqualTo(1);
+
+		// Codes are capitals only: lower case or padding is refused, not corrected.
+		String lower = "user-" + UUID.randomUUID() + "@example.com";
+		assertThat(api.registerResult(lower, code.toLowerCase()).getResponse().getStatus()).isEqualTo(400);
+		assertThat(api.registerResult(lower, " " + code + " ").getResponse().getStatus()).isEqualTo(400);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, lower)).isZero();
 
 		// An unknown code fails the registration as a whole: no account is created.
 		String email = "user-" + UUID.randomUUID() + "@example.com";
@@ -119,7 +125,7 @@ class ReferralIntegrationTest {
 		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, l2.bearer()))
 			.andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/admin/referral-earnings").param("beneficiaryId", l2.id().toString())
-				.header(HttpHeaders.AUTHORIZATION, api.staff("FINANCE").bearer()))
+				.header(HttpHeaders.AUTHORIZATION, api.staff("ADMIN", "FINANCE").bearer()))
 			.andExpect(jsonPath("$.content[0].level").value(2))
 			.andExpect(jsonPath("$.content[0].sourceUserId").value(investor.id().toString()))
 			.andExpect(jsonPath("$.content[0].base.amount").value("50000.00"))
@@ -204,7 +210,7 @@ class ReferralIntegrationTest {
 			.andReturn().getResponse().getContentAsString(), "$.id");
 		schedule(admin, tomorrow, "3", "1", "0.5", "0.25").andExpect(status().isConflict());
 
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		String history = mvc.perform(get("/api/v1/admin/referral-rates").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 		List<String> inForce = JsonPath.read(history, "$[?(@.state == 'IN_FORCE')].id");

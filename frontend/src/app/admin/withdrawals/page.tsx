@@ -6,7 +6,6 @@ import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { WithdrawalMinimumCard } from "@/features/admin/withdrawal-minimum-card";
 import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
 import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals/labels";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -20,31 +19,41 @@ export const metadata: Metadata = { title: "Withdrawals" };
 const FILTERS: readonly WithdrawalStatus[] = ["FAILED", "APPROVED", "BATCHED", "PROCESSING", "PAID", "RETURNED", "REJECTED"];
 
 export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"/admin/withdrawals">) {
-  const session = await requireStaff();
+  await requireStaff();
   const params = await searchParams;
   // Failed payments first: they wait on finance.
   const status = FILTERS.find((f) => f === params.status) ?? "FAILED";
+  // A search (a whole reference, or the investor's ID or email) covers every status, latest first.
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   // Oldest first: the queue is worked in order of arrival.
-  const withdrawals = await authFetch<PageResponse<Withdrawal>>(
-    `/api/v1/admin/withdrawals?${new URLSearchParams({ status, page: String(page), size: "25", sort: "createdAt,asc" })}`);
+  const withdrawals = await authFetch<PageResponse<Withdrawal>>(`/api/v1/admin/withdrawals?${new URLSearchParams(q
+    ? { q, page: String(page), size: "25", sort: "createdAt,desc" }
+    : { status, page: String(page), size: "25", sort: "createdAt,asc" })}`);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Withdrawals"
         description="Withdrawals are made by withdrawal runs (Withdrawal files): each run has a bank sheet, and cash at the office is marked collected by hand."
         actions={<LinkButton href="/admin/withdrawals/batches" variant="secondary">Withdrawal files</LinkButton>} />
-      <WithdrawalMinimumCard permissions={session.permissions} />
-      <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
-        {FILTERS.map((f) => (
-          <Link key={f} href={`/admin/withdrawals?status=${f}`} aria-current={f === status ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${f === status ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {WITHDRAWAL_STATUS_LABEL[f]}
-          </Link>
-        ))}
-      </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
+          {FILTERS.map((f) => (
+            <Link key={f} href={`/admin/withdrawals?status=${f}`} aria-current={!q && f === status ? "page" : undefined}
+              className={`rounded-full border px-3 py-1 ${!q && f === status ? "border-foreground text-foreground" : "border-border text-muted"}`}>
+              {WITHDRAWAL_STATUS_LABEL[f]}
+            </Link>
+          ))}
+        </nav>
+        <form className="flex gap-2" action="/admin/withdrawals" role="search">
+          <input name="q" defaultValue={q} placeholder="Reference, investor ID or email"
+            aria-label="Search withdrawals by reference, or the investor's ID or email"
+            className="h-9 w-72 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+        </form>
+      </div>
       {withdrawals.content.length === 0 ? (
-        <EmptyState title="Nothing here" description={status === "FAILED" ? "No failed payments are waiting to be resolved." : undefined} />
+        <EmptyState title={q ? "No withdrawals found" : "Nothing here"}
+          description={q ? `Nothing matches “${q}” exactly.` : status === "FAILED" ? "No failed payments are waiting to be resolved." : undefined} />
       ) : (
         <DataTable columns={["Made", "Reference", "Amount", "From", "To", "By", "Status"]}>
           {withdrawals.content.map((w) => (
@@ -64,7 +73,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
           ))}
         </DataTable>
       )}
-      <Pagination page={withdrawals} basePath="/admin/withdrawals" params={{ status }} />
+      <Pagination page={withdrawals} basePath="/admin/withdrawals" params={q ? { q } : { status }} />
     </div>
   );
 }

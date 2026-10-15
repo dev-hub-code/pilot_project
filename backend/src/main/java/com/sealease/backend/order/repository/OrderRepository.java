@@ -37,4 +37,7 @@ public interface OrderRepository extends JpaRepository<InvestmentOrder, UUID>, J
 	@Query(value = "select nextval('order_number_seq')", nativeQuery = true)
 	long nextNumber();
 
+	@Query("select o.id from InvestmentOrder o where lower(o.orderNumber) = lower(:number)")
+	Optional<UUID> findIdByOrderNumber(@Param("number") String number);
+
 }

@@ -20,6 +20,8 @@ export interface Ticket {
   requesterName: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
+  /** Staff views only. */
+  team: SupportTeam | null;
   firstResponseDueAt: string | null;
   firstRespondedAt: string | null;
   overdue: boolean;
@@ -48,7 +50,11 @@ export interface TicketMessage {
   attachments: TicketAttachment[];
 }
 
-export type TicketEventType = "OPENED" | "STATUS_CHANGED" | "REOPENED" | "ASSIGNED" | "UNASSIGNED" | "PRIORITY_CHANGED";
+export type TicketEventType = "OPENED" | "STATUS_CHANGED" | "REOPENED" | "ASSIGNED" | "UNASSIGNED" | "PRIORITY_CHANGED"
+  | "TEAM_CHANGED";
+
+/** The team a ticket is with: support hands tickets that need finance to the finance team. */
+export type SupportTeam = "SUPPORT" | "FINANCE";
 
 /** One update in a ticket's history; customers never receive priority changes or unassignments. */
 export interface TicketEvent {

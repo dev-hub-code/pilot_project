@@ -86,6 +86,13 @@ public class KycSubmission extends BaseEntity {
 	@Column(name = "rejection_reason", length = 500)
 	private String rejectionReason;
 
+	/** The reviewer the review is assigned to; only they may decide it. Kept after the decision. */
+	@Column(name = "assigned_to")
+	private UUID assignedTo;
+
+	@Column(name = "assigned_at")
+	private Instant assignedAt;
+
 	protected KycSubmission() {
 	}
 
@@ -172,6 +179,30 @@ public class KycSubmission extends BaseEntity {
 		this.reviewedBy = reviewer;
 		this.reviewedAt = now;
 		this.rejectionReason = reason;
+	}
+
+	/** Assigns the review to a reviewer, who alone may now decide it. */
+	public void assignTo(UUID reviewer, Instant now) {
+		this.assignedTo = reviewer;
+		this.assignedAt = now;
+	}
+
+	/** Gives the review back to the queue, for another reviewer to take. */
+	public void unassign() {
+		this.assignedTo = null;
+		this.assignedAt = null;
+	}
+
+	public boolean isAssignedTo(UUID reviewer) {
+		return reviewer.equals(assignedTo);
+	}
+
+	public UUID getAssignedTo() {
+		return assignedTo;
+	}
+
+	public Instant getAssignedAt() {
+		return assignedAt;
 	}
 
 	public UUID getUserId() {

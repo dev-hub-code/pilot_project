@@ -235,6 +235,17 @@ public class UserAccountService {
 			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
 	}
 
+	/** The one user a search names exactly: by readable ID ("SL03500") or by full email address. */
+	@Transactional(readOnly = true)
+	public Optional<UUID> findIdExactly(String query) {
+		if (query == null || query.isBlank()) {
+			return Optional.empty();
+		}
+		Optional<Long> number = UserCodes.parse(query);
+		return number.isPresent() ? users.findIdByUserNumber(number.get())
+				: users.findByEmail(EmailNormalizer.normalize(query.strip())).map(u -> u.getId());
+	}
+
 	@Transactional(readOnly = true)
 	public Optional<UserAccount> findByEmail(String email) {
 		return users.findByEmail(EmailNormalizer.normalize(email)).map(UserAccount::from);

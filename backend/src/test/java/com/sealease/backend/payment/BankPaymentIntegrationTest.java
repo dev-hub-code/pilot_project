@@ -54,7 +54,7 @@ class BankPaymentIntegrationTest {
 
 	@Test
 	void financeManagesTheCompanyBankAccounts() throws Exception {
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		Account investor = approvedInvestor();
 		String number = uniqueAccountNumber();
 
@@ -95,7 +95,7 @@ class BankPaymentIntegrationTest {
 	void investorsSayHowTheyPaidAndFinanceConfirms() throws Exception {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		String orderId = placeOrder(investor, offerings.plan());
 		String payment = paymentId(startBankPayment(investor, orderId));
 
@@ -137,7 +137,7 @@ class BankPaymentIntegrationTest {
 	void financeRejectsMoneyThatNeverArrivedAndTheInvestorPaysAgain() throws Exception {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		String orderId = placeOrder(investor, offerings.plan());
 		String payment = paymentId(startBankPayment(investor, orderId));
 		submit(investor, payment, account, "CASH_DEPOSIT", "RCPT-7781").andExpect(status().isOk());
@@ -210,12 +210,14 @@ class BankPaymentIntegrationTest {
 	}
 
 	private ResultActions confirm(Account actor, String paymentId, String reference, String amount) throws Exception {
+		api.takePayment(paymentId, actor);
 		return mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"externalReference\":\"" + reference + "\",\"amountReceived\":\"" + amount + "\"}"));
 	}
 
 	private ResultActions reject(Account actor, String paymentId) throws Exception {
+		api.takePayment(paymentId, actor);
 		return mvc.perform(post("/api/v1/admin/payments/{id}/reject", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"No deposit with this receipt number\"}"));
 	}

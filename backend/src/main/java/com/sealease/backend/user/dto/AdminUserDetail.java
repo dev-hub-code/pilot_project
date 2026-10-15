@@ -19,4 +19,9 @@ public record AdminUserDetail(
 				p.getUser().getStatusChangedAt());
 	}
 
+	/** The same, with the mobile number masked, for a viewer who may not see it in full. */
+	public AdminUserDetail withMaskedPhone() {
+		return new AdminUserDetail(summary, profile.withMaskedPhone(), statusReason, statusChangedAt);
+	}
+
 }

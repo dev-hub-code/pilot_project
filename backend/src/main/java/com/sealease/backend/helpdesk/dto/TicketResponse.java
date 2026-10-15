@@ -1,6 +1,7 @@
 package com.sealease.backend.helpdesk.dto;
 
 import com.sealease.backend.helpdesk.entity.RelatedType;
+import com.sealease.backend.helpdesk.entity.SupportTeam;
 import com.sealease.backend.helpdesk.entity.SupportTicket;
 import com.sealease.backend.helpdesk.entity.TicketCategory;
 import com.sealease.backend.helpdesk.entity.TicketPriority;
@@ -10,7 +11,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A ticket. Staff views name the requester and assignee; investor views leave those {@code null}.
+ * A ticket. Staff views name the requester and assignee and the team it is with; investor views leave those
+ * {@code null}.
  *
  * @param overdue no staff reply yet and the first-response target has passed
  * @param reopenableUntil for a resolved or closed ticket still within the reopen window, until when its customer can
@@ -30,6 +32,7 @@ public record TicketResponse(
 		String requesterName,
 		UUID assigneeId,
 		String assigneeName,
+		SupportTeam team,
 		Instant firstResponseDueAt,
 		Instant firstRespondedAt,
 		boolean overdue,
@@ -52,7 +55,8 @@ public record TicketResponse(
 			Instant reopenableUntil) {
 		return new TicketResponse(t.getId(), t.getReference(), t.getSubject(), t.getCategory(), t.getRelatedType(),
 				t.getRelatedId(), t.getRelatedLabel(), t.getStatus(), t.getPriority(), staff ? t.getUserId() : null,
-				requesterName, staff ? t.getAssigneeId() : null, assigneeName, staff ? t.getFirstResponseDueAt() : null,
+				requesterName, staff ? t.getAssigneeId() : null, assigneeName, staff ? t.getTeam() : null,
+				staff ? t.getFirstResponseDueAt() : null,
 				t.getFirstRespondedAt(), staff && t.isOverdueAt(now), t.getLastMessageAt(), t.getCreatedAt(),
 				t.getResolvedAt(), t.getClosedAt(), reopenableUntil);
 	}

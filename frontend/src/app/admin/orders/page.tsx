@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ORDER_STATUS_LABEL, ORDER_TONE, containersSummary } from "@/features/orders/labels";
+import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Order, OrderStatus } from "@/types/order";
@@ -17,15 +18,17 @@ export const metadata: Metadata = { title: "Orders" };
 const STATUSES = Object.keys(ORDER_STATUS_LABEL) as OrderStatus[];
 
 export default async function AdminOrdersPage({ searchParams }: PageProps<"/admin/orders">) {
-  await requireStaff();
+  const session = await requireStaff();
+  // Without browsing (support), orders are found only by a whole order number or the investor's ID or email.
+  const searchOnly = !hasPermission(session.permissions, Permission.RECORD_BROWSE);
   const params = await searchParams;
   const status = STATUSES.find((s) => s === params.status);
-  const q = typeof params.q === "string" ? params.q.slice(0, 30) : "";
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   const query = new URLSearchParams({ page: String(page), size: "25" });
   if (status) query.set("status", status);
   if (q) query.set("q", q);
-  const orders = await authFetch<PageResponse<Order>>(`/api/v1/admin/orders?${query}`);
+  const orders = searchOnly && !q ? null : await authFetch<PageResponse<Order>>(`/api/v1/admin/orders?${query}`);
 
   return (
     <div className="space-y-6">
@@ -41,12 +44,16 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
         </nav>
         <form className="flex gap-2" action="/admin/orders">
           {status && <input type="hidden" name="status" value={status} />}
-          <input name="q" defaultValue={q} placeholder="Order number" aria-label="Search by order number"
-            className="h-9 w-48 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+          <input name="q" defaultValue={q} placeholder="Order number, investor ID or email"
+            aria-label="Search by order number, or the investor's ID or email"
+            className="h-9 w-72 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
         </form>
       </div>
-      {orders.content.length === 0 ? (
-        <EmptyState title="No orders" />
+      {!orders ? (
+        <EmptyState title="Search for an order"
+          description="Enter a whole order number, or the investor's ID (e.g. SL03500) or email to see their orders." />
+      ) : orders.content.length === 0 ? (
+        <EmptyState title="No orders" description={q && searchOnly ? `Nothing matches “${q}” exactly.` : undefined} />
       ) : (
         <DataTable columns={["Order", "Placed", "Containers", "Total", "Status"]}>
           {orders.content.map((o) => (
@@ -60,7 +67,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
           ))}
         </DataTable>
       )}
-      <Pagination page={orders} basePath="/admin/orders" params={{ status, q: q || undefined }} />
+      {orders && <Pagination page={orders} basePath="/admin/orders" params={{ status, q: q || undefined }} />}
     </div>
   );
 }

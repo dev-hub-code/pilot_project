@@ -3,6 +3,7 @@ package com.sealease.backend.kyc.service;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.crypto.FieldEncryptor;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
@@ -23,6 +24,7 @@ import com.sealease.backend.kyc.repository.KycDocumentRepository;
 import com.sealease.backend.kyc.repository.KycSubmissionRepository;
 import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.user.dto.ProfileResponse;
+import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
@@ -74,11 +76,12 @@ public class KycService {
 	private final Clock clock;
 	private final FixedWindowRateLimiter submissionsPerUser;
 	private final TransactionTemplate transactions;
+	private final KycFollowUpService followUps;
 
 	public KycService(KycSubmissionRepository submissions, KycDocumentRepository kycDocuments,
 			DocumentService documents, UserProfileService profiles, UserAccountService accounts,
 			FieldEncryptor encryptor, AuditService audit, NotificationService notifications, Clock clock,
-			TransactionTemplate transactions) {
+			TransactionTemplate transactions, KycFollowUpService followUps) {
 		this.submissions = submissions;
 		this.kycDocuments = kycDocuments;
 		this.documents = documents;
@@ -90,6 +93,7 @@ public class KycService {
 		this.clock = clock;
 		this.submissionsPerUser = new FixedWindowRateLimiter(5, Duration.ofDays(1), clock);
 		this.transactions = transactions;
+		this.followUps = followUps;
 	}
 
 	/**
@@ -181,6 +185,7 @@ public class KycService {
 						"This Aadhaar number or PAN is already registered with another account. Contact support if it is yours.");
 			}
 			profiles.markKycStatus(userId, KycStatus.PENDING);
+			followUps.documentsSubmitted(userId);
 			audit.record(AuditRecord.of(userId, AuditAction.KYC_SUBMITTED, "KYC_SUBMISSION", submission.getId())
 				.withNewValue(Map.of("documents", List.of(DocumentPurpose.KYC_AADHAAR_CARD, DocumentPurpose.KYC_PAN_CARD))));
 		}
@@ -234,6 +239,38 @@ public class KycService {
 		return content;
 	}
 
+	/**
+	 * A reviewer takes a submission waiting for review: from now on only they may approve or reject it. Taking one
+	 * already assigned to you changes nothing; one assigned to another reviewer must be given back by them first.
+	 */
+	@Transactional
+	public KycSubmissionResponse assign(UUID reviewerId, UUID submissionId) {
+		KycSubmission submission = pending(reviewerId, submissionId);
+		if (submission.isAssignedTo(reviewerId)) {
+			return response(submission);
+		}
+		if (submission.getAssignedTo() != null) {
+			throw new BusinessException(ErrorCode.CONFLICT,
+					"This review is already assigned to " + assignee(submission).name());
+		}
+		submission.assignTo(reviewerId, clock.instant());
+		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_ASSIGNED, "KYC_SUBMISSION", submissionId)
+			.withNewValue(Map.of("userId", submission.getUserId().toString())));
+		submissions.flush();
+		return response(submission);
+	}
+
+	/** The assigned reviewer gives a submission back to the queue, undecided, for another reviewer to take. */
+	@Transactional
+	public KycSubmissionResponse unassign(UUID reviewerId, UUID submissionId) {
+		KycSubmission submission = pendingForReview(reviewerId, submissionId);
+		submission.unassign();
+		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_UNASSIGNED, "KYC_SUBMISSION", submissionId)
+			.withNewValue(Map.of("userId", submission.getUserId().toString())));
+		submissions.flush();
+		return response(submission);
+	}
+
 	@Transactional
 	public KycSubmissionResponse approve(UUID reviewerId, UUID submissionId) {
 		KycSubmission submission = pendingForReview(reviewerId, submissionId);
@@ -267,7 +304,18 @@ public class KycService {
 		return reason.strip().replaceAll("[.!?]+$", "") + ".";
 	}
 
+	/** A pending submission the reviewer has assigned to themselves: only they may decide it. */
 	private KycSubmission pendingForReview(UUID reviewerId, UUID submissionId) {
+		KycSubmission submission = pending(reviewerId, submissionId);
+		if (!submission.isAssignedTo(reviewerId)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, submission.getAssignedTo() == null
+					? "Assign this review to yourself before deciding it"
+					: "This review is assigned to " + assignee(submission).name());
+		}
+		return submission;
+	}
+
+	private KycSubmission pending(UUID reviewerId, UUID submissionId) {
 		KycSubmission submission = submissions.findByIdForUpdate(submissionId)
 			.orElseThrow(() -> new ResourceNotFoundException("KYC submission", submissionId));
 		if (submission.getUserId().equals(reviewerId)) {
@@ -323,7 +371,16 @@ public class KycService {
 		return KycSubmissionResponse.from(submission, kycDocuments.findByIdSubmissionId(submission.getId()),
 				new KycSubmissionResponse.Numbers(decrypt(submission.getAadhaarNumberEncrypted(), AADHAAR_NUMBER_CONTEXT),
 						decrypt(submission.getPanNumberEncrypted(), PAN_NUMBER_CONTEXT),
-						decrypt(submission.getDocumentNumberEncrypted(), LEGACY_DOCUMENT_NUMBER_CONTEXT)));
+						decrypt(submission.getDocumentNumberEncrypted(), LEGACY_DOCUMENT_NUMBER_CONTEXT)),
+				assignee(submission));
+	}
+
+	private Assignee assignee(KycSubmission submission) {
+		if (submission.getAssignedTo() == null) {
+			return null;
+		}
+		UserAccount reviewer = accounts.getAccount(submission.getAssignedTo());
+		return new Assignee(reviewer.id(), reviewer.firstName() + " " + reviewer.lastName(), submission.getAssignedAt());
 	}
 
 	private String decrypt(String encrypted, String context) {

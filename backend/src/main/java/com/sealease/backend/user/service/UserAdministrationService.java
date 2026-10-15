@@ -6,6 +6,10 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.permission.PermissionCode;
+import com.sealease.backend.permission.entity.Permission;
+import com.sealease.backend.role.entity.Role;
+import com.sealease.backend.role.entity.UserRole;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
 import com.sealease.backend.user.dto.UserSearchCriteria;
@@ -16,8 +20,14 @@ import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.event.UserStatusChangedEvent;
 import com.sealease.backend.user.repository.UserProfileRepository;
+
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,8 +39,8 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Staff operations on accounts: directory search and suspension. */
@@ -61,6 +71,16 @@ public class UserAdministrationService {
 	public AdminUserDetail detail(UUID userId) {
 		UserProfile profile = profiles.findByUserId(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
 		return AdminUserDetail.from(profile);
+	}
+
+	/** One account; with {@code investorsOnly}, a staff account is not found. */
+	@Transactional(readOnly = true)
+	public AdminUserDetail detail(UUID userId, boolean investorsOnly) {
+		if (investorsOnly && profiles.count((root, query, cb) -> cb.and(
+				cb.equal(root.get("user").get("id"), userId), investor(root.get("user"), query, cb))) == 0) {
+			throw new ResourceNotFoundException("User", userId);
+		}
+		return detail(userId);
 	}
 
 	@Transactional
@@ -126,8 +146,21 @@ public class UserAdministrationService {
 			if (criteria.kycStatus() != null) {
 				predicates.add(cb.equal(root.get("kycStatus"), criteria.kycStatus()));
 			}
+			if (criteria.investorsOnly()) {
+				predicates.add(investor(user, query, cb));
+			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};
+	}
+
+	/** The user is an investor: one of their roles grants the investor portal. */
+	private static Predicate investor(Path<User> user, CriteriaQuery<?> query, CriteriaBuilder cb) {
+		Subquery<UUID> investors = query.subquery(UUID.class);
+		Root<UserRole> userRole = investors.from(UserRole.class);
+		Join<Role, Permission> permission = userRole.join("role").join("permissions");
+		investors.select(userRole.get("id").get("userId"))
+			.where(cb.equal(permission.get("code"), PermissionCode.INVESTOR_PORTAL.name()));
+		return user.get("id").in(investors);
 	}
 
 	private static String escapeLike(String value) {

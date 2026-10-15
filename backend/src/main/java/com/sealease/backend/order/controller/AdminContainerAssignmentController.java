@@ -36,6 +36,17 @@ public class AdminContainerAssignmentController {
 		return assignments.queue(pageable);
 	}
 
+	/** Takes the task: only the finance member it is assigned to may assign the container. */
+	@PostMapping("/{holdingId}/take")
+	public ContainerAssignmentQueue.Pending take(AuthenticatedUser actor, @PathVariable UUID holdingId) {
+		return assignments.take(actor.userId(), holdingId);
+	}
+
+	@PostMapping("/{holdingId}/release")
+	public ContainerAssignmentQueue.Pending release(AuthenticatedUser actor, @PathVariable UUID holdingId) {
+		return assignments.release(actor.userId(), holdingId);
+	}
+
 	@PostMapping("/{holdingId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void assign(AuthenticatedUser actor, @PathVariable UUID holdingId, @Valid @RequestBody AssignContainerRequest request) {

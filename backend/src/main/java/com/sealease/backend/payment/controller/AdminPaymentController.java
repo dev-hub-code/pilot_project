@@ -2,6 +2,7 @@ package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
+import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.payment.dto.ConfirmTransferRequest;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
@@ -10,7 +11,9 @@ import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
 import com.sealease.backend.payment.service.PaymentService;
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.user.service.UserAccountService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -30,16 +33,46 @@ public class AdminPaymentController {
 
 	private final PaymentService payments;
 
-	public AdminPaymentController(PaymentService payments) {
+	private final OrderService orders;
+	private final UserAccountService accounts;
+
+	public AdminPaymentController(PaymentService payments, OrderService orders, UserAccountService accounts) {
+		this.orders = orders;
+		this.accounts = accounts;
 		this.payments = payments;
 	}
 
+	/**
+	 * Finance view sees every payment; those who confirm payments see the ones waiting for confirmation; those who
+	 * only search (support) see what an exact search finds, and nothing without one. A search ({@code q}) is a whole
+	 * payment reference, a whole order number, or an investor's readable ID or email.
+	 */
 	@GetMapping("/api/v1/admin/payments")
-	@PreAuthorize("hasAuthority('FINANCE_VIEW')")
-	public PageResponse<PaymentResponse> search(@RequestParam(required = false) PaymentStatus status,
-			@RequestParam(required = false) PaymentMethod method,
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'PAYMENT_CONFIRM', 'PAYMENT_SEARCH')")
+	public PageResponse<PaymentResponse> search(AuthenticatedUser viewer, @RequestParam(required = false) PaymentStatus status,
+			@RequestParam(required = false) PaymentMethod method, @RequestParam(required = false) @Size(max = 100) String q,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(payments.search(new PaymentSearchCriteria(status, method), pageable));
+		boolean searching = q != null && !q.isBlank();
+		boolean financeView = viewer.hasPermission("FINANCE_VIEW");
+		boolean searchOnly = !financeView && (viewer.hasPermission("PAYMENT_SEARCH") && (searching
+				|| !viewer.hasPermission("PAYMENT_CONFIRM")));
+		PaymentStatus visible = financeView || searchOnly ? status : PaymentStatus.PENDING;
+		return PageResponse.from(payments.search(new PaymentSearchCriteria(visible, method, searching ? q : null,
+				searching ? orders.idByNumber(q).orElse(null) : null,
+				searching ? accounts.findIdExactly(q).orElse(null) : null, searchOnly), pageable));
+	}
+
+	/** Takes the payment: only the finance member it is assigned to may confirm or reject it. */
+	@PostMapping("/api/v1/admin/payments/{paymentId}/take")
+	@PreAuthorize("hasAuthority('PAYMENT_CONFIRM')")
+	public PaymentResponse take(AuthenticatedUser actor, @PathVariable UUID paymentId) {
+		return payments.takeTask(actor.userId(), paymentId);
+	}
+
+	@PostMapping("/api/v1/admin/payments/{paymentId}/release")
+	@PreAuthorize("hasAuthority('PAYMENT_CONFIRM')")
+	public PaymentResponse release(AuthenticatedUser actor, @PathVariable UUID paymentId) {
+		return payments.releaseTask(actor.userId(), paymentId);
 	}
 
 	@GetMapping("/api/v1/admin/orders/{orderId}/payments")

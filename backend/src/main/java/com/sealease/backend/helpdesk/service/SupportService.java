@@ -13,6 +13,7 @@ import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.permission.PermissionCode;
+import com.sealease.backend.reporting.dto.Workload;
 import com.sealease.backend.role.service.UserRoleService;
 import com.sealease.backend.helpdesk.dto.Agent;
 import com.sealease.backend.helpdesk.dto.OpenTicketRequest;
@@ -20,6 +21,7 @@ import com.sealease.backend.helpdesk.dto.TicketDetail;
 import com.sealease.backend.helpdesk.dto.TicketResponse;
 import com.sealease.backend.helpdesk.dto.TicketSearchCriteria;
 import com.sealease.backend.helpdesk.entity.RelatedType;
+import com.sealease.backend.helpdesk.entity.SupportTeam;
 import com.sealease.backend.helpdesk.entity.SupportTicket;
 import com.sealease.backend.helpdesk.entity.TicketAttachment;
 import com.sealease.backend.helpdesk.entity.TicketCategory;
@@ -51,6 +53,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -283,9 +286,11 @@ public class SupportService {
 
 	/** A public reply puts the ticket in the customer's court and notifies them; an internal note changes nothing. */
 	@Transactional
-	public TicketDetail staffReply(UUID actorId, UUID ticketId, String body, boolean internal, List<MultipartFile> files) {
+	public TicketDetail staffReply(UUID actorId, boolean financeOnly, UUID ticketId, String body, boolean internal,
+			List<MultipartFile> files) {
 		requireFileCount(files);
 		SupportTicket ticket = lock(ticketId);
+		requireWorkingOn(ticket, actorId, financeOnly);
 		requireNotClosed(ticket);
 		if (ticket.getUserId().equals(actorId)) {
 			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot answer your own ticket");
@@ -306,11 +311,12 @@ public class SupportService {
 	}
 
 	@Transactional
-	public TicketDetail setStatus(UUID actorId, UUID ticketId, TicketStatus target) {
+	public TicketDetail setStatus(UUID actorId, boolean financeOnly, UUID ticketId, TicketStatus target) {
 		if (target != TicketStatus.RESOLVED && target != TicketStatus.CLOSED) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Tickets are resolved or closed by our support team; replies reopen them");
 		}
 		SupportTicket ticket = lock(ticketId);
+		requireWorkingOn(ticket, actorId, financeOnly);
 		requireNotClosed(ticket);
 		TicketStatus previous = ticket.getStatus();
 		if (previous == target) {
@@ -334,8 +340,9 @@ public class SupportService {
 
 	/** Changing priority moves the first-response target, unless staff have already responded. */
 	@Transactional
-	public TicketDetail setPriority(UUID actorId, UUID ticketId, TicketPriority priority) {
+	public TicketDetail setPriority(UUID actorId, boolean financeOnly, UUID ticketId, TicketPriority priority) {
 		SupportTicket ticket = lock(ticketId);
+		requireWorkingOn(ticket, actorId, financeOnly);
 		TicketPriority previous = ticket.getPriority();
 		if (previous == priority) {
 			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already " + priority);
@@ -349,14 +356,29 @@ public class SupportService {
 		return staffDetail(ticketId);
 	}
 
+	/**
+	 * Assigns a ticket, or unassigns it. Support assigns any ticket to anyone who handles tickets (finance members only
+	 * for tickets handed to finance). Finance only takes a ticket handed to it for themselves, or gives back their own.
+	 */
 	@Transactional
-	public TicketDetail assign(UUID actorId, UUID ticketId, UUID assigneeId) {
+	public TicketDetail assign(UUID actorId, boolean financeOnly, UUID ticketId, UUID assigneeId) {
 		SupportTicket ticket = lock(ticketId);
+		if (financeOnly) {
+			requireVisible(ticket, true);
+			boolean takes = actorId.equals(assigneeId);
+			boolean givesBack = assigneeId == null && actorId.equals(ticket.getAssigneeId());
+			if (!takes && !givesBack) {
+				throw new BusinessException(ErrorCode.FORBIDDEN, "You can only assign a ticket to yourself");
+			}
+			if (takes && ticket.getAssigneeId() != null && !ticket.getAssigneeId().equals(actorId)) {
+				throw new BusinessException(ErrorCode.CONFLICT, "Another finance member is already working on this ticket");
+			}
+		}
 		if (Objects.equals(ticket.getAssigneeId(), assigneeId)) {
 			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already assigned that way");
 		}
 		if (assigneeId != null) {
-			if (!roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name()).contains(assigneeId)) {
+			if (!handlers(ticket.getTeam()).contains(assigneeId)) {
 				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "That user cannot handle tickets");
 			}
 			if (assigneeId.equals(ticket.getUserId())) {
@@ -377,12 +399,24 @@ public class SupportService {
 	}
 
 	@Transactional(readOnly = true)
-	public Page<TicketResponse> search(UUID viewerId, TicketSearchCriteria criteria, Pageable pageable) {
+	public Page<TicketResponse> search(UUID viewerId, boolean financeOnly, TicketSearchCriteria criteria, Pageable pageable) {
 		Instant now = clock.instant();
+		if (financeOnly) {
+			criteria = new TicketSearchCriteria(criteria.q(), criteria.status(), criteria.priority(), criteria.assignee(),
+					criteria.overdue(), SupportTeam.FINANCE);
+		}
 		Page<SupportTicket> page = tickets.findAll(matching(viewerId, criteria, now), pageable);
 		Map<UUID, String> names = names(page.stream().flatMap(t -> Stream.of(t.getUserId(), t.getAssigneeId())));
 		return page.map(t -> TicketResponse.forStaff(t, names.get(t.getUserId()), names.get(t.getAssigneeId()), now,
 				reopenableUntil(t)));
+	}
+
+	/** A ticket for staff; finance only sees the tickets handed to it. */
+	@Transactional(readOnly = true)
+	public TicketDetail staffDetail(boolean financeOnly, UUID ticketId) {
+		SupportTicket ticket = tickets.findById(ticketId).orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
+		requireVisible(ticket, financeOnly);
+		return staffDetail(ticketId);
 	}
 
 	@Transactional(readOnly = true)
@@ -395,21 +429,100 @@ public class SupportService {
 
 	/** Staff downloads are audited: attachments can hold personal financial documents. */
 	@Transactional
-	public DocumentContent staffAttachment(UUID actorId, UUID ticketId, UUID attachmentId) {
+	public DocumentContent staffAttachment(UUID actorId, boolean financeOnly, UUID ticketId, UUID attachmentId) {
 		SupportTicket ticket = tickets.findById(ticketId).orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
+		requireVisible(ticket, financeOnly);
 		TicketAttachment attachment = attachment(ticket, attachmentId);
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_ATTACHMENT_VIEWED, ENTITY, ticketId)
 			.withNewValue(Map.of("attachmentId", attachmentId.toString(), "filename", attachment.getFilename())));
 		return documents.load(attachment.getDocumentId());
 	}
 
-	/** Tickets waiting for staff, and those past their first-response target. */
-	@Transactional(readOnly = true)
-	public QueueCounts queueCounts() {
-		return new QueueCounts(tickets.countByStatus(TicketStatus.OPEN), tickets.countOverdue(clock.instant()));
+
+	/**
+	 * Hands a ticket to another team, unassigned. Support hands any ticket to finance (whose members are told) or
+	 * back; finance only hands back to support a ticket it is working on.
+	 */
+	@Transactional
+	public TicketDetail handTo(UUID actorId, boolean financeOnly, UUID ticketId, SupportTeam team) {
+		SupportTicket ticket = lock(ticketId);
+		if (financeOnly) {
+			requireWorkingOn(ticket, actorId, true);
+			if (team != SupportTeam.SUPPORT) {
+				throw new BusinessException(ErrorCode.FORBIDDEN, "Finance can only hand a ticket back to support");
+			}
+		}
+		requireNotClosed(ticket);
+		SupportTeam previous = ticket.getTeam();
+		if (previous == team) {
+			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already with " + team.name().toLowerCase(Locale.ROOT));
+		}
+		ticket.handTo(team);
+		tickets.flush();
+		event(ticket, actorId, true, TicketEventType.TEAM_CHANGED, previous, team, null, clock.instant());
+		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_TEAM_CHANGED, ENTITY, ticketId)
+			.withOldValue(Map.of("team", previous)).withNewValue(Map.of("team", team)));
+		if (team == SupportTeam.FINANCE) {
+			handlers(SupportTeam.FINANCE).stream()
+				.filter(id -> !id.equals(actorId) && !id.equals(ticket.getUserId()))
+				.forEach(id -> notifications.notify(id, "TICKET_HANDED_TO_FINANCE",
+						ticket.getReference() + " was handed to finance", ticket.getSubject(), "/admin/support/" + ticket.getId()));
+		}
+		return staffDetail(ticketId);
 	}
 
-	public record QueueCounts(long open, long overdue) {
+	/** Who may be assigned a ticket with this team: support agents, and finance members for tickets handed to finance. */
+	private Set<UUID> handlers(SupportTeam team) {
+		Set<UUID> ids = new HashSet<>(roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name()));
+		if (team == SupportTeam.FINANCE) {
+			ids.addAll(roles.usersWithPermission(PermissionCode.FINANCE_TICKET_HANDLE.name()));
+		}
+		return ids;
+	}
+
+	/** Finance only sees the tickets handed to it; anything else is not found, as if it did not exist. */
+	private static void requireVisible(SupportTicket ticket, boolean financeOnly) {
+		if (financeOnly && ticket.getTeam() != SupportTeam.FINANCE) {
+			throw new ResourceNotFoundException("Ticket", ticket.getId());
+		}
+	}
+
+	/** Finance works only on a ticket handed to it that they have assigned to themselves. */
+	private static void requireWorkingOn(SupportTicket ticket, UUID actorId, boolean financeOnly) {
+		requireVisible(ticket, financeOnly);
+		if (financeOnly && !actorId.equals(ticket.getAssigneeId())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, ticket.getAssigneeId() == null
+					? "Assign this ticket to yourself before working on it"
+					: "Another finance member is working on this ticket");
+		}
+	}
+
+	/** A team's tickets pending, the viewer's among them, and done in each period ({@code [from, to)}) by anyone and by the viewer. */
+	@Transactional(readOnly = true)
+	public Workload.Counts workload(SupportTeam team, UUID viewerId, Instant today, Instant month, Instant to) {
+		return new Workload.Counts(tickets.countPendingForTeam(team, null), tickets.countOverdueForTeam(team, clock.instant()),
+				tickets.countPendingForTeam(team, viewerId),
+				tickets.countDoneForTeam(team, null, today, to), tickets.countDoneForTeam(team, viewerId, today, to),
+				tickets.countDoneForTeam(team, null, month, to), tickets.countDoneForTeam(team, viewerId, month, to));
+	}
+
+	/** A team's pending tickets for each priority, most urgent first; every priority has a row. */
+	@Transactional(readOnly = true)
+	public List<Workload.PriorityRow> pendingByPriority(SupportTeam team, UUID viewerId) {
+		Map<TicketPriority, Object[]> rows = new EnumMap<>(TicketPriority.class);
+		tickets.pendingByPriority(team, viewerId, clock.instant()).forEach(row -> rows.put((TicketPriority) row[0], row));
+		List<Workload.PriorityRow> out = new ArrayList<>();
+		for (int i = TicketPriority.values().length - 1; i >= 0; i--) {
+			TicketPriority priority = TicketPriority.values()[i];
+			Object[] row = rows.get(priority);
+			out.add(row == null ? new Workload.PriorityRow(priority, 0, 0, 0, 0)
+					: new Workload.PriorityRow(priority, count(row[1]), count(row[2]), count(row[3]), count(row[4])));
+		}
+		return out;
+	}
+
+	private static long count(Object value) {
+		return value == null ? 0 : ((Number) value).longValue();
 	}
 
 	@Transactional(readOnly = true)
@@ -456,13 +569,15 @@ public class SupportService {
 			.filter(e -> staff || e.getType().visibleToCustomer())
 			.toList();
 		Set<UUID> people = new HashSet<>();
-		thread.forEach(m -> people.add(m.getAuthorId()));
+		thread.stream().map(TicketMessage::getAuthorId).filter(Objects::nonNull).forEach(people::add);
 		history.forEach(e -> Stream.of(e.getActorId(), e.getSubjectUserId()).filter(Objects::nonNull).forEach(people::add));
 		Map<UUID, UserAccount> authors = accounts.getAccounts(people);
 		List<TicketDetail.Message> out = new ArrayList<>();
 		for (TicketMessage m : thread) {
-			UserAccount author = authors.get(m.getAuthorId());
-			String name = author == null ? null
+			UserAccount author = m.getAuthorId() == null ? null : authors.get(m.getAuthorId());
+			// A message without an author was written by the system.
+			String name = m.getAuthorId() == null ? "SeaLease support"
+					: author == null ? null
 					: staff ? author.firstName() + " " + author.lastName()
 					: m.isFromStaff() ? author.firstName() + " (SeaLease support)" : "You";
 			out.add(new TicketDetail.Message(m.getId(), m.isFromStaff(), m.isInternal(), name, m.getBody(),
@@ -604,6 +719,9 @@ public class SupportService {
 	private static Specification<SupportTicket> matching(UUID viewerId, TicketSearchCriteria c, Instant now) {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
+			if (c.team() != null) {
+				predicates.add(cb.equal(root.get("team"), c.team()));
+			}
 			if (c.status() != null) {
 				predicates.add(cb.equal(root.get("status"), c.status()));
 			}

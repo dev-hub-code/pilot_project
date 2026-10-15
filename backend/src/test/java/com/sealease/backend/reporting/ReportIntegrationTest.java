@@ -20,10 +20,12 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -50,7 +52,7 @@ class ReportIntegrationTest {
 		api = new TestApi(mvc, jdbc);
 		investors = new InvestorFixtures(mvc, jdbc, api);
 		admin = api.admin();
-		finance = api.staff("FINANCE");
+		finance = api.staff("ADMIN", "FINANCE");
 	}
 
 	// ------------------------------------------------------------------- investor statement
@@ -69,7 +71,7 @@ class ReportIntegrationTest {
 			.andExpect(jsonPath("$.sections[0].rows.length()").value(0));
 
 		// A rent withdrawal run takes the ₹500: it is listed, in progress.
-		Account finance = api.staff("FINANCE");
+		Account finance = api.staff("ADMIN", "FINANCE");
 		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isCreated());
 		String withdrawal = jdbc.queryForObject("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid", String.class,
@@ -84,6 +86,7 @@ class ReportIntegrationTest {
 			.andExpect(jsonPath("$.sections[0].rows[1].emphasis").value(true));
 
 		// Finance pays it: the statement shows it paid, and the total paid out.
+		api.takeFinanceTask(withdrawal, finance);
 		mvc.perform(post("/api/v1/admin/finance-tasks/{id}", withdrawal).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"PAID\",\"reference\":\"UTR-9\"}"))
 			.andExpect(status().isOk());
@@ -173,11 +176,71 @@ class ReportIntegrationTest {
 	void theDashboardShowsOnlyWhatTheViewerMaySee() throws Exception {
 		List<String> all = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$[*].key");
-		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "support", "leads", "security");
+		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "leads", "security");
 
 		List<String> sales = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString(), "$[*].key");
 		assertThat(sales).containsExactly("capital", "leads");
+
+		// Support may look up users, investments and withdrawals for tickets, but sees no business figures.
+		Account support = api.staff("SUPPORT");
+		mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		String charts = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andReturn().getResponse().getContentAsString();
+		assertThat((Object) JsonPath.read(charts, "$.invested")).isNull();
+		assertThat((Object) JsonPath.read(charts, "$.investors")).isNull();
+
+		// Nor when they also verify KYC: the roles' permissions add up, and neither brings the figures.
+		Account supportAndVerification = api.staff("SUPPORT", "VERIFICATION");
+		mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, supportAndVerification.bearer()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		String both = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, supportAndVerification.bearer()))
+			.andReturn().getResponse().getContentAsString();
+		assertThat((Object) JsonPath.read(both, "$.invested")).isNull();
+		assertThat((Object) JsonPath.read(both, "$.investors")).isNull();
+	}
+
+	@Test
+	void supportSeesItsTicketWorkload() throws Exception {
+		Account agent = api.staff("SUPPORT");
+		Map<String, Integer> before = supportWorkload(agent);
+		assertThat(before).containsEntry("assignedToMe", 0).containsEntry("doneThisMonthByMe", 0);
+		mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(jsonPath("$.financeTasks").doesNotExist()).andExpect(jsonPath("$.financeTickets").doesNotExist());
+
+		String ticket = JsonPath.read(mvc.perform(multipart("/api/v1/support/tickets").param("subject", "Statement question")
+				.param("category", "OTHER").param("message", "Please help.")
+				.header(HttpHeaders.AUTHORIZATION, api.register().bearer()))
+			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.ticket.id");
+		mvc.perform(post("/api/v1/admin/support/tickets/{id}/assign", ticket).header(HttpHeaders.AUTHORIZATION, agent.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"assigneeId\":\"" + agent.id() + "\"}"))
+			.andExpect(status().isOk());
+		Map<String, Integer> assigned = supportWorkload(agent);
+		assertThat(assigned.get("pending")).isEqualTo(before.get("pending") + 1);
+		assertThat(assigned).containsEntry("assignedToMe", 1);
+		// The priority table: every priority, most urgent first; the new ticket is NORMAL and the agent's.
+		String workload = mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andReturn().getResponse().getContentAsString();
+		assertThat(JsonPath.<List<String>>read(workload, "$.supportByPriority[*].priority"))
+			.containsExactly("URGENT", "HIGH", "NORMAL", "LOW");
+		assertThat(JsonPath.<List<Integer>>read(workload, "$.supportByPriority[?(@.priority == 'NORMAL')].assignedToMe"))
+			.containsExactly(1);
+		assertThat(JsonPath.<List<Integer>>read(workload, "$.supportByPriority[?(@.priority != 'NORMAL')].assignedToMe"))
+			.containsOnly(0);
+
+		mvc.perform(post("/api/v1/admin/support/tickets/{id}/status", ticket).header(HttpHeaders.AUTHORIZATION, agent.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
+			.andExpect(status().isOk());
+		Map<String, Integer> done = supportWorkload(agent);
+		assertThat(done.get("pending")).isEqualTo(before.get("pending"));
+		assertThat(done.get("doneToday")).isEqualTo(before.get("doneToday") + 1);
+		assertThat(done).containsEntry("assignedToMe", 0).containsEntry("doneTodayByMe", 1).containsEntry("doneThisMonthByMe", 1);
+	}
+
+	private Map<String, Integer> supportWorkload(Account agent) throws Exception {
+		return JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.supportTickets");
 	}
 
 	@Test
@@ -212,7 +275,7 @@ class ReportIntegrationTest {
 	}
 
 	private ResultActions credit(Account investor, String currency, String amount, String balance) throws Exception {
-		return mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, finance.bearer())
+		return mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
 						{"userId":"%s","currency":"%s","direction":"CREDIT","amount":"%s","reason":"Report test","balance":"%s"}
 						""".formatted(investor.id(), currency, amount, balance)))

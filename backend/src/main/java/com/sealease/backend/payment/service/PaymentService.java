@@ -1,6 +1,7 @@
 package com.sealease.backend.payment.service;
 
 import com.sealease.backend.audit.AuditAction;
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
@@ -34,6 +35,8 @@ import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
 import com.sealease.backend.payment.repository.PaymentRepository;
 import jakarta.persistence.criteria.Predicate;
+import com.sealease.backend.user.dto.UserAccount;
+import com.sealease.backend.user.service.UserAccountService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -79,11 +82,12 @@ public class PaymentService {
 	private final OfficeProperties office;
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
+	private final UserAccountService users;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
-			OutboxPublisher outbox, AuditService audit, Clock clock) {
+			OutboxPublisher outbox, AuditService audit, UserAccountService users, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -96,6 +100,7 @@ public class PaymentService {
 		this.office = office;
 		this.outbox = outbox;
 		this.audit = audit;
+		this.users = users;
 		this.clock = clock;
 	}
 
@@ -213,7 +218,10 @@ public class PaymentService {
 		List<Payment> found = payments.findByOrderIdOrderByCreatedAtDesc(orderId);
 		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(found));
 		List<CompanyBankAccountResponse> active = companyAccounts.active();
-		return found.stream().map(p -> view(p, order.orderNumber(), accounts, active)).toList();
+		return found.stream().map(p -> {
+			PaymentResponse view = view(p, order.orderNumber(), accounts, active);
+			return ownerId == null ? view.withAssignee(assignee(p)) : view;
+		}).toList();
 	}
 
 	// -------------------------------------------------------------------------------- staff
@@ -234,6 +242,7 @@ public class PaymentService {
 		}
 		PayableOrder order = orders.lockForPayment(payment.getOrderId());
 		Payment locked = lockPayment(paymentId);
+		requireTaskOf(actorId, locked);
 		if (locked.getStatus() != PaymentStatus.PENDING && locked.getStatus() != PaymentStatus.CANCELLED) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + locked.getStatus());
 		}
@@ -252,7 +261,7 @@ public class PaymentService {
 					+ locked.amount().display() + "; partial or excess transfers must be returned to the investor");
 		}
 		settle(locked, order, received, request.externalReference().strip(), actorId);
-		return view(locked, order.orderNumber());
+		return staffView(locked, order.orderNumber());
 	}
 
 	/**
@@ -273,6 +282,7 @@ public class PaymentService {
 		if (locked.getStatus() != PaymentStatus.PENDING) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(locked.getStatus()));
 		}
+		requireTaskOf(actorId, locked);
 		String note = reason.strip();
 		locked.fail(note);
 		payments.flush();
@@ -281,7 +291,7 @@ public class PaymentService {
 		outbox.publish(DomainEvent.of(KafkaTopics.PAYMENT_FAILED, "PaymentFailed", ENTITY, paymentId,
 				Map.of("paymentId", paymentId.toString(), "orderId", order.id().toString(),
 						"userId", locked.getUserId().toString(), "reason", note)));
-		return view(locked, order.orderNumber());
+		return staffView(locked, order.orderNumber());
 	}
 
 	/** Finance records that money held for an order that could not be confirmed was paid back. */
@@ -308,7 +318,68 @@ public class PaymentService {
 		Map<UUID, String> numbers = orders.orderNumbers(page.map(Payment::getOrderId).toList());
 		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(page.getContent()));
 		List<CompanyBankAccountResponse> active = companyAccounts.active();
-		return page.map(p -> view(p, numbers.get(p.getOrderId()), accounts, active));
+		return page.map(p -> view(p, numbers.get(p.getOrderId()), accounts, active).withAssignee(assignee(p)));
+	}
+
+	/**
+	 * A finance member takes the task of confirming or rejecting a bank or office payment: from now on only they may
+	 * decide it. Taking one already assigned to you changes nothing; one another member holds must be given back first.
+	 */
+	@Transactional
+	public PaymentResponse takeTask(UUID actorId, UUID paymentId) {
+		Payment payment = lockPayment(paymentId);
+		if (!isManual(payment.getMethod())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank and office payments are confirmed manually");
+		}
+		if (payment.getUserId().equals(actorId)) {
+			throw new BusinessException(ErrorCode.FORBIDDEN, "You cannot decide on a payment for your own order");
+		}
+		if (payment.getStatus() != PaymentStatus.PENDING && payment.getStatus() != PaymentStatus.CANCELLED) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(payment.getStatus()));
+		}
+		if (!actorId.equals(payment.getTaskAssigneeId())) {
+			if (payment.getTaskAssigneeId() != null) {
+				throw new BusinessException(ErrorCode.CONFLICT, "Another finance member is already confirming this payment");
+			}
+			payment.takeTask(actorId, clock.instant());
+			payments.flush();
+			audit.record(AuditRecord.of(actorId, AuditAction.PAYMENT_TASK_ASSIGNED, ENTITY, paymentId));
+		}
+		return staffView(payment, orders.payable(payment.getOrderId()).orderNumber());
+	}
+
+	/** The member holding the task gives it back to the queue, undecided, for another finance member to take. */
+	@Transactional
+	public PaymentResponse releaseTask(UUID actorId, UUID paymentId) {
+		Payment payment = lockPayment(paymentId);
+		if (payment.getStatus() != PaymentStatus.PENDING && payment.getStatus() != PaymentStatus.CANCELLED) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(payment.getStatus()));
+		}
+		requireTaskOf(actorId, payment);
+		payment.releaseTask();
+		payments.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.PAYMENT_TASK_UNASSIGNED, ENTITY, paymentId));
+		return staffView(payment, orders.payable(payment.getOrderId()).orderNumber());
+	}
+
+	private static void requireTaskOf(UUID actorId, Payment payment) {
+		if (!actorId.equals(payment.getTaskAssigneeId())) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, payment.getTaskAssigneeId() == null
+					? "Assign this payment to yourself before confirming or rejecting it"
+					: "Another finance member is confirming this payment");
+		}
+	}
+
+	private PaymentResponse staffView(Payment payment, String orderNumber) {
+		return view(payment, orderNumber).withAssignee(assignee(payment));
+	}
+
+	private Assignee assignee(Payment payment) {
+		if (payment.getTaskAssigneeId() == null) {
+			return null;
+		}
+		UserAccount member = users.getAccount(payment.getTaskAssigneeId());
+		return new Assignee(member.id(), (member.firstName() + " " + member.lastName()).strip(), payment.getTaskAssignedAt());
 	}
 
 	// ----------------------------------------------------------------------------- internal
@@ -435,6 +506,21 @@ public class PaymentService {
 			}
 			if (c.method() != null) {
 				predicates.add(cb.equal(root.get("method"), c.method()));
+			}
+			if (c.q() != null && !c.q().isBlank()) {
+				String q = c.q().strip().toUpperCase(Locale.ROOT);
+				List<Predicate> any = new ArrayList<>(List.of(cb.equal(cb.upper(root.get("externalReference")), q),
+						cb.equal(cb.upper(root.get("depositReference")), q), cb.equal(cb.upper(root.get("providerReference")), q)));
+				if (c.qOrderId() != null) {
+					any.add(cb.equal(root.get("orderId"), c.qOrderId()));
+				}
+				if (c.qInvestorId() != null) {
+					any.add(cb.equal(root.get("userId"), c.qInvestorId()));
+				}
+				predicates.add(cb.or(any.toArray(Predicate[]::new)));
+			}
+			else if (c.searchOnly()) {
+				return cb.disjunction();
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};

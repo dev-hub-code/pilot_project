@@ -205,6 +205,12 @@ app:
     auto-close-after: ${APP_SUPPORT_AUTO_CLOSE_AFTER:24h}
     # How often resolved tickets are checked for closing.
     auto-close-interval: ${APP_SUPPORT_AUTO_CLOSE_INTERVAL:15m}
+  kyc:
+    follow-up:
+      # Investors who have not verified their identity this long after registering get a support ticket.
+      after: ${APP_KYC_FOLLOW_UP_AFTER:24h}
+      # How often investors are checked for one.
+      interval: ${APP_KYC_FOLLOW_UP_INTERVAL:15m}
   crm:
     # Public interest form: submissions accepted per client IP.
     public-form-per-ip: { requests: 5, window: 1h }

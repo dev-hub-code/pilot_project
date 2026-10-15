@@ -12,6 +12,7 @@ import com.sealease.backend.bankaccount.entity.BankAccount;
 import com.sealease.backend.bankaccount.entity.BankAccountStatus;
 import com.sealease.backend.bankaccount.entity.BankProofType;
 import com.sealease.backend.bankaccount.repository.BankAccountRepository;
+import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.crypto.FieldEncryptor;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
@@ -192,6 +193,38 @@ public class BankAccountService {
 		return accounts.findByStatus(status, pageable).map(this::adminView);
 	}
 
+	/**
+	 * A reviewer takes an account waiting for verification: from now on only they may verify or reject it. Taking one
+	 * already assigned to you changes nothing; one assigned to another reviewer must be given back by them first.
+	 */
+	@Transactional
+	public AdminBankAccountResponse assign(UUID reviewerId, UUID accountId) {
+		BankAccount account = pending(reviewerId, accountId);
+		if (account.isAssignedTo(reviewerId)) {
+			return adminView(account);
+		}
+		if (account.getAssignedTo() != null) {
+			throw new BusinessException(ErrorCode.CONFLICT,
+					"This verification is already assigned to " + assignee(account).name());
+		}
+		account.assignTo(reviewerId, clock.instant());
+		audit.record(AuditRecord.of(reviewerId, AuditAction.BANK_ACCOUNT_ASSIGNED, "BANK_ACCOUNT", accountId)
+			.withNewValue(Map.of("userId", account.getUserId().toString())));
+		accounts.flush();
+		return adminView(account);
+	}
+
+	/** The assigned reviewer gives an account back to the queue, undecided, for another reviewer to take. */
+	@Transactional
+	public AdminBankAccountResponse unassign(UUID reviewerId, UUID accountId) {
+		BankAccount account = pendingForReview(reviewerId, accountId);
+		account.unassign();
+		audit.record(AuditRecord.of(reviewerId, AuditAction.BANK_ACCOUNT_UNASSIGNED, "BANK_ACCOUNT", accountId)
+			.withNewValue(Map.of("userId", account.getUserId().toString())));
+		accounts.flush();
+		return adminView(account);
+	}
+
 	@Transactional
 	public AdminBankAccountResponse verify(UUID reviewerId, UUID accountId) {
 		// Lock the owner's accounts first, in the same order as the owner's own changes.
@@ -307,7 +340,18 @@ public class BankAccountService {
 					encryptor.decrypt(a.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT))));
 	}
 
+	/** A pending account the reviewer has assigned to themselves: only they may decide it. */
 	private BankAccount pendingForReview(UUID reviewerId, UUID accountId) {
+		BankAccount account = pending(reviewerId, accountId);
+		if (!account.isAssignedTo(reviewerId)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, account.getAssignedTo() == null
+					? "Assign this verification to yourself before deciding it"
+					: "This verification is assigned to " + assignee(account).name());
+		}
+		return account;
+	}
+
+	private BankAccount pending(UUID reviewerId, UUID accountId) {
 		BankAccount account = accounts.findByIdForUpdate(accountId)
 			.orElseThrow(() -> new ResourceNotFoundException("Bank account", accountId));
 		if (account.getUserId().equals(reviewerId)) {
@@ -331,7 +375,16 @@ public class BankAccountService {
 				: accounts.findById(account.getReplacesAccountId()).map(BankAccountResponse::from).orElse(null);
 		return new AdminBankAccountResponse(account.getUserId(), BankAccountResponse.from(account),
 				account.getVerifiedBy(),
-				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()), replaces);
+				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()), replaces,
+				assignee(account));
+	}
+
+	private Assignee assignee(BankAccount account) {
+		if (account.getAssignedTo() == null) {
+			return null;
+		}
+		UserAccount reviewer = users.getAccount(account.getAssignedTo());
+		return new Assignee(reviewer.id(), reviewer.firstName() + " " + reviewer.lastName(), account.getAssignedAt());
 	}
 
 }
