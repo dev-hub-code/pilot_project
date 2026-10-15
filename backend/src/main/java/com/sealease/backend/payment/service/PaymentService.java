@@ -44,6 +44,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -104,6 +105,8 @@ public class PaymentService {
 	 * Starts paying an order by bank or in cash at the office. Idempotent per key; asking again while a
 	 * payment of the same method is in flight resumes it, and one of another method still in flight is
 	 * cancelled. Paying at the office holds the order for the office window, as the investor has to come in.
+	 * Cash at the office is paid without GST and earns a bonus on the monthly rent; an office payment in flight
+	 * on other terms (started before) is replaced by one on the current terms.
 	 */
 	@Transactional
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
@@ -133,21 +136,36 @@ public class PaymentService {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					humanize(method) + " payments are not available");
 		}
+		boolean atOffice = method == PaymentMethod.OFFICE_CASH;
+		boolean gstIncluded = !atOffice;
+		BigDecimal rentBonus = atOffice ? office.cashRentBonusPercent() : BigDecimal.ZERO;
 		for (Payment inFlight : payments.findByOrderIdAndStatus(orderId, PaymentStatus.PENDING)) {
-			if (inFlight.getMethod() == method) {
+			// Cash at the office, once chosen, is how the order is paid: the office expects it. To pay another way the
+			// investor cancels the order.
+			if (inFlight.getMethod() == PaymentMethod.OFFICE_CASH && method != PaymentMethod.OFFICE_CASH) {
+				throw new BusinessException(ErrorCode.CONFLICT,
+						"You chose to pay in cash at our office. To pay another way, cancel this order and place it again.");
+			}
+			boolean sameTerms = inFlight.getMethod() == method && inFlight.isGstIncluded() == gstIncluded
+					&& inFlight.getRentBonusPercent().compareTo(rentBonus) == 0;
+			if (sameTerms) {
 				return view(inFlight, order.orderNumber());
 			}
-			inFlight.cancel("Replaced by a " + humanize(method).toLowerCase(Locale.ROOT) + " payment");
+			inFlight.cancel(inFlight.getMethod() == method ? "Replaced by a payment on the current terms"
+					: method == PaymentMethod.OFFICE_CASH ? "Replaced by a cash payment at the office"
+							: "Replaced by a " + humanize(method).toLowerCase(Locale.ROOT) + " payment");
 		}
 		payments.flush();
 
+		Money due = order.due(gstIncluded);
 		Payment payment = payments.saveAndFlush(new Payment(orderId, userId, method, provider.name(),
-				provider.open(order.orderNumber(), order.total()), order.total(), key));
+				provider.open(order.orderNumber(), due), due, gstIncluded, rentBonus, key));
 		if (method == PaymentMethod.OFFICE_CASH) {
 			order = orders.holdForVerification(orderId, clock.instant().plus(office.holdWindow()));
 		}
 		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
-			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", order.total().toString(),
+			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", due.toString(),
+					"gstIncluded", gstIncluded, "rentBonusPercent", rentBonus.toPlainString(),
 					"orderExpiresAt", order.expiresAt().toString())));
 		return view(payment, order.orderNumber());
 	}
@@ -218,6 +236,15 @@ public class PaymentService {
 		Payment locked = lockPayment(paymentId);
 		if (locked.getStatus() != PaymentStatus.PENDING && locked.getStatus() != PaymentStatus.CANCELLED) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + locked.getStatus());
+		}
+		// A cancelled payment is confirmed only for money that arrived late; not while the order's live payment (the one
+		// that replaced it) is still pending.
+		if (locked.getStatus() == PaymentStatus.CANCELLED) {
+			payments.findByOrderIdAndStatus(locked.getOrderId(), PaymentStatus.PENDING).stream().findFirst()
+				.ifPresent(pending -> {
+					throw new BusinessException(ErrorCode.CONFLICT, "This payment was cancelled and " + pending.getProviderReference()
+							+ " is pending for the order: confirm that one instead");
+				});
 		}
 		Money received = Money.of(request.amountReceived(), locked.amount().currency());
 		if (!received.equals(locked.amount())) {
@@ -321,7 +348,8 @@ public class PaymentService {
 		Instant now = clock.instant();
 		payment.settle(accepted, externalReference, actorId, note, now);
 		payments.flush();
-		if (accepted && !orders.confirmPaid(order.id(), payment.getId(), payment.getMethod() == PaymentMethod.OFFICE_CASH)) {
+		if (accepted && !orders.confirmPaid(order.id(), payment.getId(), payment.getMethod() == PaymentMethod.OFFICE_CASH,
+				payment.isGstIncluded(), payment.getRentBonusPercent())) {
 			throw new IllegalStateException("Order " + order.orderNumber() + " could not be confirmed while locked");
 		}
 
@@ -329,6 +357,8 @@ public class PaymentService {
 		details.put("orderId", order.id().toString());
 		details.put("amount", payment.amount().toString());
 		details.put("method", payment.getMethod());
+		details.put("gstIncluded", payment.isGstIncluded());
+		details.put("rentBonusPercent", payment.getRentBonusPercent().toPlainString());
 		if (note != null) {
 			details.put("note", note);
 		}
@@ -386,7 +416,11 @@ public class PaymentService {
 	}
 
 	private static String humanize(PaymentMethod method) {
-		return method == PaymentMethod.CARD ? "Card" : "Bank";
+		return switch (method) {
+			case CARD -> "Card";
+			case BANK_TRANSFER -> "Bank";
+			case OFFICE_CASH -> "Cash at the office";
+		};
 	}
 
 	private static String humanize(PaymentStatus status) {

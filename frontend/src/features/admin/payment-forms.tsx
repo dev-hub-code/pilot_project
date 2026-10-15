@@ -7,6 +7,7 @@ import { TextField } from "@/components/ui/text-field";
 import type { CompanyBankAccount } from "@/types/order";
 import type { FormState } from "@/validators/form-state";
 import { currencyLabel, formatMoney } from "@/utils/money";
+import { upperCase } from "@/utils/input";
 import { confirmTransferAction, recordRefundAction, rejectPaymentAction, saveCompanyBankAccountAction } from "./payment-actions";
 
 /** @param defaultReference the investor's transaction id, cheque or receipt number, when they gave one */
@@ -72,6 +73,7 @@ export function CompanyBankAccountForm({ account }: { account?: CompanyBankAccou
         <TextField id={`${key}-number`} label="Account number" name="accountNumber" inputMode="numeric" autoComplete="off"
           defaultValue={v("accountNumber")} error={e.accountNumber} />
         <TextField id={`${key}-ifsc`} label="IFSC" name="ifscCode" placeholder="HDFC0001234" autoComplete="off"
+          autoCapitalize="characters" spellCheck={false} onChange={upperCase} maxLength={11}
           defaultValue={v("ifscCode")} error={e.ifscCode} />
         <TextField id={`${key}-branch`} label="Branch (optional)" name="branch" defaultValue={v("branch")} error={e.branch} />
         <TextField id={`${key}-upi`} label="UPI ID (optional)" name="upiId" placeholder="name@bank" autoComplete="off"

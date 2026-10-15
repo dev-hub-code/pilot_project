@@ -28,9 +28,15 @@ export async function setCartItemAction(productId: string, then: "cart" | "stay"
   return { success: "Cart updated." };
 }
 
-export async function removeCartItemAction(productId: string): Promise<void> {
-  await authFetch(`/api/v1/cart/items/${id(productId)}`, { method: "DELETE" });
+/** Takes a plan out of the cart, with all its containers. */
+export async function removeCartItemAction(productId: string): Promise<FormState> {
+  try {
+    await authFetch(`/api/v1/cart/items/${id(productId)}`, { method: "DELETE" });
+  } catch (error) {
+    return failureState(error);
+  }
   revalidatePath("/cart");
+  return { success: "Removed from your cart." };
 }
 
 /**

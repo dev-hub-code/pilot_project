@@ -5,25 +5,21 @@ import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
-import { Pagination } from "@/components/ui/pagination";
 import { DownlineTree } from "@/features/referrals/downline-tree";
 import { ShareLink } from "@/features/referrals/share-link";
 import { authFetch } from "@/lib/server/auth/session";
-import type { PageResponse } from "@/types/api";
-import type { Downline, ReferralEarning, ReferralMonth, ReferralOverview } from "@/types/referral";
+import type { Downline, ReferralMonth, ReferralOverview } from "@/types/referral";
 import { formatDate, formatMonth } from "@/utils/format";
 import { CURRENCY } from "@/lib/currency";
 import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Referrals" };
 
-export default async function ReferralsPage({ searchParams }: PageProps<"/referrals">) {
-  const page = Math.max(0, Number.parseInt(String((await searchParams).page ?? "0"), 10) || 0);
-  const [overview, downline, monthly, history] = await Promise.all([
+export default async function ReferralsPage() {
+  const [overview, downline, monthly] = await Promise.all([
     authFetch<ReferralOverview>("/api/v1/referrals/me"),
     authFetch<Downline>("/api/v1/referrals/downline"),
     authFetch<ReferralMonth[]>("/api/v1/referrals/monthly"),
-    authFetch<PageResponse<ReferralEarning>>(`/api/v1/referrals/earnings?page=${page}&size=20`),
   ]);
   // Worked example from the level-1 rate in force, which admins set.
   const level1 = overview.levels.find((l) => l.level === 1);
@@ -83,7 +79,7 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Monthly earnings by level</h2>
         {monthly.length === 0 ? (
-          <p className="text-sm text-muted">Each month&apos;s commission appears here, split by level, and is added to your wallet as it is paid.</p>
+          <p className="text-sm text-muted">Each month&apos;s commission appears here, split by level. It is added to your wallet every hour, with your referrals&apos; rent.</p>
         ) : (
           <DataTable columns={["Month", ...overview.levels.map((l) => `Level ${l.level}`), "Total"]}>
             {monthly.map((m) => (
@@ -96,30 +92,6 @@ export default async function ReferralsPage({ searchParams }: PageProps<"/referr
               </tr>
             ))}
           </DataTable>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">Commission history</h2>
-        {history.content.length === 0 ? (
-          <p className="text-sm text-muted">Commission is paid every month, alongside each payout on your referrals&apos; containers.</p>
-        ) : (
-          <>
-            <DataTable columns={["Paid", "From", "Level", "Plan", "Their investment", "Rate", "Commission"]}>
-              {history.content.map((e) => (
-                <tr key={e.id} className="hover:bg-background">
-                  <Cell className="text-muted">{formatDate(e.paidAt)}</Cell>
-                  <Cell>{e.sourceName}</Cell>
-                  <Cell className="tabular-nums">{e.level}</Cell>
-                  <Cell><span className="font-mono">{e.productCode}</span> <span className="text-xs text-muted">payout {e.installmentNumber}</span></Cell>
-                  <Cell className="tabular-nums">{formatMoney(e.base)}</Cell>
-                  <Cell className="tabular-nums text-muted">{formatPercent(e.ratePercent, 3)}</Cell>
-                  <Cell className="tabular-nums font-medium">{formatMoney(e.amount)}</Cell>
-                </tr>
-              ))}
-            </DataTable>
-            <Pagination page={history} basePath="/referrals" params={{}} />
-          </>
         )}
       </section>
     </div>

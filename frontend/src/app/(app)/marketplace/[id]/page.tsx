@@ -95,7 +95,8 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               value={Number(listing.gstRatePercent) > 0
                 ? `${formatMoney(listing.price)} + ${formatPercent(listing.gstRatePercent)} GST = ${formatMoney(listing.priceWithGst)}`
                 : formatMoney(listing.price)} />
-            <Fact label="Rent per container a month" value={formatMoney(detail.monthlyRent)} />
+            <Fact label="Rent per container a month"
+              value={`${formatMoney(detail.monthlyRent)} (${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(listing.price)}${Number(listing.gstRatePercent) > 0 ? ", before GST" : ""})`} />
             <Fact label="Minimum lease tenure"
               value={listing.maxTenureYears > listing.minTenureYears
                 ? `${yearsLabel(listing.minTenureYears)} (choose up to ${yearsLabel(listing.maxTenureYears)})`
@@ -105,7 +106,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
           <div className="space-y-1 text-sm">
             <p className="text-muted">
               Buy as many {type} containers as you like. Once your payment is confirmed, our team assigns each one to you
-              by its container number, and your lease and monthly payouts start that day.
+              by its container number; your lease starts at the next full hour and earns rent every hour from then.
             </p>
           </div>
         </div>
@@ -152,9 +153,18 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               <Button type="submit" className="col-span-2">Calculate</Button>
             </form>
             <dl className="grid grid-cols-2 gap-4 text-sm">
-              <Projection label={Number(listing.gstRatePercent) > 0 ? "You pay (incl. GST)" : "You invest"}
-                value={formatMoney(projection.amountWithGst)} />
-              <Projection label="Rent every month" value={formatMoney(projection.monthlyRent)} />
+              {Number(listing.gstRatePercent) > 0 ? (
+                <>
+                  <Projection label="Price (before GST)" value={formatMoney(projection.amount)} />
+                  <Projection label={`GST ${formatPercent(listing.gstRatePercent)}`} value={formatMoney(projection.gstAmount)}
+                    note="Not part of the rent calculation" />
+                  <Projection label="You pay (incl. GST)" value={formatMoney(projection.amountWithGst)} />
+                </>
+              ) : (
+                <Projection label="You invest" value={formatMoney(projection.amount)} />
+              )}
+              <Projection label="Rent every month" value={formatMoney(projection.monthlyRent)}
+                note={`${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(projection.amount)}${Number(listing.gstRatePercent) > 0 ? " (before GST)" : ""}`} />
               <Projection label="Lease" value={`${yearsLabel(projection.tenureYears)} (${projection.payouts} payouts)`} />
             </dl>
             <p className="border-t border-border pt-3 text-sm">
@@ -211,11 +221,12 @@ function Fact({ label, value, emphasis }: { label: string; value: string; emphas
   );
 }
 
-function Projection({ label, value }: { label: string; value: string }) {
+function Projection({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div>
       <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
       <dd className="mt-1 font-display text-xl font-semibold">{value}</dd>
+      {note && <dd className="mt-0.5 text-xs text-muted">{note}</dd>}
     </div>
   );
 }

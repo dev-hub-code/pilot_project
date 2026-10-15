@@ -100,7 +100,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
               </div>
             )}
           </Card>
-          <Card title="Payout per container" description="Paid monthly on the payout day for the lease the investor chooses; part months at the start and end are paid by the day.">
+          <Card title="Payout per container" description="Credited to the investor's wallet every hour for the lease they choose; part months at the start and end are paid by the hour.">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
               <Item label="Price (without GST)">{formatMoney(p.price)}</Item>
               <Item label={`GST (${formatPercent(p.gstRatePercent)})`}>{formatMoney(p.gstPerContainer)}</Item>
@@ -129,7 +129,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
               </Card>
             )}
             {p.status === "OPEN" && (
-              <Card title="Close to new investors" description="Containers already sold keep their lease and monthly payouts.">
+              <Card title="Close to new investors" description="Containers already sold keep their lease and keep earning rent every hour.">
                 <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close plan"
                   confirm={`Close ${p.code}? Investors can no longer buy containers under it.`} />
               </Card>

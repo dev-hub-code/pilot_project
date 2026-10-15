@@ -2,14 +2,13 @@ package com.sealease.backend.earning.controller;
 
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.earning.dto.DuePayouts;
-import com.sealease.backend.earning.dto.PayoutResponse;
-import com.sealease.backend.earning.dto.PayoutSearchCriteria;
-import com.sealease.backend.earning.entity.PayoutStatus;
+import com.sealease.backend.earning.dto.LeaseRentResponse;
+import com.sealease.backend.earning.dto.LeaseRentResponse.LeaseRentStatus;
+import com.sealease.backend.earning.dto.LeaseSearchCriteria;
 import com.sealease.backend.earning.service.PayoutService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,12 +16,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Monthly investor payouts. They are paid automatically as they fall due; finance can also run them now. */
+/** Investors' rent, per container lease. It is credited automatically every hour; finance can also run it now. */
 @RestController
 @RequestMapping("/api/v1/admin/payouts")
 public class AdminPayoutController {
@@ -37,21 +35,20 @@ public class AdminPayoutController {
 
 	@GetMapping
 	@PreAuthorize(VIEW)
-	public PageResponse<PayoutResponse> search(@RequestParam(required = false) PayoutStatus status,
+	public PageResponse<LeaseRentResponse> search(@RequestParam(required = false) LeaseRentStatus status,
 			@RequestParam(required = false) UUID userId, @RequestParam(required = false) UUID holdingId,
-			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueBy,
-			@PageableDefault(size = 25, sort = "dueOn", direction = Sort.Direction.ASC) Pageable pageable) {
-		return PageResponse.from(payouts.search(new PayoutSearchCriteria(status, userId, holdingId, dueBy), pageable));
+			@PageableDefault(size = 25, sort = "startsAt", direction = Sort.Direction.DESC) Pageable pageable) {
+		return PageResponse.from(payouts.search(new LeaseSearchCriteria(status, userId, holdingId), pageable));
 	}
 
-	/** Payouts that have fallen due and are not paid yet. */
+	/** Leases with hours that have ended and are not credited yet: normally none, crediting runs every minute. */
 	@GetMapping("/due")
 	@PreAuthorize(VIEW)
 	public List<DuePayouts> due() {
 		return payouts.due();
 	}
 
-	/** Credits every day of rent that has ended now, instead of waiting for the next automatic run. */
+	/** Credits every hour of rent that has ended now, instead of waiting for the next automatic run. */
 	@PostMapping("/run")
 	@PreAuthorize("hasAuthority('PAYOUT_PROCESS')")
 	public Map<String, Integer> run() {

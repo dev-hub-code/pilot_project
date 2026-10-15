@@ -1,5 +1,6 @@
 package com.sealease.backend.reporting.engine;
 
+import com.sealease.backend.common.time.DisplayTimeZone;
 import com.sealease.backend.common.csv.Csv;
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.JasperCompileManager;
@@ -14,11 +15,11 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -29,15 +30,20 @@ import java.util.Map;
 public class ReportRenderer {
 
 	static final String TEMPLATE = "reports/document.jrxml";
-	private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+	private final DateTimeFormatter stamp;
 
 	private volatile JasperReport template;
+
+	public ReportRenderer(DisplayTimeZone display) {
+		// "14 Oct 2026, 20:07 IST"
+		this.stamp = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm z", Locale.ENGLISH).withZone(display.zone());
+	}
 
 	public byte[] pdf(ReportDocument document) {
 		Map<String, Object> parameters = new HashMap<>();
 		parameters.put("title", document.title());
 		parameters.put("subtitle", document.subtitle());
-		parameters.put("generatedAt", STAMP.format(document.generatedAt()));
+		parameters.put("generatedAt", stamp.format(document.generatedAt()));
 		parameters.put("footnote", document.footnote());
 		List<Map<String, ?>> rows = new ArrayList<>();
 		int index = 0;

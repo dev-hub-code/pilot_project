@@ -10,6 +10,7 @@ import { COUNTRY_OPTIONS } from "@/lib/countries";
 import { CURRENCY } from "@/lib/currency";
 import type { FormState } from "@/validators/form-state";
 import { ACCEPTED_FILE_TYPES } from "@/validators/profile";
+import { upperCase } from "@/utils/input";
 import { addBankAccountAction } from "./actions";
 
 const PROOF_TYPES = [
@@ -40,8 +41,8 @@ export function BankAccountForm({ holderName }: { holderName: string }) {
         <TextField label="Account number" name="accountNumber" autoComplete="off" inputMode="numeric"
           pattern="[0-9]{8,15}" minLength={8} maxLength={15} placeholder="8 to 15 digits" error={e.accountNumber} />
         <TextField label="IFSC code" name="routingCode" defaultValue={v("routingCode")} autoComplete="off"
-          autoCapitalize="characters" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" minLength={11} maxLength={11}
-          placeholder="e.g. HDFC0001234" error={e.routingCode} />
+          autoCapitalize="characters" spellCheck={false} onChange={upperCase} pattern="[A-Z]{4}0[A-Z0-9]{6}"
+          minLength={11} maxLength={11} placeholder="e.g. HDFC0001234" error={e.routingCode} />
         <SelectField label="Proof of account" name="proofType" placeholder="Select…" options={PROOF_TYPES}
           defaultValue={v("proofType")} error={e.proofType} />
         <div className="sm:col-span-2 lg:col-span-3">

@@ -72,6 +72,8 @@ export interface Order {
   closeReason: string | null;
   createdAt: string;
   items: OrderItem[];
+  /** Paid in cash at the office, so without GST; {@code total} still includes GST. */
+  gstWaived: boolean;
 }
 
 /**
@@ -144,6 +146,10 @@ export interface Payment {
   bankTransfer: BankTransferInstructions | null;
   deposit: DepositDetails | null;
   officeCash: OfficeCashInstructions | null;
+  /** The amount includes GST; office cash payments leave it out. */
+  gstIncluded: boolean;
+  /** Added to every container's monthly rent once this pays the order (office cash); 0 for none. */
+  rentBonusPercent: number;
 }
 
 export interface InvoiceParty {

@@ -11,6 +11,7 @@ import com.sealease.backend.user.dto.AdminUserSummary;
 import com.sealease.backend.user.dto.UserSearchCriteria;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.User;
+import com.sealease.backend.user.entity.UserCodes;
 import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.event.UserStatusChangedEvent;
@@ -28,6 +29,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Map;
 import java.util.UUID;
 
@@ -106,7 +108,12 @@ public class UserAdministrationService {
 			Join<UserProfile, User> user = countQuery ? root.join("user")
 					: (Join<UserProfile, User>) root.<UserProfile, User>fetch("user");
 			List<Predicate> predicates = new ArrayList<>();
-			if (criteria.q() != null && !criteria.q().isBlank()) {
+			Optional<Long> number = UserCodes.parse(criteria.q());
+			if (number.isPresent()) {
+				// A readable ID ("SL03500") finds that one account.
+				predicates.add(cb.equal(user.get("userNumber"), number.get()));
+			}
+			else if (criteria.q() != null && !criteria.q().isBlank()) {
 				String like = "%" + escapeLike(criteria.q().strip().toLowerCase(Locale.ROOT)) + "%";
 				predicates.add(cb.or(
 						cb.like(user.get("email"), like, '\\'),

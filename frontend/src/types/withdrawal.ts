@@ -51,18 +51,23 @@ export interface Withdrawal {
 export type WithdrawalPayoutMethod = "BANK_TRANSFER" | "OFFICE_CASH";
 
 export interface WithdrawalPolicy {
-  /** A monthly bank withdrawal is made only for a balance of at least this. */
+  /** A withdrawal run pays an investor's balances only when they come to at least this. */
   minimumAmount: number;
-  /** Rent is paid into bank accounts, or collected in cash at the office, from this day of the month. */
-  rentWithdrawalDay: number;
-  /** Likewise for referral earnings. */
-  referralWithdrawalDay: number;
   /** Where cash is collected, and when. */
   officeAddress: string;
   officeHours: string;
 }
 
-/** The two monthly bank withdrawal runs, each with its own Excel file. */
+/** The minimum withdrawal an admin sets; until then the configured default applies. */
+export interface WithdrawalSettings {
+  minimumAmount: number;
+  currency: string;
+  defaultAmount: number;
+  /** When an admin last set it; null while the default applies. */
+  updatedAt: string | null;
+}
+
+/** Which monthly run made a batch, for batches from before admin-made withdrawal runs. */
 export type WithdrawalKind = "RENT" | "REFERRAL";
 
 /** How referral earnings are paid this year: chosen once a year, otherwise the default. */
@@ -73,21 +78,14 @@ export interface ReferralPayoutMode {
   chosenAt: string | null;
 }
 
-/** A balance finance may withdraw in cash at the office for an investor today. */
-export interface OfficeWithdrawalOption {
-  balance: EarningsBalance;
-  /** The whole balance, which is what would be withdrawn. */
-  available: Money;
-  /** Why it cannot be withdrawn today; null when it can. */
-  refusal: string | null;
-}
-
 export type BatchStatus = "CREATED" | "SENT" | "CLOSED" | "CANCELLED";
 
 export interface PayoutBatch {
   id: string;
   reference: string;
-  /** Which monthly run made it; null for batches made by hand before the runs. */
+  /** The bank sheet (BANK_TRANSFER) or the cash sheet (OFFICE_CASH) of a withdrawal run. */
+  payoutMethod: WithdrawalPayoutMethod;
+  /** Which monthly run made it, for batches from before admin-made runs; otherwise null. */
   kind: WithdrawalKind | null;
   /** "yyyy-MM" for a batch made by a monthly run; null when made by hand. */
   period: string | null;
@@ -107,6 +105,8 @@ export interface PayoutBatch {
 export interface PayoutBatchDetail {
   batch: PayoutBatch;
   items: Withdrawal[];
+  /** Who the batch pays; the phone only for cash at the office. */
+  investors: { userId: string; userCode: string | null; name: string | null; phone: string | null }[];
 }
 
 /** A file kept with a batch: its bank file, or a reconciliation file uploaded back. */
@@ -121,33 +121,53 @@ export interface BatchFile {
   createdAt: string;
 }
 
-export interface ReconciliationResult {
-  paid: number;
-  failed: number;
-  unchanged: number;
-  batch: PayoutBatchDetail;
-}
-
-export interface WithdrawalSettings {
-  rentWithdrawalDay: number;
-  referralWithdrawalDay: number;
-  /** ISO dates the next files will be made (the day before each withdrawal day). */
-  nextRentFileOn: string;
-  nextReferralFileOn: string;
-  updatedAt: string;
-}
-
-/** One month's rent or referral withdrawal run. */
-export interface ScheduledRun {
+/** A finance task: one withdrawal of a run, to pay by bank or hand over in cash, then mark paid or failed. */
+export interface FinanceTask {
   id: string;
+  /** The withdrawal's reference ("WD-100001"). */
+  reference: string;
   kind: WithdrawalKind;
-  period: string;
+  payoutMethod: WithdrawalPayoutMethod;
+  batchId: string;
+  batchReference: string | null;
+  userId: string;
+  userCode: string | null;
+  name: string | null;
+  /** Cash tasks only. */
+  phone: string | null;
+  bankName: string | null;
+  accountHolder: string | null;
+  /** In full while a bank task is open; masked once done; null for cash. */
+  accountNumber: string | null;
+  ifsc: string | null;
+  amount: Money;
+  /** BATCHED/PROCESSING while open; then PAID, FAILED or RETURNED. */
+  status: WithdrawalStatus;
+  payoutReference: string | null;
+  failureReason: string | null;
+  ticketId: string | null;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+/** One withdrawal run: every eligible investor's rent and referral balances, in a bank sheet and a cash sheet. */
+export interface WithdrawalRun {
+  id: string;
+  /** "WR-00001". */
+  reference: string;
+  /** RENT or REFERRAL; null for runs from before they were separate (both). */
+  kind: WithdrawalKind | null;
   currency: string;
   runAt: string;
-  triggeredBy: string | null;
-  batchId: string | null;
-  batchReference: string | null;
-  withdrawalCount: number;
-  total: Money;
-  skipped: { userId: string; reason: string }[];
+  triggeredBy: string;
+  bankBatchId: string | null;
+  bankBatchReference: string | null;
+  bankInvestors: number;
+  bankTotal: Money;
+  cashBatchId: string | null;
+  cashBatchReference: string | null;
+  cashInvestors: number;
+  cashTotal: Money;
+  /** Investors with money to withdraw who were left out, how they would have been paid, and why. */
+  skipped: { userId: string; userCode: string | null; payoutMethod: WithdrawalPayoutMethod; reason: string }[];
 }

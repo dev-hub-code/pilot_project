@@ -115,10 +115,13 @@ class ReferralIntegrationTest {
 		// The referred investor keeps their full payout.
 		balance(investor).andExpect(jsonPath("$.balances[0].amount").value("1000.00"));
 
+		// Investors see their totals, not a commission history; staff do.
 		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, l2.bearer()))
+			.andExpect(status().isNotFound());
+		mvc.perform(get("/api/v1/admin/referral-earnings").param("beneficiaryId", l2.id().toString())
+				.header(HttpHeaders.AUTHORIZATION, api.staff("FINANCE").bearer()))
 			.andExpect(jsonPath("$.content[0].level").value(2))
-			.andExpect(jsonPath("$.content[0].sourceName").value("Test I."))
-			.andExpect(jsonPath("$.content[0].sourceUserId").doesNotExist())
+			.andExpect(jsonPath("$.content[0].sourceUserId").value(investor.id().toString()))
 			.andExpect(jsonPath("$.content[0].base.amount").value("50000.00"))
 			.andExpect(jsonPath("$.content[0].amount.amount").value("500.00"));
 
@@ -144,7 +147,7 @@ class ReferralIntegrationTest {
 		List<String> earnedFromInvestor = JsonPath.read(downline, "$.members[?(@.level == 4)].earned[0].amount");
 		assertThat(earnedFromInvestor).containsExactly("125.00");
 
-		// Each member opens on its own, with the commission ledger from that member only.
+		// Each member opens on its own, with what was earned from them (no commission ledger).
 		List<String> investorId = JsonPath.read(downline, "$.members[?(@.level == 4)].id");
 		mvc.perform(get("/api/v1/referrals/members/{id}", investorId.getFirst()).header(HttpHeaders.AUTHORIZATION, l4.bearer()))
 			.andExpect(status().isOk())
@@ -152,22 +155,18 @@ class ReferralIntegrationTest {
 			.andExpect(jsonPath("$.displayName").value("Test I."));
 		mvc.perform(get("/api/v1/referrals/members/{id}/earnings", investorId.getFirst())
 				.header(HttpHeaders.AUTHORIZATION, l4.bearer()))
-			.andExpect(jsonPath("$.content.length()").value(1))
-			.andExpect(jsonPath("$.content[0].level").value(4))
-			.andExpect(jsonPath("$.content[0].sourceUserId").doesNotExist())
-			.andExpect(jsonPath("$.content[0].amount.amount").value("125.00"));
-		mvc.perform(get("/api/v1/referrals/members/m1/earnings").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
-			.andExpect(jsonPath("$.content.length()").value(0));
+			.andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/referrals/members/m5").header(HttpHeaders.AUTHORIZATION, l4.bearer()))
 			.andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/referrals/members/m1").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isNotFound());
 
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'referral.earning.created' "
-				+ "AND payload ->> 'installmentId' = ?", Integer.class, receipt)).isEqualTo(3);
-		assertThat(jdbc.queryForObject("""
-				SELECT new_value ->> 'forfeited' FROM audit_logs WHERE action = 'REFERRAL_COMMISSIONS_PAID' AND entity_id = ?
-				""", String.class, receipt)).isEqualTo("1");
+		// One event per credit of rent (one per calendar month it covers), with its commissions.
+		assertThat(jdbc.queryForList("SELECT payload ->> 'commissions' FROM outbox_events WHERE topic = 'referral.earning.created' "
+				+ "AND payload ->> 'holdingId' = ?", String.class, receipt)).isNotEmpty().containsOnly("3");
+		assertThat(jdbc.queryForList("""
+				SELECT new_value ->> 'forfeited' FROM audit_logs WHERE action = 'REFERRAL_COMMISSIONS_PAID'
+				AND new_value ->> 'holdingId' = ?""", String.class, receipt)).isNotEmpty().containsOnly("1");
 		assertThat(jdbc.queryForList("""
 				SELECT sum(CASE direction WHEN 'DEBIT' THEN amount ELSE -amount END) = 0
 				FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id GROUP BY t.currency
@@ -238,22 +237,19 @@ class ReferralIntegrationTest {
 	}
 
 	/**
-	 * Makes the order's first period a whole month that has just ended (a lease bought mid-month starts with a part
-	 * month) and credits it: fully credited, it pays referral commission. Returns the installment id.
+	 * Moves the order's lease back so it started exactly one lease month before the current hour, and credits that
+	 * month: its rent pays referral commission. Returns the holding id.
 	 */
 	private String payFirstPayout(String orderId) {
-		UUID installment = jdbc.queryForObject("""
-				SELECT p.id FROM payout_installments p JOIN holdings h ON h.id = p.holding_id
-				WHERE h.order_id = ?::uuid AND p.installment_number = 1""", UUID.class, orderId);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 		jdbc.update("""
-				UPDATE payout_installments p
-				SET period_start = today - 31, period_end = today, due_on = today, credited_through = today - 31,
-				    month_share = 1,
-				    rent_amount = (SELECT rent_amount FROM payout_installments WHERE holding_id = p.holding_id AND installment_number = 2)
-				FROM (SELECT (now() AT TIME ZONE 'UTC')::date AS today) t
-				WHERE p.id = ?""", installment);
+				UPDATE rent_accruals
+				SET starts_at = start, ends_at = (start AT TIME ZONE 'UTC' + make_interval(months => tenure_months)) AT TIME ZONE 'UTC',
+				    credited_until = start
+				FROM (SELECT (date_trunc('hour', now() AT TIME ZONE 'UTC') - interval '1 month') AT TIME ZONE 'UTC' AS start) t
+				WHERE holding_id = ?""", holding);
 		payouts.creditDue();
-		return installment.toString();
+		return holding.toString();
 	}
 
 	private ResultActions schedule(Account actor, Instant from, String... percents) throws Exception {

@@ -13,6 +13,7 @@ import java.util.UUID;
 /**
  * @param expiresAt payment is due by then; afterwards the reserved containers go back to inventory
  * @param items     one per container
+ * @param gstWaived paid in cash at the office without GST, at the investor's choice; {@code total} includes GST
  */
 public record OrderResponse(
 		UUID id,
@@ -25,14 +26,15 @@ public record OrderResponse(
 		Instant closedAt,
 		String closeReason,
 		Instant createdAt,
-		List<OrderItemResponse> items) {
+		List<OrderItemResponse> items,
+		boolean gstWaived) {
 
 	/** @param containerNumbers by order item id; only the containers that may be shown */
 	public static OrderResponse from(InvestmentOrder o, List<OrderItem> items, Map<UUID, String> containerNumbers) {
 		return new OrderResponse(o.getId(), o.getOrderNumber(), o.getUserId(), o.getStatus(),
 				MoneyResponse.from(o.total()), o.getExpiresAt(), o.getConfirmedAt(), o.getClosedAt(), o.getCloseReason(),
 				o.getCreatedAt(), items.stream().map(i -> OrderItemResponse.from(i, containerNumbers.get(i.getId())))
-					.toList());
+					.toList(), o.isGstWaived());
 	}
 
 }

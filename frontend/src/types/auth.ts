@@ -1,6 +1,8 @@
 /** Mirrors backend CurrentUserResponse. */
 export interface CurrentUser {
   id: string;
+  /** The readable ID ("SL03500"). */
+  userCode: string;
   email: string;
   firstName: string;
   lastName: string;

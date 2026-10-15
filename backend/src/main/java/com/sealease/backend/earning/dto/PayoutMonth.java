@@ -3,10 +3,9 @@ package com.sealease.backend.earning.dto;
 import com.sealease.backend.common.money.MoneyResponse;
 
 /**
- * Payouts falling due in one calendar month, split into what has been paid and what is still
- * scheduled.
+ * Rent for one calendar month (UTC): what has been credited to the wallet and what is still to come this month.
  *
- * @param month {@code yyyy-MM}, by due date
+ * @param month {@code yyyy-MM}
  */
 public record PayoutMonth(String month, MoneyResponse rentPaid, MoneyResponse capitalPaid, MoneyResponse rentScheduled,
 		MoneyResponse capitalScheduled) {

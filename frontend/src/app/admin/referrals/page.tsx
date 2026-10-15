@@ -14,7 +14,7 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { RateVersion, ReferralEarning } from "@/types/referral";
-import { formatDateTime, humanize } from "@/utils/format";
+import { formatDateTime, formatMonth, humanize } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Referrals" };
@@ -86,7 +86,7 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
                       {c.sourceUserId ? <Link href={`/admin/users/${c.sourceUserId}`} className="hover:underline">{c.sourceName}</Link> : c.sourceName}
                     </Cell>
                     <Cell className="tabular-nums">{c.level}</Cell>
-                    <Cell><span className="font-mono">{c.productCode}</span> <span className="text-xs text-muted">payout {c.installmentNumber}</span></Cell>
+                    <Cell><span className="font-mono">{c.productCode}</span> <span className="text-xs text-muted">rent in {formatMonth(c.month)}</span></Cell>
                     <Cell className="tabular-nums">{formatMoney(c.base)}</Cell>
                     <Cell className="tabular-nums text-muted">{formatPercent(c.ratePercent, 3)}</Cell>
                     <Cell className="tabular-nums font-medium">{formatMoney(c.amount)}</Cell>

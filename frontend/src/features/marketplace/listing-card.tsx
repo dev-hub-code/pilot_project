@@ -37,9 +37,11 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <Stat label="Monthly rent" value={formatPercent(listing.monthlyRentPercent)} emphasis />
-          <Stat label={Number(listing.gstRatePercent) > 0 ? `Price + ${formatPercent(listing.gstRatePercent)} GST` : "Price per container"}
-            value={formatMoney(listing.priceWithGst)} />
-          <Stat label="Rent paid monthly" value={formatMoney(listing.monthlyPayout)} />
+          <Stat label={Number(listing.gstRatePercent) > 0 ? "Price (before GST)" : "Price per container"}
+            value={formatMoney(listing.price)}
+            note={Number(listing.gstRatePercent) > 0 ? `${formatMoney(listing.priceWithGst)} with ${formatPercent(listing.gstRatePercent)} GST` : undefined} />
+          <Stat label="Rent paid monthly" value={formatMoney(listing.monthlyPayout)}
+            note={`${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(listing.price)}`} />
           <Stat label="Minimum lease" value={yearsLabel(listing.minTenureYears)} />
         </dl>
         <p className="text-xs text-muted">
@@ -56,11 +58,12 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
   );
 }
 
-function Stat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+function Stat({ label, value, emphasis, note }: { label: string; value: string; emphasis?: boolean; note?: string }) {
   return (
     <div>
       <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
       <dd className={emphasis ? "font-display text-xl font-semibold text-gold-text" : "font-medium"}>{value}</dd>
+      {note && <dd className="text-xs text-muted">{note}</dd>}
     </div>
   );
 }

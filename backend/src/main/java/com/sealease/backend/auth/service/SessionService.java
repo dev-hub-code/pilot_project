@@ -48,6 +48,16 @@ public class SessionService {
 		this.clock = clock;
 	}
 
+	/** Sessions not signed out, revoked or expired, and how many people they belong to. */
+	@Transactional(readOnly = true)
+	public ActiveSessions activeSessions() {
+		Instant now = clock.instant();
+		return new ActiveSessions(sessions.countActive(now), sessions.countUsersWithActiveSessions(now));
+	}
+
+	public record ActiveSessions(long sessions, long users) {
+	}
+
 	@Transactional(propagation = Propagation.MANDATORY)
 	public OpenedSession open(UUID userId, ClientInfo client) {
 		Instant now = clock.instant();

@@ -84,11 +84,22 @@ public class Payment extends BaseEntity {
 	@Column(name = "deposit_submitted_at")
 	private Instant depositSubmittedAt;
 
+	/** The amount due includes GST; office cash payments leave it out (those started before that include it). */
+	@Column(name = "gst_included", nullable = false, updatable = false)
+	private boolean gstIncluded;
+
+	/** Added to every container's monthly rent once this pays the order; only office cash earns one. */
+	@Column(name = "rent_bonus_percent", nullable = false, updatable = false, precision = 5, scale = 2)
+	private BigDecimal rentBonusPercent;
+
 	protected Payment() {
 	}
 
 	public Payment(UUID orderId, UUID userId, PaymentMethod method, String provider, String providerReference,
-			Money amount, String idempotencyKey) {
+			Money amount, boolean gstIncluded, BigDecimal rentBonusPercent, String idempotencyKey) {
+		if (method != PaymentMethod.OFFICE_CASH && (!gstIncluded || rentBonusPercent.signum() != 0)) {
+			throw new IllegalArgumentException("Only office cash payments leave out GST or earn a rent bonus");
+		}
 		this.orderId = orderId;
 		this.userId = userId;
 		this.method = method;
@@ -97,6 +108,8 @@ public class Payment extends BaseEntity {
 		this.amount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
 		this.status = PaymentStatus.PENDING;
+		this.gstIncluded = gstIncluded;
+		this.rentBonusPercent = rentBonusPercent;
 		this.idempotencyKey = idempotencyKey;
 	}
 
@@ -235,6 +248,14 @@ public class Payment extends BaseEntity {
 
 	public Instant getDepositSubmittedAt() {
 		return depositSubmittedAt;
+	}
+
+	public boolean isGstIncluded() {
+		return gstIncluded;
+	}
+
+	public BigDecimal getRentBonusPercent() {
+		return rentBonusPercent;
 	}
 
 }

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
+import { TIME_ZONE_LABEL } from "@/lib/time-zone";
 import type { FormState } from "@/validators/form-state";
 import { scheduleRatesAction } from "./referral-actions";
 
@@ -21,7 +22,7 @@ export function ScheduleRatesForm({ current }: { current: number[] }) {
         ))}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField label="Takes effect (UTC, empty = now)" name="effectiveFrom" type="datetime-local"
+        <TextField label={`Takes effect (${TIME_ZONE_LABEL}, empty = now)`} name="effectiveFrom" type="datetime-local"
           defaultValue={v("effectiveFrom")} error={e.effectiveFrom} />
         <TextField label="Reason" name="reason" defaultValue={v("reason")} error={e.reason} />
       </div>

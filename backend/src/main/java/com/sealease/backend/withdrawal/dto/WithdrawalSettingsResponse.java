@@ -1,15 +1,15 @@
 package com.sealease.backend.withdrawal.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 
 /**
- * The days of the month withdrawals are made. Each bank file is made the day before its withdrawal day, for finance
- * to pay on the day; cash is collected at the office from the withdrawal day.
+ * The minimum withdrawal: a run pays an investor's row only when it comes to at least {@code minimumAmount}.
  *
- * @param nextRentFileOn     when the next rent file will be made (this month's if not made yet)
- * @param nextReferralFileOn likewise for the referral file
+ * @param currency      the currency it is in (the platform's default)
+ * @param defaultAmount the configured default, which applies while no admin has set one
+ * @param updatedAt     when an admin last set it; null while the default applies
  */
-public record WithdrawalSettingsResponse(int rentWithdrawalDay, int referralWithdrawalDay, LocalDate nextRentFileOn,
-		LocalDate nextReferralFileOn, Instant updatedAt) {
+public record WithdrawalSettingsResponse(BigDecimal minimumAmount, String currency, BigDecimal defaultAmount,
+		Instant updatedAt) {
 }

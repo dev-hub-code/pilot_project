@@ -1,3 +1,4 @@
+import { todayInZone } from "@/lib/time-zone";
 import type { ReportDocument } from "@/types/report";
 
 /** A report document on screen, section by section; the PDF uses the same data. */
@@ -37,14 +38,19 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
   );
 }
 
-/** The default period: the current month so far (UTC). */
-export function thisMonth(today = new Date()): { from: string; to: string } {
+/** Today in the display time zone, as a date at UTC midnight (so the date arithmetic below stays on that day). */
+function zoneToday(): Date {
+  return new Date(`${todayInZone()}T00:00:00Z`);
+}
+
+/** The default period: the current month so far, in the display time zone. */
+export function thisMonth(today = zoneToday()): { from: string; to: string } {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   return { from: iso(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))), to: iso(today) };
 }
 
-/** "This month" style presets as from/to ISO dates (UTC). */
-export function periodPresets(today = new Date()): { label: string; from: string; to: string }[] {
+/** "This month" style presets as from/to ISO dates, in the display time zone. */
+export function periodPresets(today = zoneToday()): { label: string; from: string; to: string }[] {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const y = today.getUTCFullYear();
   const m = today.getUTCMonth();

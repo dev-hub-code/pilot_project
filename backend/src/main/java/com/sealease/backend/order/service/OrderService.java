@@ -52,8 +52,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -258,7 +256,7 @@ public class OrderService {
 	/** Locks the order for a payment decision (start, settle) within the caller's transaction. */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public PayableOrder lockForPayment(UUID orderId) {
-		return PayableOrder.of(lock(orderId));
+		return payable(lock(orderId));
 	}
 
 	/**
@@ -270,7 +268,7 @@ public class OrderService {
 		InvestmentOrder order = lock(orderId);
 		order.holdUntil(until);
 		orders.flush();
-		return PayableOrder.of(order);
+		return payable(order);
 	}
 
 	/**
@@ -279,11 +277,14 @@ public class OrderService {
 	 * issued. A line that reserved a container at checkout (orders placed before manual assignment) is leased
 	 * at once, with its payout schedule from today.
 	 *
-	 * @param paidAtOffice the order was paid in cash at the office: its containers' rent is collected in cash there
+	 * @param paidAtOffice       the order was paid in cash at the office: its containers' rent is collected in cash there
+	 * @param gstPaid          the investor paid GST; cash at the office is paid without, and the invoice then carries none
+	 * @param rentBonusPercent added to every container's monthly rent (paying cash at the office earns one); zero for none
 	 * @return {@code false} when the order is no longer awaiting payment (the money must be refunded)
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public boolean confirmPaid(UUID orderId, UUID paymentId, boolean paidAtOffice) {
+	public boolean confirmPaid(UUID orderId, UUID paymentId, boolean paidAtOffice, boolean gstPaid,
+			BigDecimal rentBonusPercent) {
 		InvestmentOrder order = lock(orderId);
 		if (!order.isPendingPayment()) {
 			return false;
@@ -292,38 +293,44 @@ public class OrderService {
 		List<OrderItem> lines = items.findByOrderIdOrderByProductIdAscIdAsc(orderId);
 		List<Map<String, Object>> confirmed = new ArrayList<>();
 		List<InvoiceRequest.Line> invoiceLines = new ArrayList<>();
-		LocalDate leaseStartsOn = LocalDate.ofInstant(now, ZoneOffset.UTC);
+		Instant leaseStartsAt = payouts.leaseStartAfter(now);
 		for (OrderItem item : lines) {
+			BigDecimal rentPercent = item.getMonthlyRentPercent().add(rentBonusPercent);
+			BigDecimal gstRate = gstPaid ? item.getGstRatePercent() : BigDecimal.ZERO;
+			Money gst = gstPaid ? item.gst() : Money.zero(item.amount().currency());
 			if (item.getContainerId() == null) {
 				UUID holdingId = holdings.recordAwaitingContainer(order.getUserId(), item.getProductId(), orderId,
-						item.getId(), item.amount(), item.getMonthlyRentPercent(), item.getMonthlyCapitalReturnPercent(),
+						item.getId(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
 						item.getTenureMonths(), now, paidAtOffice);
 				confirmed.add(Map.of("holdingId", holdingId.toString(), "productId", item.getProductId().toString(),
 						"amount", item.amount().amount().toPlainString()));
 				invoiceLines.add(new InvoiceRequest.Line("%s %s - one %s container, %d-month lease".formatted(
 						item.getProductCode(), item.getProductTitle(), item.getContainerType().label(),
-						item.getTenureMonths()), item.amount(), item.getGstRatePercent(), item.gst()));
+						item.getTenureMonths()), item.amount(), gstRate, gst));
 				continue;
 			}
 			ContainerSummary container = inventory.lease(item.getContainerId(), orderId);
 			PayoutTerms holding = holdings.record(order.getUserId(), item.getProductId(), orderId, item.getId(),
-					container.id(), item.amount(), item.getMonthlyRentPercent(), item.getMonthlyCapitalReturnPercent(),
-					item.getTenureMonths(), leaseStartsOn, now, paidAtOffice);
+					container.id(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
+					item.getTenureMonths(), leaseStartsAt, now, paidAtOffice);
 			payouts.schedule(holding);
 			confirmed.add(Map.of("holdingId", holding.holdingId().toString(), "productId", item.getProductId().toString(),
 					"containerNumber", container.containerNumber(), "amount", item.amount().amount().toPlainString()));
 			invoiceLines.add(new InvoiceRequest.Line("%s %s - container %s (%s), %d-month lease".formatted(
 					item.getProductCode(), item.getProductTitle(), container.containerNumber(),
-					container.containerType().label(), item.getTenureMonths()), item.amount(), item.getGstRatePercent(),
-					item.gst()));
+					container.containerType().label(), item.getTenureMonths()), item.amount(), gstRate, gst));
 		}
-		order.confirm(now);
+		order.confirm(now, !gstPaid);
 		orders.flush();
 		invoices.issue(new InvoiceRequest(orderId, order.getOrderNumber(), order.getUserId(), paymentId, invoiceLines));
 
-		audit.record(AuditRecord.of(null, AuditAction.ORDER_CONFIRMED, ENTITY, orderId)
-			.withNewValue(Map.of("paymentId", paymentId.toString(), "holdings", confirmed.size())));
-		Money total = order.total();
+		Map<String, Object> audited = new HashMap<>(Map.of("paymentId", paymentId.toString(),
+				"holdings", confirmed.size(), "gstPaid", gstPaid));
+		if (rentBonusPercent.signum() != 0) {
+			audited.put("rentBonusPercent", rentBonusPercent.toPlainString());
+		}
+		audit.record(AuditRecord.of(null, AuditAction.ORDER_CONFIRMED, ENTITY, orderId).withNewValue(audited));
+		Money total = gstPaid ? order.total() : totalWithoutGst(lines);
 		events.publishEvent(new OrderConfirmedEvent(orderId, order.getOrderNumber(), order.getUserId(), total));
 		outbox.publish(DomainEvent.of(KafkaTopics.INVESTMENT_CONFIRMED, "InvestmentConfirmed", ENTITY, orderId,
 				Map.of("orderId", orderId.toString(), "orderNumber", order.getOrderNumber(),
@@ -366,7 +373,16 @@ public class OrderService {
 
 	@Transactional(readOnly = true)
 	public PayableOrder payable(UUID orderId) {
-		return PayableOrder.of(load(orderId));
+		return payable(load(orderId));
+	}
+
+	private PayableOrder payable(InvestmentOrder order) {
+		return PayableOrder.of(order, totalWithoutGst(items.findByOrderIdOrderByProductIdAscIdAsc(order.getId())));
+	}
+
+	/** The order's price without GST: what an investor paying cash at the office without GST pays. */
+	private static Money totalWithoutGst(List<OrderItem> lines) {
+		return lines.stream().map(OrderItem::amount).reduce(Money::plus).orElseThrow();
 	}
 
 	@Transactional(readOnly = true)

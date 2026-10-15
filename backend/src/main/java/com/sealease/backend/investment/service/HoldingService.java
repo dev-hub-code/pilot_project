@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Currency;
 import java.util.HashMap;
@@ -65,15 +66,16 @@ public class HoldingService {
 
 	/**
 	 * Called by order confirmation, in its transaction, once the container is leased to the
-	 * investor: the lease (and the payout schedule) starts on {@code leaseStartsOn}.
+	 * investor: the lease (and the payout schedule) starts at {@code leaseStartsAt}, on the hour.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public PayoutTerms record(UUID userId, UUID productId, UUID orderId, UUID orderItemId, UUID containerId,
 			Money amount, BigDecimal monthlyRentPercent, BigDecimal monthlyCapitalReturnPercent, int tenureMonths,
-			LocalDate leaseStartsOn, Instant confirmedAt, boolean paidAtOffice) {
+			Instant leaseStartsAt, Instant confirmedAt, boolean paidAtOffice) {
 		Holding holding = holdings.saveAndFlush(new Holding(userId, productId, orderId, orderItemId, containerId, amount,
-				monthlyRentPercent, monthlyCapitalReturnPercent, tenureMonths, leaseStartsOn, confirmedAt, paidAtOffice));
-		return payoutTerms(holding);
+				monthlyRentPercent, monthlyCapitalReturnPercent, tenureMonths, LocalDate.ofInstant(leaseStartsAt, ZoneOffset.UTC),
+				confirmedAt, paidAtOffice));
+		return payoutTerms(holding, leaseStartsAt);
 	}
 
 	/** Called by order confirmation, in its transaction: a paid investment waiting for finance to assign a container. */
@@ -87,11 +89,12 @@ public class HoldingService {
 
 	/**
 	 * Leases the container finance typed in (of the plan's type) to a holding awaiting one. Its lease runs from
-	 * {@code leaseStartsOn}; the caller schedules the payouts from the returned terms.
+	 * {@code leaseStartsAt} (on the hour); the caller schedules the payouts from the returned terms.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public PayoutTerms assignContainer(UUID actorId, UUID holdingId, String containerNumber, String currentLocation,
-			LocalDate leaseStartsOn, Instant now) {
+			Instant leaseStartsAt, Instant now) {
+		LocalDate leaseStartsOn = LocalDate.ofInstant(leaseStartsAt, ZoneOffset.UTC);
 		Holding holding = holdings.findByIdForUpdate(holdingId)
 			.orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
 		if (holding.getStatus() != HoldingStatus.AWAITING_CONTAINER) {
@@ -103,8 +106,8 @@ public class HoldingService {
 		holdings.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.HOLDING_CONTAINER_ASSIGNED, ENTITY, holdingId)
 			.withNewValue(Map.of("containerId", container.id().toString(), "containerNumber", container.containerNumber(),
-					"leaseStartsOn", leaseStartsOn.toString())));
-		return payoutTerms(holding);
+					"leaseStartsAt", leaseStartsAt.toString())));
+		return payoutTerms(holding, leaseStartsAt);
 	}
 
 	/** Paid investments awaiting a container, oldest first. */
@@ -230,11 +233,11 @@ public class HoldingService {
 		return totals;
 	}
 
-	private PayoutTerms payoutTerms(Holding h) {
+	private PayoutTerms payoutTerms(Holding h, Instant leaseStartsAt) {
 		OfferingTerms plan = offerings.terms(List.of(h.getProductId())).get(h.getProductId());
 		return new PayoutTerms(h.getId(), h.getUserId(), h.getProductId(), plan.code(),
 				containers.summary(h.getContainerId()).containerNumber(), h.amount(), h.monthlyRent(), h.capitalReturned(),
-				h.getTenureMonths(), h.getLeaseStartsOn());
+				h.getTenureMonths(), leaseStartsAt);
 	}
 
 	private PortfolioResponse summarise(List<Holding> owned) {

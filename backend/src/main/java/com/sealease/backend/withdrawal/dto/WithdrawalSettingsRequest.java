@@ -1,11 +1,13 @@
 package com.sealease.backend.withdrawal.dto;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
-/** Days 2-28: the file is made the day before, and the 28th exists in every month. */
+import java.math.BigDecimal;
+
+/** @param minimumAmount in the platform's default currency, to the paisa */
 public record WithdrawalSettingsRequest(
-		@NotNull @Min(2) @Max(28) Integer rentWithdrawalDay,
-		@NotNull @Min(2) @Max(28) Integer referralWithdrawalDay) {
+		@NotNull @DecimalMin("1") @DecimalMax("10000000") @Digits(integer = 8, fraction = 2) BigDecimal minimumAmount) {
 }

@@ -46,7 +46,7 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
   return (
     <div className="space-y-6">
       <PageHeader title="Assign containers"
-        description="Paid investments waiting for a container, oldest first. Type the number of the container you are assigning; the investor\u2019s lease and monthly payouts start that day, and they are notified." />
+        description="Paid investments waiting for a container, oldest first. Type the number of the container you are assigning; the investor\u2019s lease starts at the next full hour and rent is credited every hour from then, and they are notified." />
       {queue.pending.content.length === 0 ? (
         <EmptyState title="Nothing to assign" description="Every paid investment has its container." />
       ) : (

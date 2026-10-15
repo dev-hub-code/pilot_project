@@ -23,11 +23,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -296,7 +300,7 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.holdings[0].container").doesNotExist())
 			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").doesNotExist())
 			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("1000.00"));
-		assertThat(scheduledPayouts(orderId)).isEmpty();
+		assertThat(leases(orderId)).isEmpty();
 		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.status").value("CONFIRMED"))
 			.andExpect(jsonPath("$.items[0].containerNumber").doesNotExist());
@@ -355,11 +359,15 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").value(today.toString()))
 			.andExpect(jsonPath("$.holdings[0].leaseEndsOn").value(today.plusMonths(24).toString()));
 
-		// Calendar months, credited daily: a lease starting mid-month has a part month at each end (25 periods).
-		List<LocalDate> schedule = scheduledPayouts(orderId);
-		assertThat(schedule).hasSize(2 * (today.getDayOfMonth() == 1 ? 24 : 25));
-		assertThat(schedule.getFirst()).isEqualTo(today.withDayOfMonth(1).plusMonths(1));
-		assertThat(schedule.getLast()).isEqualTo(today.plusMonths(24));
+		// One rent accrual per container: the lease from the next full hour for 24 months, ₹1,000 a month.
+		List<Map<String, Object>> leases = leases(orderId);
+		assertThat(leases).hasSize(2).allSatisfy(lease -> {
+			Instant start = ((Timestamp) lease.get("starts_at")).toInstant();
+			assertThat(start.getEpochSecond() % 3600).isZero();
+			assertThat(((Timestamp) lease.get("ends_at")).toInstant())
+				.isEqualTo(start.atZone(ZoneOffset.UTC).plusMonths(24).toInstant());
+			assertThat((BigDecimal) lease.get("monthly_rent")).isEqualByComparingTo("1000");
+		});
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND type = 'CONTAINER_ASSIGNED'",
 				Integer.class, investor.id())).isEqualTo(2);
 		assertThat(api.auditCount("HOLDING_CONTAINER_ASSIGNED", holdings.get(0))).isEqualTo(1);
@@ -586,6 +594,91 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.total.amount").value("59000.00"));
 	}
 
+	@Test
+	void cashPaidAtTheOfficeIsWithoutGstAndEarnsHalfAPercentMoreRent() throws Exception {
+		// ₹50,000 a container plus 18% GST; the plan pays 2% rent a month.
+		UUID product = offerings.publishedWithGst(OfferingFixtures.TYPE, "50000", "18", "2");
+		Account investor = approvedInvestor();
+		jdbc.update("UPDATE user_profiles SET state_region = 'maharashtra', country = 'IN' WHERE user_id = ?", investor.id());
+		String orderId = placeOrder(investor, product, 1);
+
+		// By bank the investor pays GST and earns the plan's rent.
+		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isCreated())
+			.andExpect(jsonPath("$.gstIncluded").value(true))
+			.andExpect(jsonPath("$.rentBonusPercent").value(0))
+			.andExpect(jsonPath("$.bankTransfer.amount.amount").value("59000.00"));
+		// At the office: the price alone, and 0.50% more rent.
+		String paymentId = JsonPath.read(startPayment(investor, orderId, "OFFICE_CASH")
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.gstIncluded").value(false))
+			.andExpect(jsonPath("$.rentBonusPercent").value(0.5))
+			.andExpect(jsonPath("$.officeCash.amount.amount").value("50000.00"))
+			.andReturn().getResponse().getContentAsString(), "$.id");
+
+		Account finance = api.staff("FINANCE");
+		confirmTransfer(finance, paymentId, "59000").andExpect(status().isUnprocessableContent());
+		confirmTransfer(finance, paymentId, "50000").andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("SUCCEEDED"));
+
+		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.status").value("CONFIRMED"))
+			.andExpect(jsonPath("$.gstWaived").value(true));
+		mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.taxable.amount").value("50000.00"))
+			.andExpect(jsonPath("$.cgst.amount").value("0.00"))
+			.andExpect(jsonPath("$.sgst.amount").value("0.00"))
+			.andExpect(jsonPath("$.total.amount").value("50000.00"));
+		// 2.5% of ₹50,000.
+		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("1250.00"));
+	}
+
+	@Test
+	void anOfficePaymentStartedOnEarlierTermsIsReplacedOnTheCurrentOnes() throws Exception {
+		UUID product = offerings.publishedWithGst(OfferingFixtures.TYPE, "50000", "18", "2");
+		Account investor = approvedInvestor();
+		String orderId = placeOrder(investor, product, 1);
+		String first = JsonPath.read(startPayment(investor, orderId, "OFFICE_CASH")
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		// As if started before cash at the office was without GST.
+		jdbc.update("UPDATE payments SET gst_included = TRUE, rent_bonus_percent = 0, amount = 59000 WHERE id = ?::uuid",
+				first);
+		String second = JsonPath.read(startPayment(investor, orderId, "OFFICE_CASH")
+			.andExpect(jsonPath("$.officeCash.amount.amount").value("50000.00"))
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		assertThat(second).isNotEqualTo(first);
+		assertThat(jdbc.queryForObject("SELECT status FROM payments WHERE id = ?::uuid", String.class, first))
+			.isEqualTo("CANCELLED");
+	}
+
+	@Test
+	void cashAtTheOfficeOnceChosenStaysAndThePaymentItReplacedIsNotConfirmed() throws Exception {
+		UUID product = offerings.publishedWithGst(OfferingFixtures.TYPE, "50000", "18", "2");
+		Account investor = approvedInvestor();
+		String orderId = placeOrder(investor, product, 1);
+		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		// The investor chooses cash at the office instead: the bank payment is cancelled, saying why.
+		String cash = JsonPath.read(startPayment(investor, orderId, "OFFICE_CASH")
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		assertThat(jdbc.queryForObject("SELECT failure_reason FROM payments WHERE id = ?::uuid", String.class, bank))
+			.isEqualTo("Replaced by a cash payment at the office");
+
+		// Cash, once chosen, stays: going back to the bank is refused.
+		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("cancel this order")));
+		assertThat(jdbc.queryForObject("SELECT status FROM payments WHERE id = ?::uuid", String.class, cash))
+			.isEqualTo("PENDING");
+
+		// Finance cannot confirm the replaced bank payment while the cash one is pending; the cash one confirms.
+		Account finance = api.staff("FINANCE");
+		confirmTransfer(finance, bank, "59000").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("confirm that one instead")));
+		confirmTransfer(finance, cash, "50000").andExpect(status().isOk());
+		assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?::uuid", String.class, orderId))
+			.isEqualTo("CONFIRMED");
+	}
+
 	/** Pays the order by bank deposit, confirmed by finance for {@code amount}. */
 	private void pay(Account investor, String orderId, String amount) throws Exception {
 		String paymentId = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
@@ -629,10 +722,11 @@ class CheckoutIntegrationTest {
 		return count == null ? 0 : count;
 	}
 
-	private List<LocalDate> scheduledPayouts(String orderId) {
+	/** The rent accruals of the order's holdings: their leases. */
+	private List<Map<String, Object>> leases(String orderId) {
 		return jdbc.queryForList("""
-				SELECT p.due_on FROM payout_installments p JOIN holdings h ON h.id = p.holding_id
-				WHERE h.order_id = ?::uuid AND p.status = 'SCHEDULED' ORDER BY p.due_on""", LocalDate.class, orderId);
+				SELECT a.starts_at, a.ends_at, a.monthly_rent FROM rent_accruals a JOIN holdings h ON h.id = a.holding_id
+				WHERE h.order_id = ?::uuid""", orderId);
 	}
 
 	private ResultActions assign(Account actor, String holdingId, String containerNumber) throws Exception {
@@ -670,6 +764,7 @@ class CheckoutIntegrationTest {
 			.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"" + method + "\"}"));
 	}
 
+
 	private ResultActions submitDeposit(Account investor, String paymentId) throws Exception {
 		return mvc.perform(post("/api/v1/payments/{id}/deposit", paymentId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
 			.contentType(MediaType.APPLICATION_JSON)
@@ -682,6 +777,7 @@ class CheckoutIntegrationTest {
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("{\"externalReference\":\"BANK-REF-1\",\"amountReceived\":\"" + amount + "\"}"));
 	}
+
 
 	private ResultActions refund(Account actor, String paymentId) throws Exception {
 		return mvc.perform(post("/api/v1/admin/payments/{id}/refund", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer())

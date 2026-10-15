@@ -43,7 +43,7 @@ export async function AppHeader({ session }: { session: Session }) {
         <Logo href={investor ? "/dashboard" : "/admin"} compact />
         <div className="flex items-center gap-4">
           <NotificationBell initial={unread} />
-          <AccountMenu sections={sections} name={name} email={me?.email ?? null} />
+          <AccountMenu sections={sections} name={name} email={me?.email ?? null} userCode={me?.userCode ?? null} />
         </div>
       </div>
     </header>

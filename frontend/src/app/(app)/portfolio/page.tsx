@@ -5,13 +5,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
-import { formatPeriod } from "@/features/earnings/labels";
+import { formatPeriod, leasePercent, nextCreditNote } from "@/features/earnings/labels";
 import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
+import { CURRENCY } from "@/lib/currency";
 import { authFetch } from "@/lib/server/auth/session";
 import type { EarningsSummary } from "@/types/earning";
 import type { HoldingStatus, Portfolio } from "@/types/order";
-import { formatDate } from "@/utils/format";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Portfolio" };
 
@@ -32,11 +32,14 @@ export default async function PortfolioPage() {
     authFetch<Portfolio>("/api/v1/portfolio"),
     authFetch<EarningsSummary>("/api/v1/earnings/summary"),
   ]);
-  const progress = new Map(earnings.holdings.map((h) => [h.holdingId, h]));
+  const leases = new Map(earnings.leases.map((l) => [l.holdingId, l]));
+  const rent = earnings.wallet.filter((w) => w.balance !== "REFERRAL").map((w) => w.amount);
+  const rentWallet = rent.length === 0 ? "—"
+    : formatMoney({ amount: rent.reduce((sum, m) => sum + Number(m.amount), 0).toFixed(2), currency: CURRENCY });
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Portfolio" description="The containers you own, their leases and their monthly payouts." />
+      <PageHeader title="Portfolio" description="The containers you own, their leases and the rent they earn." />
       <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Portfolio summary">
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Total invested</p>
@@ -49,9 +52,9 @@ export default async function PortfolioPage() {
           <p className="font-display text-4xl font-semibold tabular-nums">{portfolio.activeHoldings}</p>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Next payout</p>
-          <p className="font-display text-4xl font-semibold tabular-nums">{earnings.nextPayout ? formatMoney(earnings.nextPayout.total) : "—"}</p>
-          {earnings.nextPayout && <p className="text-xs text-muted">on {formatDate(earnings.nextPayout.dueOn)}</p>}
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Rent wallet</p>
+          <p className="font-display text-4xl font-semibold tabular-nums">{rentWallet}</p>
+          <p className="text-xs text-muted">{nextCreditNote(earnings.nextCreditAt)}</p>
         </div>
       </section>
 
@@ -61,9 +64,9 @@ export default async function PortfolioPage() {
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
-        <DataTable columns={["Container", "Plan", "Invested", "Paid monthly", "Lease", "Payouts received", "Status"]}>
+        <DataTable columns={["Container", "Plan", "Invested", "Rent", "Paid monthly", "Lease", "Rent credited", "Status"]}>
           {portfolio.holdings.map((h) => {
-            const p = progress.get(h.id);
+            const lease = leases.get(h.id);
             return (
               <tr key={h.id} className="hover:bg-background">
                 <Cell>
@@ -85,6 +88,10 @@ export default async function PortfolioPage() {
                 </Cell>
                 <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
                 <Cell className="tabular-nums">
+                  {formatPercent(h.monthlyRentPercent)}
+                  <span className="block text-xs text-muted">a month</span>
+                </Cell>
+                <Cell className="tabular-nums">
                   {formatMoney(h.monthlyPayout)}
                   {Number(h.monthlyCapitalReturn.amount) > 0 && (
                     <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
@@ -97,8 +104,8 @@ export default async function PortfolioPage() {
                   </span>
                 </Cell>
                 <Cell className="tabular-nums">
-                  {p ? `${p.paid} of ${p.installments}` : "—"}
-                  {p && <span className="block text-xs text-muted">{formatMoney(p.received)} received</span>}
+                  {lease ? formatMoney(lease.rentCredited) : "—"}
+                  {lease && <span className="block text-xs text-muted">{Math.round(leasePercent(lease))}% of {formatMoney(lease.totalRent)}</span>}
                 </Cell>
                 <Cell>
                   <StatusBadge tone={HOLDING_TONE[h.status]}>{HOLDING_LABEL[h.status]}</StatusBadge>
@@ -109,8 +116,8 @@ export default async function PortfolioPage() {
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Once your payment is confirmed, our team assigns each investment its container; the lease starts that day. Payouts are credited to your wallet on the payout day each month from then on (a part month is paid by the day). See{" "}
-        <Link href="/earnings" className="underline">Earnings</Link> for the full schedule.
+        Once your payment is confirmed, our team assigns each investment its container; the lease starts at the next full hour. Rent is credited to your wallet every hour from then on. See{" "}
+        <Link href="/earnings" className="underline">Earnings</Link> for each lease&apos;s rent.
       </p>
     </div>
   );

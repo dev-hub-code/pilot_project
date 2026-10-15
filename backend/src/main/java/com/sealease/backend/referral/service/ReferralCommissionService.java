@@ -4,7 +4,7 @@ import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.earning.event.PayoutPaidEvent;
+import com.sealease.backend.earning.event.RentCreditedEvent;
 import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.LedgerService;
@@ -32,8 +32,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Pays referral commissions when a monthly payout is credited, in the payout's transaction: each
- * month of the tenure, a referred investor's investment in the container earns their uplines
+ * Pays referral commissions as a referred investor's rent is credited, in that transaction: for each
+ * month of the lease (credited hour by hour), their investment in the container earns their uplines
  * (levels 1-4) the rates in force, which admins set - e.g. at a 2% level-1 rate, ₹1,00,000 earns ₹2,000 a month. The platform
  * pays (referral expense); the investor's own earnings are untouched. An upline who is not active
  * or not verified forfeits that level's commission - it is not passed further up.
@@ -41,7 +41,7 @@ import java.util.UUID;
 @Service
 public class ReferralCommissionService {
 
-	private static final String ENTITY = "PAYOUT";
+	private static final String ENTITY = "RENT_CREDIT";
 
 	private final ReferralService referrals;
 	private final ReferralRateService rates;
@@ -63,11 +63,17 @@ public class ReferralCommissionService {
 		this.clock = clock;
 	}
 
+	/**
+	 * Pays the uplines commission on the hours of rent just credited. Commission is worked out on the lease months
+	 * elapsed after these hours, less what it was before them, so over a whole lease it adds up to exactly the monthly
+	 * commission × tenure (no rounding drift from paying it hour by hour).
+	 */
 	@EventListener
 	@Transactional(propagation = Propagation.MANDATORY)
-	public void onPayoutPaid(PayoutPaidEvent event) {
-		// A part-month payout earns the same part of a month's commission.
-		Money base = prorated(event.invested(), event.monthShare());
+	public void onRentCredited(RentCreditedEvent event) {
+		Money baseBefore = base(event.invested(), event.monthsBefore());
+		Money baseAfter = base(event.invested(), event.monthsAfter());
+		Money base = baseAfter.minus(baseBefore);
 		if (!base.isPositive()) {
 			return;
 		}
@@ -76,7 +82,7 @@ public class ReferralCommissionService {
 		List<ReferralEarning> commissions = new ArrayList<>();
 		int forfeited = 0;
 		for (Upline upline : referrals.uplines(event.userId())) {
-			Money amount = version.commission(upline.level(), base);
+			Money amount = version.commission(upline.level(), baseAfter).minus(version.commission(upline.level(), baseBefore));
 			if (!amount.isPositive()) {
 				continue;
 			}
@@ -84,9 +90,8 @@ public class ReferralCommissionService {
 				forfeited++;
 				continue;
 			}
-			commissions.add(new ReferralEarning(event.installmentId(), event.userId(), upline.userId(), event.productId(),
-					event.installmentNumber(), upline.level(), base, version.percentFor(upline.level()), amount,
-					version.getId(), now));
+			commissions.add(new ReferralEarning(event.holdingId(), event.creditId(), event.userId(), upline.userId(),
+					event.productId(), upline.level(), base, version.percentFor(upline.level()), amount, version.getId(), now));
 		}
 		if (commissions.isEmpty()) {
 			return;
@@ -97,34 +102,32 @@ public class ReferralCommissionService {
 		commissions.forEach(c -> perBeneficiary.merge(c.getBeneficiaryUserId(), c.amount(), Money::plus));
 		List<Posting> postings = new ArrayList<>();
 		postings.add(Posting.debit(AccountType.PLATFORM_REFERRAL_EXPENSE, null, total));
-		// Commission has its own balance: the investor chooses at withdrawal whether to be paid by bank or in cash.
+		// Commission has its own balance: paid by bank or in cash, as the investor chose for the year.
 		perBeneficiary.forEach((userId, amount) -> postings.add(Posting.credit(AccountType.INVESTOR_REFERRAL_EARNINGS, userId, amount)));
-		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.installmentId().toString(),
-				"Referral commissions on %s payout %d".formatted(event.productCode(), event.installmentNumber()),
+		UUID transactionId = ledger.post(TransactionType.REFERRAL_COMMISSION, event.creditId().toString(),
+				"Referral commissions on %s rent, %s to %s".formatted(event.productCode(), event.from(), event.to()),
 				null, postings);
-
-		List<ReferralEarning> saved = earnings.saveAll(commissions);
-		audit.record(AuditRecord.of(null, AuditAction.REFERRAL_COMMISSIONS_PAID, ENTITY, event.installmentId())
-			.withNewValue(Map.of("total", total.toString(), "commissions", saved.size(),
+		earnings.saveAll(commissions);
+		audit.record(AuditRecord.of(null, AuditAction.REFERRAL_COMMISSIONS_PAID, ENTITY, event.creditId())
+			.withNewValue(Map.of("total", total.toString(), "commissions", commissions.size(),
 					"beneficiaries", perBeneficiary.size(), "forfeited", forfeited,
+					"holdingId", event.holdingId().toString(),
 					"rateVersionId", version.getId().toString(), "ledgerTransactionId", transactionId.toString())));
-		for (ReferralEarning c : saved) {
-			outbox.publish(DomainEvent.of(KafkaTopics.REFERRAL_EARNING_CREATED, "ReferralEarningCreated",
-					"REFERRAL_EARNING", c.getId(),
-					Map.of("referralEarningId", c.getId().toString(), "beneficiaryUserId", c.getBeneficiaryUserId().toString(),
-							"sourceUserId", c.getSourceUserId().toString(), "level", c.getLevel(),
-							"installmentId", c.getSourceInstallmentId().toString(), "amount", c.amount().amount().toPlainString(),
-							"currency", c.amount().currency().getCurrencyCode())));
-		}
+		// One event per credit, not per commission: commissions arrive every hour.
+		outbox.publish(DomainEvent.of(KafkaTopics.REFERRAL_EARNING_CREATED, "ReferralCommissionsCredited",
+				ENTITY, event.creditId(),
+				Map.of("creditId", event.creditId().toString(), "holdingId", event.holdingId().toString(),
+						"sourceUserId", event.userId().toString(), "total", total.amount().toPlainString(),
+						"currency", total.currency().getCurrencyCode(), "commissions", commissions.size())));
 	}
 
-	/** The invested amount × the payout's share of a month, rounded down to the currency's minor unit. */
-	static Money prorated(Money invested, BigDecimal monthShare) {
-		if (monthShare.compareTo(BigDecimal.ONE) == 0) {
-			return invested;
+	/** The commission base for {@code months} of the lease: invested × months, rounded down to the minor unit. */
+	static Money base(Money invested, BigDecimal months) {
+		if (months.signum() <= 0) {
+			return Money.zero(invested.currency());
 		}
 		int digits = Math.max(invested.currency().getDefaultFractionDigits(), 0);
-		return Money.of(invested.amount().multiply(monthShare).setScale(digits, RoundingMode.DOWN), invested.currency());
+		return Money.of(invested.amount().multiply(months).setScale(digits, RoundingMode.DOWN), invested.currency());
 	}
 
 }

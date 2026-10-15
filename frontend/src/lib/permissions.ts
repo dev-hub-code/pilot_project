@@ -33,6 +33,7 @@ export const Permission = {
   INVESTMENT_CREATE: "INVESTMENT_CREATE",
   INVESTMENT_UPDATE: "INVESTMENT_UPDATE",
   INVESTMENT_APPROVE: "INVESTMENT_APPROVE",
+  AUDIT_VIEW: "AUDIT_VIEW",
 } as const;
 
 /** Any permission beyond the investor portal grants access to the staff console. */

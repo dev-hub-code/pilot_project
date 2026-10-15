@@ -4,12 +4,10 @@ import { z } from "zod";
 
 export const referralModeSchema = z.object({ mode: z.enum(["BANK_TRANSFER", "OFFICE_CASH"]) });
 
-export const markPaidSchema = z.object({
-  payoutReference: z.string().trim().max(100).optional().transform((v) => v || undefined),
-});
-
-export const receiptSchema = z.object({
-  receiptNumber: z.string().trim().min(1, "Enter the cash receipt number").max(100),
+export const financeTaskSchema = z.object({
+  outcome: z.enum(["PAID", "FAILED"]),
+  reference: z.string().trim().max(100).optional().transform((v) => v || undefined),
+  reason: z.string().trim().max(500).optional().transform((v) => v || undefined),
 });
 
 export const resolveSchema = z.object({
@@ -17,7 +15,11 @@ export const resolveSchema = z.object({
   note: z.string().trim().max(200).optional().transform((v) => v || undefined),
 });
 
-export const withdrawalDaysSchema = z.object({
-  rentWithdrawalDay: z.coerce.number().int().min(2, "Choose a day from 2 to 28").max(28, "Choose a day from 2 to 28"),
-  referralWithdrawalDay: z.coerce.number().int().min(2, "Choose a day from 2 to 28").max(28, "Choose a day from 2 to 28"),
+
+/** Rupees to the paisa, at least ₹1. */
+export const withdrawalMinimumSchema = z.object({
+  minimumAmount: z.string().trim()
+    .regex(/^\d{1,8}(\.\d{1,2})?$/, "Enter an amount in rupees, up to 2 decimals")
+    .refine((v) => Number(v) >= 1, "The minimum must be at least ₹1")
+    .refine((v) => Number(v) <= 10_000_000, "The minimum can be at most ₹1,00,00,000"),
 });

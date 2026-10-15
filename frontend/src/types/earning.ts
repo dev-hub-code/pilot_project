@@ -1,43 +1,31 @@
-/** Mirrors of the backend's payout, earnings and ledger DTOs. */
+/** Mirrors of the backend's rent, earnings and ledger DTOs. */
 import type { Money } from "./marketplace";
 
-export type PayoutStatus = "SCHEDULED" | "PAID";
+export type LeaseRentStatus = "RUNNING" | "COMPLETED";
 
-/** One monthly payout of one container: rent plus capital returned. */
-export interface Payout {
-  id: string;
+/** The rent of one container's lease, credited every hour from its start to its end. */
+export interface LeaseRent {
   holdingId: string;
   /** Staff views only. */
   userId: string | null;
   productId: string;
-  productCode: string;
-  productTitle: string;
-  containerNumber: string;
-  installmentNumber: number;
-  installmentCount: number;
-  /** The days this payout covers (ISO dates). */
-  periodStart: string;
-  periodEnd: string;
-  /** The period as a share of a month: below 1 for a part month. */
-  monthShare: number;
-  dueOn: string;
-  rent: Money;
-  capital: Money;
-  total: Money;
-  status: PayoutStatus;
-  paidAt: string | null;
-}
-
-export interface HoldingPayouts {
-  holdingId: string;
-  productId: string;
+  productCode: string | null;
+  productTitle: string | null;
   containerNumber: string | null;
-  paid: number;
-  installments: number;
-  received: Money;
-  nextDueOn: string | null;
-  nextAmount: Money | null;
-  lastPaidAt: string | null;
+  tenureMonths: number;
+  startsAt: string;
+  endsAt: string;
+  /** Credited up to this hour. */
+  creditedUntil: string;
+  monthlyRent: Money;
+  /** Monthly rent × tenure: what the whole lease pays. */
+  totalRent: Money;
+  rentCredited: Money;
+  /** Capital returned over the lease (containers sold before capital returns ended); zero otherwise. */
+  capitalTotal: Money;
+  capitalCredited: Money;
+  status: LeaseRentStatus;
+  completedAt: string | null;
 }
 
 /**
@@ -55,18 +43,17 @@ export interface EarningsSummary {
   capitalReturned: Money[];
   /** Commission on referrals' rent, already included in the wallet balance. */
   referralEarned: Money[];
-  nextPayout: { dueOn: string; total: Money } | null;
-  holdings: HoldingPayouts[];
-  /** The day of the month payouts are made (29-31: the last day of shorter months). */
-  payoutDay: number;
+  /** The rent of each container's lease, oldest lease first. */
+  leases: LeaseRent[];
+  /** Withdrawn from the wallet by a withdrawal run and not yet paid out. */
+  withdrawalInProgress: Money[];
+  /** Paid out to the investor over all time. */
+  totalWithdrawn: Money[];
+  /** When the next hour of rent ends and is credited (a minute or so after); null with no lease running or starting. */
+  nextCreditAt: string | null;
 }
 
-export interface PayoutSettings {
-  payoutDay: number;
-  updatedAt: string;
-}
-
-/** Scheduled payouts that have fallen due and are not paid yet, in one currency. */
+/** Leases with ended hours not credited yet (crediting is behind), in one currency, and what those hours come to. */
 export interface DuePayouts {
   count: number;
   total: Money;

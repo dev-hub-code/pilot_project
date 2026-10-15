@@ -17,7 +17,13 @@ export interface MenuSection {
 }
 
 /** The avatar in the header: opens the site menu as a vertical list, with sign-out at the bottom. */
-export function AccountMenu({ sections, name, email }: { sections: readonly MenuSection[]; name: string; email: string | null }) {
+export function AccountMenu({ sections, name, email, userCode }: {
+  sections: readonly MenuSection[];
+  name: string;
+  email: string | null;
+  /** The readable ID ("SL03500"), shown so the user can quote it to us. */
+  userCode: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const root = useRef<HTMLDivElement>(null);
@@ -60,6 +66,7 @@ export function AccountMenu({ sections, name, email }: { sections: readonly Menu
           <div className="border-b border-border px-4 py-3">
             <p className="truncate text-sm font-medium">{name}</p>
             {email && <p className="truncate text-xs text-muted">{email}</p>}
+            {userCode && <p className="mt-1 font-mono text-xs text-muted">ID {userCode}</p>}
           </div>
           <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm">
             {sections.map((section, index) => (

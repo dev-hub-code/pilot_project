@@ -17,8 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 
@@ -65,15 +63,15 @@ public class ContainerAssignmentService {
 		return holdings.awaitingContainerCount();
 	}
 
-	/** Records and leases the container finance typed in, and starts the investment's lease and payouts today. */
+	/** Records and leases the container finance typed in; the lease and hourly rent start at the next full hour. */
 	@Transactional
 	public void assign(UUID actorId, UUID holdingId, String containerNumber, String currentLocation) {
 		Instant now = clock.instant();
 		PayoutTerms terms = holdings.assignContainer(actorId, holdingId, containerNumber, currentLocation,
-				LocalDate.ofInstant(now, ZoneOffset.UTC), now);
+				payouts.leaseStartAfter(now), now);
 		payouts.schedule(terms);
 		notifications.notify(terms.userId(), "CONTAINER_ASSIGNED", "Container " + terms.containerNumber() + " is now yours",
-				terms.productCode() + ": your lease and monthly payouts start today.", "/portfolio");
+				terms.productCode() + ": your lease starts now and rent is credited to your wallet every hour.", "/portfolio");
 	}
 
 }

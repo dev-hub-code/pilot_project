@@ -21,15 +21,18 @@ import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
 import com.sealease.backend.outbox.DomainEvent;
 import com.sealease.backend.outbox.OutboxPublisher;
+import com.sealease.backend.user.dto.UserAccount;
+import com.sealease.backend.user.service.UserAccountService;
+import com.sealease.backend.user.service.UserProfileService;
 import com.sealease.backend.withdrawal.dto.BatchDetail;
 import com.sealease.backend.withdrawal.dto.BatchFileResponse;
 import com.sealease.backend.withdrawal.dto.BatchResponse;
-import com.sealease.backend.withdrawal.dto.ReconciliationResult;
 import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
 import com.sealease.backend.withdrawal.entity.BatchStatus;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
 import com.sealease.backend.withdrawal.entity.WithdrawalBatch;
 import com.sealease.backend.withdrawal.entity.WithdrawalKind;
+import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
 import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import com.sealease.backend.withdrawal.repository.WithdrawalBatchRepository;
 import com.sealease.backend.withdrawal.repository.WithdrawalRepository;
@@ -38,25 +41,24 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
-import java.time.YearMonth;
-import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
- * Paying the monthly bank withdrawals: each run's withdrawals form a batch whose Excel file (serial number, user id,
- * name, account number, IFSC code, amount) is made and kept (encrypted) with it. Finance pays the file by hand and
- * uploads it back with a Status per row, which completes or fails each withdrawal; items can also be settled one by
- * one.
+ * Paying withdrawal runs: each run's bank withdrawals form one batch and its cash withdrawals another, each with an
+ * Excel sheet made and kept (encrypted) with it - one row per investor with their rent, referral and total, and their
+ * bank account (bank sheet) or phone (cash sheet). Finance pays a sheet by hand and uploads it back with a Status per
+ * row, which completes or fails that investor's withdrawals in the batch; items can also be settled one by one.
  *
  * <p>A failed payment is held: the withdrawal stays FAILED with its money in transit, and a support ticket is opened
  * for the investor and assigned to the finance user who recorded the failure. Finance resolves it by marking it
@@ -69,8 +71,8 @@ public class PayoutBatchService {
 
 	private static final String ENTITY = "WITHDRAWAL_BATCH";
 	/** Rows to report when an uploaded file is refused. */
-	private static final int MAX_REPORTED_ERRORS = 10;
 	private static final String DEFAULT_FAILURE = "The bank did not pay it";
+	private static final String CASH_NOT_COLLECTED = "The cash was not collected at the office";
 
 	private final WithdrawalBatchRepository batches;
 	private final WithdrawalRepository withdrawals;
@@ -81,11 +83,16 @@ public class PayoutBatchService {
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final BatchFileStore files;
+	private final UserAccountService accounts;
+	private final UserProfileService profiles;
 	private final Clock clock;
 
 	public PayoutBatchService(WithdrawalBatchRepository batches, WithdrawalRepository withdrawals,
 			WithdrawalService withdrawalService, BankAccountService bankAccounts, LedgerService ledger,
-			SupportService support, OutboxPublisher outbox, AuditService audit, BatchFileStore files, Clock clock) {
+			SupportService support, OutboxPublisher outbox, AuditService audit, BatchFileStore files,
+			UserAccountService accounts, UserProfileService profiles, Clock clock) {
+		this.accounts = accounts;
+		this.profiles = profiles;
 		this.batches = batches;
 		this.withdrawals = withdrawals;
 		this.withdrawalService = withdrawalService;
@@ -98,24 +105,30 @@ public class PayoutBatchService {
 		this.clock = clock;
 	}
 
-	/** The batch of one month's rent or referral withdrawals, with its Excel file. Caller's transaction. */
-	WithdrawalBatch createScheduled(WithdrawalKind kind, YearMonth period, List<Withdrawal> scheduled) {
-		Money total = scheduled.stream().map(Withdrawal::amount).reduce(Money::plus).orElseThrow();
-		WithdrawalBatch batch = batches.saveAndFlush(WithdrawalBatch.scheduled(reference(), total, scheduled.size(), kind, period));
-		scheduled.forEach(w -> w.addToBatch(batch.getId()));
+	/**
+	 * Makes the bank or cash batch of a rent or referral withdrawal run. A bank batch gets its Excel sheet
+	 * ("WR-00002-Rent-Bank.xlsx") for finance to pay from; a cash batch, paid by hand at the office, has none. Either way
+	 * each withdrawal is a finance task from the start, marked paid (collected) or failed on its own.
+	 */
+	WithdrawalBatch createForRun(WithdrawalKind kind, WithdrawalPayoutMethod method, List<Withdrawal> items, String run,
+			UUID actorId) {
+		Money total = items.stream().map(Withdrawal::amount).reduce(Money::plus).orElseThrow();
+		WithdrawalBatch batch = batches.saveAndFlush(WithdrawalBatch.forRun(reference(), total, items.size(), kind, method,
+				actorId));
+		items.forEach(w -> w.addToBatch(batch.getId()));
 		withdrawals.flush();
-		files.save(batch.getId(), BatchFileStore.PAYMENT, filename(kind, period), paymentFile(scheduled), null, null, null);
-		audit.record(AuditRecord.of(null, AuditAction.WITHDRAWAL_BATCH_CREATED, ENTITY, batch.getId())
-			.withNewValue(new LinkedHashMap<>(Map.of("reference", batch.getReference(), "kind", kind, "period", period.toString(),
-					"items", scheduled.size(), "total", batch.total().toString()))));
+		boolean cash = method == WithdrawalPayoutMethod.OFFICE_CASH;
+		if (!cash) {
+			files.save(batch.getId(), BatchFileStore.PAYMENT, run + "-" + kind.label() + "-Bank.xlsx", paymentFile(items),
+					null, null, null);
+		}
+		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_BATCH_CREATED, ENTITY, batch.getId())
+			.withNewValue(new LinkedHashMap<>(Map.of("reference", batch.getReference(), "run", run, "kind", kind,
+					"payoutMethod", method, "items", items.size(), "total", batch.total().toString()))));
 		publishBatch(KafkaTopics.WITHDRAWAL_BATCHED, "WithdrawalBatchCreated", batch);
+		// Each withdrawal is now a finance task, to be marked paid (or failed) on its own.
+		send(actorId, batch);
 		return batch;
-	}
-
-	/** "Rent-October-2026.xlsx": the kind of withdrawal, the month's name and the year. */
-	static String filename(WithdrawalKind kind, YearMonth period) {
-		return kind.label() + "-" + period.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + "-"
-				+ period.getYear() + ".xlsx";
 	}
 
 	private String reference() {
@@ -123,14 +136,15 @@ public class PayoutBatchService {
 	}
 
 	/**
-	 * The batch's Excel file with full account details, as kept when the batch was made. Every download is audited.
-	 * Refused before payment while any payee account is no longer verified.
+	 * The batch's Excel file with full account details: for a withdrawal run, its sheet in the current columns (see
+	 * {@link #current}); for an older monthly batch, the file kept when it was made. Every download is audited. Refused before payment while
+	 * any payee account is no longer verified.
 	 */
 	@Transactional
 	public PayoutFile file(UUID actorId, UUID batchId) {
 		WithdrawalBatch batch = load(batchId);
 		List<Withdrawal> items = withdrawals.findByBatchIdOrderByCreatedAtAscIdAsc(batchId);
-		if (batch.getStatus() == BatchStatus.CREATED) {
+		if (batch.getStatus() == BatchStatus.CREATED && !batch.isOfficeCash()) {
 			List<String> unverified = items.stream()
 				.filter(w -> !bankAccounts.payoutAccount(w.getBankAccountId()).map(PayoutAccount::isVerified).orElse(false))
 				.map(Withdrawal::getReference)
@@ -140,11 +154,15 @@ public class PayoutBatchService {
 						+ String.join(", ", unverified) + ": pay the others, and mark these failed when uploading the file");
 			}
 		}
+		if (batch.isOfficeCash() && batch.getPeriod() == null) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Cash at the office has no sheet: mark each withdrawal collected or not on the batch's page");
+		}
 		BatchFileStore.StoredFile file = files.payment(batchId)
 			.orElseThrow(() -> new ResourceNotFoundException("Batch file", batchId));
 		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_BATCH_EXPORTED, ENTITY, batchId)
 			.withNewValue(Map.of("reference", batch.getReference(), "items", items.size(), "file", file.filename())));
-		return new PayoutFile(file.filename(), file.content());
+		return new PayoutFile(file.filename(), current(batch, file, items));
 	}
 
 	/** One of the files kept with a batch (the payment file or an uploaded one). Audited. */
@@ -154,7 +172,21 @@ public class PayoutBatchService {
 		BatchFileStore.StoredFile file = files.content(batchId, fileId);
 		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_BATCH_EXPORTED, ENTITY, batchId)
 			.withNewValue(Map.of("reference", batch.getReference(), "file", file.filename())));
-		return new PayoutFile(file.filename(), file.content());
+		return new PayoutFile(file.filename(), file.isPayment()
+				? current(batch, file, withdrawals.findByBatchIdOrderByCreatedAtAscIdAsc(batchId)) : file.content());
+	}
+
+	/**
+	 * A withdrawal run's sheet in the current columns (readable User ID, Withdrawal ID): built from its withdrawals,
+	 * so a run made before a column was added gets it too. Batches of the monthly runs before withdrawal runs keep the
+	 * file they were made with.
+	 */
+	private byte[] current(WithdrawalBatch batch, BatchFileStore.StoredFile file, List<Withdrawal> items) {
+		// Monthly batches have a period; withdrawal runs' do not.
+		if (batch.getPeriod() != null || !file.filename().toLowerCase(Locale.ROOT).endsWith(".xlsx") || items.isEmpty()) {
+			return file.content();
+		}
+		return batch.isOfficeCash() ? file.content() : paymentFile(items);
 	}
 
 	@Transactional(readOnly = true)
@@ -163,135 +195,36 @@ public class PayoutBatchService {
 		return files.list(batchId);
 	}
 
-	/**
-	 * Reconciles a batch from its Excel file uploaded back after paying it by hand: each row names a {@code User ID}
-	 * and its {@code Status}: PAID (the withdrawal completes; {@code Remarks} may hold the bank reference), FAILED
-	 * (held for finance, with a ticket; {@code Remarks} says why) or blank (still outstanding). Every row is checked
-	 * before anything is applied: one bad row refuses the whole file. Uploading the same file again changes nothing.
-	 */
-	@Transactional
-	public ReconciliationResult reconcile(UUID actorId, UUID batchId, String filename, byte[] content) {
-		WithdrawalBatch batch = lock(batchId);
-		// A closed batch takes the same file again (nothing changes); a row that would change it is refused below.
-		if (batch.getStatus() == BatchStatus.CANCELLED) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This batch is " + batch.getStatus());
-		}
-		List<WithdrawalSheet.Entry> entries = WithdrawalSheet.read(content);
-		if (entries.isEmpty()) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The file has no withdrawals in it");
-		}
-		for (String required : List.of("userid", "status")) {
-			if (!WithdrawalSheet.hasColumn(entries, required)) {
-				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The file has no \"" + (required.equals("userid")
-						? "User ID" : "Status") + "\" column: upload the batch's file with the Status column filled in");
-			}
-		}
 
-		Map<String, Withdrawal> items = new HashMap<>();
-		withdrawals.lockBatchItems(batchId).forEach(w -> items.put(w.getUserId().toString(), w));
-		List<String> errors = new ArrayList<>();
-		List<RowOutcome> outcomes = new ArrayList<>();
-		Set<String> seen = new HashSet<>();
-		int unchanged = 0;
-		for (WithdrawalSheet.Entry entry : entries) {
-			String where = "Row " + entry.row() + ": ";
-			String userId = entry.get("userid").toLowerCase(Locale.ROOT);
-			Withdrawal w = items.get(userId);
-			if (w == null) {
-				errors.add(where + "user \"" + entry.get("userid") + "\" is not in " + batch.getReference());
-				continue;
-			}
-			if (!seen.add(userId)) {
-				errors.add(where + "user " + userId + " appears more than once");
-				continue;
-			}
-			String status = entry.get("status").toUpperCase(Locale.ROOT);
-			String remarks = blankToNull(entry.get("remarks"));
-			switch (status) {
-				case "", "PENDING", "PROCESSING" -> unchanged++;
-				case "PAID", "COMPLETED", "SUCCESS", "SUCCESSFUL" -> {
-					if (w.getStatus() == WithdrawalStatus.PAID) {
-						unchanged++;
-					}
-					else if (w.getStatus() == WithdrawalStatus.BATCHED || w.getStatus() == WithdrawalStatus.PROCESSING) {
-						outcomes.add(new RowOutcome(w, true, remarks));
-					}
-					else {
-						errors.add(where + w.getReference() + " is already " + w.getStatus()
-								+ (w.getStatus() == WithdrawalStatus.FAILED ? ": resolve it from the withdrawal" : ""));
-					}
-				}
-				case "FAILED", "FAIL", "RETURNED", "REJECTED" -> {
-					if (w.getStatus() == WithdrawalStatus.FAILED || w.getStatus() == WithdrawalStatus.RETURNED) {
-						unchanged++;
-					}
-					else if (w.getStatus() == WithdrawalStatus.BATCHED || w.getStatus() == WithdrawalStatus.PROCESSING) {
-						outcomes.add(new RowOutcome(w, false, remarks == null ? DEFAULT_FAILURE : remarks));
-					}
-					else {
-						errors.add(where + w.getReference() + " is already " + w.getStatus());
-					}
-				}
-				default -> errors.add(where + "status \"" + entry.get("status") + "\" is not PAID, FAILED or blank");
-			}
-		}
-		if (!errors.isEmpty()) {
-			String shown = String.join("; ", errors.subList(0, Math.min(errors.size(), MAX_REPORTED_ERRORS)));
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Nothing was changed. " + shown
-					+ (errors.size() > MAX_REPORTED_ERRORS ? " (and " + (errors.size() - MAX_REPORTED_ERRORS) + " more)" : ""));
-		}
-
-		if (batch.getStatus() == BatchStatus.CREATED && !outcomes.isEmpty()) {
-			send(actorId, batch);
-		}
-		int paid = 0;
-		int failed = 0;
-		for (RowOutcome outcome : outcomes) {
-			if (outcome.paid()) {
-				pay(actorId, batch, outcome.withdrawal(), outcome.remarks());
-				paid++;
-			}
-			else {
-				fail(actorId, batch, outcome.withdrawal(), outcome.remarks());
-				failed++;
-			}
-		}
-		if (batch.getStatus() == BatchStatus.SENT) {
-			closeIfDone(batch);
-		}
-		String name = filename == null || filename.isBlank() ? batch.getReference() + "-status.xlsx" : filename.strip();
-		files.save(batchId, BatchFileStore.RECONCILIATION, name.length() > 200 ? name.substring(0, 200) : name, content,
-				actorId, paid, failed);
-		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_BATCH_RECONCILED, ENTITY, batchId)
-			.withNewValue(Map.of("reference", batch.getReference(), "file", name, "paid", paid, "failed", failed,
-					"unchanged", unchanged)));
-		return new ReconciliationResult(paid, failed, unchanged, detail(batchId));
-	}
-
-	private record RowOutcome(Withdrawal withdrawal, boolean paid, String remarks) {
-	}
-
-	/** The Excel file: one row per withdrawal, with empty Status and Remarks columns for finance to fill in. */
+	/** The bank sheet: one row per investor with their account and what the batch pays them, and an empty Status. */
 	private byte[] paymentFile(List<Withdrawal> items) {
+		Map<UUID, List<Withdrawal>> byInvestor = new LinkedHashMap<>();
+		items.stream().sorted(Comparator.comparing(Withdrawal::getReference))
+			.forEach(w -> byInvestor.computeIfAbsent(w.getUserId(), k -> new ArrayList<>()).add(w));
 		Map<UUID, PayoutInstruction> payees = bankAccounts.payoutInstructions(
 				items.stream().map(Withdrawal::getBankAccountId).distinct().toList());
-		List<WithdrawalSheet.Line> lines = items.stream().sorted(Comparator.comparing(Withdrawal::getReference))
-			.map(w -> {
-				PayoutInstruction payee = payees.get(w.getBankAccountId());
-				return new WithdrawalSheet.Line(w.getUserId().toString(), payee.holderName(), payee.accountNumber(),
-						payee.routingCode(), w.amount().toMinorUnitScale());
-			})
-			.toList();
+		Map<UUID, UserAccount> people = accounts.getAccounts(byInvestor.keySet());
+		List<WithdrawalSheet.Line> lines = new ArrayList<>();
+		byInvestor.forEach((userId, own) -> {
+			PayoutInstruction payee = payees.get(own.getFirst().getBankAccountId());
+			lines.add(new WithdrawalSheet.Line(userCode(people, userId), payee.holderName(), payee.accountNumber(),
+					payee.routingCode(), sum(own, w -> true)));
+		});
 		return WithdrawalSheet.write(lines);
 	}
 
-	/** Finance is paying the file: its items are now in flight. */
-	@Transactional
-	public BatchDetail markSent(UUID actorId, UUID batchId) {
-		WithdrawalBatch batch = lock(batchId);
-		requireStatus(batch, BatchStatus.CREATED, "This batch was already sent");
-		send(actorId, batch);
-		return detail(batchId);
+	/** The user's readable ID ("SL03500") for the sheet. */
+	private static String userCode(Map<UUID, UserAccount> people, UUID userId) {
+		UserAccount person = people.get(userId);
+		return person == null || person.userCode() == null ? userId.toString() : person.userCode();
+	}
+
+	private static BigDecimal sum(List<Withdrawal> items, Predicate<Withdrawal> which) {
+		return items.stream().filter(which).map(w -> w.amount().toMinorUnitScale()).reduce(BigDecimal.ZERO, BigDecimal::add);
+	}
+
+	private static String defaultFailure(WithdrawalBatch batch) {
+		return batch.isOfficeCash() ? CASH_NOT_COLLECTED : DEFAULT_FAILURE;
 	}
 
 	private void send(UUID actorId, WithdrawalBatch batch) {
@@ -319,19 +252,6 @@ public class PayoutBatchService {
 	public BatchDetail markFailed(UUID actorId, UUID batchId, UUID withdrawalId, String reason) {
 		WithdrawalBatch batch = lockSent(batchId);
 		fail(actorId, batch, item(batchId, withdrawalId), reason.strip());
-		closeIfDone(batch);
-		return detail(batchId);
-	}
-
-	/** Everything still in flight in the batch was paid (the usual case). */
-	@Transactional
-	public BatchDetail markRemainingPaid(UUID actorId, UUID batchId, String payoutReference) {
-		WithdrawalBatch batch = lockSent(batchId);
-		for (Withdrawal w : withdrawals.lockBatchItems(batchId)) {
-			if (w.getStatus() == WithdrawalStatus.PROCESSING) {
-				pay(actorId, batch, w, blankToNull(payoutReference));
-			}
-		}
 		closeIfDone(batch);
 		return detail(batchId);
 	}
@@ -389,7 +309,15 @@ public class PayoutBatchService {
 	public BatchDetail detail(UUID batchId) {
 		WithdrawalBatch batch = load(batchId);
 		List<Withdrawal> items = withdrawals.findByBatchIdOrderByCreatedAtAscIdAsc(batchId);
-		return new BatchDetail(summary(batch, items), items.stream().map(WithdrawalResponse::forStaff).toList());
+		List<UUID> userIds = items.stream().map(Withdrawal::getUserId).distinct().toList();
+		Map<UUID, UserAccount> people = accounts.getAccounts(userIds);
+		List<BatchDetail.Investor> investors = userIds.stream().map(userId -> {
+			UserAccount person = people.get(userId);
+			return new BatchDetail.Investor(userId, person == null ? null : person.userCode(),
+					person == null ? null : (person.firstName() + " " + person.lastName()).strip(),
+					batch.isOfficeCash() ? profiles.getProfile(userId).phone() : null);
+		}).toList();
+		return new BatchDetail(summary(batch, items), items.stream().map(WithdrawalResponse::forStaff).toList(), investors);
 	}
 
 	// ----------------------------------------------------------------------------- internal
@@ -415,8 +343,9 @@ public class PayoutBatchService {
 		UUID ticketId = support.openOnBehalf(actorId, withdrawal.getUserId(), TicketCategory.WITHDRAWAL,
 				RelatedType.WITHDRAWAL, withdrawal.getId(), withdrawal.getReference(),
 				"Withdrawal " + withdrawal.getReference() + " could not be paid",
-				"Your withdrawal " + withdrawal.getReference() + " of " + withdrawal.amount().display() + " to "
-						+ withdrawal.getBankName() + " •••• " + withdrawal.getBankAccountLast4()
+				"Your withdrawal " + withdrawal.getReference() + " of " + withdrawal.amount().display()
+						+ (withdrawal.isOfficeCash() ? " in cash at our office"
+								: " to " + withdrawal.getBankName() + " •••• " + withdrawal.getBankAccountLast4())
 						+ " could not be paid: " + reason + ". The amount is held safely while our finance team sorts it out;"
 						+ " we will update you here.",
 				TicketPriority.HIGH, actorId);

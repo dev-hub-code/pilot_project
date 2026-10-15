@@ -52,6 +52,10 @@ public class InvestmentOrder extends BaseEntity {
 	@Column(name = "close_reason", length = 500)
 	private String closeReason;
 
+	/** Paid in cash at the office without GST, at the investor's choice: the invoice carries none. */
+	@Column(name = "gst_waived", nullable = false)
+	private boolean gstWaived;
+
 	protected InvestmentOrder() {
 	}
 
@@ -67,10 +71,12 @@ public class InvestmentOrder extends BaseEntity {
 		this.expiresAt = expiresAt;
 	}
 
-	public void confirm(Instant now) {
+	/** @param gstWaived the investor paid in cash at the office and chose to pay without GST */
+	public void confirm(Instant now, boolean gstWaived) {
 		requirePending();
 		this.status = OrderStatus.CONFIRMED;
 		this.confirmedAt = now;
+		this.gstWaived = gstWaived;
 	}
 
 	public void close(OrderStatus outcome, String reason, Instant now) {
@@ -135,6 +141,10 @@ public class InvestmentOrder extends BaseEntity {
 
 	public String getCloseReason() {
 		return closeReason;
+	}
+
+	public boolean isGstWaived() {
+		return gstWaived;
 	}
 
 }

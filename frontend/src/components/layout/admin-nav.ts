@@ -17,11 +17,14 @@ export function adminNavLinks(permissions: readonly string[]): MenuLink[] {
     { href: "/admin/payments", label: "Payments", show: can(Permission.FINANCE_VIEW) },
     { href: "/admin/company-bank-accounts", label: "Company accounts",
       show: can(Permission.FINANCE_VIEW) || can(Permission.COMPANY_BANK_ACCOUNT_MANAGE) },
-    { href: "/admin/payouts", label: "Payouts", show: can(Permission.FINANCE_VIEW) || can(Permission.PAYOUT_PROCESS) },
+    { href: "/admin/payouts", label: "Rent", show: can(Permission.FINANCE_VIEW) || can(Permission.PAYOUT_PROCESS) },
     { href: "/admin/ledger", label: "Ledger", show: can(Permission.FINANCE_VIEW) },
     { href: "/admin/withdrawals", label: "Withdrawals", show: can(Permission.WITHDRAWAL_VIEW) },
+    { href: "/admin/finance-tasks", label: "Finance tasks", show: can(Permission.WITHDRAWAL_PROCESS) },
     { href: "/admin/reports", label: "Reports", show: can(Permission.REPORT_VIEW) || can(Permission.REPORT_GENERATE) },
     { href: "/admin/referrals", label: "Referrals",
       show: can(Permission.FINANCE_VIEW) || can(Permission.REFERRAL_CONFIG_MANAGE) },
+    { href: "/admin/security", label: "Security", show: can(Permission.AUDIT_VIEW) },
+    { href: "/admin/audit", label: "Audit log", show: can(Permission.AUDIT_VIEW) },
   ].filter((item) => item.show).map(({ href, label }) => ({ href, label }));
 }

@@ -35,6 +35,9 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
     throw error;
   }
   const ownOrder = order.userId === session.userId;
+  // While a payment is pending (or one went through), payments it replaced are not confirmed: only money arriving
+  // late for a cancelled payment, with nothing else live, is.
+  const livePayment = payments.some((p) => p.status === "PENDING" || p.status === "SUCCEEDED");
   const investor = can(Permission.USER_VIEW)
     ? await authFetch<AdminUserDetail>(`/api/v1/admin/users/${order.userId}`).then((u) => u.summary).catch(() => null)
     : null;
@@ -110,6 +113,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                   <span>
                     <strong>{METHOD_LABEL[p.method]}</strong> · <span className="font-mono">{p.providerReference}</span> · {formatMoney(p.amount)}
+                    {p.method === "OFFICE_CASH" && <span className="text-muted">{p.gstIncluded ? " with GST" : " without GST"}</span>}
                   </span>
                   <StatusBadge tone={PAYMENT_TONE[p.status]}>{humanize(p.status)}</StatusBadge>
                 </div>
@@ -124,10 +128,12 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                       <Item label="Into account">{`${p.deposit.bankName ?? "—"} · ${p.deposit.accountNumber ?? ""}`}</Item>
                     </>
                   )}
+                  {p.rentBonusPercent > 0 && <Item label="Rent bonus">{`+${formatPercent(p.rentBonusPercent)} a month`}</Item>}
                   {p.failureReason && <Item label="Note">{p.failureReason}</Item>}
                   {p.refundedAt && <Item label="Refunded">{`${formatDateTime(p.refundedAt)} · ${p.refundReference}`}</Item>}
                 </dl>
-                {(p.method === "BANK_TRANSFER" || p.method === "OFFICE_CASH") && (p.status === "PENDING" || p.status === "CANCELLED")
+                {(p.method === "BANK_TRANSFER" || p.method === "OFFICE_CASH")
+                  && (p.status === "PENDING" || (p.status === "CANCELLED" && !livePayment))
                   && can(Permission.PAYMENT_CONFIRM) && !ownOrder && (
                   <div className="grid gap-6 border-t border-border pt-4 lg:grid-cols-2">
                     <ConfirmTransferForm paymentId={p.id} amountDue={p.amount.amount} currency={p.amount.currency}

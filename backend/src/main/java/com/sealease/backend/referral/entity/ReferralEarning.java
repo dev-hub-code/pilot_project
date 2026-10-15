@@ -13,7 +13,7 @@ import java.time.Instant;
 import java.util.Currency;
 import java.util.UUID;
 
-/** One upline's monthly commission on a referred investor's investment, paid with one of their payouts. Append-only. */
+/** One upline's commission on a referred investor's investment, paid with some hours of its rent. Append-only. */
 @Entity
 @Immutable
 @Table(name = "referral_earnings")
@@ -23,8 +23,13 @@ public class ReferralEarning {
 	@UuidGenerator(style = UuidGenerator.Style.TIME)
 	private UUID id;
 
-	@Column(name = "source_installment_id", nullable = false)
-	private UUID sourceInstallmentId;
+	/** The referred investor's holding whose rent the commission was earned on. */
+	@Column(name = "source_holding_id", nullable = false)
+	private UUID sourceHoldingId;
+
+	/** The hours of rent (a rent_credits row) the commission was earned on; null for month-end commissions before. */
+	@Column(name = "source_credit_id")
+	private UUID sourceCreditId;
 
 	@Column(name = "source_user_id", nullable = false)
 	private UUID sourceUserId;
@@ -34,9 +39,6 @@ public class ReferralEarning {
 
 	@Column(name = "product_id", nullable = false)
 	private UUID productId;
-
-	@Column(name = "installment_number", nullable = false)
-	private int installmentNumber;
 
 	@Column(name = "level", nullable = false)
 	private short level;
@@ -62,14 +64,14 @@ public class ReferralEarning {
 	protected ReferralEarning() {
 	}
 
-	public ReferralEarning(UUID sourceInstallmentId, UUID sourceUserId, UUID beneficiaryUserId, UUID productId,
-			int installmentNumber, int level, Money base, BigDecimal ratePercent, Money amount, UUID rateVersionId,
+	public ReferralEarning(UUID sourceHoldingId, UUID sourceCreditId, UUID sourceUserId, UUID beneficiaryUserId,
+			UUID productId, int level, Money base, BigDecimal ratePercent, Money amount, UUID rateVersionId,
 			Instant createdAt) {
-		this.sourceInstallmentId = sourceInstallmentId;
+		this.sourceHoldingId = sourceHoldingId;
+		this.sourceCreditId = sourceCreditId;
 		this.sourceUserId = sourceUserId;
 		this.beneficiaryUserId = beneficiaryUserId;
 		this.productId = productId;
-		this.installmentNumber = installmentNumber;
 		this.level = (short) level;
 		this.baseAmount = base.amount();
 		this.ratePercent = ratePercent;
@@ -83,8 +85,8 @@ public class ReferralEarning {
 		return id;
 	}
 
-	public UUID getSourceInstallmentId() {
-		return sourceInstallmentId;
+	public UUID getSourceHoldingId() {
+		return sourceHoldingId;
 	}
 
 	public UUID getSourceUserId() {
@@ -97,10 +99,6 @@ public class ReferralEarning {
 
 	public UUID getProductId() {
 		return productId;
-	}
-
-	public int getInstallmentNumber() {
-		return installmentNumber;
 	}
 
 	public int getLevel() {

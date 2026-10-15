@@ -209,15 +209,20 @@ app:
     # Public interest form: submissions accepted per client IP.
     public-form-per-ip: { requests: 5, window: 1h }
   withdrawals:
-    # In the withdrawal's own currency. Above the threshold a second, different approver is needed.
+    # In the withdrawal's own currency: a withdrawal run pays an investor's row only when it comes to at least this.
+    # Above the threshold a second, different approver is needed.
     minimum-amount: ${APP_WITHDRAWAL_MINIMUM:500}
     dual-approval-threshold: ${APP_WITHDRAWAL_DUAL_APPROVAL_THRESHOLD:100000}
     max-batch-size: 500
-    # How often the job checks whether the month's scheduled withdrawals are due (the day is set by an admin).
-    schedule-interval: ${APP_WITHDRAWAL_SCHEDULE_INTERVAL:1h}
+  display:
+    # The time zone dates and times are shown in (pages, statements, reports). Data is kept in UTC.
+    time-zone: ${APP_DISPLAY_TIME_ZONE:Asia/Kolkata}
   payouts:
-    # How often due monthly payouts are credited to investors' wallets.
-    sweep-interval: ${APP_PAYOUT_SWEEP_INTERVAL:1h}
+    # Rent is credited in steps of this length, each once it has ended; leases start on a step boundary.
+    # An hour in production. Set it shorter (e.g. 5m) only to test crediting quickly.
+    credit-interval: ${APP_PAYOUT_CREDIT_INTERVAL:1h}
+    # How often the crediting job looks for steps that have ended.
+    sweep-interval: ${APP_PAYOUT_SWEEP_INTERVAL:1m}
   orders:
     payment-window: ${APP_ORDER_PAYMENT_WINDOW:30m}
     expiry-sweep-interval: 60s
@@ -229,6 +234,8 @@ app:
     hours: ${APP_OFFICE_HOURS:Monday to Friday, 10:00 to 17:00}
     # An order paid at the office is held this long for the investor to come in.
     hold-window: ${APP_OFFICE_HOLD_WINDOW:3d}
+    # Cash paid at the office is without GST and adds this to every container's monthly rent (percentage points).
+    cash-rent-bonus-percent: ${APP_OFFICE_CASH_RENT_BONUS_PERCENT:0.50}
   payments:
     # The accounts investors pay into are managed in the admin console (Company bank accounts).
     bank-transfer:

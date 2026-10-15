@@ -10,6 +10,7 @@ import { toneFor } from "@/components/ui/status-tones";
 import { LeaseProgress } from "@/features/dashboard/lease-progress";
 import { monthColumns, monthKey } from "@/features/dashboard/months";
 import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
+import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
@@ -19,7 +20,7 @@ import type { Money } from "@/types/marketplace";
 import type { Portfolio } from "@/types/order";
 import type { ReferralMonth } from "@/types/referral";
 import type { Profile } from "@/types/user";
-import { formatDate, humanize } from "@/utils/format";
+import { humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -69,9 +70,11 @@ export default async function DashboardPage() {
     || (payoutMonths ?? []).some((m) => Number(m.capitalPaid.amount) > 0 || Number(m.capitalScheduled.amount) > 0);
   const kpis = [
     { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} container(s) on lease` : "Investor accounts only" },
-    { label: "Next payout", value: earnings?.nextPayout ? formatMoney(earnings.nextPayout.total, { compact: true }) : "—",
-      note: earnings?.nextPayout ? `Due ${formatDate(earnings.nextPayout.dueOn)}` : earnings ? "Buy a container to start earning" : "Investor accounts only" },
-    { label: "Available balance", value: list(earnings?.balances), note: earnings ? "Ready to withdraw" : "Investor accounts only" },
+    { label: "Total withdrawn", value: list(earnings?.totalWithdrawn),
+      note: earnings ? (earnings.withdrawalInProgress.length > 0 ? `${list(earnings.withdrawalInProgress)} in progress` : "Paid out to you so far")
+        : "Investor accounts only" },
+    { label: "Available balance", value: list(earnings?.balances),
+      note: earnings ? nextCreditNote(earnings.nextCreditAt) : "Investor accounts only" },
   ];
 
   return (
@@ -112,15 +115,15 @@ export default async function DashboardPage() {
 
       {earnings && (
         <>
-          <section className="grid gap-6 lg:grid-cols-3" aria-label="Payouts">
-            <Card title="Monthly rent" description="Credited to your wallet every day, by month"
+          <section className="grid gap-6 lg:grid-cols-3" aria-label="Rent">
+            <Card title="Monthly rent" description="Credited to your wallet every hour, by month"
               className="lg:col-span-2">
               {payoutMonths === null ? (
-                <EmptyState title="The chart could not be loaded" description="Your payouts are listed on the Earnings page." />
-              ) : payoutMonths.length === 0 && earnings.holdings.length === 0 ? (
-                <EmptyState title="No payouts yet" description="Buy a container and its monthly payouts appear here." />
+                <EmptyState title="The chart could not be loaded" description="Your rent is listed on the Earnings page." />
+              ) : payoutMonths.length === 0 && earnings.leases.length === 0 ? (
+                <EmptyState title="No rent yet" description="Buy a container and the rent it earns each month appears here." />
               ) : (
-                <ColumnChart series={hasCapital ? PAYOUT_SERIES : RENT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Monthly payouts"
+                <ColumnChart series={hasCapital ? PAYOUT_SERIES : RENT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Rent by month"
                   data={monthColumns(payoutMonths, PAST, AHEAD, CURRENCY, (m) => ({
                     rentPaid: m.rentPaid, capitalPaid: m.capitalPaid,
                     rentScheduled: m.rentScheduled, capitalScheduled: m.capitalScheduled,
@@ -137,11 +140,11 @@ export default async function DashboardPage() {
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2" aria-label="Leases and referrals">
-            <Card title="Lease progress" description="Months of rent credited over each container's lease"
+            <Card title="Lease progress" description="Rent credited over each container's lease"
               actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
-              {earnings.holdings.some((h) => h.paid < h.installments)
-                ? <LeaseProgress holdings={earnings.holdings} />
-                : <EmptyState title="No active leases" description="Containers you own appear here with their payout progress." />}
+              {earnings.leases.some((l) => l.status === "RUNNING")
+                ? <LeaseProgress leases={earnings.leases} />
+                : <EmptyState title="No active leases" description="Containers you own appear here with how much of their rent has been credited." />}
             </Card>
             <Card title="Referral commission" description="Earned from your network, last six months"
               actions={<LinkButton href="/referrals" variant="secondary">Referrals</LinkButton>}>

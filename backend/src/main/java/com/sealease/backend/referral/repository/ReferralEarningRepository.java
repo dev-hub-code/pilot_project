@@ -14,10 +14,30 @@ import java.util.UUID;
 public interface ReferralEarningRepository
 		extends JpaRepository<ReferralEarning, UUID>, JpaSpecificationExecutor<ReferralEarning> {
 
-	Page<ReferralEarning> findByBeneficiaryUserIdOrderByCreatedAtDescIdDesc(UUID beneficiaryUserId, Pageable pageable);
-
-	Page<ReferralEarning> findByBeneficiaryUserIdAndSourceUserIdOrderByCreatedAtDescIdDesc(UUID beneficiaryUserId,
-			UUID sourceUserId, Pageable pageable);
+	/**
+	 * Commission per referred holding, calendar month (UTC) and level, adding up its hourly rows; latest first.
+	 * Either filter may be null.
+	 */
+	@Query(value = """
+			select source_holding_id as holdingId, to_char(created_at at time zone 'UTC', 'YYYY-MM') as month, level,
+			       source_user_id as sourceUserId, beneficiary_user_id as beneficiaryUserId, product_id as productId,
+			       currency, sum(base_amount) as baseAmount, max(rate_percent) as ratePercent, sum(amount) as amount,
+			       max(created_at) as lastCreditedAt
+			from referral_earnings
+			where (cast(:beneficiary as uuid) is null or beneficiary_user_id = cast(:beneficiary as uuid))
+			  and (cast(:source as uuid) is null or source_user_id = cast(:source as uuid))
+			group by 1, 2, level, source_user_id, beneficiary_user_id, product_id, currency
+			order by max(created_at) desc, 1, level
+			""", countQuery = """
+			select count(*) from (
+			    select 1 from referral_earnings
+			    where (cast(:beneficiary as uuid) is null or beneficiary_user_id = cast(:beneficiary as uuid))
+			      and (cast(:source as uuid) is null or source_user_id = cast(:source as uuid))
+			    group by source_holding_id, to_char(created_at at time zone 'UTC', 'YYYY-MM'), level, beneficiary_user_id,
+			             currency) g
+			""", nativeQuery = true)
+	Page<ReferralEarningGroup> grouped(@Param("beneficiary") UUID beneficiaryUserId, @Param("source") UUID sourceUserId,
+			Pageable pageable);
 
 	/** Commission earned by one upline, per referred investor and currency. */
 	@Query("""

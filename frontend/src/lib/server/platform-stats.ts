@@ -5,7 +5,8 @@ import { backendFetch } from "./backend-client";
 /** The platform's track record, computed by the backend from its books. */
 export interface PlatformStats {
   paidToInvestors: Money;
-  payoutsPaid: number;
+  /** Containers whose rent has started being credited. */
+  containersEarning: number;
   investors: number;
   containers: number;
 }

@@ -7,8 +7,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,9 +26,6 @@ public final class TestApi {
 	public TestApi(MockMvc mvc, JdbcTemplate jdbc) {
 		this.mvc = mvc;
 		this.jdbc = jdbc;
-		// Payouts on today's day of the month: containers bought today are paid whole months, which most
-		// tests assume. Tests of part months set another day.
-		jdbc.update("UPDATE payout_settings SET payout_day = ? WHERE id = 1", LocalDate.now(ZoneOffset.UTC).getDayOfMonth());
 	}
 
 	public record Account(UUID id, String email, String accessToken) {

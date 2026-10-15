@@ -46,7 +46,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
           ? <LinkButton href="/admin/users/new">New employee</LinkButton> : undefined} />
       <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-5" role="search">
         <div className="sm:col-span-2">
-          <TextField label="Search" name="q" type="search" placeholder="Email or name" defaultValue={filters.q} />
+          <TextField label="Search" name="q" type="search" placeholder="Email, name or ID (SL03500)" defaultValue={filters.q} />
         </div>
         <SelectField label="Status" name="status" options={options(STATUS)} placeholder="Any" defaultValue={filters.status ?? ""} />
         <SelectField label="KYC" name="kycStatus" options={options(KYC)} placeholder="Any" defaultValue={filters.kycStatus ?? ""} />
@@ -60,9 +60,10 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
       {users.content.length === 0 ? (
         <EmptyState title="No users match these filters" />
       ) : (
-        <DataTable columns={["Name", "Email", "Status", "KYC", "Type", "Joined", "Last sign-in"]}>
+        <DataTable columns={["ID", "Name", "Email", "Status", "KYC", "Joined", "Last sign-in"]}>
           {users.content.map((user) => (
             <tr key={user.id} className="hover:bg-background">
+              <Cell className="font-mono text-xs">{user.userCode}</Cell>
               <Cell>
                 <Link href={`/admin/users/${user.id}`} className="font-medium text-brand hover:underline">
                   {user.firstName} {user.lastName}

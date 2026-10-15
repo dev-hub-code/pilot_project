@@ -80,7 +80,7 @@ class NotificationEmailSenderTest {
 	}
 
 	private UserAccount account(UserStatus status) {
-		return new UserAccount(userId, "asha@example.com", "Asha", "Rao", status, false);
+		return new UserAccount(userId, "SL03500", "asha@example.com", "Asha", "Rao", status, false);
 	}
 
 }

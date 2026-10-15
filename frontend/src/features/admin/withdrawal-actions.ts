@@ -1,163 +1,62 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
-import type { EarningsBalance } from "@/types/earning";
-import type { ReconciliationResult, ScheduledRun, Withdrawal, WithdrawalKind } from "@/types/withdrawal";
+import type { WithdrawalKind, WithdrawalRun } from "@/types/withdrawal";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { reasonSchema } from "@/validators/profile";
-import { markPaidSchema, referralModeSchema, resolveSchema, withdrawalDaysSchema } from "@/validators/withdrawal";
+import { financeTaskSchema, referralModeSchema, resolveSchema, withdrawalMinimumSchema } from "@/validators/withdrawal";
 
 const id = (value: string) => encodeURIComponent(value);
 
 function refresh() {
   revalidatePath("/admin/withdrawals", "layout");
+  revalidatePath("/admin/finance-tasks");
   revalidatePath("/admin/ledger", "layout");
 }
 
-/** Cash withdrawn at the office: records the hand-over with the cash receipt number. */
-export async function handOverCashAction(withdrawalId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const receiptNumber = String(formData.get("receiptNumber") ?? "").trim();
-  if (!receiptNumber) return { fieldErrors: { receiptNumber: "Enter the cash receipt number" } };
-  if (receiptNumber.length > 100) return { fieldErrors: { receiptNumber: "At most 100 characters" } };
-  try {
-    await authFetch(`/api/v1/admin/withdrawals/${id(withdrawalId)}/hand-over`, { method: "POST", json: { receiptNumber } });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  return { success: "Cash hand-over recorded. The withdrawal is paid." };
-}
-
-export async function rejectWithdrawalAction(withdrawalId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const parsed = reasonSchema.safeParse({ reason: formData.get("reason") ?? "" });
+/** Finance's update of a task: paid (with the bank reference or cash receipt), or failed (with the reason). */
+export async function updateFinanceTaskAction(withdrawalId: string, outcome: "PAID" | "FAILED", _p: FormState,
+  formData: FormData): Promise<FormState> {
+  const parsed = financeTaskSchema.safeParse({
+    outcome,
+    reference: formData.get("reference") ?? "",
+    reason: formData.get("reason") ?? "",
+  });
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+  if (outcome === "FAILED" && !parsed.data.reason) return { fieldErrors: { reason: "Say why it could not be paid" } };
   try {
-    await authFetch(`/api/v1/admin/withdrawals/${id(withdrawalId)}/reject`, { method: "POST", json: parsed.data });
+    await authFetch(`/api/v1/admin/finance-tasks/${id(withdrawalId)}`, { method: "POST", json: parsed.data });
   } catch (error) {
     return failureState(error);
   }
   refresh();
-  return { success: "Cancelled. The amount is back in the investor's balance." };
-}
-
-export async function batchStepAction(batchId: string, step: "sent"): Promise<FormState> {
-  try {
-    await authFetch(`/api/v1/admin/withdrawal-batches/${id(batchId)}/${step}`, { method: "POST" });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  return { success: "Marked as being paid. Upload the file with each row's status once the payments are done." };
-}
-
-export async function settleBatchAction(batchId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const parsed = markPaidSchema.safeParse({ payoutReference: formData.get("payoutReference") ?? "" });
-  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
-  try {
-    await authFetch(`/api/v1/admin/withdrawal-batches/${id(batchId)}/settle`, { method: "POST", json: parsed.data });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  return { success: "All outstanding payments marked as paid." };
-}
-
-export async function markItemPaidAction(batchId: string, withdrawalId: string): Promise<FormState> {
-  try {
-    await authFetch(`/api/v1/admin/withdrawal-batches/${id(batchId)}/items/${id(withdrawalId)}/paid`, { method: "POST", json: {} });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  return { success: "Marked as paid." };
-}
-
-export async function markItemFailedAction(batchId: string, withdrawalId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const parsed = reasonSchema.safeParse({ reason: formData.get("reason") ?? "" });
-  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
-  try {
-    await authFetch(`/api/v1/admin/withdrawal-batches/${id(batchId)}/items/${id(withdrawalId)}/failed`, {
-      method: "POST",
-      json: parsed.data,
-    });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  return { success: "Marked as failed. The amount is held and a support ticket was opened for you to resolve it." };
-}
-
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-
-/** The batch's Excel file uploaded back with a Status per row: completes or fails each withdrawal. */
-export async function reconcileBatchAction(batchId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { fieldErrors: { file: "Choose the Excel file to upload." } };
-  if (file.size > MAX_UPLOAD_BYTES) return { fieldErrors: { file: "The file must be 5 MB or smaller." } };
-  if (!/\.xlsx$/i.test(file.name)) return { fieldErrors: { file: "Upload the batch's .xlsx file." } };
-  const upload = new FormData();
-  upload.append("file", file, file.name);
-  let result: ReconciliationResult;
-  try {
-    result = await authFetch<ReconciliationResult>(`/api/v1/admin/withdrawal-batches/${id(batchId)}/reconciliation`, {
-      method: "POST",
-      formData: upload,
-    });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  const { paid, failed, unchanged } = result;
   return {
-    success: paid + failed === 0
-      ? "Nothing to change: every row is blank or already recorded."
-      : `${paid} marked paid, ${failed} marked failed${unchanged > 0 ? `, ${unchanged} unchanged` : ""}.`
-        + (failed > 0 ? " A support ticket was opened for each failed payment." : ""),
+    success: outcome === "PAID"
+      ? "Marked as paid: it is in the investor's total withdrawn."
+      : "Marked as failed. The amount is held and a support ticket was opened for you to resolve it.",
   };
 }
 
-export async function updateWithdrawalDaysAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const parsed = withdrawalDaysSchema.safeParse({
-    rentWithdrawalDay: formData.get("rentWithdrawalDay") ?? "",
-    referralWithdrawalDay: formData.get("referralWithdrawalDay") ?? "",
-  });
-  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+/**
+ * Generates rent or referral withdrawals: every eligible investor's balance of that kind moves to "in progress", in a
+ * bank sheet for finance to pay and a cash batch handed over at the office. The other kind is left for its own run.
+ */
+export async function generateWithdrawalsAction(kind: WithdrawalKind): Promise<FormState> {
+  let run: WithdrawalRun;
   try {
-    await authFetch("/api/v1/admin/settings/withdrawals", { method: "PUT", json: parsed.data });
+    run = await authFetch<WithdrawalRun>(`/api/v1/admin/withdrawal-runs?kind=${kind}`, { method: "POST" });
   } catch (error) {
     return failureState(error);
   }
   refresh();
-  return { success: "Withdrawal days saved." };
-}
-
-/** Makes this month's rent or referral withdrawals now instead of waiting for the file day. */
-export async function runWithdrawalsNowAction(kind: WithdrawalKind): Promise<FormState> {
-  let run: ScheduledRun;
-  try {
-    run = await authFetch<ScheduledRun>(`/api/v1/admin/withdrawal-runs?kind=${kind}`, { method: "POST" });
-  } catch (error) {
-    return failureState(error);
+  if (run.bankBatchId == null && run.cashBatchId == null) {
+    return { success: `No ${kind === "RENT" ? "rent" : "referral"} to withdraw this time${run.skipped.length > 0 ? `; ${run.skipped.length} investor(s) left out` : ""}.` };
   }
-  refresh();
-  if (run.batchId) redirect(`/admin/withdrawals/batches/${run.batchId}`);
-  return { success: `No balances to withdraw this month${run.skipped.length > 0 ? `; ${run.skipped.length} investor(s) skipped` : ""}.` };
-}
-
-/** Cash withdrawn at the office in front of the investor: their whole balance, then handed over against a receipt. */
-export async function officeWithdrawalAction(userId: string, balance: EarningsBalance): Promise<FormState> {
-  let withdrawal: Withdrawal;
-  try {
-    withdrawal = await authFetch<Withdrawal>("/api/v1/admin/withdrawals/office", { method: "POST", json: { userId, balance } });
-  } catch (error) {
-    return failureState(error);
-  }
-  refresh();
-  revalidatePath(`/admin/users/${userId}`);
-  redirect(`/admin/withdrawals/${withdrawal.id}`);
+  return {
+    success: `${run.reference}: ${run.bankInvestors} investor(s) on the bank sheet, ${run.cashInvestors} to collect cash at the office`
+      + `${run.skipped.length > 0 ? `; ${run.skipped.length} left out` : ""}.`,
+  };
 }
 
 /** A failed bank payment, settled: paid by hand (with the bank reference), or returned to the investor's balance. */
@@ -189,4 +88,18 @@ export async function setReferralModeAction(userId: string, _p: FormState, formD
   }
   revalidatePath(`/admin/users/${userId}`);
   return { success: "Referral payout mode saved for this year." };
+}
+
+/** The minimum an investor's row must come to for a withdrawal run to pay it; applies from the next run. */
+export async function setWithdrawalMinimumAction(_p: FormState, formData: FormData): Promise<FormState> {
+  const parsed = withdrawalMinimumSchema.safeParse({ minimumAmount: formData.get("minimumAmount") ?? "" });
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+  try {
+    await authFetch("/api/v1/admin/settings/withdrawals", { method: "PUT", json: parsed.data });
+  } catch (error) {
+    return failureState(error);
+  }
+  refresh();
+  revalidatePath("/withdrawals");
+  return { success: "Minimum withdrawal saved. It applies from the next run." };
 }

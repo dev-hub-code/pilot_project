@@ -10,6 +10,7 @@ import type { StaffCredentials } from "@/types/staff";
 import type { FormState } from "@/validators/form-state";
 import { type CredentialsState, createStaffAction, resetStaffPasswordAction, updateRolesAction } from "./staff-actions";
 import { copyText } from "@/utils/clipboard";
+import { formatDateTime } from "@/utils/format";
 
 function RoleChoices({ roles, selected, error }: { roles: Role[]; selected: string[]; error?: string }) {
   return (
@@ -45,7 +46,7 @@ export function IssuedCredentials({ credentials }: { credentials: StaffCredentia
         {credentials.emailed
           ? `We emailed these sign-in details to ${credentials.email}. `
           : "We could not email these sign-in details: share the password privately. "}
-        Shown only now. They must replace it at first sign-in, before {new Date(credentials.expiresAt).toUTCString()}.
+        Shown only now. They must replace it at first sign-in, before {formatDateTime(credentials.expiresAt)}.
       </p>
     </div>
   );

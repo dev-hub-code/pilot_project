@@ -727,6 +727,30 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isForbidden());
 	}
 
+	@Test
+	void everyUserHasAReadableIdFromTheSequence() throws Exception {
+		Account first = api.register();
+		Account second = api.register();
+		Account support = api.staff("SUPPORT");
+		String code = JsonPath.read(mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, first.bearer()))
+			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.userCode");
+		String next = JsonPath.read(mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, second.bearer()))
+			.andReturn().getResponse().getContentAsString(), "$.userCode");
+		// "SL" and at least five digits, from 3500 up, one after another.
+		assertThat(code).matches("SL\\d{5,}");
+		long number = Long.parseLong(code.substring(2));
+		assertThat(number).isGreaterThanOrEqualTo(3500);
+		assertThat(Long.parseLong(next.substring(2))).isGreaterThan(number);
+
+		// Staff find the account by it, in any case.
+		mvc.perform(get("/api/v1/admin/users").param("q", code.toLowerCase()).header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(1))
+			.andExpect(jsonPath("$.content[0].email").value(first.email()))
+			.andExpect(jsonPath("$.content[0].userCode").value(code));
+		mvc.perform(get("/api/v1/admin/users/{id}", first.id()).header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.summary.userCode").value(code));
+	}
+
 	// -------------------------------------------------------------------------- helpers
 
 	private void approveKyc(Account investor) throws Exception {

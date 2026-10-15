@@ -6,18 +6,18 @@ import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.service.OfferingQuery;
 import com.sealease.backend.referral.dto.ReferralEarningResponse;
 import com.sealease.backend.referral.dto.ReferralMonth;
-import com.sealease.backend.referral.entity.ReferralEarning;
 import com.sealease.backend.referral.repository.MonthlyLevelTotal;
+import com.sealease.backend.referral.repository.ReferralEarningGroup;
 import com.sealease.backend.referral.repository.ReferralEarningRepository;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
-import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Currency;
@@ -26,41 +26,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Referral commission history, for the earning investor and for staff. */
+/** Referral commission totals for the earning investor, and the commission history for staff. */
 @Service
 public class ReferralEarningService {
 
 	private final ReferralEarningRepository earnings;
 	private final OfferingQuery plans;
 	private final UserAccountService accounts;
-	private final ReferralService referrals;
 
-	public ReferralEarningService(ReferralEarningRepository earnings, OfferingQuery plans, UserAccountService accounts,
-			ReferralService referrals) {
+	public ReferralEarningService(ReferralEarningRepository earnings, OfferingQuery plans, UserAccountService accounts) {
 		this.earnings = earnings;
 		this.plans = plans;
 		this.accounts = accounts;
-		this.referrals = referrals;
-	}
-
-	/** The investor's own commissions; the referred investors appear by display name only. */
-	@Transactional(readOnly = true)
-	public Page<ReferralEarningResponse> mine(UUID userId, Pageable pageable) {
-		Page<ReferralEarning> page = earnings.findByBeneficiaryUserIdOrderByCreatedAtDescIdDesc(userId, pageable);
-		Map<UUID, UserAccount> sources = accounts.getAccounts(page.map(ReferralEarning::getSourceUserId).toSet());
-		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarning::getProductId).toSet());
-		return page.map(e -> view(e, ReferralService.displayName(sources.get(e.getSourceUserId())), products, false));
-	}
-
-	/** The investor's commissions from one member of their downline (by its id in downline views). */
-	@Transactional(readOnly = true)
-	public Page<ReferralEarningResponse> fromMember(UUID userId, String memberId, Pageable pageable) {
-		UUID source = referrals.memberUserId(userId, memberId);
-		Page<ReferralEarning> page = earnings.findByBeneficiaryUserIdAndSourceUserIdOrderByCreatedAtDescIdDesc(userId,
-				source, pageable);
-		String name = ReferralService.displayName(accounts.getAccount(source));
-		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarning::getProductId).toSet());
-		return page.map(e -> view(e, name, products, false));
 	}
 
 	/** Commission the investor has earned over all time, per currency. */
@@ -91,34 +68,32 @@ public class ReferralEarningService {
 
 	@Transactional(readOnly = true)
 	public Page<ReferralEarningResponse> search(UUID beneficiaryId, UUID sourceId, Pageable pageable) {
-		Page<ReferralEarning> page = earnings.findAll(matching(beneficiaryId, sourceId), pageable);
-		Map<UUID, UserAccount> sources = accounts.getAccounts(page.map(ReferralEarning::getSourceUserId).toSet());
-		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarning::getProductId).toSet());
+		Page<ReferralEarningGroup> page = earnings.grouped(beneficiaryId, sourceId, unsorted(pageable));
+		Map<UUID, UserAccount> sources = accounts.getAccounts(page.map(ReferralEarningGroup::getSourceUserId).toSet());
+		Map<UUID, OfferingTerms> products = plans.terms(page.map(ReferralEarningGroup::getProductId).toSet());
 		return page.map(e -> {
 			UserAccount source = sources.get(e.getSourceUserId());
 			return view(e, source == null ? null : source.firstName() + " " + source.lastName(), products, true);
 		});
 	}
 
-	private static ReferralEarningResponse view(ReferralEarning e, String sourceName, Map<UUID, OfferingTerms> products,
-			boolean staff) {
+	private static ReferralEarningResponse view(ReferralEarningGroup e, String sourceName,
+			Map<UUID, OfferingTerms> products, boolean staff) {
 		OfferingTerms plan = products.get(e.getProductId());
-		return new ReferralEarningResponse(e.getId(), e.getLevel(), sourceName, staff ? e.getSourceUserId() : null,
-				staff ? e.getBeneficiaryUserId() : null, plan == null ? null : plan.code(), e.getInstallmentNumber(),
-				MoneyResponse.from(e.base()), e.getRatePercent(), MoneyResponse.from(e.amount()), e.getCreatedAt());
+		Currency currency = Currency.getInstance(e.getCurrency());
+		// Stable id for the group: the holding, month, level and beneficiary it adds up.
+		UUID id = UUID.nameUUIDFromBytes((e.getHoldingId() + ":" + e.getMonth() + ":" + e.getLevel() + ":"
+				+ e.getBeneficiaryUserId() + ":" + e.getCurrency())
+			.getBytes(StandardCharsets.UTF_8));
+		return new ReferralEarningResponse(id, e.getLevel().intValue(), sourceName, staff ? e.getSourceUserId() : null,
+				staff ? e.getBeneficiaryUserId() : null, plan == null ? null : plan.code(), e.getMonth(),
+				MoneyResponse.from(Money.of(e.getBaseAmount(), currency)), e.getRatePercent(),
+				MoneyResponse.from(Money.of(e.getAmount(), currency)), e.getLastCreditedAt());
 	}
 
-	private static Specification<ReferralEarning> matching(UUID beneficiaryId, UUID sourceId) {
-		return (root, query, cb) -> {
-			List<Predicate> predicates = new ArrayList<>();
-			if (beneficiaryId != null) {
-				predicates.add(cb.equal(root.get("beneficiaryUserId"), beneficiaryId));
-			}
-			if (sourceId != null) {
-				predicates.add(cb.equal(root.get("sourceUserId"), sourceId));
-			}
-			return cb.and(predicates.toArray(Predicate[]::new));
-		};
+	/** The grouped history has its own order (latest first); page and size are kept. */
+	private static Pageable unsorted(Pageable pageable) {
+		return pageable.isPaged() ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize()) : pageable;
 	}
 
 }

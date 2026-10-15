@@ -1,41 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Cell, DataTable } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Pagination } from "@/components/ui/pagination";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { PAYOUT_STATUS_LABEL, PAYOUT_TONE } from "@/features/earnings/labels";
 import { authFetch } from "@/lib/server/auth/session";
-import type { PageResponse } from "@/types/api";
-import type { EarningsSummary, Payout, PayoutStatus } from "@/types/earning";
-import { formatDate, formatPeriod } from "@/utils/format";
+import type { EarningsSummary } from "@/types/earning";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Earnings" };
 
-const VIEWS: readonly { status: PayoutStatus; label: string; sort: string }[] = [
-  { status: "PAID", label: "Received", sort: "dueOn,desc" },
-  { status: "SCHEDULED", label: "Upcoming", sort: "dueOn,asc" },
-];
-
-export default async function EarningsPage({ searchParams }: PageProps<"/earnings">) {
-  const params = await searchParams;
-  const view = VIEWS.find((v) => v.status === params.status) ?? VIEWS[0]!;
-  const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
-  const [summary, payouts] = await Promise.all([
-    authFetch<EarningsSummary>("/api/v1/earnings/summary"),
-    authFetch<PageResponse<Payout>>(`/api/v1/earnings?status=${view.status}&sort=${view.sort}&page=${page}&size=20`),
-  ]);
+export default async function EarningsPage() {
+  const summary = await authFetch<EarningsSummary>("/api/v1/earnings/summary");
   // Plans pay rent only; capital shows only for containers bought before that.
-  const hasCapital = summary.capitalReturned.length > 0 || payouts.content.some((p) => Number(p.capital.amount) > 0);
+  const hasCapital = summary.capitalReturned.length > 0 || summary.leases.some((l) => Number(l.capitalTotal.amount) > 0);
   const totals = (list: EarningsSummary["balances"]) => (list.length === 0 ? "—" : list.map((m) => formatMoney(m)).join(" · "));
 
   return (
     <div className="space-y-6">
       <PageHeader title="Earnings"
-        description="Each of your containers earns its rent every day: that month's rent ÷ its days is credited to your wallet daily. Your balance is paid out once a month (see Withdrawals)."
+        description="Each of your containers earns its rent every hour of its lease, credited to your wallet as each hour ends. Your wallet is paid out when our team makes a withdrawal (see Withdrawals)."
         actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
       <section className={`grid gap-px bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">
@@ -59,53 +41,13 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
           <Link href="/referrals" className="text-sm text-gold-text hover:underline">By month and level →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Next payout</p>
-          <p className="font-display text-3xl font-semibold tabular-nums">{summary.nextPayout ? formatMoney(summary.nextPayout.total) : "—"}</p>
-          {summary.nextPayout && <p className="text-xs text-muted">on {formatDate(summary.nextPayout.dueOn)}</p>}
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Total withdrawn</p>
+          <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.totalWithdrawn)}</p>
+          {summary.withdrawalInProgress.length > 0 && (
+            <p className="text-xs text-muted">{totals(summary.withdrawalInProgress)} in progress</p>
+          )}
         </div>
       </section>
-
-      <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
-        {VIEWS.map((v) => (
-          <Link key={v.status} href={`/earnings?status=${v.status}`} aria-current={v === view ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${v === view ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {v.label}
-          </Link>
-        ))}
-      </nav>
-
-      {payouts.content.length === 0 ? (
-        <div className="space-y-4">
-          <EmptyState title={view.status === "PAID" ? "No payouts yet" : "Nothing scheduled"}
-            description="Each container you buy earns rent every day of its lease, from the day its container is assigned to you." />
-          <LinkButton href="/portfolio" variant="secondary">View portfolio</LinkButton>
-        </div>
-      ) : (
-        <>
-          <DataTable columns={[view.status === "PAID" ? "Paid" : "Due", "Container", "Payout", "Period", "Rent",
-            ...(hasCapital ? ["Capital back"] : []), "Total", "Status"]}>
-            {payouts.content.map((p) => (
-              <tr key={p.id} className="hover:bg-background">
-                <Cell className="text-muted">{formatDate(p.paidAt ?? p.dueOn)}</Cell>
-                <Cell>
-                  <span className="font-mono">{p.containerNumber}</span>
-                  <span className="block text-xs text-muted">{p.productCode}</span>
-                </Cell>
-                <Cell className="tabular-nums">{p.installmentNumber} of {p.installmentCount}</Cell>
-                <Cell className="whitespace-nowrap text-xs text-muted">
-                  {formatPeriod(p.periodStart, p.periodEnd)}
-                  {p.monthShare < 1 && <span className="block">Part month</span>}
-                </Cell>
-                <Cell className="tabular-nums">{formatMoney(p.rent)}</Cell>
-                {hasCapital && <Cell className="tabular-nums">{formatMoney(p.capital)}</Cell>}
-                <Cell className="tabular-nums font-medium">{formatMoney(p.total)}</Cell>
-                <Cell><StatusBadge tone={PAYOUT_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</StatusBadge></Cell>
-              </tr>
-            ))}
-          </DataTable>
-          <Pagination page={payouts} basePath="/earnings" params={{ status: view.status }} />
-        </>
-      )}
     </div>
   );
 }

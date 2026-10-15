@@ -28,7 +28,7 @@ export default async function StatementsPage({ searchParams }: PageProps<"/state
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Statements" description="Your account activity for any period of up to a year, to view or download."
+      <PageHeader title="Statements" description="Your withdrawals for any period of up to a year: where each was paid and how it stands. View or download."
         actions={report ? (
           <div className="flex gap-3 text-sm">
             <a href={`/statements/download?${query}&format=pdf`} className="rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface">Download PDF</a>

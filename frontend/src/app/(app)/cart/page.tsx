@@ -75,7 +75,7 @@ export default async function CartPage() {
                   {line.problems.map((problem) => <li key={problem}>{problem}</li>)}
                 </ul>
               )}
-              <CartLineForm productId={line.productId} quantity={line.quantity} tenureYears={line.tenureYears}
+              <CartLineForm productId={line.productId} title={line.productTitle} quantity={line.quantity} tenureYears={line.tenureYears}
                 minYears={line.minTenureYears} maxYears={line.maxTenureYears} />
             </li>
           ))}

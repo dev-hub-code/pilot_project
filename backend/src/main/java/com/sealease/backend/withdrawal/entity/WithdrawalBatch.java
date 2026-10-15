@@ -10,7 +10,6 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.YearMonth;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -39,11 +38,16 @@ public class WithdrawalBatch extends BaseEntity {
 	@Column(name = "created_by", updatable = false)
 	private UUID createdBy;
 
-	/** The month ("yyyy-MM") of a batch made by the monthly withdrawal run; null for batches made by hand. */
+	/** How its withdrawals are paid: into bank accounts, or in cash at the office. */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "payout_method", nullable = false, updatable = false, length = 20)
+	private WithdrawalPayoutMethod payoutMethod = WithdrawalPayoutMethod.BANK_TRANSFER;
+
+	/** The month ("yyyy-MM") of a batch made by a monthly run (before admin runs); null otherwise. */
 	@Column(name = "period", updatable = false, length = 7)
 	private String period;
 
-	/** Which monthly run made it: rent or referral; null for batches made by hand before the runs. */
+	/** Which monthly run made it: rent or referral; null for other batches. */
 	@Enumerated(EnumType.STRING)
 	@Column(name = "kind", updatable = false, length = 20)
 	private WithdrawalKind kind;
@@ -69,13 +73,21 @@ public class WithdrawalBatch extends BaseEntity {
 		this.status = BatchStatus.CREATED;
 	}
 
-	/** The batch of one month's scheduled withdrawals. */
-	public static WithdrawalBatch scheduled(String reference, Money total, int itemCount, WithdrawalKind kind,
-			YearMonth period) {
-		WithdrawalBatch batch = new WithdrawalBatch(reference, total, itemCount, null);
+	/** One of the two batches of a rent or referral withdrawal run: its bank or its cash withdrawals. */
+	public static WithdrawalBatch forRun(String reference, Money total, int itemCount, WithdrawalKind kind,
+			WithdrawalPayoutMethod method, UUID createdBy) {
+		WithdrawalBatch batch = new WithdrawalBatch(reference, total, itemCount, createdBy);
 		batch.kind = kind;
-		batch.period = period.toString();
+		batch.payoutMethod = method;
 		return batch;
+	}
+
+	public WithdrawalPayoutMethod getPayoutMethod() {
+		return payoutMethod;
+	}
+
+	public boolean isOfficeCash() {
+		return payoutMethod == WithdrawalPayoutMethod.OFFICE_CASH;
 	}
 
 	public void markSent(UUID actorId, Instant now) {

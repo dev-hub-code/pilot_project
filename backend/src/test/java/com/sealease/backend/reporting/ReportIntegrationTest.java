@@ -56,22 +56,41 @@ class ReportIntegrationTest {
 	// ------------------------------------------------------------------- investor statement
 
 	@Test
-	void anInvestorsStatementMatchesTheirLedger() throws Exception {
+	void anInvestorsStatementListsTheirWithdrawals() throws Exception {
 		Account investor = investors.approvedInvestor();
+		investors.ensureVerifiedBankAccount(investor);
 		credit(investor, "INR", "500", "RENT_BANK");
-
 		String today = today().toString();
+		// Nothing withdrawn yet: the statement is empty.
 		statement(investor, today, today, null).andExpect(status().isOk())
-			.andExpect(jsonPath("$.title").value("Investor statement"))
+			.andExpect(jsonPath("$.title").value("Withdrawal statement"))
+			.andExpect(jsonPath("$.sections.length()").value(1))
+			.andExpect(jsonPath("$.sections[0].name").value("Withdrawals"))
+			.andExpect(jsonPath("$.sections[0].rows.length()").value(0));
+
+		// A rent withdrawal run takes the ₹500: it is listed, in progress.
+		Account finance = api.staff("FINANCE");
+		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isCreated());
+		String withdrawal = jdbc.queryForObject("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid", String.class,
+				investor.id());
+		String reference = jdbc.queryForObject("SELECT reference FROM withdrawals WHERE id = ?::uuid", String.class, withdrawal);
+		statement(investor, today, today, null)
 			.andExpect(jsonPath("$.subtitle").value(containsString(investor.email())))
-			.andExpect(jsonPath("$.sections[0].name").value("Summary (₹)"))
-			.andExpect(jsonPath("$.sections[0].rows[0].c4").value("₹0.00"))
-			.andExpect(jsonPath("$.sections[0].rows[3].c4").value("₹500.00"))
-			.andExpect(jsonPath("$.sections[0].rows[5].c1").value("Closing balance"))
-			.andExpect(jsonPath("$.sections[0].rows[5].c4").value("₹500.00"))
-			.andExpect(jsonPath("$.sections[0].rows[5].emphasis").value(true))
-			.andExpect(jsonPath("$.sections[1].rows.length()").value(1))
-			.andExpect(jsonPath("$.sections[1].rows[0].c3").value("Adjustment"));
+			.andExpect(jsonPath("$.sections[0].rows[0].c2").value(reference + " · Rent"))
+			.andExpect(jsonPath("$.sections[0].rows[0].c3").value(containsString("In progress")))
+			.andExpect(jsonPath("$.sections[0].rows[0].c4").value("₹500.00"))
+			.andExpect(jsonPath("$.sections[0].rows[1].c1").value("In progress"))
+			.andExpect(jsonPath("$.sections[0].rows[1].emphasis").value(true));
+
+		// Finance pays it: the statement shows it paid, and the total paid out.
+		mvc.perform(post("/api/v1/admin/finance-tasks/{id}", withdrawal).header(HttpHeaders.AUTHORIZATION, finance.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"PAID\",\"reference\":\"UTR-9\"}"))
+			.andExpect(status().isOk());
+		statement(investor, today, today, null)
+			.andExpect(jsonPath("$.sections[0].rows[0].c3").value(containsString("Paid")))
+			.andExpect(jsonPath("$.sections[0].rows[1].c1").value("Paid out"))
+			.andExpect(jsonPath("$.sections[0].rows[1].c4").value("₹500.00"));
 
 		byte[] pdf = statement(investor, today, today, "pdf").andExpect(status().isOk())
 			.andExpect(content().contentType(MediaType.APPLICATION_PDF))
@@ -81,7 +100,7 @@ class ReportIntegrationTest {
 		assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
 		String csv = statement(investor, today, today, "csv").andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-		assertThat(csv).contains("\"Summary (₹)\",\"Closing balance\",\"\",\"\",\"₹500.00\"");
+		assertThat(csv).contains("\"Withdrawals\",\"Paid out\",\"\",\"\",\"₹500.00\"");
 
 		statement(investor, today, today().minusDays(1).toString(), null).andExpect(status().isBadRequest());
 		statement(investor, today().minusDays(400).toString(), today, null).andExpect(status().isBadRequest())
@@ -116,7 +135,7 @@ class ReportIntegrationTest {
 
 		mvc.perform(get("/api/v1/admin/reports/statement").param("userId", investor.id().toString()).param("from", today)
 				.param("to", today).param("format", "csv").header(HttpHeaders.AUTHORIZATION, viewer.bearer()))
-			.andExpect(status().isOk()).andExpect(content().string(containsString("₹250.00")));
+			.andExpect(status().isOk()).andExpect(content().string(containsString("Withdrawals")));
 		mvc.perform(get("/api/v1/admin/reports/offerings").header(HttpHeaders.AUTHORIZATION, api.staff("SUPPORT").bearer()))
 			.andExpect(status().isForbidden());
 		mvc.perform(get("/api/v1/admin/reports/offerings").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
@@ -154,7 +173,7 @@ class ReportIntegrationTest {
 	void theDashboardShowsOnlyWhatTheViewerMaySee() throws Exception {
 		List<String> all = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$[*].key");
-		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "support", "leads");
+		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "support", "leads", "security");
 
 		List<String> sales = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString(), "$[*].key");

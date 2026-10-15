@@ -53,18 +53,20 @@ public class DashboardService {
 	private final WithdrawalService withdrawals;
 	private final SupportService support;
 	private final LeadService leads;
+	private final SecurityDashboardService security;
 	private final MoneyProperties moneyProperties;
 	private final Clock clock;
 
 	public DashboardService(UserRoleService roles, HoldingService holdings, LedgerService ledger,
-			WithdrawalService withdrawals, SupportService support, LeadService leads, MoneyProperties moneyProperties,
-			Clock clock) {
+			WithdrawalService withdrawals, SupportService support, LeadService leads, SecurityDashboardService security,
+			MoneyProperties moneyProperties, Clock clock) {
 		this.roles = roles;
 		this.holdings = holdings;
 		this.ledger = ledger;
 		this.withdrawals = withdrawals;
 		this.support = support;
 		this.leads = leads;
+		this.security = security;
 		this.moneyProperties = moneyProperties;
 		this.clock = clock;
 	}
@@ -84,7 +86,7 @@ public class DashboardService {
 			LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
 			ReportService.Period month = new ReportService.Period(today.withDayOfMonth(1), today);
 			Map<String, Money> paid = new TreeMap<>();
-			ledger.periodTotals(month.start(), month.end()).forEach((currency, totals) -> totals.stream()
+			ledger.periodTotals(month.start(ZoneOffset.UTC), month.end(ZoneOffset.UTC)).forEach((currency, totals) -> totals.stream()
 				.filter(t -> t.transactionType() == TransactionType.INVESTOR_PAYOUT
 						&& EarningsBalance.ACCOUNT_TYPES.contains(t.accountType()) && t.direction() == Direction.CREDIT)
 				.map(PeriodTotal::amount)
@@ -110,6 +112,10 @@ public class DashboardService {
 			long open = pipeline.stream().filter(p -> p.stage().isOpen()).mapToLong(PipelineStage::leads).sum();
 			long fresh = pipeline.stream().filter(p -> p.stage() == LeadStage.NEW).mapToLong(PipelineStage::leads).sum();
 			tiles.add(new KpiTile("leads", "Open leads", List.of(String.valueOf(open)), fresh + " new", "/admin/leads"));
+		}
+		if (viewer.hasPermission("AUDIT_VIEW")) {
+			tiles.add(new KpiTile("security", "Failed sign-ins", List.of(String.valueOf(security.failedSignInsLastDay())),
+					"In the last 24 hours", "/admin/security?hours=24"));
 		}
 		return tiles;
 	}

@@ -1,16 +1,18 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui/button";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { FormState } from "@/validators/form-state";
+import { ActionButton } from "./action-button";
 import { removeCartItemAction, setCartItemAction } from "./actions";
 import { leaseOptions } from "./lease-years";
 
 /** Containers and lease of one cart line; the lease is chosen in whole years within the plan's limits. */
-export function CartLineForm({ productId, quantity, tenureYears, minYears, maxYears }: {
+export function CartLineForm({ productId, title, quantity, tenureYears, minYears, maxYears }: {
   productId: string;
+  /** The plan, named when asking to remove it. */
+  title: string;
   quantity: number;
   tenureYears: number;
   minYears: number;
@@ -40,9 +42,8 @@ export function CartLineForm({ productId, quantity, tenureYears, minYears, maxYe
           )}
           <SubmitButton variant="quiet" pendingLabel="Saving…">Update</SubmitButton>
         </form>
-        <form action={removeCartItemAction.bind(null, productId)}>
-          <Button type="submit" variant="quiet">Remove</Button>
-        </form>
+        <ActionButton action={removeCartItemAction.bind(null, productId)} label="Remove" variant="quiet"
+          pendingLabel="Removing…" confirm={`Remove ${title} from your cart?`} />
       </div>
       {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
     </div>

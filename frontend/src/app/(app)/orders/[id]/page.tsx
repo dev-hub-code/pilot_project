@@ -38,6 +38,11 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const awaitingVerification = pending?.deposit != null;
   const rejected = payments.find((p) => p.method === "BANK_TRANSFER" && p.status === "FAILED" && p.deposit);
   const refunds = payments.filter((p) => p.status === "REFUND_REQUIRED" || p.status === "REFUNDED");
+  const paid = payments.find((p) => p.status === "SUCCEEDED");
+  // Paying cash at the office adds a bonus to every container's monthly rent.
+  const rentBonus = paid?.rentBonusPercent ?? 0;
+  const withBonus = (item: Order["items"][number]) => rentBonus === 0 ? item.monthlyPayout
+    : { amount: (Number(item.amount.amount) * (Number(item.monthlyRentPercent) + rentBonus) / 100).toFixed(2), currency: item.amount.currency };
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -59,7 +64,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       {order.status === "CONFIRMED" && (
         <Notice tone="success">
-          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; their leases and monthly payouts have started.
+          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; their leases have started and earn rent every hour.
+          {order.gstWaived && <> You paid in cash at our office, so no GST was charged</>}
+          {order.gstWaived && (rentBonus > 0 ? <> and every container earns {formatPercent(rentBonus)} more rent a month.</> : <>.</>)}
         </Notice>
       )}
       {(order.status === "EXPIRED" || order.status === "CANCELLED") && (
@@ -101,12 +108,12 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                 </Cell>
                 <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
                 <Cell className="tabular-nums">
-                  {Number(item.gstRatePercent) > 0
+                  {order.gstWaived ? <span className="text-muted">Not charged</span> : Number(item.gstRatePercent) > 0
                     ? <>{formatMoney(item.gstAmount)}<span className="block text-xs text-muted">{formatPercent(item.gstRatePercent)}</span></>
                     : "—"}
                 </Cell>
-                <Cell className="tabular-nums font-medium">{formatMoney(item.amountWithGst)}</Cell>
-                <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
+                <Cell className="tabular-nums font-medium">{formatMoney(order.gstWaived ? item.amount : item.amountWithGst)}</Cell>
+                <Cell className="tabular-nums">{formatMoney(withBonus(item))}</Cell>
                 <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
               </tr>
             ))}
@@ -142,7 +149,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
         <aside className="space-y-6">
           <Card title="Total">
-            <p className="font-display text-3xl font-semibold tabular-nums">{formatMoney(order.total)}</p>
+            <p className="font-display text-3xl font-semibold tabular-nums">{formatMoney(paid?.amount ?? pending?.amount ?? order.total)}</p>
+            {(paid ?? pending)?.gstIncluded === false && <p className="mt-1 text-xs text-muted">Without GST: paid in cash at our office</p>}
             {order.status === "PENDING_PAYMENT" && (
               <p className="mt-2 text-sm text-muted">
                 {awaitingVerification
@@ -162,8 +170,12 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                   <div className="space-y-3 text-sm">
                     <p className="font-medium">Pay in cash at our office</p>
                     <dl className="space-y-2">
-                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Amount</dt>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">{pending.gstIncluded ? "Amount (with GST)" : "Amount (no GST)"}</dt>
                         <dd className="font-display text-xl font-semibold tabular-nums">{formatMoney(pending.officeCash.amount)}</dd></div>
+                      {pending.rentBonusPercent > 0 && (
+                        <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Rent bonus</dt>
+                          <dd>+{formatPercent(pending.rentBonusPercent)} a month on every container</dd></div>
+                      )}
                       <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Quote this reference</dt>
                         <dd className="font-mono text-base">{pending.officeCash.reference}</dd></div>
                       <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Office</dt>
@@ -177,14 +189,21 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     </p>
                   </div>
                 )}
-                {pending?.method !== "BANK_TRANSFER" && (
+                {/* Once cash at the office is chosen it stays the way to pay (or the order is cancelled). */}
+                {!pending && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "BANK_TRANSFER", key())}
-                    label="Pay by bank (online transfer, cheque or cash deposit)" className="w-full"
-                    variant={pending?.method === "OFFICE_CASH" ? "secondary" : "primary"} />
+                    label="Pay now" className="w-full" />
                 )}
                 {pending?.method !== "OFFICE_CASH" && (
+                  <div className="space-y-1.5">
+                    <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
+                      label="Pay in cash at our office" variant="secondary" className="w-full" />
+                    <p className="text-xs text-muted">No GST, and your containers earn extra monthly rent.</p>
+                  </div>
+                )}
+                {pending?.officeCash && pending.gstIncluded && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
-                    label="Pay in cash at our office" variant="secondary" className="w-full" />
+                    label="Switch to paying without GST" variant="quiet" className="w-full" />
                 )}
                 <div className="border-t border-border pt-4">
                   <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"

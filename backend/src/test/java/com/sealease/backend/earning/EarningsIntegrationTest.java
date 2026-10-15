@@ -18,10 +18,11 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,7 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Monthly payouts (rent only on current plans), the ledger, and maturity at the end of the tenure. */
+/** Rent credited hourly over the lease (rent only on current plans), the ledger, and maturity at its end. */
 @IntegrationTest
 class EarningsIntegrationTest {
 
@@ -62,68 +63,92 @@ class EarningsIntegrationTest {
 		investors = new InvestorFixtures(mvc, jdbc, api);
 	}
 
-	// ------------------------------------------------------------------------------ payouts
+	// --------------------------------------------------------------------------------- rent
 
 	@Test
-	void rentIsCreditedDailyAndTheContainerReturnsToStockAfterTheLastDay() throws Exception {
+	void rentIsCreditedHourlyAndTheContainerReturnsToStockAfterTheLastHour() throws Exception {
 		// ₹50,000 container at 2% rent, leased for 1 year (12 months): ₹1,000 a month. Plans pay rent only.
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
 
-		// Nothing on the day of purchase: a day is credited once it has ended.
+		// One rent accrual for the whole lease, starting at the next full hour: nothing is credited until an hour passes.
+		Map<String, Object> lease = jdbc.queryForMap(
+				"SELECT starts_at, ends_at, monthly_rent, tenure_months FROM rent_accruals WHERE holding_id = ?", holding);
+		Instant start = ((Timestamp) lease.get("starts_at")).toInstant();
+		assertThat(start.getEpochSecond() % 3600).isZero();
+		assertThat(start).isAfterOrEqualTo(Instant.now().truncatedTo(ChronoUnit.HOURS));
+		assertThat(((Timestamp) lease.get("ends_at")).toInstant()).isEqualTo(start.atZone(ZoneOffset.UTC).plusMonths(12).toInstant());
+		assertThat((BigDecimal) lease.get("monthly_rent")).isEqualByComparingTo("1000");
 		assertThat(payouts.creditDue()).isZero();
 		assertThat(credits(holding)).isZero();
 
-		// Three months later: every day since the lease started is credited, one ledger transaction each.
-		int days = backdate(holding, 3);
-		assertThat(payouts.creditDue()).isEqualTo(days);
-		assertThat(credits(holding)).isEqualTo(days);
+		// Three lease months later: every hour is credited, one ledger transaction per calendar month they fall in.
+		long hours = backdate(holding, 3);
+		Instant hour = Instant.now().truncatedTo(ChronoUnit.HOURS);
+		assertThat(payouts.creditDue()).isEqualTo(hours);
+		assertThat(credits(holding)).isEqualTo(calendarMonths(hour.minus(hours, ChronoUnit.HOURS), hour));
 		assertThat(payouts.creditDue()).as("crediting again changes nothing").isZero();
-		BigDecimal credited = expectedCredited(holding);
-		assertThat(credited).isGreaterThan(new BigDecimal("2900")).isLessThan(new BigDecimal("3100"));
+		// Exactly three months' rent, however long those months are.
 		assertThat(jdbc.queryForObject("SELECT sum(rent_amount) FROM rent_credits WHERE holding_id = ?", BigDecimal.class,
-				holding)).isEqualByComparingTo(credited);
-		int paid = paid(holding);
-		assertThat(paid).as("whole periods credited").isBetween(2, 4);
+				holding)).isEqualByComparingTo("3000");
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM rent_credits WHERE holding_id = ? AND date_trunc('month', from_at "
+				+ "AT TIME ZONE 'UTC') <> date_trunc('month', (to_at - interval '1 second') AT TIME ZONE 'UTC')", Integer.class,
+				holding)).as("no credit spans two months").isZero();
 
 		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balances[0].amount").value(credited.setScale(2).toPlainString()))
+			.andExpect(jsonPath("$.balances[0].amount").value("3000.00"))
+			.andExpect(jsonPath("$.rentPaid[0].amount").value("3000.00"))
 			.andExpect(jsonPath("$.capitalReturned.length()").value(0))
-			.andExpect(jsonPath("$.holdings[0].paid").value(paid))
-			.andExpect(jsonPath("$.holdings[0].installments").value(installments(holding)));
-		mvc.perform(get("/api/v1/earnings").param("status", "PAID").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(paid))
-			.andExpect(jsonPath("$.content[0].capital.amount").value("0.00"))
-			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty());
+			.andExpect(jsonPath("$.leases[0].rentCredited.amount").value("3000.00"))
+			.andExpect(jsonPath("$.leases[0].totalRent.amount").value("12000.00"))
+			.andExpect(jsonPath("$.leases[0].status").value("RUNNING"))
+			.andExpect(jsonPath("$.nextPayout").doesNotExist())
+			// Credited up to the current hour: the next credit comes when it ends.
+			.andExpect(jsonPath("$.nextCreditAt").value(hour.plus(1, ChronoUnit.HOURS).toString()));
+		mvc.perform(get("/api/v1/earnings").param("status", "RUNNING").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(1))
+			.andExpect(jsonPath("$.content[0].capitalTotal.amount").value("0.00"))
+			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty())
+			.andExpect(jsonPath("$.content[0].userId").doesNotExist());
 
-		// Each day is one balanced ledger transaction: the rent is a platform expense (no capital posting).
-		Map<String, Object> day = jdbc.queryForMap("""
-				SELECT c.installment_id, c.day, c.rent_amount FROM rent_credits c WHERE c.holding_id = ? ORDER BY c.day LIMIT 1""",
-				holding);
-		String rent = ((BigDecimal) day.get("rent_amount")).setScale(4).toPlainString();
-		assertThat(entries(day.get("installment_id") + ":" + day.get("day"))).containsExactlyInAnyOrder(
+		// Each credit is one balanced ledger transaction: the rent is a platform expense (no capital posting).
+		Map<String, Object> first = jdbc.queryForMap(
+				"SELECT from_at, rent_amount FROM rent_credits WHERE holding_id = ? ORDER BY from_at LIMIT 1", holding);
+		String rent = ((BigDecimal) first.get("rent_amount")).setScale(4).toPlainString();
+		Instant from = ((Timestamp) first.get("from_at")).toInstant();
+		assertThat(from).isEqualTo(hour.minus(hours, ChronoUnit.HOURS));
+		assertThat(entries(holding + ":" + from)).containsExactlyInAnyOrder(
 				"DEBIT PLATFORM_RENT_EXPENSE " + rent, "CREDIT INVESTOR_EARNINGS " + rent);
-		UUID first = jdbc.queryForObject("SELECT id FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
-				UUID.class, holding);
-		assertThat(api.auditCount("PAYOUT_PAID", first)).isEqualTo(1);
-		assertThat(outboxCount("earning.created", first.toString())).isEqualTo(1);
 
-		// The lease ends: the last day matures the holding and the container goes back to stock.
+		assertLedgerBalanced();
+	}
+
+	@Test
+	void theLastHourMaturesTheHoldingAndTheContainerReturnsToStock() throws Exception {
+		Account investor = investors.approvedInvestor();
+		String orderId = investors.invest(investor, offerings.plan(), 1);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
+		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
 		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("ON_LEASE");
+
+		// The whole year has passed: its rent is credited at once and the lease ends.
 		backdate(holding, 12);
 		payouts.creditDue();
-		assertThat(paid(holding)).isEqualTo(installments(holding));
+		assertThat(jdbc.queryForObject("SELECT completed_at IS NOT NULL FROM rent_accruals WHERE holding_id = ?",
+				Boolean.class, holding)).isTrue();
 		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?", String.class, holding)).isEqualTo("MATURED");
 		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("AVAILABLE");
 		assertThat(api.auditCount("HOLDING_MATURED", holding)).isEqualTo(1);
+		assertThat(payouts.creditDue()).as("nothing more to credit").isZero();
 		// The whole lease: 12 × ₹1,000, 24% of the price in rent, and nothing more.
 		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.balances[0].amount").value("12000.00"))
 			.andExpect(jsonPath("$.rentPaid[0].amount").value("12000.00"))
-			.andExpect(jsonPath("$.nextPayout").doesNotExist());
+			.andExpect(jsonPath("$.leases[0].status").value("COMPLETED"))
+			.andExpect(jsonPath("$.nextCreditAt").doesNotExist());
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.activeHoldings").value(0))
 			.andExpect(jsonPath("$.holdings[0].status").value("MATURED"));
@@ -131,56 +156,34 @@ class EarningsIntegrationTest {
 	}
 
 	@Test
-	void periodsAreCalendarMonthsAndAPartMonthEarnsCommissionInProportion() throws Exception {
-		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+	void commissionIsCreditedWithEachHourOfRent() throws Exception {
 		Account referrer = investors.approvedInvestor();
 		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
 			.andReturn().getResponse().getContentAsString(), "$.code");
 		Account investor = investors.approve(api.register(code));
-		// ₹50,000 container at 2% rent, leased for 1 year: ₹1,000 rent a whole month.
+		// ₹50,000 container at 2% rent, leased for 1 year: ₹1,000 rent a month; level-1 commission 2% of ₹50,000 a month.
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 
-		// The first period runs to the 1st of next month: its share is its days ÷ the month's days.
-		boolean onTheFirst = today.getDayOfMonth() == 1;
-		LocalDate firstEnd = today.withDayOfMonth(1).plusMonths(1);
-		Map<String, Object> first = jdbc.queryForMap("""
-				SELECT period_start, period_end, month_share, rent_amount, installment_count
-				FROM payout_installments WHERE holding_id = ? AND installment_number = 1""", holding);
-		BigDecimal share = (BigDecimal) first.get("month_share");
-		assertThat(first.get("installment_count")).isEqualTo(onTheFirst ? 12 : 13);
-		assertThat(first.get("period_start").toString()).isEqualTo(today.toString());
-		assertThat(first.get("period_end").toString()).isEqualTo(firstEnd.toString());
-		assertThat(share).isEqualByComparingTo(BigDecimal.valueOf(firstEnd.toEpochDay() - today.toEpochDay())
-			.divide(BigDecimal.valueOf(today.lengthOfMonth()), 6, RoundingMode.HALF_UP));
-		assertThat(jdbc.queryForObject("SELECT sum(month_share) FROM payout_installments WHERE holding_id = ?",
-				BigDecimal.class, holding)).isEqualByComparingTo("12");
-		assertThat(jdbc.queryForObject("SELECT sum(rent_amount) FROM payout_installments WHERE holding_id = ?",
-				BigDecimal.class, holding)).isEqualByComparingTo("12000");
-		// Every later period but the last starts on the 1st.
-		assertThat(jdbc.queryForObject("""
-				SELECT count(*) FROM payout_installments WHERE holding_id = ? AND installment_number > 1
-				AND extract(day FROM period_start) <> 1""", Integer.class, holding)).isZero();
-
-		// Once the first period is fully credited, the referrer earns its share of a month's 2% commission.
-		backdate(holding, firstEnd.toEpochDay() - today.toEpochDay());
+		// Two lease months: credited in one run per calendar month they cover (at least two), each paying the
+		// commission on its hours; together exactly two months' 2%.
+		backdate(holding, 2);
 		payouts.creditDue();
-		assertThat(jdbc.queryForObject("SELECT status FROM payout_installments WHERE holding_id = ? AND installment_number = 1",
-				String.class, holding)).isEqualTo("PAID");
-		BigDecimal base = new BigDecimal("50000").multiply(share).setScale(2, RoundingMode.DOWN);
-		mvc.perform(get("/api/v1/referrals/earnings").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM referral_earnings WHERE source_holding_id = ?",
+				Integer.class, holding)).isEqualTo(credits(holding)).isGreaterThanOrEqualTo(2);
+		assertThat(referralBalance(referrer)).isEqualByComparingTo("2000");
+		// Staff's commission history adds the hourly commissions up: one entry for the referred container this month.
+		mvc.perform(get("/api/v1/admin/referral-earnings").param("beneficiaryId", referrer.id().toString())
+				.header(HttpHeaders.AUTHORIZATION, api.staff("FINANCE").bearer()))
 			.andExpect(jsonPath("$.content.length()").value(1))
-			.andExpect(jsonPath("$.content[0].base.amount").value(base.toPlainString()))
-			.andExpect(jsonPath("$.content[0].amount.amount")
-				.value(base.multiply(new BigDecimal("0.02")).setScale(2, RoundingMode.DOWN).toPlainString()));
-		mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
-			.andExpect(jsonPath("$.wallet[?(@.balance == 'REFERRAL')].amount.amount")
-				.value(base.multiply(new BigDecimal("0.02")).setScale(2, RoundingMode.DOWN).toPlainString()));
+			.andExpect(jsonPath("$.content[0].month").value(YearMonth.now(ZoneOffset.UTC).toString()))
+			.andExpect(jsonPath("$.content[0].base.amount").value("100000.00"))
+			.andExpect(jsonPath("$.content[0].amount.amount").value("2000.00"));
 		assertLedgerBalanced();
 	}
 
 	@Test
-	void financeCanRunDuePayoutsNow() throws Exception {
+	void financeCanRunDueRentNow() throws Exception {
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
@@ -192,15 +195,16 @@ class EarningsIntegrationTest {
 			.andExpect(jsonPath("$[0].count").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
 		mvc.perform(get("/api/v1/admin/payouts").param("holdingId", holding.toString())
 				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(jsonPath("$.totalElements").value(installments(holding)))
+			.andExpect(jsonPath("$.totalElements").value(1))
 			.andExpect(jsonPath("$.content[0].userId").value(investor.id().toString()));
 
 		run(investor).andExpect(status().isForbidden());
 		run(api.staff("SUPPORT")).andExpect(status().isForbidden());
-		run(finance).andExpect(status().isOk()).andExpect(jsonPath("$.credited").value(org.hamcrest.Matchers.greaterThanOrEqualTo(28)));
-		assertThat(paid(holding)).isGreaterThanOrEqualTo(1);
+		run(finance).andExpect(status().isOk()).andExpect(jsonPath("$.credited").value(org.hamcrest.Matchers.greaterThanOrEqualTo(28 * 24)));
+		assertThat(jdbc.queryForObject("SELECT credited_rent FROM rent_accruals WHERE holding_id = ?", BigDecimal.class,
+				holding)).isEqualByComparingTo("1000");
 
-		// Investors see their own payouts only.
+		// Investors see their own leases only.
 		mvc.perform(get("/api/v1/earnings").header(HttpHeaders.AUTHORIZATION, investors.approvedInvestor().bearer()))
 			.andExpect(jsonPath("$.totalElements").value(0));
 	}
@@ -261,37 +265,41 @@ class EarningsIntegrationTest {
 	// ------------------------------------------------------------------------------ helpers
 
 	/**
-	 * Moves the holding's schedule into the past, as if the lease had started {@code months} months ago; every date
-	 * moves by the same number of days, so periods keep their lengths.
+	 * Moves the holding's lease into the past, as if it had started {@code months} lease months before the current
+	 * hour. Only for a lease nothing has been credited on yet: a real lease never moves.
 	 *
-	 * @return the days from the lease start to today
+	 * @return the hours from the lease start to the current hour
 	 */
-	private int backdate(UUID holding, int months) {
-		LocalDate today = LocalDate.now(ZoneOffset.UTC);
-		return backdate(holding, today.toEpochDay() - today.minusMonths(months).toEpochDay());
+	private long backdate(UUID holding, int months) {
+		Instant hour = Instant.now().truncatedTo(ChronoUnit.HOURS);
+		return backdateHours(holding, ChronoUnit.HOURS.between(hour.atZone(ZoneOffset.UTC).minusMonths(months).toInstant(), hour));
 	}
 
-	/** As {@link #backdate(UUID, int)}, the lease starting {@code days} days ago. */
-	private int backdate(UUID holding, long days) {
-		LocalDate start = jdbc.queryForObject(
-				"SELECT period_start FROM payout_installments WHERE holding_id = ? AND installment_number = 1", LocalDate.class, holding);
-		long shift = start.toEpochDay() - (LocalDate.now(ZoneOffset.UTC).toEpochDay() - days);
+	/** As {@link #backdate(UUID, int)}, the lease starting {@code hours} hours before the current hour. */
+	private long backdateHours(UUID holding, long hours) {
+		Instant target = Instant.now().truncatedTo(ChronoUnit.HOURS).minus(hours, ChronoUnit.HOURS);
 		jdbc.update("""
-				UPDATE payout_installments
-				SET period_start = period_start - ?, period_end = period_end - ?, due_on = due_on - ?,
-				    credited_through = credited_through - ?
-				WHERE holding_id = ?""", (int) shift, (int) shift, (int) shift, (int) shift, holding);
-		return (int) days;
+				UPDATE rent_accruals
+				SET starts_at = ?,
+				    ends_at = (? AT TIME ZONE 'UTC' + make_interval(months => tenure_months)) AT TIME ZONE 'UTC',
+				    credited_until = ?
+				WHERE holding_id = ? AND credited_until = starts_at""", Timestamp.from(target), Timestamp.from(target),
+				Timestamp.from(target), holding);
+		return hours;
 	}
 
-	/** What daily crediting should have credited to the holding by today: each period's rent × its elapsed share. */
-	private BigDecimal expectedCredited(UUID holding) {
-		return jdbc.queryForObject("""
-				SELECT sum(CASE WHEN period_end <= today THEN rent_amount
-				                WHEN period_start >= today THEN 0
-				                ELSE round(rent_amount * (today - period_start) / (period_end - period_start), 2) END)
-				FROM payout_installments, (SELECT (now() AT TIME ZONE 'UTC')::date AS today) t
-				WHERE holding_id = ?""", BigDecimal.class, holding);
+	/** Calendar months (UTC) the hours from {@code from} to {@code to} fall in. */
+	private static int calendarMonths(Instant from, Instant to) {
+		YearMonth first = YearMonth.from(from.atZone(ZoneOffset.UTC));
+		YearMonth last = YearMonth.from(to.minusSeconds(1).atZone(ZoneOffset.UTC));
+		return (int) ChronoUnit.MONTHS.between(first, last) + 1;
+	}
+
+	private BigDecimal referralBalance(Account investor) throws Exception {
+		String summary = mvc.perform(get("/api/v1/earnings/summary").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andReturn().getResponse().getContentAsString();
+		List<String> amounts = JsonPath.read(summary, "$.wallet[?(@.balance == 'REFERRAL')].amount.amount");
+		return amounts.isEmpty() ? BigDecimal.ZERO : new BigDecimal(amounts.getFirst());
 	}
 
 	private int credits(UUID holding) {
@@ -299,25 +307,14 @@ class EarningsIntegrationTest {
 		return count == null ? 0 : count;
 	}
 
-	private int installments(UUID holding) {
-		Integer count = jdbc.queryForObject("SELECT count(*) FROM payout_installments WHERE holding_id = ?", Integer.class, holding);
-		return count == null ? 0 : count;
-	}
-
-	private int paid(UUID holding) {
-		Integer count = jdbc.queryForObject("SELECT count(*) FROM payout_installments WHERE holding_id = ? AND status = 'PAID'",
-				Integer.class, holding);
-		return count == null ? 0 : count;
-	}
-
-	/** The ledger entries of a payout, as "DIRECTION ACCOUNT_TYPE amount". */
-	private List<String> entries(String installmentId) {
+	/** The ledger entries of a rent credit (by its reference), as "DIRECTION ACCOUNT_TYPE amount". */
+	private List<String> entries(String reference) {
 		return jdbc.queryForList("""
 				SELECT e.direction || ' ' || a.account_type || ' ' || e.amount
 				FROM ledger_entries e
 				JOIN ledger_transactions t ON t.id = e.transaction_id
 				JOIN ledger_accounts a ON a.id = e.account_id
-				WHERE t.transaction_type = 'INVESTOR_PAYOUT' AND t.reference = ?""", String.class, installmentId);
+				WHERE t.transaction_type = 'INVESTOR_PAYOUT' AND t.reference = ?""", String.class, reference);
 	}
 
 	private ResultActions run(Account actor) throws Exception {
@@ -339,12 +336,6 @@ class EarningsIntegrationTest {
 				GROUP BY t.currency
 				""", Boolean.class);
 		assertThat(balanced).isNotEmpty().containsOnly(true);
-	}
-
-	private int outboxCount(String topic, String aggregateId) {
-		Integer count = jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = ? AND aggregate_id = ?",
-				Integer.class, topic, aggregateId);
-		return count == null ? 0 : count;
 	}
 
 }

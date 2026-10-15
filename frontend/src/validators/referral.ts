@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zonedInputToIso } from "@/lib/time-zone";
 
 /** Client-side mirror of the backend's rate validation; the backend is authoritative. */
 const percent = z.string().trim().regex(/^\d{1,2}(\.\d{1,3})?$/, "Up to 3 decimals")
@@ -9,9 +10,9 @@ export const scheduleRatesSchema = z.object({
   level2: percent,
   level3: percent,
   level4: percent,
-  /** datetime-local input, read as UTC; empty means "now". */
+  /** datetime-local input, read in the display time zone; empty means "now". */
   effectiveFrom: z.string().trim().optional()
-    .transform((v) => (v ? `${v.length === 16 ? `${v}:00` : v}Z` : undefined))
+    .transform((v) => (v ? zonedInputToIso(v) : undefined))
     .pipe(z.iso.datetime("Enter a valid date and time").optional()),
   reason: z.string().trim().min(3, "Give a reason").max(500),
 }).refine((d) => [d.level1, d.level2, d.level3, d.level4].reduce((sum, v) => sum + Number(v), 0) <= 20, {

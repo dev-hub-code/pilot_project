@@ -26,7 +26,6 @@ import java.util.UUID;
 class BatchFileStore {
 
 	static final String PAYMENT = "PAYMENT";
-	static final String RECONCILIATION = "RECONCILIATION";
 	private static final String CONTEXT = "withdrawal_batch_file.content";
 
 	private static final RowMapper<BatchFileResponse> FILE = (rs, i) -> new BatchFileResponse(
@@ -69,27 +68,35 @@ class BatchFileStore {
 	/** The batch's bank file, if it was kept. */
 	@Transactional(readOnly = true)
 	Optional<StoredFile> payment(UUID batchId) {
-		return jdbc.query("SELECT filename, content_encrypted FROM withdrawal_batch_files WHERE batch_id = ? AND kind = ?",
-				(rs, i) -> stored(rs.getString("filename"), rs.getString("content_encrypted")), batchId, PAYMENT).stream().findFirst();
+		return jdbc.query("SELECT kind, filename, content_encrypted FROM withdrawal_batch_files WHERE batch_id = ? AND kind = ?",
+				(rs, i) -> stored(rs.getString("kind"), rs.getString("filename"), rs.getString("content_encrypted")), batchId,
+				PAYMENT).stream().findFirst();
 	}
 
 	@Transactional(readOnly = true)
 	StoredFile content(UUID batchId, UUID fileId) {
-		return jdbc.query("SELECT filename, content_encrypted FROM withdrawal_batch_files WHERE batch_id = ? AND id = ?",
-				(rs, i) -> stored(rs.getString("filename"), rs.getString("content_encrypted")), batchId, fileId).stream().findFirst()
+		return jdbc.query("SELECT kind, filename, content_encrypted FROM withdrawal_batch_files WHERE batch_id = ? AND id = ?",
+				(rs, i) -> stored(rs.getString("kind"), rs.getString("filename"), rs.getString("content_encrypted")), batchId,
+				fileId).stream().findFirst()
 			.orElseThrow(() -> new ResourceNotFoundException("Batch file", fileId));
 	}
 
-	private StoredFile stored(String filename, String encrypted) {
+	private StoredFile stored(String kind, String filename, String encrypted) {
 		String content = encryptor.decrypt(encrypted, CONTEXT);
-		return new StoredFile(filename, isText(filename) ? content.getBytes(StandardCharsets.UTF_8) : Base64.getDecoder().decode(content));
+		return new StoredFile(kind, filename, isText(filename) ? content.getBytes(StandardCharsets.UTF_8) : Base64.getDecoder().decode(content));
 	}
 
 	private static boolean isText(String filename) {
 		return filename.toLowerCase(java.util.Locale.ROOT).endsWith(".csv");
 	}
 
-	record StoredFile(String filename, byte[] content) {
+	/** @param kind PAYMENT (the sheet made with the batch); RECONCILIATION for completed sheets uploaded before uploads were removed */
+	record StoredFile(String kind, String filename, byte[] content) {
+
+		boolean isPayment() {
+			return PAYMENT.equals(kind);
+		}
+
 	}
 
 }

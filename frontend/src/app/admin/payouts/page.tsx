@@ -5,95 +5,99 @@ import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { runPayoutsAction } from "@/features/admin/ledger-actions";
 import { ActionButton } from "@/features/orders/action-button";
-import { PAYOUT_STATUS_LABEL, PAYOUT_TONE, todayUtc } from "@/features/earnings/labels";
+import { LEASE_STATUS_LABEL, LEASE_TONE, leaseNote, leasePercent } from "@/features/earnings/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
-import type { DuePayouts, Payout } from "@/types/earning";
-import { formatDate, formatDateTime, formatPeriod } from "@/utils/format";
+import type { DuePayouts, LeaseRent, LeaseRentStatus } from "@/types/earning";
+import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Payouts" };
+export const metadata: Metadata = { title: "Rent" };
 
-type View = { key: string; label: string; query: Record<string, string> };
-
-const VIEWS: readonly [View, ...View[]] = [
-  { key: "due", label: "Ended", query: { status: "SCHEDULED", dueBy: "" } },
-  { key: "scheduled", label: "In progress and upcoming", query: { status: "SCHEDULED", sort: "dueOn,asc" } },
-  { key: "paid", label: "Fully credited", query: { status: "PAID", sort: "dueOn,desc" } },
+const VIEWS: readonly { status: LeaseRentStatus; label: string }[] = [
+  { status: "RUNNING", label: "Earning now" },
+  { status: "COMPLETED", label: "Completed" },
 ];
 
 export default async function PayoutsPage({ searchParams }: PageProps<"/admin/payouts">) {
   const session = await requireStaff();
   const params = await searchParams;
-  const view = VIEWS.find((v) => v.key === params.view) ?? (params.status === "PAID" ? VIEWS[2]! : VIEWS[0]);
+  const view = VIEWS.find((v) => v.status === params.status) ?? VIEWS[0]!;
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
-  const query = new URLSearchParams({ page: String(page), size: "25", ...view.query });
-  if (view.key === "due") query.set("dueBy", todayUtc());
-  const [payouts, due] = await Promise.all([
-    authFetch<PageResponse<Payout>>(`/api/v1/admin/payouts?${query}`),
+  const query = new URLSearchParams({ page: String(page), size: "25", status: view.status });
+  const [leases, due] = await Promise.all([
+    authFetch<PageResponse<LeaseRent>>(`/api/v1/admin/payouts?${query}`),
     authFetch<DuePayouts[]>("/api/v1/admin/payouts/due"),
   ]);
   const dueCount = due.reduce((n, d) => n + d.count, 0);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payouts"
-        description="Every container's rent is credited to its investor's wallet every day: each day gets that month's rent ÷ its days. Each row is one calendar month of a lease (a part month at each end); it is fully credited when the month ends, and referral commission on it is paid then. Containers bought before plans became rent-only also get part of the price back, the same way." />
+      <PageHeader title="Rent"
+        description="Every container's rent is credited to its investor's wallet every hour of its lease, from the full hour after the container is assigned: the monthly rent × the lease months elapsed, so the whole lease pays exactly monthly rent × tenure. Referral commission on it is credited with it. Containers bought before plans became rent-only also get part of the price back, the same way." />
 
-      <Card title="Rent not yet credited" description="Days that have ended are credited automatically every hour.">
+      <Card title="Rent not yet credited" description="Hours that have ended are credited automatically within a minute or so.">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-sm">
             {dueCount === 0
-              ? "Nothing is waiting: every day of rent so far has been credited."
-              : due.map((d) => `${d.count} month(s) · ${formatMoney(d.total)}`).join(" · ")}
+              ? "Nothing is waiting: every hour of rent so far has been credited."
+              : due.map((d) => `${d.count} lease(s) behind · ${formatMoney(d.total)}`).join(" · ")}
           </p>
           {dueCount > 0 && hasPermission(session.permissions, Permission.PAYOUT_PROCESS) && (
             <ActionButton action={runPayoutsAction} label="Credit rent now" pendingLabel="Crediting…"
-              confirm="Credit every day of rent that has ended to investors' wallets now?" />
+              confirm="Credit every hour of rent that has ended to investors' wallets now?" />
           )}
         </div>
       </Card>
 
       <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
         {VIEWS.map((v) => (
-          <Link key={v.key} href={`/admin/payouts?view=${v.key}`} aria-current={v === view ? "page" : undefined}
+          <Link key={v.status} href={`/admin/payouts?status=${v.status}`} aria-current={v === view ? "page" : undefined}
             className={`rounded-full border px-3 py-1 ${v === view ? "border-foreground text-foreground" : "border-border text-muted"}`}>
             {v.label}
           </Link>
         ))}
       </nav>
 
-      {payouts.content.length === 0 ? (
-        <EmptyState title="No payouts here" />
+      {leases.content.length === 0 ? (
+        <EmptyState title={view.status === "RUNNING" ? "No leases earning rent" : "No completed leases"} />
       ) : (
-        <DataTable columns={["Due", "Investor", "Plan", "Container", "Payout", "Period", "Rent", "Capital", "Total", "Status"]}>
-          {payouts.content.map((p) => (
-            <tr key={p.id}>
-              <Cell className="text-muted">{formatDate(p.dueOn)}</Cell>
-              <Cell>{p.userId && <Link href={`/admin/users/${p.userId}`} className="text-gold-text hover:underline">View</Link>}</Cell>
-              <Cell className="font-mono text-xs">{p.productCode}</Cell>
-              <Cell className="font-mono text-xs">{p.containerNumber}</Cell>
-              <Cell className="tabular-nums">{p.installmentNumber} of {p.installmentCount}</Cell>
+        <DataTable columns={["Investor", "Plan", "Container", "Lease", "Monthly rent", "Rent credited", "Capital back", "Progress", "Status"]}>
+          {leases.content.map((l) => (
+            <tr key={l.holdingId} className="align-top">
+              <Cell>{l.userId && <Link href={`/admin/users/${l.userId}`} className="text-gold-text hover:underline">View</Link>}</Cell>
+              <Cell className="font-mono text-xs">{l.productCode}</Cell>
+              <Cell className="font-mono text-xs">{l.containerNumber}</Cell>
               <Cell className="whitespace-nowrap text-xs text-muted">
-                {formatPeriod(p.periodStart, p.periodEnd)}
-                {p.monthShare < 1 && <span className="block">Part month</span>}
+                {formatDate(l.startsAt)} – {formatDate(l.endsAt)}
+                <span className="block">{l.tenureMonths} months</span>
               </Cell>
-              <Cell className="tabular-nums">{formatMoney(p.rent)}</Cell>
-              <Cell className="tabular-nums">{formatMoney(p.capital)}</Cell>
-              <Cell className="tabular-nums font-medium">{formatMoney(p.total)}</Cell>
-              <Cell>
-                <StatusBadge tone={PAYOUT_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</StatusBadge>
-                {p.paidAt && <span className="block text-xs text-muted">{formatDateTime(p.paidAt)}</span>}
+              <Cell className="tabular-nums">{formatMoney(l.monthlyRent)}</Cell>
+              <Cell className="tabular-nums">
+                <span className="font-medium">{formatMoney(l.rentCredited)}</span>
+                <span className="block text-xs text-muted">of {formatMoney(l.totalRent)}</span>
               </Cell>
+              <Cell className="tabular-nums">
+                {formatMoney(l.capitalCredited)}
+                <span className="block text-xs text-muted">of {formatMoney(l.capitalTotal)}</span>
+              </Cell>
+              <Cell className="min-w-36">
+                <ProgressBar percent={leasePercent(l)} label={`${l.containerNumber ?? "Container"} lease credited`} />
+                <span className="mt-1 block text-xs text-muted">
+                  {leaseNote(l)}
+                </span>
+              </Cell>
+              <Cell><StatusBadge tone={LEASE_TONE[l.status]}>{LEASE_STATUS_LABEL[l.status]}</StatusBadge></Cell>
             </tr>
           ))}
         </DataTable>
       )}
-      <Pagination page={payouts} basePath="/admin/payouts" params={{ view: view.key }} />
+      <Pagination page={leases} basePath="/admin/payouts" params={{ status: view.status }} />
     </div>
   );
 }

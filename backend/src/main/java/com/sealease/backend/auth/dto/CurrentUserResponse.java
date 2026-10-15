@@ -5,6 +5,8 @@ import java.util.UUID;
 
 public record CurrentUserResponse(
 		UUID id,
+		/** The readable ID ("SL03500"). */
+		String userCode,
 		String email,
 		String firstName,
 		String lastName,

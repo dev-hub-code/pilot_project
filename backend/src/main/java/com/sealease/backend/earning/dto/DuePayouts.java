@@ -2,6 +2,6 @@ package com.sealease.backend.earning.dto;
 
 import com.sealease.backend.common.money.MoneyResponse;
 
-/** Scheduled payouts that have fallen due and are not paid yet, in one currency. */
+/** Leases with ended hours not credited yet (crediting is behind), in one currency, and what those hours come to. */
 public record DuePayouts(long count, MoneyResponse total) {
 }

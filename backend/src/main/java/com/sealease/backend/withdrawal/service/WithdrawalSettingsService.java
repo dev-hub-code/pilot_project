@@ -3,22 +3,22 @@ package com.sealease.backend.withdrawal.service;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
+import com.sealease.backend.common.money.MoneyProperties;
 import com.sealease.backend.withdrawal.dto.WithdrawalSettingsResponse;
-import com.sealease.backend.withdrawal.entity.WithdrawalKind;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 
-/** The days of the month withdrawals are made, set by an admin (one row, {@code withdrawal_settings}). */
+/**
+ * The minimum withdrawal, set by an admin (one row, {@code withdrawal_settings}). Until it is set, the configured
+ * {@code app.withdrawals.minimum-amount} applies.
+ */
 @Service
 public class WithdrawalSettingsService {
 
@@ -26,67 +26,49 @@ public class WithdrawalSettingsService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService audit;
+	private final WithdrawalProperties properties;
+	private final MoneyProperties money;
 	private final Clock clock;
 
-	public WithdrawalSettingsService(JdbcTemplate jdbc, AuditService audit, Clock clock) {
+	public WithdrawalSettingsService(JdbcTemplate jdbc, AuditService audit, WithdrawalProperties properties,
+			MoneyProperties money, Clock clock) {
 		this.jdbc = jdbc;
 		this.audit = audit;
+		this.properties = properties;
+		this.money = money;
 		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
 	public WithdrawalSettingsResponse get() {
-		return jdbc.queryForObject("SELECT rent_withdrawal_day, referral_withdrawal_day, updated_at FROM withdrawal_settings WHERE id = 1",
-				(rs, i) -> {
-					int rent = rs.getInt("rent_withdrawal_day");
-					int referral = rs.getInt("referral_withdrawal_day");
-					return new WithdrawalSettingsResponse(rent, referral, nextFileOn(WithdrawalKind.RENT, rent),
-							nextFileOn(WithdrawalKind.REFERRAL, referral), rs.getTimestamp("updated_at").toInstant());
-				});
+		return jdbc.queryForObject("SELECT minimum_amount, updated_at FROM withdrawal_settings WHERE id = 1", (rs, i) -> {
+			BigDecimal set = rs.getBigDecimal("minimum_amount");
+			Timestamp updatedAt = rs.getTimestamp("updated_at");
+			return new WithdrawalSettingsResponse(set == null ? properties.minimumAmount() : set.stripTrailingZeros(),
+					money.defaultCurrency().getCurrencyCode(), properties.minimumAmount(),
+					set == null || updatedAt == null ? null : updatedAt.toInstant());
+		});
 	}
 
-	/** The withdrawal day of a kind of withdrawal: bank payment, and cash at the office from then on. */
+	/** The amount a run's row must come to, in the platform's default currency. */
 	@Transactional(readOnly = true)
-	public int withdrawalDay(WithdrawalKind kind) {
-		WithdrawalSettingsResponse settings = get();
-		return kind == WithdrawalKind.RENT ? settings.rentWithdrawalDay() : settings.referralWithdrawalDay();
+	public BigDecimal minimumAmount() {
+		return get().minimumAmount();
 	}
 
-	/** Takes effect from the next run: a month that has already run is not run again. */
 	@Transactional
-	public WithdrawalSettingsResponse update(UUID actorId, int rentDay, int referralDay) {
-		Map<String, Object> before = jdbc.queryForMap(
-				"SELECT rent_withdrawal_day, referral_withdrawal_day FROM withdrawal_settings WHERE id = 1 FOR UPDATE");
-		int rentBefore = ((Number) before.get("rent_withdrawal_day")).intValue();
-		int referralBefore = ((Number) before.get("referral_withdrawal_day")).intValue();
-		if (rentBefore != rentDay || referralBefore != referralDay) {
-			jdbc.update("""
-					UPDATE withdrawal_settings SET rent_withdrawal_day = ?, referral_withdrawal_day = ?, updated_at = ?,
-					    updated_by = ? WHERE id = 1""", rentDay, referralDay, Timestamp.from(clock.instant()), actorId);
-			audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_DAY_CHANGED, ENTITY, null)
-				.withOldValue(Map.of("rentWithdrawalDay", rentBefore, "referralWithdrawalDay", referralBefore))
-				.withNewValue(Map.of("rentWithdrawalDay", rentDay, "referralWithdrawalDay", referralDay)));
+	public WithdrawalSettingsResponse update(UUID actorId, BigDecimal minimumAmount) {
+		BigDecimal before = jdbc.queryForObject("SELECT minimum_amount FROM withdrawal_settings WHERE id = 1 FOR UPDATE",
+				BigDecimal.class);
+		BigDecimal effectiveBefore = before == null ? properties.minimumAmount() : before;
+		if (before == null || effectiveBefore.compareTo(minimumAmount) != 0) {
+			jdbc.update("UPDATE withdrawal_settings SET minimum_amount = ?, updated_at = ?, updated_by = ? WHERE id = 1",
+					minimumAmount, Timestamp.from(clock.instant()), actorId);
+			audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_MINIMUM_CHANGED, ENTITY, null)
+				.withOldValue(Map.of("minimumAmount", effectiveBefore.toPlainString()))
+				.withNewValue(Map.of("minimumAmount", minimumAmount.toPlainString())));
 		}
 		return get();
-	}
-
-	/** The day a month's bank file is made: the day before its withdrawal day. */
-	static LocalDate fileDate(YearMonth month, int withdrawalDay) {
-		return month.atDay(withdrawalDay - 1);
-	}
-
-	/** This month's file date, or today when that has passed without a run (the job picks it up shortly). */
-	private LocalDate nextFileOn(WithdrawalKind kind, int withdrawalDay) {
-		LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
-		YearMonth month = YearMonth.from(today);
-		boolean ran = Boolean.TRUE.equals(jdbc.queryForObject(
-				"SELECT exists(SELECT 1 FROM scheduled_withdrawal_runs WHERE period = ? AND kind = ?)", Boolean.class,
-				month.toString(), kind.name()));
-		if (ran) {
-			return fileDate(month.plusMonths(1), withdrawalDay);
-		}
-		LocalDate date = fileDate(month, withdrawalDay);
-		return date.isBefore(today) ? today : date;
 	}
 
 }

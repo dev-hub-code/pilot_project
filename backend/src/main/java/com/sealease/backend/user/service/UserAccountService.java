@@ -8,11 +8,13 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.User;
+import com.sealease.backend.user.entity.UserCodes;
 import com.sealease.backend.user.entity.UserStatus;
 import com.sealease.backend.user.event.UserRegisteredEvent;
 import com.sealease.backend.user.repository.UserRepository;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -21,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -161,10 +165,40 @@ public class UserAccountService {
 			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
 	}
 
+	/**
+	 * Ids of the users a staff search names: by user code ("SL03500") that one user, otherwise those whose email or
+	 * name contains the text (at most {@code limit}).
+	 */
+	@Transactional(readOnly = true)
+	public List<UUID> searchIds(String query, int limit) {
+		if (query == null || query.isBlank()) {
+			return List.of();
+		}
+		Optional<Long> number = UserCodes.parse(query);
+		if (number.isPresent()) {
+			return users.findIdByUserNumber(number.get()).map(List::of).orElse(List.of());
+		}
+		String like = "%" + query.strip().toLowerCase(Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%")
+			.replace("_", "\\_") + "%";
+		return users.findIdsMatching(like, PageRequest.of(0, limit));
+	}
+
 	@Transactional(readOnly = true)
 	public Map<UUID, UserAccount> getAccounts(Collection<UUID> userIds) {
 		return users.findAllById(userIds).stream()
 			.collect(Collectors.toMap(User::getId, UserAccount::from));
+	}
+
+	/** Accounts locked right now after repeated failed sign-ins, latest lock first. */
+	@Transactional(readOnly = true)
+	public List<LockedAccount> lockedAccounts() {
+		return users.findByLockedUntilAfterOrderByLockedUntilDesc(clock.instant()).stream()
+			.map(u -> new LockedAccount(UserAccount.from(u), u.getLockedUntil(), u.getFailedLoginAttempts()))
+			.toList();
+	}
+
+	/** @param failedAttempts failed sign-ins in a row that led to the lock */
+	public record LockedAccount(UserAccount account, Instant lockedUntil, int failedAttempts) {
 	}
 
 	/**

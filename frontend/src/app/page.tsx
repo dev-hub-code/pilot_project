@@ -52,11 +52,11 @@ const BENEFITS = [
  * Investor reviews, shown as a carousel. Only real reviews, published with the investor's consent, may go here. Entries
  * marked `sample` are layout placeholders, never shown in production. Every review must
  * match how the platform works today: whole containers, rent only (the price is not paid back), lease chosen in whole years,
- * payouts to the wallet on the payout day, withdrawals to a verified bank account or in cash at the office.
+ * rent credited to the wallet every hour, withdrawals to a verified bank account or in cash at the office.
  */
 const REVIEWS: Review[] = [
   {
-    quote: "My rent reaches my SeaLease wallet on the payout day every month, and the Earnings page shows each payout per container. No chasing anyone.",
+    quote: "My rent reaches my SeaLease wallet every hour, and the Earnings page shows how much each container has earned. No chasing anyone.",
     name: "Priya S.",
     detail: "Pune · 3 containers",
     sample: true,
@@ -110,7 +110,7 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "I bought my container in the middle of the month and the first payout covered just the days up to the payout day. After that it has been the full rent every month.",
+    quote: "My container was assigned in the middle of the month and the rent started that same day, by the hour. No waiting for a payout date.",
     name: "Meera J.",
     detail: "Kochi · 1 container",
     sample: true,
@@ -183,7 +183,7 @@ const FAQS = [
   },
   {
     question: "What happens at the end of the lease?",
-    answer: "After the last monthly payout, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then invest again in any open plan.",
+    answer: "When the last hour of the lease is credited, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then invest again in any open plan.",
   },
   {
     question: "Can I earn by referring others?",
@@ -255,11 +255,12 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
     investors: COMPANY_RECORD.investors ?? SAMPLE_RECORD.investors,
     containers: COMPANY_RECORD.containers ?? SAMPLE_RECORD.containers,
   } : COMPANY_RECORD;
-  const live = SHOW_LIVE_FIGURES && stats && stats.payoutsPaid > 0 ? stats : null;
+  const live = SHOW_LIVE_FIGURES && stats && stats.containersEarning > 0 ? stats : null;
   const figures = {
     paid: record.paidToInvestorsCrore !== null ? `₹${record.paidToInvestorsCrore.toLocaleString("en-IN")} Cr+`
       : live && formatMoney(live.paidToInvestors, { compact: true }),
-    payouts: record.payoutsMade !== null ? thousands(record.payoutsMade) : live?.payoutsPaid.toLocaleString("en-IN"),
+    // Rent is credited hourly now, so the platform has no count of payouts: only the company's own figure is shown.
+    payouts: record.payoutsMade !== null ? thousands(record.payoutsMade) : null,
     investors: record.investors !== null ? thousands(record.investors) : live?.investors.toLocaleString("en-IN"),
     containers: record.containers !== null ? thousands(record.containers) : live?.containers.toLocaleString("en-IN"),
   };
@@ -388,10 +389,10 @@ export default async function Home() {
               <dl className="grid grid-cols-2 gap-px bg-border pt-px sm:grid-cols-4">
                 {[
                   { label: "Paid to investors", value: figures.paid },
-                  { label: "Monthly payouts made", value: figures.payouts },
+                  { label: "Payouts made", value: figures.payouts },
                   { label: "Investors", value: figures.investors },
                   { label: "Containers owned by investors", value: figures.containers },
-                ].map((figure) => (
+                ].filter((figure) => figure.value).map((figure) => (
                   <div key={figure.label} className="flex flex-col-reverse justify-end gap-1 bg-background px-3 py-5">
                     <dt className="text-xs text-muted">{figure.label}</dt>
                     <dd className="font-display text-2xl font-semibold">{figure.value}</dd>
@@ -584,8 +585,8 @@ export default async function Home() {
               </Carousel>
             </div>
             <p className="mt-6 text-xs leading-relaxed text-muted">
-              Figures are the plans&apos; published terms, not a promise of future returns. Rent is paid on the
-              monthly payout day; a container bought between payout days is paid for the days up to the first one.
+              Figures are the plans&apos; published terms, not a promise of future returns. Rent is credited to your
+              wallet every hour of the lease, from the full hour after your container is assigned.
             </p>
           </section>
         )}

@@ -157,11 +157,20 @@ public class Withdrawal extends BaseEntity {
 		return w;
 	}
 
-	/** A withdrawal made by the monthly run: approved by the schedule, so it goes straight to a batch. */
+	/** A withdrawal to a bank account made by a withdrawal run: approved by the run, so it goes straight to a batch. */
 	public static Withdrawal scheduled(String reference, UUID userId, Money amount, String idempotencyKey,
 			EarningsBalance balance, UUID bankAccountId, String bankHolderName, String bankName, String bankAccountLast4) {
 		Withdrawal w = new Withdrawal(reference, userId, amount, idempotencyKey, balance, bankAccountId,
 				bankHolderName, bankName, bankAccountLast4, 1);
+		w.origin = WithdrawalOrigin.SCHEDULED;
+		w.status = WithdrawalStatus.APPROVED;
+		return w;
+	}
+
+	/** A withdrawal in cash at the office made by a withdrawal run: goes straight to the run's cash batch. */
+	public static Withdrawal scheduledCash(String reference, UUID userId, Money amount, String idempotencyKey,
+			EarningsBalance balance) {
+		Withdrawal w = officeCash(reference, userId, amount, idempotencyKey, balance, 1);
 		w.origin = WithdrawalOrigin.SCHEDULED;
 		w.status = WithdrawalStatus.APPROVED;
 		return w;

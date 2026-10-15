@@ -207,7 +207,7 @@ public class AuthService {
 	public CurrentUserResponse currentUser(AuthenticatedUser user) {
 		UserAccount account = accounts.getAccount(user.userId());
 		UserAuthorities authorities = userRoles.authoritiesOf(user.userId());
-		return new CurrentUserResponse(account.id(), account.email(), account.firstName(), account.lastName(),
+		return new CurrentUserResponse(account.id(), account.userCode(), account.email(), account.firstName(), account.lastName(),
 				account.status().name(), authorities.roles(), authorities.permissions(), account.mustChangePassword());
 	}
 

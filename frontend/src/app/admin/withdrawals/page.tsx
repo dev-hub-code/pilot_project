@@ -6,6 +6,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { WithdrawalMinimumCard } from "@/features/admin/withdrawal-minimum-card";
 import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
 import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals/labels";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
@@ -19,7 +20,7 @@ export const metadata: Metadata = { title: "Withdrawals" };
 const FILTERS: readonly WithdrawalStatus[] = ["FAILED", "APPROVED", "BATCHED", "PROCESSING", "PAID", "RETURNED", "REJECTED"];
 
 export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"/admin/withdrawals">) {
-  await requireStaff();
+  const session = await requireStaff();
   const params = await searchParams;
   // Failed payments first: they wait on finance.
   const status = FILTERS.find((f) => f === params.status) ?? "FAILED";
@@ -31,8 +32,9 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
   return (
     <div className="space-y-6">
       <PageHeader title="Withdrawals"
-        description="Bank withdrawals are made each month in the rent and referral files. Cash is withdrawn at the office from the investor's page."
+        description="Withdrawals are made by withdrawal runs (Withdrawal files): each run has a bank sheet, and cash at the office is marked collected by hand."
         actions={<LinkButton href="/admin/withdrawals/batches" variant="secondary">Withdrawal files</LinkButton>} />
+      <WithdrawalMinimumCard permissions={session.permissions} />
       <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
         {FILTERS.map((f) => (
           <Link key={f} href={`/admin/withdrawals?status=${f}`} aria-current={f === status ? "page" : undefined}
@@ -56,7 +58,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
                   ? <>Cash at the office{w.status === "APPROVED" && <span className="block text-xs text-gold-text">To hand over</span>}</>
                   : <>{w.bankHolderName} <span className="text-xs text-muted">{w.bankName} {w.bankAccountMasked}</span></>}
               </Cell>
-              <Cell>{w.origin === "SCHEDULED" ? "Monthly run" : w.origin === "OFFICE" ? "At the office" : "Investor request"}</Cell>
+              <Cell>{w.origin === "SCHEDULED" ? "Withdrawal run" : w.origin === "OFFICE" ? "At the office" : "Investor request"}</Cell>
               <Cell><StatusBadge tone={WITHDRAWAL_TONE[w.status]}>{WITHDRAWAL_STATUS_LABEL[w.status]}</StatusBadge></Cell>
             </tr>
           ))}

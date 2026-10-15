@@ -14,6 +14,8 @@ export interface Address {
 
 export interface Profile {
   id: string;
+  /** The readable ID ("SL03500"). */
+  userCode: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -111,6 +113,8 @@ export interface AdminBankAccount {
 
 export interface AdminUserSummary {
   id: string;
+  /** The readable ID ("SL03500"). */
+  userCode: string;
   email: string;
   firstName: string;
   lastName: string;

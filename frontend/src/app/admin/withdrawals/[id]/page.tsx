@@ -4,9 +4,7 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ReasonForm } from "@/features/admin/decision-forms";
-import { rejectWithdrawalAction } from "@/features/admin/withdrawal-actions";
-import { HandOverCashForm, ResolveFailedForm } from "@/features/admin/withdrawal-forms";
+import { ResolveFailedForm } from "@/features/admin/withdrawal-forms";
 import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
 import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
@@ -34,10 +32,8 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
   const own = w.userId === session.userId;
   const cash = w.payoutMethod === "OFFICE_CASH";
   const process = can(Permission.WITHDRAWAL_PROCESS) && !own;
-  const toHandOver = cash && w.status === "APPROVED" && process;
-  const cancellable = cash && w.status === "APPROVED" && can(Permission.WITHDRAWAL_REJECT) && !own;
   const toResolve = w.status === "FAILED" && process;
-  const made = w.origin === "SCHEDULED" ? "By the monthly withdrawal run" : w.origin === "OFFICE" ? "At the office" : "Requested by the investor";
+  const made = w.origin === "SCHEDULED" ? "By a withdrawal run" : w.origin === "OFFICE" ? "At the office" : "Requested by the investor";
 
   return (
     <div className="space-y-6">
@@ -81,20 +77,9 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
           </dl>
         </Card>
 
-        {(toHandOver || cancellable || toResolve || (own && (cash || w.status === "FAILED"))) && (
+        {(toResolve || (own && w.status === "FAILED")) && (
           <div className="space-y-6">
             {own && <Notice tone="warning">This is your own withdrawal: someone else must handle it.</Notice>}
-            {toHandOver && (
-              <Card title="Hand over cash" description="Check the investor's photo ID, hand over the cash and have them sign the receipt.">
-                <HandOverCashForm withdrawalId={w.id} amount={formatMoney(w.amount)} />
-              </Card>
-            )}
-            {cancellable && (
-              <Card title="Cancel" description="If the cash is not handed over (e.g. the investor left), the amount returns to their balance.">
-                <ReasonForm action={rejectWithdrawalAction.bind(null, w.id)} label="Reason (shown to the investor)"
-                  submitLabel="Cancel withdrawal" confirm={`Cancel ${w.reference}? The amount returns to the investor's balance.`} />
-              </Card>
-            )}
             {toResolve && (
               <Card title="Resolve the failed payment" description="Once the ticket is sorted out. The investor is told and the ticket resolved.">
                 <ResolveFailedForm withdrawalId={w.id} amount={formatMoney(w.amount)} />

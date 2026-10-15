@@ -45,8 +45,9 @@ public class SecurityConfig {
 			"/api/v1/auth/verify-email/resend", "/api/v1/auth/verify-email/code", "/api/v1/auth/password-reset/request",
 			"/api/v1/auth/password-reset/confirm" };
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
-	/** The website's public read-only data: the track record and the open plans. */
-	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans" };
+	/** The website's public read-only data: the track record, the open plans, and countries, states and cities. */
+	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans",
+			"/api/v1/public/locations/**" };
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 
 	@Bean

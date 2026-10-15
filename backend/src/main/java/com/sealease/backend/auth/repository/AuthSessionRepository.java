@@ -22,6 +22,12 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, UUID> 
 			""")
 	boolean isActive(@Param("id") UUID id, @Param("now") Instant now);
 
+	@Query("select count(s) from AuthSession s where s.revokedAt is null and s.expiresAt > :now")
+	long countActive(@Param("now") Instant now);
+
+	@Query("select count(distinct s.userId) from AuthSession s where s.revokedAt is null and s.expiresAt > :now")
+	long countUsersWithActiveSessions(@Param("now") Instant now);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select s from AuthSession s where s.id = :id")
 	Optional<AuthSession> findByIdForUpdate(@Param("id") UUID id);

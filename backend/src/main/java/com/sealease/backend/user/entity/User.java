@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Generated;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -17,6 +18,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "users")
 public class User extends BaseEntity {
+
+	/** The readable number, from the database sequence on insert: shown as the user's ID (see {@link UserCodes}). */
+	@Generated
+	@Column(name = "user_number", insertable = false, updatable = false)
+	private Long userNumber;
 
 	@Column(name = "email", nullable = false, length = 254)
 	private String email;
@@ -69,6 +75,11 @@ public class User extends BaseEntity {
 	private boolean mfaEnabled;
 
 	protected User() {
+	}
+
+	/** "SL03500": the user's readable ID. */
+	public String getUserCode() {
+		return userNumber == null ? null : UserCodes.format(userNumber);
 	}
 
 	public User(String email, String passwordHash, String firstName, String lastName, Instant now) {

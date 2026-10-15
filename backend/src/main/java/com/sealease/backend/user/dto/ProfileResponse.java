@@ -12,6 +12,8 @@ import java.util.UUID;
 /** The caller's own profile. The tax id is only ever returned masked. */
 public record ProfileResponse(
 		UUID id,
+		/** The readable ID ("SL03500"). */
+		String userCode,
 		String email,
 		String firstName,
 		String lastName,
@@ -34,7 +36,7 @@ public record ProfileResponse(
 
 	public static ProfileResponse from(UserProfile p) {
 		var u = p.getUser();
-		return new ProfileResponse(u.getId(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus(),
+		return new ProfileResponse(u.getId(), u.getUserCode(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus(),
 				p.getPhone(), p.getDateOfBirth(), p.getNationality(),
 				new Address(p.getAddressLine1(), p.getAddressLine2(), p.getCity(), p.getStateRegion(),
 						p.getPostalCode(), p.getCountry()),

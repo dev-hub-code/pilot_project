@@ -71,7 +71,7 @@ export default async function AdminOverviewPage() {
           {charts.payouts && (
             <Card title="Paid to investors" description="Each month, by source" className="min-w-0 lg:col-span-2">
               {charts.payouts.length === 0 ? (
-                <EmptyState title="No payouts yet" description="Monthly payouts appear here once they are paid." />
+                <EmptyState title="Nothing credited yet" description="Rent and commission credited to investors appear here by month." />
               ) : (
                 <ColumnChart series={PAYOUT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Paid to investors by month"
                   data={monthColumns(charts.payouts, PAST, 0, CURRENCY, (m) => ({

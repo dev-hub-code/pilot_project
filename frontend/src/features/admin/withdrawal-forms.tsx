@@ -1,65 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { FileField } from "@/components/ui/file-field";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
-import { ordinal } from "@/utils/format";
 import type { FormState } from "@/validators/form-state";
 import {
-  handOverCashAction, reconcileBatchAction, resolveFailedAction, setReferralModeAction, settleBatchAction,
-  updateWithdrawalDaysAction,
+  resolveFailedAction, setReferralModeAction, setWithdrawalMinimumAction, updateFinanceTaskAction,
 } from "./withdrawal-actions";
 
-const DAYS = Array.from({ length: 27 }, (_, i) => ({ value: String(i + 2), label: ordinal(i + 2) }));
 
-/** Finance hands the cash of a withdrawal made at the office to the investor, against a signed receipt. */
-export function HandOverCashForm({ withdrawalId, amount }: { withdrawalId: string; amount: string }) {
-  const [state, action] = useActionState<FormState, FormData>(handOverCashAction.bind(null, withdrawalId), {});
-  return (
-    <form action={action} className="space-y-3" noValidate>
-      <FormFeedback state={state} />
-      <TextField label="Cash receipt number" name="receiptNumber" autoComplete="off" error={state.fieldErrors?.receiptNumber} />
-      <SubmitButton confirm={`Record that ${amount} was handed over in cash? This completes the withdrawal.`}>
-        Record cash handed over
-      </SubmitButton>
-    </form>
-  );
-}
-
-export function SettleBatchForm({ batchId, outstanding }: { batchId: string; outstanding: number }) {
-  const [state, action] = useActionState<FormState, FormData>(settleBatchAction.bind(null, batchId), {});
-  return (
-    <form action={action} className="space-y-3" noValidate>
-      <FormFeedback state={state} />
-      <TextField label="Bank statement reference (optional)" name="payoutReference" autoComplete="off"
-        error={state.fieldErrors?.payoutReference} />
-      <SubmitButton confirm={`Mark all ${outstanding} outstanding payment(s) as paid?`}>Mark remaining as paid</SubmitButton>
-    </form>
-  );
-}
-
-export function WithdrawalDaysForm({ rentDay, referralDay }: { rentDay: number; referralDay: number }) {
-  const [state, action] = useActionState<FormState, FormData>(updateWithdrawalDaysAction, {});
-  return (
-    <form action={action} className="space-y-4">
-      <FormFeedback state={state} />
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="w-full max-w-48">
-          <SelectField label="Rent withdrawal day" name="rentWithdrawalDay" options={DAYS}
-            defaultValue={String(rentDay)} error={state.fieldErrors?.rentWithdrawalDay} />
-        </div>
-        <div className="w-full max-w-48">
-          <SelectField label="Referral withdrawal day" name="referralWithdrawalDay" options={DAYS}
-            defaultValue={String(referralDay)} error={state.fieldErrors?.referralWithdrawalDay} />
-        </div>
-        <SubmitButton>Save days</SubmitButton>
-      </div>
-    </form>
-  );
-}
 
 /** How a failed bank payment was settled: paid by hand, or returned to the investor's balance. */
 export function ResolveFailedForm({ withdrawalId, amount }: { withdrawalId: string; amount: string }) {
@@ -105,18 +56,54 @@ export function ReferralModeAdminForm({ userId, mode }: { userId: string; mode: 
   );
 }
 
-/** Upload the batch's Excel file back with the Status column filled in after paying it. */
-export function ReconcileUploadForm({ batchId, reference }: { batchId: string; reference: string }) {
-  const [state, action] = useActionState<FormState, FormData>(reconcileBatchAction.bind(null, batchId), {});
+/** The minimum withdrawal, in rupees: rows below it stay in the investor's wallets until a later run. */
+export function WithdrawalMinimumForm({ minimumAmount }: { minimumAmount: number }) {
+  const [state, action] = useActionState<FormState, FormData>(setWithdrawalMinimumAction, {});
   return (
-    <form action={action} className="space-y-4" noValidate>
-      <FormFeedback state={state} />
-      <FileField label="Completed withdrawal file" name="file"
-        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required error={state.fieldErrors?.file}
-        hint={`The ${reference} Excel file with Status set to PAID or FAILED per row (blank rows stay outstanding). Remarks: the bank reference, or why it failed.`} />
-      <SubmitButton confirm="Update every withdrawal in the file to the status it gives? Each failed one is held and gets a support ticket.">
-        Upload and update
-      </SubmitButton>
+    <form action={action} className="flex flex-wrap items-end gap-3" noValidate>
+      <div className="w-full"><FormFeedback state={state} /></div>
+      <div className="w-48">
+        <TextField label="Minimum withdrawal (₹)" name="minimumAmount" inputMode="decimal" autoComplete="off"
+          defaultValue={String(minimumAmount)} error={state.fieldErrors?.minimumAmount} />
+      </div>
+      <SubmitButton variant="secondary" confirm="Change the minimum withdrawal? It applies from the next run.">Save</SubmitButton>
     </form>
+  );
+}
+
+/**
+ * Finance's update of an open task: paid (with the bank reference, or the receipt for cash collected at the office),
+ * or - behind a toggle - failed with the reason.
+ */
+export function FinanceTaskForm({ withdrawalId, reference, amount, cash }: {
+  withdrawalId: string;
+  reference: string;
+  amount: string;
+  cash: boolean;
+}) {
+  const [paidState, paid] = useActionState<FormState, FormData>(updateFinanceTaskAction.bind(null, withdrawalId, "PAID"), {});
+  const [failedState, failed] = useActionState<FormState, FormData>(updateFinanceTaskAction.bind(null, withdrawalId, "FAILED"), {});
+  return (
+    <div className="min-w-64 space-y-2">
+      <form action={paid} className="space-y-2" noValidate>
+        <FormFeedback state={paidState} />
+        <TextField label={cash ? "Receipt number (optional)" : "Bank reference / UTR (optional)"} name="reference"
+          autoComplete="off" error={paidState.fieldErrors?.reference} />
+        <SubmitButton confirm={cash ? `Record that the investor collected ${amount} in cash for ${reference}?`
+          : `Record that ${amount} for ${reference} has been paid into the investor's account?`}>
+          {cash ? "Collected" : "Paid"}
+        </SubmitButton>
+      </form>
+      <details>
+        <summary className="cursor-pointer text-xs text-muted">{cash ? "Not collected…" : "Bank could not pay it…"}</summary>
+        <form action={failed} className="mt-2 space-y-2" noValidate>
+          <FormFeedback state={failedState} />
+          <TextField label="Why" name="reason" autoComplete="off" error={failedState.fieldErrors?.reason} />
+          <SubmitButton variant="danger" confirm={`Mark ${reference} as ${cash ? "not collected" : "failed"}? The amount is held and a support ticket is opened for you.`}>
+            {cash ? "Not collected" : "Failed"}
+          </SubmitButton>
+        </form>
+      </details>
+    </div>
   );
 }

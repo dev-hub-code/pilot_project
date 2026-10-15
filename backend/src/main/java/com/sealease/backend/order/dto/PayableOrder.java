@@ -7,13 +7,22 @@ import com.sealease.backend.order.entity.OrderStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-/** What the payment module needs to know about an order. */
+/**
+ * What the payment module needs to know about an order.
+ *
+ * @param total           what the investor pays: the price plus GST
+ * @param totalWithoutGst the price alone, what an investor paying cash at the office pays
+ */
 public record PayableOrder(UUID id, String orderNumber, UUID userId, OrderStatus status, Money total,
-		Instant expiresAt) {
+		Money totalWithoutGst, Instant expiresAt) {
 
-	public static PayableOrder of(InvestmentOrder o) {
+	public static PayableOrder of(InvestmentOrder o, Money totalWithoutGst) {
 		return new PayableOrder(o.getId(), o.getOrderNumber(), o.getUserId(), o.getStatus(), o.total(),
-				o.getExpiresAt());
+				totalWithoutGst, o.getExpiresAt());
+	}
+
+	public Money due(boolean gstIncluded) {
+		return gstIncluded ? total : totalWithoutGst;
 	}
 
 	public boolean acceptsPaymentAt(Instant now) {

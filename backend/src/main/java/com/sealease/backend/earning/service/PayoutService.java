@@ -1,35 +1,32 @@
 package com.sealease.backend.earning.service;
 
-import com.sealease.backend.audit.AuditAction;
-import com.sealease.backend.audit.AuditRecord;
-import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.earning.dto.DuePayouts;
 import com.sealease.backend.earning.dto.EarningsSummary;
+import com.sealease.backend.earning.dto.LeaseRentResponse;
+import com.sealease.backend.earning.dto.LeaseRentResponse.LeaseRentStatus;
+import com.sealease.backend.earning.dto.LeaseSearchCriteria;
 import com.sealease.backend.earning.dto.PayoutMonth;
-import com.sealease.backend.earning.dto.PayoutResponse;
-import com.sealease.backend.earning.dto.PayoutSearchCriteria;
-import com.sealease.backend.earning.entity.PayoutInstallment;
-import com.sealease.backend.earning.entity.PayoutStatus;
-import com.sealease.backend.earning.event.PayoutPaidEvent;
-import com.sealease.backend.earning.repository.PayoutInstallmentRepository;
+import com.sealease.backend.earning.entity.RentAccrual;
+import com.sealease.backend.earning.event.RentCreditedEvent;
+import com.sealease.backend.earning.repository.RentAccrualRepository;
 import com.sealease.backend.investment.dto.HoldingLabel;
 import com.sealease.backend.investment.dto.PayoutTerms;
 import com.sealease.backend.investment.service.HoldingService;
-import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.dto.LedgerAccountResponse;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.service.LedgerService;
 import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
-import com.sealease.backend.outbox.DomainEvent;
-import com.sealease.backend.outbox.OutboxPublisher;
 import com.sealease.backend.referral.service.ReferralEarningService;
+import com.sealease.backend.withdrawal.service.WithdrawalService;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,17 +38,18 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Currency;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -59,84 +57,91 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Rent to investors, credited to their wallet every day. Each holding gets one installment per calendar month of its
- * lease (a part month at each end): the month's rent. Holdings sold before capital returns ended also get price ÷
- * tenure of capital back. Each whole day of an installment is credited the next day, in its own balanced ledger
- * transaction (unique per installment and day): the month's amount ÷ its days. Once a month is fully credited it is
- * PAID and referral commission on it is paid; after the last one the holding matures and its container returns to
- * inventory.
+ * Rent to investors, credited to their wallet every hour. Each holding has one rent accrual for its lease: the
+ * monthly rent (and, for holdings sold before capital returns ended, price ÷ tenure of capital back) owed for the lease
+ * months elapsed. Each run credits every whole hour that has passed since the lease was last credited, in one
+ * balanced ledger transaction per calendar month it covers (unique per holding and starting hour), so monthly
+ * statements add up exactly. Referral commission on those hours is paid with them. Once the lease end is credited the
+ * holding matures and its container returns to inventory.
  */
 @Service
 public class PayoutService {
 
-	private static final String ENTITY = "PAYOUT";
+	private static final Logger log = LoggerFactory.getLogger(PayoutService.class);
 	private static final int BATCH_SIZE = 200;
-	/** Payout periods start on the 1st: each is a calendar month. */
-	private static final int CALENDAR_MONTHS = 1;
+	private static final DateTimeFormatter HOUR = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 	/** The longest range {@link #monthly} answers: three years. */
 	static final int MAX_MONTHS = 36;
 
-	private final PayoutInstallmentRepository installments;
+	private final RentAccrualRepository accruals;
 	private final HoldingService holdings;
 	private final LedgerService ledger;
-	private final OutboxPublisher outbox;
-	private final AuditService audit;
 	private final ReferralEarningService referralEarnings;
-	private final PayoutSettingsService settings;
 	private final ApplicationEventPublisher events;
 	private final TransactionTemplate transactions;
 	private final JdbcTemplate jdbc;
+	private final WithdrawalService withdrawals;
+	private final RentCreditProperties credits;
 	private final Clock clock;
 
-	public PayoutService(PayoutInstallmentRepository installments, HoldingService holdings, LedgerService ledger,
-			OutboxPublisher outbox, AuditService audit, ReferralEarningService referralEarnings,
-			PayoutSettingsService settings, ApplicationEventPublisher events, TransactionTemplate transactions,
-			JdbcTemplate jdbc, Clock clock) {
-		this.jdbc = jdbc;
-		this.settings = settings;
-		this.installments = installments;
+	public PayoutService(RentAccrualRepository accruals, HoldingService holdings, LedgerService ledger,
+			ReferralEarningService referralEarnings, ApplicationEventPublisher events, TransactionTemplate transactions,
+			JdbcTemplate jdbc, WithdrawalService withdrawals, RentCreditProperties credits, Clock clock) {
+		this.accruals = accruals;
 		this.holdings = holdings;
 		this.ledger = ledger;
-		this.outbox = outbox;
-		this.audit = audit;
 		this.referralEarnings = referralEarnings;
 		this.events = events;
 		this.transactions = transactions;
+		this.jdbc = jdbc;
+		this.withdrawals = withdrawals;
+		this.credits = credits;
 		this.clock = clock;
-	}
-
-	/** Called by order confirmation for each new holding, in its transaction. */
-	@Transactional(propagation = Propagation.MANDATORY)
-	public void schedule(PayoutTerms terms) {
-		// Periods are calendar months (a part month at each end), so a day's rent is the month's rent ÷ its days.
-		List<PayoutSchedule.Entry> plan = PayoutSchedule.plan(terms.leaseStartsOn(), terms.tenureMonths(),
-				CALENDAR_MONTHS, terms.monthlyRent(), terms.capitalReturned());
-		List<PayoutInstallment> schedule = plan.stream()
-			.map(e -> new PayoutInstallment(terms.holdingId(), terms.userId(), terms.productId(), e.number(), plan.size(),
-					// Fully credited when the period ends (each day is credited the day after).
-				e.periodStart(), e.periodEnd(), e.monthShare(), e.periodEnd(), e.rent(), e.capital()))
-			.toList();
-		installments.saveAll(schedule);
-		installments.flush();
+		if (!credits.creditInterval().equals(Duration.ofHours(1))) {
+			log.warn("Rent is credited every {} instead of every hour: for testing only (app.payouts.credit-interval)",
+					credits.creditInterval());
+		}
 	}
 
 	/**
-	 * Credits every whole day of rent not yet credited (every day before today), each installment in its own
-	 * transaction so one failure does not hold back the rest. Safe to run concurrently and repeatedly: a day is
-	 * credited once (the ledger transaction is unique per installment and day).
+	 * When a lease taken at {@code now} starts: the next credit step (the next full hour in production), or now if
+	 * exactly on one.
+	 */
+	public Instant leaseStartAfter(Instant now) {
+		return credits.nextStepFrom(now);
+	}
+
+	/** Called when a holding's lease starts (its container is assigned), in that transaction. */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void schedule(PayoutTerms terms) {
+		accruals.saveAndFlush(new RentAccrual(terms.holdingId(), terms.userId(), terms.productId(), terms.leaseStartsAt(),
+				terms.tenureMonths(), terms.monthlyRent(), terms.capitalReturned()));
+	}
+
+	/**
+	 * Credits every whole hour of rent not yet credited (every hour that has passed), each lease in its own
+	 * transaction so one failure does not hold back the rest. Safe to run concurrently and repeatedly: an hour is
+	 * credited once (the ledger transaction is unique per holding and starting hour).
 	 *
-	 * @return the number of days credited, over all installments
+	 * @return the number of credit steps (hours in production) credited, over all leases
 	 */
 	public int creditDue() {
-		LocalDate today = today();
+		Instant now = clock.instant();
+		Instant step = credits.stepStart(now);
 		int credited = 0;
 		List<UUID> due;
 		do {
-			due = installments.findUncreditedIds(today, PageRequest.of(0, BATCH_SIZE));
+			due = accruals.findUncreditedIds(step, PageRequest.of(0, BATCH_SIZE));
 			int before = credited;
 			for (UUID id : due) {
-				Integer days = transactions.execute(status -> credit(id, today));
-				credited += days == null ? 0 : days;
+				try {
+					Integer hours = transactions.execute(status -> credit(id, now));
+					credited += hours == null ? 0 : hours;
+				}
+				catch (RuntimeException e) {
+					// Rolled back on its own; the next run tries it again.
+					log.error("Could not credit rent of lease {}", id, e);
+				}
 			}
 			if (credited == before) {
 				break;
@@ -146,25 +151,42 @@ public class PayoutService {
 		return credited;
 	}
 
-	/** Credits the installment's uncredited days before {@code today}, one ledger transaction per day. */
-	private int credit(UUID installmentId, LocalDate today) {
-		PayoutInstallment installment = installments.findByIdForUpdate(installmentId).orElse(null);
+	/** Credits the lease's hours that have passed by {@code now}: one credit per calendar month they fall in. */
+	private int credit(UUID accrualId, Instant now) {
+		RentAccrual accrual = accruals.findByIdForUpdate(accrualId).orElse(null);
 		// Re-checked under the lock: another run may have credited it since it was selected.
-		if (installment == null || installment.getStatus() != PayoutStatus.SCHEDULED
-				|| !installment.getCreditedThrough().isBefore(today)) {
+		if (accrual == null || accrual.isCompleted()) {
 			return 0;
 		}
-		HoldingLabel label = holdings.labels(List.of(installment.getHoldingId())).get(installment.getHoldingId());
+		Instant until = accrual.creditableUntil(credits.stepStart(now));
+		if (!until.isAfter(accrual.getCreditedUntil())) {
+			return 0;
+		}
+		Instant before = accrual.getCreditedUntil();
+		HoldingLabel label = holdings.labels(List.of(accrual.getHoldingId())).get(accrual.getHoldingId());
 		// Rent on a container paid in cash at the office is collected in cash there; otherwise it is paid by bank.
 		EarningsBalance balance = label.paidAtOffice() ? EarningsBalance.RENT_CASH : EarningsBalance.RENT_BANK;
-		Instant now = clock.instant();
-		int days = 0;
+		while (accrual.getCreditedUntil().isBefore(until)) {
+			Instant from = accrual.getCreditedUntil();
+			Instant to = min(until, firstOfNextMonth(from));
+			creditHours(accrual, label, balance, from, to, now);
+		}
+		accruals.flush();
+		if (accrual.isCompleted()) {
+			holdings.mature(accrual.getHoldingId(), now);
+		}
+		return (int) (Duration.between(before, accrual.getCreditedUntil()).toSeconds() / credits.creditInterval().toSeconds());
+	}
+
+	/** Credits the hours from {@code from} to {@code to} in one ledger transaction, and the commission on them. */
+	private void creditHours(RentAccrual accrual, HoldingLabel label, EarningsBalance balance, Instant from, Instant to,
+			Instant now) {
+		Money[] amounts = accrual.amountsUpTo(to);
+		Money rent = amounts[0];
+		Money capital = amounts[1];
+		Money total = rent.plus(capital);
 		UUID transactionId = null;
-		while (installment.getStatus() == PayoutStatus.SCHEDULED && installment.getCreditedThrough().isBefore(today)) {
-			LocalDate day = installment.getCreditedThrough();
-			Money[] amounts = installment.nextDay();
-			Money rent = amounts[0];
-			Money capital = amounts[1];
+		if (total.isPositive()) {
 			List<Posting> postings = new ArrayList<>();
 			if (rent.isPositive()) {
 				postings.add(Posting.debit(AccountType.PLATFORM_RENT_EXPENSE, null, rent));
@@ -172,50 +194,27 @@ public class PayoutService {
 			if (capital.isPositive()) {
 				postings.add(Posting.debit(AccountType.PLATFORM_CAPITAL_RETURNS, null, capital));
 			}
-			Money total = rent.plus(capital);
-			if (total.isPositive()) {
-				postings.add(Posting.credit(balance.account(), installment.getUserId(), total));
-				transactionId = ledger.post(TransactionType.INVESTOR_PAYOUT, installmentId + ":" + day,
-						"Rent for %s · %s · container %s".formatted(day, label.productCode(), label.containerNumber()),
-						null, postings);
-				jdbc.update("""
-						INSERT INTO rent_credits (id, installment_id, holding_id, user_id, day, rent_amount, capital_amount,
-						                          currency, ledger_transaction_id, created_at)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-						""", UUID.randomUUID(), installmentId, installment.getHoldingId(), installment.getUserId(), day,
-						rent.amount(), capital.amount(), total.currency().getCurrencyCode(), transactionId,
-						java.sql.Timestamp.from(now));
-			}
-			installment.creditDay(rent, capital, transactionId, now);
-			days++;
+			postings.add(Posting.credit(balance.account(), accrual.getUserId(), total));
+			transactionId = ledger.post(TransactionType.INVESTOR_PAYOUT, accrual.getHoldingId() + ":" + from,
+					"Rent %s to %s · %s · container %s".formatted(HOUR.format(from), HOUR.format(to), label.productCode(),
+							label.containerNumber()),
+					null, postings);
 		}
-		installments.flush();
-		if (installment.getStatus() == PayoutStatus.PAID) {
-			completed(installment, label, now);
+		accrual.creditUpTo(to, rent, capital, now);
+		if (transactionId == null) {
+			return;
 		}
-		return days;
-	}
-
-	/** A period fully credited: recorded, announced, and referral commission on it paid; the last one matures the holding. */
-	private void completed(PayoutInstallment installment, HoldingLabel label, Instant now) {
-		UUID installmentId = installment.getId();
-		audit.record(AuditRecord.of(null, AuditAction.PAYOUT_PAID, ENTITY, installmentId)
-			.withNewValue(Map.of("holdingId", installment.getHoldingId().toString(),
-					"installment", installment.getInstallmentNumber(), "rent", installment.rent().toString(),
-					"capital", installment.capital().toString(), "days", installment.days())));
-		outbox.publish(DomainEvent.of(KafkaTopics.EARNING_CREATED, "PayoutPaid", ENTITY, installmentId,
-				Map.of("installmentId", installmentId.toString(), "userId", installment.getUserId().toString(),
-						"holdingId", installment.getHoldingId().toString(),
-						"installmentNumber", installment.getInstallmentNumber(),
-						"rent", installment.rent().amount().toPlainString(),
-						"capital", installment.capital().amount().toPlainString(),
-						"currency", installment.rent().currency().getCurrencyCode())));
-		events.publishEvent(new PayoutPaidEvent(installmentId, installment.getUserId(), installment.getProductId(),
-				label.productCode(), installment.getInstallmentNumber(), label.amount(), installment.getMonthShare()));
-
-		if (!installments.existsByHoldingIdAndStatus(installment.getHoldingId(), PayoutStatus.SCHEDULED)) {
-			holdings.mature(installment.getHoldingId(), now);
-		}
+		UUID creditId = UUID.randomUUID();
+		jdbc.update("""
+				INSERT INTO rent_credits (id, holding_id, user_id, day, from_at, to_at, rent_amount, capital_amount,
+				                          currency, ledger_transaction_id, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				""", creditId, accrual.getHoldingId(), accrual.getUserId(), LocalDate.ofInstant(from, ZoneOffset.UTC),
+				Timestamp.from(from), Timestamp.from(to), rent.amount(), capital.amount(),
+				total.currency().getCurrencyCode(), transactionId, Timestamp.from(now));
+		events.publishEvent(new RentCreditedEvent(creditId, accrual.getHoldingId(), accrual.getUserId(),
+				accrual.getProductId(), label.productCode(), label.amount(), accrual.monthsAt(from), accrual.monthsAt(to),
+				from, to));
 	}
 
 	// ----------------------------------------------------------------------------- investor
@@ -226,59 +225,38 @@ public class PayoutService {
 		List<LedgerAccountResponse> accounts = ledger.investorAccounts(userId);
 		List<EarningsSummary.WalletBalance> wallet = accounts.stream()
 			.map(a -> new EarningsSummary.WalletBalance(EarningsBalance.of(a.accountType()), a.balance()))
-			.sorted(java.util.Comparator.comparing(EarningsSummary.WalletBalance::balance))
+			.sorted(Comparator.comparing(EarningsSummary.WalletBalance::balance))
 			.toList();
 		Map<String, Money> totals = new TreeMap<>();
 		accounts.forEach(a -> totals.merge(a.balance().currency(), Money.of(a.balance().amount(), a.balance().currency()), Money::plus));
 		List<MoneyResponse> balances = totals.values().stream().map(MoneyResponse::from).toList();
-		List<PayoutInstallment> all = installments.findByUserIdOrderByDueOnAscInstallmentNumberAsc(userId);
-		Map<UUID, HoldingLabel> labels = holdings.labels(all.stream().map(PayoutInstallment::getHoldingId).distinct().toList());
 
+		List<RentAccrual> leases = accruals.findByUserIdOrderByStartsAtAsc(userId);
+		Map<UUID, HoldingLabel> labels = holdings.labels(leases.stream().map(RentAccrual::getHoldingId).toList());
 		Map<String, Money> rent = new TreeMap<>();
 		Map<String, Money> capital = new TreeMap<>();
-		Map<UUID, List<PayoutInstallment>> byHolding = new LinkedHashMap<>();
-		for (PayoutInstallment p : all) {
-			byHolding.computeIfAbsent(p.getHoldingId(), id -> new ArrayList<>()).add(p);
-			if (p.getStatus() == PayoutStatus.PAID) {
-				rent.merge(p.rent().currency().getCurrencyCode(), p.rent(), Money::plus);
-				// Only holdings sold before capital returns ended have any.
-				if (p.capital().isPositive()) {
-					capital.merge(p.capital().currency().getCurrencyCode(), p.capital(), Money::plus);
-				}
+		for (RentAccrual a : leases) {
+			if (a.creditedRent().isPositive()) {
+				rent.merge(a.currency().getCurrencyCode(), a.creditedRent(), Money::plus);
+			}
+			// Only holdings sold before capital returns ended have any.
+			if (a.creditedCapital().isPositive()) {
+				capital.merge(a.currency().getCurrencyCode(), a.creditedCapital(), Money::plus);
 			}
 		}
-
-		EarningsSummary.NextPayout next = null;
-		List<PayoutInstallment> upcoming = all.stream().filter(p -> p.getStatus() == PayoutStatus.SCHEDULED).toList();
-		if (!upcoming.isEmpty()) {
-			LocalDate day = upcoming.getFirst().getDueOn();
-			Money total = upcoming.stream().filter(p -> p.getDueOn().equals(day)).map(PayoutInstallment::total)
-				.reduce(Money::plus).orElseThrow();
-			next = new EarningsSummary.NextPayout(day, MoneyResponse.from(total));
-		}
-
-		List<EarningsSummary.HoldingPayouts> perHolding = new ArrayList<>();
-		byHolding.forEach((holdingId, schedule) -> {
-			List<PayoutInstallment> paid = schedule.stream().filter(p -> p.getStatus() == PayoutStatus.PAID).toList();
-			PayoutInstallment following = schedule.stream().filter(p -> p.getStatus() == PayoutStatus.SCHEDULED)
-				.findFirst().orElse(null);
-			Currency currency = schedule.getFirst().total().currency();
-			Money received = paid.stream().map(PayoutInstallment::total).reduce(Money.zero(currency), Money::plus);
-			Instant lastPaidAt = paid.stream().map(PayoutInstallment::getPaidAt).max(Comparator.naturalOrder()).orElse(null);
-			HoldingLabel label = labels.get(holdingId);
-			perHolding.add(new EarningsSummary.HoldingPayouts(holdingId, schedule.getFirst().getProductId(),
-					label == null ? null : label.containerNumber(), paid.size(), schedule.size(),
-					MoneyResponse.from(received), following == null ? null : following.getDueOn(),
-					following == null ? null : MoneyResponse.from(following.total()), lastPaidAt));
-		});
+		// Hours are credited once they end: the earliest one not credited yet ends an hour after it starts.
+		Instant nextCreditAt = leases.stream().filter(a -> !a.isCompleted()).map(RentAccrual::getCreditedUntil)
+			.min(Comparator.naturalOrder()).map(from -> from.plus(credits.creditInterval())).orElse(null);
+		WithdrawalService.InvestorTotals withdrawn = withdrawals.totals(userId);
 		return new EarningsSummary(balances, wallet, responses(rent), responses(capital), referralEarnings.totalEarned(userId),
-				next, perHolding, settings.payoutDay());
+				leases.stream().map(a -> LeaseRentResponse.from(a, labels.get(a.getHoldingId()), false)).toList(),
+				withdrawn.inProgress().stream().map(MoneyResponse::from).toList(),
+				withdrawn.withdrawn().stream().map(MoneyResponse::from).toList(), nextCreditAt);
 	}
 
-	/** The investor's payouts, paid and scheduled. */
 	/**
-	 * The investor's payouts per calendar month from {@code from} to {@code to} (both included), by due date,
-	 * oldest first; months without payouts are left out.
+	 * The investor's rent per calendar month (UTC) from {@code from} to {@code to} (both included), oldest first:
+	 * credited so far, and still to come from leases running that month. Months without rent are left out.
 	 */
 	@Transactional(readOnly = true)
 	public List<PayoutMonth> monthly(UUID userId, YearMonth from, YearMonth to) {
@@ -286,19 +264,41 @@ public class PayoutService {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
 					"Choose a range of 1 to " + MAX_MONTHS + " months, ending after it starts");
 		}
-		// month|currency -> rent paid, capital paid, rent scheduled, capital scheduled
+		Instant rangeStart = from.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+		Instant rangeEnd = to.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+		// month|currency -> rent credited, capital credited, rent to come, capital to come
 		Map<String, Money[]> byMonth = new TreeMap<>();
-		for (PayoutInstallment p : installments.findByUserIdAndDueOnBetweenOrderByDueOn(userId, from.atDay(1),
-				to.atEndOfMonth())) {
-			Currency currency = p.total().currency();
-			Money[] sums = byMonth.computeIfAbsent(YearMonth.from(p.getDueOn()) + "|" + currency.getCurrencyCode(), k -> {
-				Money[] zeros = new Money[4];
-				Arrays.fill(zeros, Money.zero(currency));
-				return zeros;
-			});
-			int offset = p.getStatus() == PayoutStatus.PAID ? 0 : 2;
-			sums[offset] = sums[offset].plus(p.rent());
-			sums[offset + 1] = sums[offset + 1].plus(p.capital());
+		// Credits never span two months.
+		jdbc.query("""
+				SELECT to_char(from_at AT TIME ZONE 'UTC', 'YYYY-MM') AS month, currency, sum(rent_amount) AS rent,
+				       sum(capital_amount) AS capital
+				FROM rent_credits WHERE user_id = ? AND from_at >= ? AND from_at < ?
+				GROUP BY 1, 2
+				""", rs -> {
+			Currency currency = Currency.getInstance(rs.getString("currency"));
+			Money[] sums = sums(byMonth, rs.getString("month"), currency);
+			sums[0] = sums[0].plus(Money.of(rs.getBigDecimal("rent"), currency));
+			sums[1] = sums[1].plus(Money.of(rs.getBigDecimal("capital"), currency));
+		}, userId, Timestamp.from(rangeStart), Timestamp.from(rangeEnd));
+		// Still to come: what each running lease owes over the month's hours not credited yet.
+		for (RentAccrual a : accruals.findOverlapping(userId, rangeStart, rangeEnd)) {
+			if (a.isCompleted()) {
+				continue;
+			}
+			for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
+				Instant monthStart = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+				Instant monthEnd = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+				Instant start = max(monthStart, a.getCreditedUntil());
+				Instant end = min(monthEnd, a.getEndsAt());
+				if (!end.isAfter(start)) {
+					continue;
+				}
+				Money rentToCome = a.rentUpTo(end).minus(a.rentUpTo(start));
+				Money capitalToCome = a.capitalUpTo(end).minus(a.capitalUpTo(start));
+				Money[] sums = sums(byMonth, month.toString(), a.currency());
+				sums[2] = sums[2].plus(rentToCome);
+				sums[3] = sums[3].plus(capitalToCome);
+			}
 		}
 		List<PayoutMonth> months = new ArrayList<>();
 		byMonth.forEach((key, sums) -> months.add(new PayoutMonth(key.substring(0, key.indexOf('|')),
@@ -307,46 +307,63 @@ public class PayoutService {
 		return months;
 	}
 
+	private static Money[] sums(Map<String, Money[]> byMonth, String month, Currency currency) {
+		return byMonth.computeIfAbsent(month + "|" + currency.getCurrencyCode(), k -> {
+			Money[] zeros = new Money[4];
+			Arrays.fill(zeros, Money.zero(currency));
+			return zeros;
+		});
+	}
+
+	/** The investor's leases and the rent of each, latest lease first. */
 	@Transactional(readOnly = true)
-	public Page<PayoutResponse> mine(UUID userId, PayoutStatus status, Pageable pageable) {
-		return search(new PayoutSearchCriteria(status, userId, null, null), pageable, false);
+	public Page<LeaseRentResponse> mine(UUID userId, LeaseRentStatus status, Pageable pageable) {
+		return search(new LeaseSearchCriteria(status, userId, null), pageable, false);
 	}
 
 	// -------------------------------------------------------------------------------- staff
 
 	@Transactional(readOnly = true)
-	public Page<PayoutResponse> search(PayoutSearchCriteria criteria, Pageable pageable) {
+	public Page<LeaseRentResponse> search(LeaseSearchCriteria criteria, Pageable pageable) {
 		return search(criteria, pageable, true);
 	}
 
-	/** Payouts that have fallen due and are not paid yet, per currency. */
+	/** Leases with hours that have ended and are not credited yet, per currency, and what those hours come to. */
 	@Transactional(readOnly = true)
 	public List<DuePayouts> due() {
-		return installments.dueTotals(today()).stream()
-			.map(row -> new DuePayouts((Long) row[1], MoneyResponse.from(
-					Money.of((BigDecimal) row[2], Currency.getInstance((String) row[0])))))
+		Instant now = clock.instant();
+		Map<String, long[]> counts = new TreeMap<>();
+		Map<String, Money> owed = new TreeMap<>();
+		Instant step = credits.stepStart(now);
+		for (RentAccrual a : accruals.findBehind(step)) {
+			Money[] amounts = a.amountsUpTo(a.creditableUntil(step));
+			String currency = a.currency().getCurrencyCode();
+			counts.computeIfAbsent(currency, c -> new long[1])[0]++;
+			owed.merge(currency, amounts[0].plus(amounts[1]), Money::plus);
+		}
+		return counts.entrySet().stream()
+			.map(e -> new DuePayouts(e.getValue()[0], MoneyResponse.from(owed.get(e.getKey()))))
 			.toList();
 	}
 
-	private Page<PayoutResponse> search(PayoutSearchCriteria criteria, Pageable pageable, boolean staff) {
-		Page<PayoutInstallment> page = installments.findAll(matching(criteria), pageable);
-		Map<UUID, HoldingLabel> labels = holdings.labels(page.map(PayoutInstallment::getHoldingId).toSet());
-		return page.map(p -> PayoutResponse.from(p, labels.get(p.getHoldingId()), staff));
-	}
-
-	private LocalDate today() {
-		return LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+	private Page<LeaseRentResponse> search(LeaseSearchCriteria criteria, Pageable pageable, boolean staff) {
+		Page<RentAccrual> page = accruals.findAll(matching(criteria), pageable);
+		Map<UUID, HoldingLabel> labels = holdings.labels(page.map(RentAccrual::getHoldingId).toSet());
+		return page.map(a -> LeaseRentResponse.from(a, labels.get(a.getHoldingId()), staff));
 	}
 
 	private static List<MoneyResponse> responses(Map<String, Money> totals) {
 		return totals.values().stream().map(MoneyResponse::from).collect(Collectors.toList());
 	}
 
-	private static Specification<PayoutInstallment> matching(PayoutSearchCriteria c) {
+	private static Specification<RentAccrual> matching(LeaseSearchCriteria c) {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
-			if (c.status() != null) {
-				predicates.add(cb.equal(root.get("status"), c.status()));
+			if (c.status() == LeaseRentStatus.RUNNING) {
+				predicates.add(cb.isNull(root.get("completedAt")));
+			}
+			if (c.status() == LeaseRentStatus.COMPLETED) {
+				predicates.add(cb.isNotNull(root.get("completedAt")));
 			}
 			if (c.userId() != null) {
 				predicates.add(cb.equal(root.get("userId"), c.userId()));
@@ -354,11 +371,22 @@ public class PayoutService {
 			if (c.holdingId() != null) {
 				predicates.add(cb.equal(root.get("holdingId"), c.holdingId()));
 			}
-			if (c.dueBy() != null) {
-				predicates.add(cb.lessThanOrEqualTo(root.get("dueOn"), c.dueBy()));
-			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};
+	}
+
+	/** 00:00 UTC on the 1st of the month after the one {@code instant} falls in. */
+	static Instant firstOfNextMonth(Instant instant) {
+		return YearMonth.from(instant.atZone(ZoneOffset.UTC)).plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC)
+			.toInstant();
+	}
+
+	private static Instant min(Instant a, Instant b) {
+		return a.isBefore(b) ? a : b;
+	}
+
+	private static Instant max(Instant a, Instant b) {
+		return a.isAfter(b) ? a : b;
 	}
 
 }

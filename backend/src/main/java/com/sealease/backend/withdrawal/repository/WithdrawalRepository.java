@@ -20,6 +20,10 @@ import java.util.UUID;
 
 public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, JpaSpecificationExecutor<Withdrawal> {
 
+	/** The investor's withdrawals added up per currency and status: currency, status, amount. */
+	@Query("select w.currency, w.status, sum(w.amount) from Withdrawal w where w.userId = :userId group by w.currency, w.status")
+	List<Object[]> totalsByStatus(@Param("userId") UUID userId);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select w from Withdrawal w where w.id = :id")
 	Optional<Withdrawal> findByIdForUpdate(@Param("id") UUID id);

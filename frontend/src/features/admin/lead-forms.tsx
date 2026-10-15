@@ -10,14 +10,11 @@ import { INTEREST_LABEL, STAGES, STAGE_LABEL } from "@/features/leads/labels";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
 import type { Assignee, Lead, LeadStage } from "@/types/lead";
 import type { FormState } from "@/validators/form-state";
+import { TIME_ZONE_LABEL, isoToZonedInput } from "@/lib/time-zone";
 import { assignLeadAction, changeStageAction, logActivityAction, saveLeadAction } from "./lead-actions";
 
 
 /** "2026-10-07T09:30:00Z" → "2026-10-07T09:30" for a datetime-local input (UTC). */
-function toLocalInput(iso: string | null | undefined): string | undefined {
-  return iso ? iso.slice(0, 16) : undefined;
-}
-
 export function LeadForm({ lead, assignees }: { lead?: Lead; assignees?: Assignee[] }) {
   const [state, action] = useActionState<FormState, FormData>(saveLeadAction.bind(null, lead?.id ?? null), {});
   const e = state.fieldErrors ?? {};
@@ -35,8 +32,8 @@ export function LeadForm({ lead, assignees }: { lead?: Lead; assignees?: Assigne
           options={Object.entries(INTEREST_LABEL).map(([value, label]) => ({ value, label }))} />
         <TextField label={currencyLabel("Estimated investment")} name="estimatedAmount" inputMode="decimal"
           defaultValue={v("estimatedAmount", lead?.estimate?.amount)} error={e.estimatedAmount} />
-        <TextField label="Next follow-up (UTC)" name="nextFollowUpAt" type="datetime-local"
-          defaultValue={v("nextFollowUpAt", toLocalInput(lead?.nextFollowUpAt))} error={e.nextFollowUpAt} />
+        <TextField label={`Next follow-up (${TIME_ZONE_LABEL})`} name="nextFollowUpAt" type="datetime-local"
+          defaultValue={v("nextFollowUpAt", isoToZonedInput(lead?.nextFollowUpAt))} error={e.nextFollowUpAt} />
         {!lead && assignees && (
           <SelectField label="Owner" name="ownerId" defaultValue={v("ownerId") ?? ""} placeholder="Unassigned"
             options={assignees.map((a) => ({ value: a.userId, label: a.name }))} />

@@ -14,11 +14,8 @@ import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
-import { officeWithdrawalAction } from "@/features/admin/withdrawal-actions";
 import { ReferralModeAdminForm } from "@/features/admin/withdrawal-forms";
-import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
-import { ActionButton } from "@/features/orders/action-button";
-import type { OfficeWithdrawalOption, ReferralPayoutMode } from "@/types/withdrawal";
+import type { ReferralPayoutMode } from "@/types/withdrawal";
 import { ResetPasswordForm, RolesForm } from "@/features/admin/staff-forms";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
@@ -62,14 +59,9 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
     ])
     : [null, null];
   const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
-  // Withdrawals: how referral earnings are paid this year, and cash finance can withdraw at the office today.
+  // Withdrawals: how referral earnings are paid this year.
   const showWithdrawals = !fromBankVerification && !isStaffAccount && can(Permission.WITHDRAWAL_VIEW) && session.userId !== id;
-  const [referralMode, officeOptions] = showWithdrawals
-    ? await Promise.all([
-      authFetch<ReferralPayoutMode>(`/api/v1/admin/users/${id}/referral-mode`),
-      can(Permission.WITHDRAWAL_PROCESS) ? authFetch<OfficeWithdrawalOption[]>(`/api/v1/admin/withdrawals/office?userId=${id}`) : null,
-    ])
-    : [null, null];
+  const referralMode = showWithdrawals ? await authFetch<ReferralPayoutMode>(`/api/v1/admin/users/${id}/referral-mode`) : null;
   const { summary, profile } = user;
   const isSelf = session.userId === id;
 
@@ -80,6 +72,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
       )}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{summary.firstName} {summary.lastName}</h1>
+        <span className="font-mono text-sm text-muted">{summary.userCode}</span>
         <StatusBadge tone={toneFor(summary.status)}>{humanize(summary.status)}</StatusBadge>
         <StatusBadge tone={toneFor(summary.kycStatus)}>KYC {humanize(summary.kycStatus).toLowerCase()}</StatusBadge>
       </div>
@@ -200,24 +193,9 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
 
         <div className="space-y-6">
           {referralMode && (
-            <Card title="Cash at the office" description="Withdraw the investor's whole balance in cash, in front of them; then hand it over against a receipt.">
+            <Card title="Withdrawals" description="Rent on containers paid at the office is handed over in cash at the office (marked collected by hand); referral earnings are paid by bank sheet or in cash, as chosen for the year.">
               <div className="space-y-5 text-sm">
-                {officeOptions?.map((option) => (
-                  <div key={option.balance} className="space-y-2">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="font-medium">{EARNINGS_BALANCE_LABEL[option.balance]}</span>
-                      <span className="tabular-nums">{formatMoney(option.available)}</span>
-                    </div>
-                    {option.refusal ? (
-                      <p className="text-xs text-muted">{option.refusal}</p>
-                    ) : (
-                      <ActionButton action={officeWithdrawalAction.bind(null, id, option.balance)} variant="secondary"
-                        label={`Withdraw ${formatMoney(option.available)} in cash`} pendingLabel="Withdrawing…"
-                        confirm={`Withdraw ${formatMoney(option.available)} from ${EARNINGS_BALANCE_LABEL[option.balance].toLowerCase()} in cash now? The investor must be here to collect it.`} />
-                    )}
-                  </div>
-                ))}
-                <div className="space-y-2 border-t border-border pt-4">
+                <div className="space-y-2">
                   <p>
                     Referral earnings in {referralMode.year}:{" "}
                     <span className="font-medium">{referralMode.mode === "OFFICE_CASH" ? "cash at the office" : "into the bank account"}</span>

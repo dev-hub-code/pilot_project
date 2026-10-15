@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/features/orders/action-button";
+import { cancelOrderAction } from "@/features/orders/actions";
 import { ORDER_STATUS_LABEL, ORDER_TONE, containersSummary } from "@/features/orders/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
@@ -25,7 +27,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
       {orders.content.length === 0 ? (
         <EmptyState title="No orders yet" description="Orders appear here once you check out your cart." />
       ) : (
-        <DataTable columns={["Order", "Placed", "Containers", "Total", "Status"]}>
+        <DataTable columns={["Order", "Placed", "Containers", "Total", "Status", ""]}>
           {orders.content.map((o) => (
             <tr key={o.id} className="hover:bg-background">
               <Cell><Link href={`/orders/${o.id}`} className="font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
@@ -33,6 +35,12 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
               <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
               <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>
               <Cell><StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge></Cell>
+              <Cell>
+                {o.status === "PENDING_PAYMENT" && (
+                  <ActionButton action={cancelOrderAction.bind(null, o.id)} label="Cancel" variant="quiet" pendingLabel="Cancelling…"
+                    confirm={`Cancel ${o.orderNumber}? If you have already paid for it, the money is refunded to you once it arrives.`} />
+                )}
+              </Cell>
             </tr>
           ))}
         </DataTable>

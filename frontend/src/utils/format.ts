@@ -1,13 +1,18 @@
-const dateTime = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
-const dateOnly = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
+import { DISPLAY_TIME_ZONE, TIME_ZONE_LABEL } from "@/lib/time-zone";
 
-/** Timestamps are shown in UTC with an explicit suffix: financial records must be unambiguous. */
+const dateTime = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: DISPLAY_TIME_ZONE });
+const dateOnly = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: DISPLAY_TIME_ZONE });
+const calendarDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
+
+/** Timestamps are shown in the display time zone with its name after them: financial records must be unambiguous. */
 export function formatDateTime(iso: string | null | undefined): string {
-  return iso ? `${dateTime.format(new Date(iso))} UTC` : "—";
+  return iso ? `${dateTime.format(new Date(iso))} ${TIME_ZONE_LABEL}` : "—";
 }
 
+/** The date of a timestamp in the display time zone; a plain date ("2026-10-14") as it is. */
 export function formatDate(iso: string | null | undefined): string {
-  return iso ? dateOnly.format(new Date(iso)) : "—";
+  if (!iso) return "—";
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? calendarDate.format(new Date(`${iso}T00:00:00Z`)) : dateOnly.format(new Date(iso));
 }
 
 /** Today, in the viewer's own time zone, as YYYY-MM-DD: the latest date a date-of-birth calendar offers. */

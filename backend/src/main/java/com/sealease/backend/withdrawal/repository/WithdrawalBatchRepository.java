@@ -19,6 +19,8 @@ public interface WithdrawalBatchRepository extends JpaRepository<WithdrawalBatch
 	@Query("select b from WithdrawalBatch b where b.id = :id")
 	Optional<WithdrawalBatch> findByIdForUpdate(@Param("id") UUID id);
 
+	Optional<WithdrawalBatch> findByReferenceIgnoreCase(String reference);
+
 	Page<WithdrawalBatch> findByStatus(BatchStatus status, Pageable pageable);
 
 	@Query(value = "select nextval('withdrawal_batch_number_seq')", nativeQuery = true)

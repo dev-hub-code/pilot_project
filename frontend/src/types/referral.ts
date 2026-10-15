@@ -33,7 +33,8 @@ export interface ReferralEarning {
   sourceUserId: string | null;
   beneficiaryUserId: string | null;
   productCode: string | null;
-  installmentNumber: number;
+  /** The month (yyyy-MM, UTC) the commission was credited in. */
+  month: string;
   base: Money;
   ratePercent: number;
   amount: Money;

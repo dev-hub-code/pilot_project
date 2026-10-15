@@ -5,14 +5,14 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyFormat;
 import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.common.time.DisplayTimeZone;
 import com.sealease.backend.earning.dto.DuePayouts;
 import com.sealease.backend.earning.service.PayoutService;
-import com.sealease.backend.investment.dto.HoldingResponse;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.investment.service.ProductService;
 import com.sealease.backend.invoice.dto.InvoiceResponse;
-import com.sealease.backend.ledger.dto.InvestorStatement;
+import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.dto.PeriodTotal;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.Direction;
@@ -25,6 +25,7 @@ import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
 import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
+import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import com.sealease.backend.withdrawal.service.WithdrawalService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +34,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -56,7 +58,7 @@ public class ReportService {
 	/** Longest period a statement or summary may cover. */
 	static final long MAX_DAYS = 366;
 	private static final String LEDGER_NOTE = "Figures are taken from the SeaLease double-entry ledger; amounts are in the "
-			+ "currency shown, rounded to its minor unit. Dates are UTC.";
+			+ "currency shown, rounded to its minor unit. Dates are in %s.";
 
 	private final LedgerService ledger;
 	private final HoldingService holdings;
@@ -64,10 +66,12 @@ public class ReportService {
 	private final PayoutService payouts;
 	private final WithdrawalService withdrawals;
 	private final UserAccountService accounts;
+	private final DisplayTimeZone display;
 	private final Clock clock;
 
 	public ReportService(LedgerService ledger, HoldingService holdings, ProductService products, PayoutService payouts,
-			WithdrawalService withdrawals, UserAccountService accounts, Clock clock) {
+			WithdrawalService withdrawals, UserAccountService accounts, DisplayTimeZone display, Clock clock) {
+		this.display = display;
 		this.ledger = ledger;
 		this.holdings = holdings;
 		this.products = products;
@@ -77,7 +81,7 @@ public class ReportService {
 		this.clock = clock;
 	}
 
-	/** An inclusive range of UTC dates. */
+	/** An inclusive range of dates, in the display time zone. */
 	public record Period(LocalDate from, LocalDate to) {
 
 		public Period {
@@ -89,13 +93,13 @@ public class ReportService {
 			}
 		}
 
-		Instant start() {
-			return from.atStartOfDay(ZoneOffset.UTC).toInstant();
+		public Instant start(ZoneId zone) {
+			return from.atStartOfDay(zone).toInstant();
 		}
 
 		/** Exclusive. */
-		Instant end() {
-			return to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+		public Instant end(ZoneId zone) {
+			return to.plusDays(1).atStartOfDay(zone).toInstant();
 		}
 
 		String label() {
@@ -106,57 +110,62 @@ public class ReportService {
 
 	// ------------------------------------------------------------------- investor statement
 
+	/**
+	 * An investor's statement: their withdrawals made in the period (by rent and referral withdrawal runs), each with
+	 * where it was paid and how it stands, and what was paid out and is still in progress.
+	 */
 	@Transactional(readOnly = true)
 	public ReportDocument investorStatement(UUID userId, Period period) {
 		UserAccount investor = accounts.getAccount(userId);
-		List<Section> sections = new ArrayList<>();
-		for (InvestorStatement s : ledger.investorStatements(userId, period.start(), period.end())) {
-			Currency currency = Currency.getInstance(s.currency());
-			sections.add(new Section("Summary (" + MoneyFormat.symbol(currency) + ")", List.of("", "", "", "Amount"), List.of(
-					Row.of("Opening balance", "", "", Format.money(s.opening())),
-					Row.of("Monthly payouts", "Rent plus capital returned", "", Format.money(sum(s, currency, TransactionType.INVESTOR_PAYOUT))),
-					Row.of("Referral commissions", "", "", Format.money(sum(s, currency, TransactionType.REFERRAL_COMMISSION))),
-					Row.of("Adjustments", "", "", Format.money(sum(s, currency, TransactionType.ADJUSTMENT))),
-					Row.of("Withdrawals", "Requested, less any returned", "",
-							Format.money(sum(s, currency, TransactionType.WITHDRAWAL_RESERVE)
-								.plus(sum(s, currency, TransactionType.WITHDRAWAL_RELEASE)))),
-					Row.total("Closing balance", "", "", Format.money(s.closing())))));
-			sections.add(new Section("Account activity (" + MoneyFormat.symbol(currency) + ")", List.of("Date", "Description", "Type", "Amount"),
-					s.entries().stream()
-						.map(e -> Row.of(Format.date(e.at()), e.description(), Format.label(e.type().name()), Format.money(e.amount())))
-						.toList()));
+		List<WithdrawalResponse> made = withdrawals.forStatement(userId, period.start(zone()), period.end(zone()));
+		List<Row> rows = new ArrayList<>();
+		Map<String, Money> paid = new TreeMap<>();
+		Map<String, Money> inProgress = new TreeMap<>();
+		for (WithdrawalResponse w : made) {
+			Money amount = Money.of(new java.math.BigDecimal(w.amount().amount()), Currency.getInstance(w.amount().currency()));
+			boolean cash = w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH;
+			String paidTo = cash ? "Cash at the office" : w.bankName() + " " + w.bankAccountMasked();
+			rows.add(Row.of(Format.date(w.createdAt(), zone()),
+					w.reference() + " · " + (w.balance() == EarningsBalance.REFERRAL ? "Referral" : "Rent"),
+					paidTo + " · " + statementStatus(w, cash), Format.money(amount)));
+			if (w.status() == WithdrawalStatus.PAID) {
+				paid.merge(amount.currency().getCurrencyCode(), amount, Money::plus);
+			}
+			else if (WithdrawalStatus.OPEN.contains(w.status()) || w.status() == WithdrawalStatus.FAILED) {
+				inProgress.merge(amount.currency().getCurrencyCode(), amount, Money::plus);
+			}
 		}
-		if (sections.isEmpty()) {
-			sections.add(new Section("Summary", List.of("", "", "", "Amount"), List.of()));
-		}
-		List<HoldingResponse> held = holdings.portfolio(userId).holdings();
-		sections.add(new Section("Containers", List.of("Plan", "Container", "Lease", "Invested"), held.stream()
-			.map(h -> h.container() == null
-					// Paid, awaiting the container finance assigns; the lease starts then.
-					? Row.of(h.productCode(), "To be assigned · " + Format.label(h.status().name()), "Starts on assignment",
-							Format.money(h.amount()))
-					: Row.of(h.productCode(), h.container().containerNumber() + " · " + Format.label(h.status().name()),
-							Format.date(h.leaseStartsOn()) + " – " + Format.date(h.leaseEndsOn().minusDays(1)), Format.money(h.amount())))
-			.toList()));
-		List<WithdrawalResponse> paidOut = withdrawals.forStatement(userId, period.start(), period.end());
-		sections.add(new Section("Withdrawals requested in the period", List.of("Date", "Reference", "Status", "Amount"),
-				paidOut.stream()
-					.map(w -> Row.of(Format.date(w.createdAt()), w.reference() + " · " + (w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH ? "cash at the office"
-							: w.bankName() + " " + w.bankAccountMasked()),
-							Format.label(w.status().name()), Format.money(w.amount())))
-					.toList()));
-		return new ReportDocument("Investor statement", investor.firstName() + " " + investor.lastName() + " · "
-				+ investor.email() + " · " + period.label(),
-				"statement-" + period.from() + "-" + period.to(), clock.instant(), sections, LEDGER_NOTE);
+		paid.values().forEach(m -> rows.add(Row.total("Paid out", "", "", Format.money(m))));
+		inProgress.values().forEach(m -> rows.add(Row.total("In progress", "", "", Format.money(m))));
+		List<Section> sections = List.of(new Section("Withdrawals", List.of("Date", "Withdrawal", "Paid to · Status", "Amount"),
+				rows));
+		return new ReportDocument("Withdrawal statement", investor.firstName() + " " + investor.lastName() + " · "
+				+ (investor.userCode() == null ? "" : investor.userCode() + " · ") + investor.email() + " · " + period.label(),
+				"statement-" + period.from() + "-" + period.to(), clock.instant(), sections, LEDGER_NOTE.formatted(display.longName()));
+	}
+
+	/** How a withdrawal stands, as the investor reads it: paid (and when), in progress, failed or returned. */
+	private String statementStatus(WithdrawalResponse w, boolean cash) {
+		return switch (w.status()) {
+			case PAID -> (cash ? "Collected" : "Paid") + (w.closedAt() == null ? "" : " " + Format.date(w.closedAt(), zone()));
+			case FAILED -> cash ? "Not collected" : "Payment failed";
+			case RETURNED -> "Returned to your wallet";
+			case REJECTED, CANCELLED -> Format.label(w.status().name());
+			default -> "In progress";
+		};
+	}
+
+	private ZoneId zone() {
+		return display.zone();
 	}
 
 	// -------------------------------------------------------------------- financial summary
 
 	@Transactional(readOnly = true)
 	public ReportDocument financialSummary(Period period) {
-		Map<String, List<PeriodTotal>> totals = ledger.periodTotals(period.start(), period.end());
-		Map<String, Money> owed = ledger.investorBalancesAt(period.end());
-		Map<String, Money> inTransit = ledger.balancesAt(AccountType.WITHDRAWALS_IN_TRANSIT, period.end());
+		Map<String, List<PeriodTotal>> totals = ledger.periodTotals(period.start(zone()), period.end(zone()));
+		Map<String, Money> owed = ledger.investorBalancesAt(period.end(zone()));
+		Map<String, Money> inTransit = ledger.balancesAt(AccountType.WITHDRAWALS_IN_TRANSIT, period.end(zone()));
 		Set<String> currencies = new TreeSet<>(totals.keySet());
 		currencies.addAll(owed.keySet());
 		List<Section> sections = new ArrayList<>();
@@ -185,7 +194,7 @@ public class ReportService {
 					Row.total("Withdrawals in transit", "At the end of the period", "", Format.money(inTransit.getOrDefault(code, zero))))));
 		}
 		return new ReportDocument("Financial summary", period.label(), "financial-summary-" + period.from() + "-" + period.to(),
-				clock.instant(), sections, LEDGER_NOTE);
+				clock.instant(), sections, LEDGER_NOTE.formatted(display.longName()));
 	}
 
 	// --------------------------------------------------------------------- plans & payouts
@@ -194,7 +203,7 @@ public class ReportService {
 	public ReportDocument offerings() {
 		List<ProductResponse> all = products.published();
 		Map<UUID, Long> investors = holdings.investorCounts(all.stream().map(ProductResponse::id).toList());
-		LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+		LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
 
 		List<Row> plans = all.stream()
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
@@ -245,7 +254,7 @@ public class ReportService {
 		}
 		lines.add(Row.total("", "Total", "", Format.money(invoice.total())));
 		return new ReportDocument("Invoice " + invoice.invoiceNumber(), "Order " + invoice.orderNumber() + " · issued "
-				+ Format.date(invoice.issuedAt()), "invoice-" + invoice.invoiceNumber(), clock.instant(),
+				+ Format.date(invoice.issuedAt(), zone()), "invoice-" + invoice.invoiceNumber(), clock.instant(),
 				List.of(new Section("Parties", List.of("", "Name", "Details", ""), parties),
 						new Section("Items", List.of("#", "Description", "", "Amount"), lines)),
 				invoice.notes() == null ? "Thank you for investing with SeaLease. This invoice was issued electronically."
@@ -256,11 +265,6 @@ public class ReportService {
 
 	private static boolean positive(MoneyResponse m) {
 		return m != null && new java.math.BigDecimal(m.amount()).signum() > 0;
-	}
-
-	private static Money sum(InvestorStatement s, Currency currency, TransactionType type) {
-		return s.entries().stream().filter(e -> e.type() == type).map(InvestorStatement.Entry::amount)
-			.reduce(Money.zero(currency), Money::plus);
 	}
 
 	private static Money total(List<PeriodTotal> totals, Money zero, TransactionType type, AccountType account,
@@ -283,8 +287,8 @@ public class ReportService {
 			return m == null ? "" : money(Money.of(new BigDecimal(m.amount()), Currency.getInstance(m.currency())));
 		}
 
-		static String date(Instant at) {
-			return at == null ? "" : DATE.format(at.atZone(ZoneOffset.UTC));
+		static String date(Instant at, ZoneId zone) {
+			return at == null ? "" : DATE.format(at.atZone(zone));
 		}
 
 		static String date(LocalDate day) {
