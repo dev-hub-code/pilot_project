@@ -48,6 +48,29 @@ export interface PriorityRow {
   assignedToMe: number;
 }
 
+/** The viewer's arrangement of the overview; updatedAt is null until they arrange it (the default applies). */
+export interface DashboardLayout {
+  cards: string[];
+  hidden: string[];
+  updatedAt: string | null;
+  /** The cards the viewer's roles show; null when every card is allowed. */
+  allowed: string[] | null;
+}
+
+/** One card the overview can show. */
+export interface DashboardCardInfo {
+  key: string;
+  title: string;
+  group: string;
+}
+
+/** The cards a role shows; `configured` is false while it shows every card (the default). */
+export interface RoleDashboardCards {
+  configured: boolean;
+  cards: string[];
+  updatedAt: string | null;
+}
+
 /** The queues the viewer works; a queue they do not work on is null. */
 export interface Workload {
   financeTasks: WorkloadCounts | null;

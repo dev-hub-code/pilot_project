@@ -7,10 +7,17 @@ import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.reporting.dto.DashboardCharts;
 import com.sealease.backend.reporting.dto.Workload;
+import com.sealease.backend.reporting.dto.DashboardLayoutRequest;
+import com.sealease.backend.reporting.dto.DashboardLayoutResponse;
 import com.sealease.backend.reporting.dto.KpiTile;
+import com.sealease.backend.reporting.dto.RoleDashboardCardsRequest;
+import com.sealease.backend.reporting.dto.RoleDashboardCardsResponse;
 import com.sealease.backend.reporting.engine.ReportDocument;
 import com.sealease.backend.reporting.engine.ReportFormat;
+import com.sealease.backend.reporting.service.DashboardLayoutService;
+import com.sealease.backend.reporting.service.DashboardCards;
 import com.sealease.backend.reporting.service.DashboardService;
+import com.sealease.backend.reporting.service.RoleDashboardCardService;
 import com.sealease.backend.reporting.service.ReportResponses;
 import com.sealease.backend.reporting.service.ReportService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -18,6 +25,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,11 +50,15 @@ public class AdminReportController {
 	private final ReportService reports;
 	private final ReportResponses responses;
 	private final DashboardService dashboard;
+	private final DashboardLayoutService layouts;
+	private final RoleDashboardCardService roleCards;
 	private final OrderService orders;
 	private final InvoiceService invoices;
 
 	public AdminReportController(ReportService reports, ReportResponses responses, DashboardService dashboard,
-			OrderService orders, InvoiceService invoices) {
+			DashboardLayoutService layouts, RoleDashboardCardService roleCards, OrderService orders, InvoiceService invoices) {
+		this.layouts = layouts;
+		this.roleCards = roleCards;
 		this.reports = reports;
 		this.responses = responses;
 		this.dashboard = dashboard;
@@ -97,6 +112,53 @@ public class AdminReportController {
 	@PreAuthorize("isAuthenticated()")
 	public DashboardCharts dashboardCharts(AuthenticatedUser viewer) {
 		return dashboard.charts(viewer);
+	}
+
+	/** Every card the overview can show, for choosing a role's cards. */
+	@GetMapping("/api/v1/admin/dashboard/cards")
+	@PreAuthorize("hasAuthority('ROLE_VIEW')")
+	public List<DashboardCards.Card> cards() {
+		return DashboardCards.ALL;
+	}
+
+	/** The cards a role shows; every card until an admin chooses. */
+	@GetMapping("/api/v1/admin/roles/{roleId}/dashboard-cards")
+	@PreAuthorize("hasAuthority('ROLE_VIEW')")
+	public RoleDashboardCardsResponse roleCards(@PathVariable UUID roleId) {
+		return roleCards.get(roleId);
+	}
+
+	@PutMapping("/api/v1/admin/roles/{roleId}/dashboard-cards")
+	@PreAuthorize("hasAuthority('ROLE_MANAGE')")
+	public RoleDashboardCardsResponse chooseRoleCards(AuthenticatedUser actor, @PathVariable UUID roleId,
+			@Valid @RequestBody RoleDashboardCardsRequest request) {
+		return roleCards.choose(actor.userId(), roleId, request.cards());
+	}
+
+	/** Back to every card. */
+	@DeleteMapping("/api/v1/admin/roles/{roleId}/dashboard-cards")
+	@PreAuthorize("hasAuthority('ROLE_MANAGE')")
+	public RoleDashboardCardsResponse resetRoleCards(AuthenticatedUser actor, @PathVariable UUID roleId) {
+		return roleCards.reset(actor.userId(), roleId);
+	}
+
+	/** The viewer's own arrangement of the overview's cards; empty (with no {@code updatedAt}) until they arrange it. */
+	@GetMapping("/api/v1/admin/dashboard/layout")
+	@PreAuthorize("isAuthenticated() and !hasAuthority('INVESTOR_PORTAL')")
+	public DashboardLayoutResponse layout(AuthenticatedUser viewer) {
+		return layouts.get(viewer.userId());
+	}
+
+	@PutMapping("/api/v1/admin/dashboard/layout")
+	@PreAuthorize("isAuthenticated() and !hasAuthority('INVESTOR_PORTAL')")
+	public DashboardLayoutResponse saveLayout(AuthenticatedUser viewer, @Valid @RequestBody DashboardLayoutRequest request) {
+		return layouts.save(viewer.userId(), request.cards(), request.hidden());
+	}
+
+	@DeleteMapping("/api/v1/admin/dashboard/layout")
+	@PreAuthorize("isAuthenticated() and !hasAuthority('INVESTOR_PORTAL')")
+	public DashboardLayoutResponse resetLayout(AuthenticatedUser viewer) {
+		return layouts.reset(viewer.userId());
 	}
 
 	/** The viewer's task and ticket queues for the overview; queues they do not work on are null. */

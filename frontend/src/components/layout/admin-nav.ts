@@ -28,6 +28,7 @@ export function adminNavLinks(permissions: readonly string[]): MenuLink[] {
     { href: "/admin/reports", label: "Reports", show: can(Permission.REPORT_VIEW) || can(Permission.REPORT_GENERATE) },
     { href: "/admin/referrals", label: "Referrals",
       show: can(Permission.FINANCE_VIEW) || can(Permission.REFERRAL_CONFIG_MANAGE) },
+    { href: "/admin/roles", label: "Roles", show: can(Permission.ROLE_VIEW) },
     { href: "/admin/security", label: "Security", show: can(Permission.AUDIT_VIEW) },
     { href: "/admin/audit", label: "Audit log", show: can(Permission.AUDIT_VIEW) },
   ].filter((item) => item.show).map(({ href, label }) => ({ href, label }));

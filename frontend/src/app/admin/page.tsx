@@ -7,6 +7,8 @@ import { DataTable, Cell } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DashboardBoard, type Widget } from "@/features/dashboard/board";
+import { resetDashboardLayoutAction, saveDashboardLayoutAction } from "@/features/dashboard/layout-actions";
 import { monthColumns } from "@/features/dashboard/months";
 import { PRIORITY_TONE } from "@/features/support/labels";
 import { CURRENCY } from "@/lib/currency";
@@ -14,7 +16,7 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
-import type { DashboardCharts, KpiTile, PriorityRow, Workload, WorkloadCounts } from "@/types/report";
+import type { DashboardCharts, DashboardLayout, KpiTile, PriorityRow, Workload, WorkloadCounts } from "@/types/report";
 import { humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -38,7 +40,7 @@ export default async function AdminOverviewPage() {
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
 
-  const [tiles, charts, pendingKyc, pendingBanks, roles, toAssign, toConfirm, workload] = await Promise.all([
+  const [tiles, charts, pendingKyc, pendingBanks, roles, toAssign, toConfirm, workload, layout] = await Promise.all([
     authFetch<KpiTile[]>("/api/v1/admin/dashboard"),
     authFetch<DashboardCharts>("/api/v1/admin/dashboard/charts"),
     can(Permission.KYC_REVIEW) ? authFetch<PageResponse<unknown>>("/api/v1/admin/kyc?size=1") : null,
@@ -49,129 +51,157 @@ export default async function AdminOverviewPage() {
       : null,
     can(Permission.PAYMENT_CONFIRM) ? authFetch<PageResponse<unknown>>("/api/v1/admin/payments?status=PENDING&size=1") : null,
     authFetch<Workload>("/api/v1/admin/dashboard/workload"),
+    authFetch<DashboardLayout>("/api/v1/admin/dashboard/layout"),
   ]);
+
+  // The cards the viewer's roles show (an admin chooses them per role); all of them until one is chosen.
+  const allowed = new Set(layout.allowed ?? []);
+  const widgets: Widget[] = [];
+  const add = (key: string, title: string, span: Widget["span"], node: React.ReactNode) =>
+    widgets.push({ key, title, span, node });
+  const workloadCards = (prefix: string, group: string, counts: WorkloadCounts, noun: string,
+    links: { pending: string; mine: string; done: string }) => {
+    add(`${prefix}-pending`, `${group}: all pending`, 1, <QueueCard href={links.pending} group={group}
+      label={`All pending ${noun}`} count={counts.pending}
+      note={counts.overdue === null ? undefined : `${counts.overdue} overdue`} />);
+    add(`${prefix}-mine`, `${group}: assigned to me`, 1, <QueueCard href={links.mine} group={group}
+      label="Assigned to me" count={counts.assignedToMe} note="Pending, assigned to you" />);
+    add(`${prefix}-today`, `${group}: completed today`, 1, <QueueCard href={links.done} group={group}
+      label="Completed today" count={counts.doneToday} note={`${counts.doneTodayByMe} by you`} />);
+    add(`${prefix}-month`, `${group}: completed by me this month`, 1, <QueueCard href={links.done} group={group}
+      label="Completed by me this month" count={counts.doneThisMonthByMe} note={`${counts.doneThisMonth} by everyone`} />);
+  };
+
+  if (workload.supportTickets) {
+    workloadCards("support", "Support tickets", workload.supportTickets, "tickets",
+      { pending: "/admin/support", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved" });
+  }
+  if (workload.supportByPriority) {
+    add("support-priority", "Support: pending tickets by priority", 4, <PriorityTable rows={workload.supportByPriority} />);
+  }
+  if (workload.financeTasks) {
+    workloadCards("finance-task", "Finance tasks", workload.financeTasks, "tasks",
+      { pending: "/admin/finance-tasks", mine: "/admin/finance-tasks", done: "/admin/finance-tasks?view=DONE" });
+  }
+  if (workload.financeTickets) {
+    workloadCards("finance-ticket", "Tickets handed to finance", workload.financeTickets, "tickets",
+      { pending: "/admin/support?view=finance", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved" });
+  }
+  for (const tile of tiles) {
+    add(`kpi-${tile.key}`, tile.label, 1, (
+      <Link href={tile.link} className="block h-full space-y-2 border border-border bg-surface p-5 hover:border-brand">
+        <p className="text-xs uppercase tracking-[0.1em] text-muted">{tile.label}</p>
+        {tile.values.map((value) => (
+          <p key={value} className="font-display text-2xl font-semibold tabular-nums">{value}</p>
+        ))}
+        <p className="text-xs text-muted">{tile.note}</p>
+      </Link>
+    ));
+  }
+  if (charts.payouts) {
+    add("chart-payouts", "Chart: paid to investors", 2, (
+      <Card title="Paid to investors" description="Each month, by source" className="h-full min-w-0">
+        {charts.payouts.length === 0 ? (
+          <EmptyState title="Nothing credited yet" description="Rent and commission credited to investors appear here by month." />
+        ) : (
+          <ColumnChart series={PAYOUT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Paid to investors by month"
+            data={monthColumns(charts.payouts, PAST, 0, CURRENCY, (m) => ({
+              rent: m.rent, capital: m.capital, referral: m.referral,
+            }))} />
+        )}
+      </Card>
+    ));
+  }
+  if (charts.pipeline) {
+    add("chart-pipeline", "Chart: lead pipeline", 2, (
+      <Card title="Lead pipeline" description="Leads you can see, by stage" className="h-full min-w-0">
+        <BarList label="Leads by stage" fill="fill-chart-2"
+          items={charts.pipeline.map((p) => ({ label: humanize(p.stage), value: p.leads }))} />
+      </Card>
+    ));
+  }
+  if (charts.invested) {
+    add("chart-invested", "Chart: capital invested", 2, (
+      <Card title="Capital invested" description="Containers confirmed each month" className="h-full min-w-0">
+        {charts.invested.length === 0 ? (
+          <EmptyState title="No investments yet" description="Capital appears here once orders are paid." />
+        ) : (
+          <ColumnChart series={INVESTED_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Capital invested by month"
+            data={monthColumns(charts.invested, PAST, 0, CURRENCY, (m) => ({ amount: m.amount }))} />
+        )}
+      </Card>
+    ));
+  }
+  if (charts.investors) {
+    add("chart-investors", "Chart: new investors", 2, (
+      <Card title="New investors" description="Accounts registered each month" className="h-full min-w-0">
+        {charts.investors.length === 0 ? (
+          <EmptyState title="No new investors" description="Nobody has registered in the last twelve months." />
+        ) : (
+          <ColumnChart series={INVESTOR_SERIES} currentIndex={-PAST} label="New investors by month"
+            data={monthColumns(charts.investors, PAST, 0, CURRENCY, (m) => ({ count: m.count }))} />
+        )}
+      </Card>
+    ));
+  }
+  if (pendingKyc) {
+    add("queue-kyc", "KYC awaiting review", 1,
+      <QueueCard href="/admin/kyc" label="KYC awaiting review" count={pendingKyc.totalElements} />);
+  }
+  if (pendingBanks) {
+    add("queue-banks", "Bank accounts to verify", 1,
+      <QueueCard href="/admin/bank-accounts" label="Bank accounts to verify" count={pendingBanks.totalElements} />);
+  }
+  if (toConfirm) {
+    add("queue-payments", "Payments to confirm", 1,
+      <QueueCard href="/admin/payments" label="Payments to confirm" count={toConfirm.totalElements} />);
+  }
+  if (toAssign) {
+    add("queue-containers", "Paid investments awaiting a container", 1,
+      <QueueCard href="/admin/container-assignments" label="Paid investments awaiting a container" count={toAssign.totalElements} />);
+  }
+  if (roles) {
+    add("roles", "Roles & permissions", 4, (
+      <section className="space-y-3">
+        <h2 className="font-medium">Roles &amp; permissions</h2>
+        <DataTable columns={["Role", "Description", "Permissions", "Type"]}>
+          {roles.content.map((role) => (
+            <tr key={role.id}>
+              <Cell className="font-mono text-xs font-medium">
+                <Link href={`/admin/roles/${role.id}`} className="text-gold-text hover:underline">{role.name}</Link>
+              </Cell>
+              <Cell className="text-muted">{role.description}</Cell>
+              <Cell className="tabular-nums">{role.permissions.length}</Cell>
+              <Cell>
+                <StatusBadge tone={role.system ? "neutral" : "success"}>{role.system ? "System" : "Custom"}</StatusBadge>
+              </Cell>
+            </tr>
+          ))}
+        </DataTable>
+      </section>
+    ));
+  }
 
   return (
     <div className="space-y-8">
       <PageHeader title="Administration" description={`Signed in as ${session.roles.join(", ")}`} />
-
-      {workload.supportTickets && (
-        <WorkloadSection title="Support tickets" counts={workload.supportTickets} noun="tickets" links={{
-          pending: "/admin/support", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved",
-        }} />
-      )}
-      {workload.supportByPriority && <PriorityTable rows={workload.supportByPriority} />}
-      {workload.financeTasks && (
-        <WorkloadSection title="Finance tasks" counts={workload.financeTasks} noun="tasks" links={{
-          pending: "/admin/finance-tasks", mine: "/admin/finance-tasks", done: "/admin/finance-tasks?view=DONE",
-        }} />
-      )}
-      {workload.financeTickets && (
-        <WorkloadSection title="Tickets handed to finance" counts={workload.financeTickets} noun="tickets" links={{
-          pending: "/admin/support?view=finance", mine: "/admin/support?view=mine", done: "/admin/support?view=resolved",
-        }} />
-      )}
-
-      {tiles.length > 0 && (
-        <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Key figures">
-          {tiles.map((tile) => (
-            <Link key={tile.key} href={tile.link} className="space-y-2 bg-surface p-5 hover:bg-background">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">{tile.label}</p>
-              {tile.values.map((value) => (
-                <p key={value} className="font-display text-2xl font-semibold tabular-nums">{value}</p>
-              ))}
-              <p className="text-xs text-muted">{tile.note}</p>
-            </Link>
-          ))}
-        </section>
-      )}
-
-      {(charts.payouts || charts.pipeline) && (
-        <section className="grid gap-6 lg:grid-cols-3" aria-label="Payouts and leads">
-          {charts.payouts && (
-            <Card title="Paid to investors" description="Each month, by source" className="min-w-0 lg:col-span-2">
-              {charts.payouts.length === 0 ? (
-                <EmptyState title="Nothing credited yet" description="Rent and commission credited to investors appear here by month." />
-              ) : (
-                <ColumnChart series={PAYOUT_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Paid to investors by month"
-                  data={monthColumns(charts.payouts, PAST, 0, CURRENCY, (m) => ({
-                    rent: m.rent, capital: m.capital, referral: m.referral,
-                  }))} />
-              )}
-            </Card>
-          )}
-          {charts.pipeline && (
-            <Card title="Lead pipeline" description="Leads you can see, by stage"
-              className={charts.payouts ? "min-w-0" : "min-w-0 lg:col-span-3"}>
-              <BarList label="Leads by stage" fill="fill-chart-2"
-                items={charts.pipeline.map((p) => ({ label: humanize(p.stage), value: p.leads }))} />
-            </Card>
-          )}
-        </section>
-      )}
-
-      {(charts.invested || charts.investors) && (
-        <section className="grid gap-6 lg:grid-cols-2" aria-label="Growth">
-          {charts.invested && (
-            <Card title="Capital invested" description="Containers confirmed each month" className="min-w-0">
-              {charts.invested.length === 0 ? (
-                <EmptyState title="No investments yet" description="Capital appears here once orders are paid." />
-              ) : (
-                <ColumnChart series={INVESTED_SERIES} currency={CURRENCY} currentIndex={-PAST} label="Capital invested by month"
-                  data={monthColumns(charts.invested, PAST, 0, CURRENCY, (m) => ({ amount: m.amount }))} />
-              )}
-            </Card>
-          )}
-          {charts.investors && (
-            <Card title="New investors" description="Accounts registered each month" className="min-w-0">
-              {charts.investors.length === 0 ? (
-                <EmptyState title="No new investors" description="Nobody has registered in the last twelve months." />
-              ) : (
-                <ColumnChart series={INVESTOR_SERIES} currentIndex={-PAST} label="New investors by month"
-                  data={monthColumns(charts.investors, PAST, 0, CURRENCY, (m) => ({ count: m.count }))} />
-              )}
-            </Card>
-          )}
-        </section>
-      )}
-
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Work queues">
-        {pendingKyc && <QueueCard href="/admin/kyc" label="KYC awaiting review" count={pendingKyc.totalElements} />}
-        {pendingBanks && (
-          <QueueCard href="/admin/bank-accounts" label="Bank accounts to verify" count={pendingBanks.totalElements} />
-        )}
-        {toConfirm && (
-          <QueueCard href="/admin/payments" label="Payments to confirm" count={toConfirm.totalElements} />
-        )}
-        {toAssign && (
-          <QueueCard href="/admin/container-assignments" label="Paid investments awaiting a container" count={toAssign.totalElements} />
-        )}
-      </section>
-
-      {roles && (
-        <section className="space-y-3">
-          <h2 className="font-medium">Roles &amp; permissions</h2>
-          <DataTable columns={["Role", "Description", "Permissions", "Type"]}>
-            {roles.content.map((role) => (
-              <tr key={role.id}>
-                <Cell className="font-mono text-xs font-medium">{role.name}</Cell>
-                <Cell className="text-muted">{role.description}</Cell>
-                <Cell className="tabular-nums">{role.permissions.length}</Cell>
-                <Cell>
-                  <StatusBadge tone={role.system ? "neutral" : "success"}>{role.system ? "System" : "Custom"}</StatusBadge>
-                </Cell>
-              </tr>
-            ))}
-          </DataTable>
-        </section>
-      )}
+      <DashboardBoard widgets={layout.allowed ? widgets.filter((w) => allowed.has(w.key)) : widgets} layout={layout} saveAction={saveDashboardLayoutAction}
+        resetAction={resetDashboardLayoutAction} />
     </div>
   );
 }
 
-function QueueCard({ href, label, count, note }: { href: string; label: string; count: number; note?: string }) {
+function QueueCard({ href, label, count, note, group }: {
+  href: string;
+  label: string;
+  count: number;
+  note?: string;
+  /** The queue the card belongs to, shown above its label. */
+  group?: string;
+}) {
   return (
-    <Link href={href} className="border border-border bg-surface p-6 hover:border-brand">
+    <Link href={href} className="block h-full border border-border bg-surface p-6 hover:border-brand">
+      {group && <p className="text-xs uppercase tracking-[0.1em] text-muted">{group}</p>}
       <p className="text-sm text-muted">{label}</p>
       <p className="mt-2 text-3xl font-semibold tabular-nums">{count}</p>
       {note && <p className="mt-1 text-xs text-muted">{note}</p>}
@@ -198,28 +228,6 @@ function PriorityTable({ rows }: { rows: PriorityRow[] }) {
           </tr>
         ))}
       </DataTable>
-    </section>
-  );
-}
-
-/** Pending, assigned to the viewer, completed today (by everyone) and completed by the viewer this month. */
-function WorkloadSection({ title, counts, noun, links }: {
-  title: string;
-  counts: WorkloadCounts;
-  noun: string;
-  links: { pending: string; mine: string; done: string };
-}) {
-  return (
-    <section className="space-y-3" aria-label={title}>
-      <h2 className="font-medium">{title}</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <QueueCard href={links.pending} label={`All pending ${noun}`} count={counts.pending}
-          note={counts.overdue === null ? undefined : `${counts.overdue} overdue`} />
-        <QueueCard href={links.mine} label="Assigned to me" count={counts.assignedToMe} note="Pending, assigned to you" />
-        <QueueCard href={links.done} label="Completed today" count={counts.doneToday} note={`${counts.doneTodayByMe} by you`} />
-        <QueueCard href={links.done} label="Completed by me this month" count={counts.doneThisMonthByMe}
-          note={`${counts.doneThisMonth} by everyone`} />
-      </div>
     </section>
   );
 }

@@ -24,7 +24,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -199,6 +202,89 @@ class ReportIntegrationTest {
 			.andReturn().getResponse().getContentAsString();
 		assertThat((Object) JsonPath.read(both, "$.invested")).isNull();
 		assertThat((Object) JsonPath.read(both, "$.investors")).isNull();
+	}
+
+	@Test
+	void eachEmployeeArrangesTheirOwnDashboard() throws Exception {
+		Account agent = api.staff("SUPPORT");
+		Account colleague = api.staff("SUPPORT");
+		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.cards.length()").value(0))
+			.andExpect(jsonPath("$.updatedAt").doesNotExist());
+
+		layout(agent, "{\"cards\":[\"support-priority\",\"support-mine\"],\"hidden\":[\"support-pending\"]}")
+			.andExpect(status().isOk()).andExpect(jsonPath("$.updatedAt").isNotEmpty());
+		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(jsonPath("$.cards[0]").value("support-priority"))
+			.andExpect(jsonPath("$.cards[1]").value("support-mine"))
+			.andExpect(jsonPath("$.hidden[0]").value("support-pending"));
+		// Theirs alone.
+		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, colleague.bearer()))
+			.andExpect(jsonPath("$.cards.length()").value(0));
+
+		// A card once only, and only card keys.
+		layout(agent, "{\"cards\":[\"support-mine\"],\"hidden\":[\"support-mine\"]}").andExpect(status().is4xxClientError());
+		layout(agent, "{\"cards\":[\"<script>\"],\"hidden\":[]}").andExpect(status().isBadRequest());
+
+		mvc.perform(delete("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+			.andExpect(jsonPath("$.updatedAt").doesNotExist());
+
+		// Investors have no dashboard to arrange.
+		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, api.register().bearer()))
+			.andExpect(status().isForbidden());
+	}
+
+	private org.springframework.test.web.servlet.ResultActions layout(Account who, String body) throws Exception {
+		return mvc.perform(put("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, who.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content(body));
+	}
+
+	@Test
+	void adminsChooseTheDashboardCardsEachRoleShows() throws Exception {
+		String support = jdbc.queryForObject("SELECT id::text FROM roles WHERE name = 'SUPPORT'", String.class);
+		String verification = jdbc.queryForObject("SELECT id::text FROM roles WHERE name = 'VERIFICATION'", String.class);
+		Account agent = api.staff("SUPPORT");
+		Account both = api.staff("SUPPORT", "VERIFICATION");
+		try {
+			// Until chosen, a role shows every card.
+			mvc.perform(get("/api/v1/admin/roles/{id}/dashboard-cards", support).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andExpect(jsonPath("$.configured").value(false))
+				.andExpect(jsonPath("$.cards", hasItem("kpi-investors")));
+			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+				.andExpect(jsonPath("$.allowed").doesNotExist());
+
+			roleCards(admin, support, "[\"support-pending\",\"support-priority\"]").andExpect(status().isOk())
+				.andExpect(jsonPath("$.configured").value(true));
+			assertThat(api.auditCount("ROLE_DASHBOARD_CARDS_CHANGED", support)).isEqualTo(1);
+			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+				.andExpect(jsonPath("$.allowed.length()").value(2))
+				.andExpect(jsonPath("$.allowed", hasItem("support-priority")));
+			// With another role that has not chosen, everything is allowed; once both have chosen, either's cards.
+			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, both.bearer()))
+				.andExpect(jsonPath("$.allowed").doesNotExist());
+			roleCards(admin, verification, "[\"queue-kyc\"]").andExpect(status().isOk());
+			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, both.bearer()))
+				.andExpect(jsonPath("$.allowed.length()").value(3));
+
+			// Only known cards, and only by those who manage roles.
+			roleCards(admin, support, "[\"no-such-card\"]").andExpect(status().isBadRequest());
+			roleCards(agent, support, "[]").andExpect(status().isForbidden());
+
+			mvc.perform(delete("/api/v1/admin/roles/{id}/dashboard-cards", support).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.configured").value(false));
+			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
+				.andExpect(jsonPath("$.allowed").doesNotExist());
+		}
+		finally {
+			jdbc.update("DELETE FROM role_dashboard_cards");
+		}
+	}
+
+	private org.springframework.test.web.servlet.ResultActions roleCards(Account who, String roleId, String cards) throws Exception {
+		return mvc.perform(put("/api/v1/admin/roles/{id}/dashboard-cards", roleId).header(HttpHeaders.AUTHORIZATION, who.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"cards\":" + cards + "}"));
 	}
 
 	@Test
