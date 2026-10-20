@@ -9,6 +9,7 @@ import { SettingForm } from "@/features/admin/support-forms";
 import { Notice } from "@/components/ui/notice";
 import { ReplyForm } from "@/features/support/forms";
 import { CATEGORY_LABEL, PRIORITY_TONE, STAFF_STATUS_LABEL, TICKET_TONE } from "@/features/support/labels";
+import { LiveRefresh } from "@/features/support/live-refresh";
 import { Thread } from "@/features/support/thread";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
@@ -72,6 +73,7 @@ export default async function AdminTicketPage({ params }: PageProps<"/admin/supp
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
           <Thread messages={detail.messages} events={detail.events} viewer="staff" attachmentHref={(a) => `/admin/support/${t.id}/attachments/${a}`} />
+          {open && <LiveRefresh />}
           {canWork && open && (
             <Card title="Reply">
               <ReplyForm action={staffReplyAction.bind(null, t.id)} submitLabel="Send"

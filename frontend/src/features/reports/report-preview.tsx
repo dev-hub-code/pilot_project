@@ -1,3 +1,4 @@
+import { EmailText } from "@/components/ui/email-text";
 import { todayInZone } from "@/lib/time-zone";
 import type { ReportDocument } from "@/types/report";
 
@@ -22,9 +23,9 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
                   <tr><td colSpan={4} className="px-4 py-3 text-muted">Nothing in this period.</td></tr>
                 ) : section.rows.map((row, r) => (
                   <tr key={r} className={row.emphasis ? "font-semibold" : ""}>
-                    <td className="whitespace-nowrap px-4 py-2">{row.c1}</td>
-                    <td className="px-4 py-2">{row.c2}</td>
-                    <td className="px-4 py-2 text-muted">{row.c3}</td>
+                    <td className="whitespace-nowrap px-4 py-2"><EmailText>{row.c1}</EmailText></td>
+                    <td className="px-4 py-2"><EmailText>{row.c2}</EmailText></td>
+                    <td className="px-4 py-2 text-muted"><EmailText>{row.c3}</EmailText></td>
                     <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{row.c4}</td>
                   </tr>
                 ))}

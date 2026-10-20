@@ -15,6 +15,7 @@ import type { ContainerType, Money } from "@/types/marketplace";
 import type { Assignee } from "@/types/user";
 import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Assign containers" };
 
@@ -67,7 +68,7 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
                   </p>
                   <p>
                     <Link href={`/admin/users/${p.investorId}`} className="text-gold-text hover:underline">{name}</Link>
-                    {p.investorEmail && p.investorName && <span className="text-muted"> · {p.investorEmail}</span>}
+                    {p.investorEmail && p.investorName && <span className="text-muted"> · <EmailText>{p.investorEmail}</EmailText></span>}
                   </p>
                   <p className="text-muted">
                     {canViewOrders ? (

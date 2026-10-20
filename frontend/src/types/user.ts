@@ -20,7 +20,10 @@ export interface Profile {
   firstName: string;
   lastName: string;
   status: UserStatus;
+  /** In international form, e.g. "+919876543210". */
   phone: string | null;
+  /** The phone number's country (ISO 3166-1 alpha-2); null for a number saved before countries were asked. */
+  phoneCountry: string | null;
   dateOfBirth: string | null;
   nationality: string | null;
   address: Address;
@@ -128,6 +131,8 @@ export interface AdminUserSummary {
   lastName: string;
   status: UserStatus;
   kycStatus: KycStatus;
+  /** When the user confirmed their email address; null while it is unverified. */
+  emailVerifiedAt: string | null;
   createdAt: string;
   lastLoginAt: string | null;
 }

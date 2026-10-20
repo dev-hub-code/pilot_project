@@ -5,11 +5,12 @@ import type { MarketplaceListing } from "@/types/marketplace";
 import { formatMoney } from "@/utils/money";
 import { CONTAINER_TYPE_LABEL } from "./labels";
 
+/** The whole card opens the container: its title's link is stretched over it (one link for keyboards and readers). */
 export function ListingCard({ listing }: { listing: MarketplaceListing }) {
   const href = `/marketplace/${listing.id}`;
   return (
-    <article className="group flex flex-col border border-border bg-surface transition-colors hover:border-foreground/40">
-      <Link href={href} className="relative block aspect-[16/10] overflow-hidden bg-ink" tabIndex={-1} aria-hidden="true">
+    <article className="group flex flex-col border border-border bg-surface transition-colors hover:border-foreground/40 has-focus-visible:border-gold">
+      <div className="relative block aspect-[16/10] overflow-hidden bg-ink">
         {listing.coverPhotoId ? (
           // eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP
           <img
@@ -24,17 +25,20 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
         <span className="absolute top-3 left-3 bg-ink/80 px-2.5 py-1 text-[11px] tracking-[0.12em] text-on-ink uppercase">
           {CONTAINER_TYPE_LABEL[listing.containerType]}
         </span>
-      </Link>
+      </div>
 
       <div className="flex flex-1 flex-col gap-5 p-5">
         <div className="space-y-1.5">
           <h3 className="text-lg leading-snug font-semibold tracking-tight">
-            <Link href={href} className="hover:text-gold-text">{listing.title}</Link>
+            <Link href={href}
+              className="card-link group-hover:text-gold-text">
+              {listing.title}
+            </Link>
           </h3>
           <p className="text-sm text-muted">{listing.summary}</p>
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-x-4 gap-y-3 text-sm">
           <Stat label="Price per container" value={formatMoney(listing.price)} emphasis />
           <Stat label="Minimum lease" value={yearsLabel(listing.minTenureYears)} />
         </dl>

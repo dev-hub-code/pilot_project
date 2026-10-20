@@ -15,6 +15,7 @@ import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { BatchFile, PayoutBatchDetail } from "@/types/withdrawal";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { formatPhone } from "@/lib/phone";
 
 export const metadata: Metadata = { title: "Withdrawal file" };
 
@@ -114,7 +115,7 @@ export default async function BatchPage({ params }: PageProps<"/admin/withdrawal
               </Link>
               <span className="block">{cash ? investors.get(w.userId)?.name : w.bankHolderName}</span>
             </Cell>
-            <Cell className="text-muted">{cash ? investors.get(w.userId)?.phone ?? "—" : `${w.bankName ?? ""} ${w.bankAccountMasked ?? ""}`}</Cell>
+            <Cell className="text-muted">{cash ? formatPhone(investors.get(w.userId)?.phone ?? "—") : `${w.bankName ?? ""} ${w.bankAccountMasked ?? ""}`}</Cell>
             <Cell className="tabular-nums">{formatMoney(w.amount)}</Cell>
             <Cell>
               <StatusBadge tone={WITHDRAWAL_TONE[w.status]}>{WITHDRAWAL_STATUS_LABEL[w.status]}</StatusBadge>

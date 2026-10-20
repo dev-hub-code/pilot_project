@@ -6,6 +6,7 @@ import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import type { FormState } from "@/validators/form-state";
+import { useInvestmentPlan } from "@/features/marketplace/investment-plan";
 import { setCartItemAction } from "./actions";
 import { leaseOptions } from "./lease-years";
 
@@ -20,14 +21,21 @@ export function AddToCartForm({ productId, defaultQuantity, defaultYears, minYea
   inCart: number;
 }) {
   const [state, action] = useActionState<FormState, FormData>(setCartItemAction.bind(null, productId, "cart"), {});
+  // On a container page the return calculator fills these in; the investor can still change them here.
+  const plan = useInvestmentPlan();
   return (
     <form action={action} className="space-y-4" noValidate>
       <FormFeedback state={state} />
       <TextField id="invest-quantity" label={inCart > 0 ? "Containers to add" : "Containers"} name="quantity" type="number" inputMode="numeric" min={1}
-        max={50} defaultValue={state.values?.quantity ?? String(defaultQuantity)}
+        max={50} {...(plan
+          ? { value: plan.quantity, onChange: (e: React.ChangeEvent<HTMLInputElement>) => plan.setQuantity(e.target.value) }
+          : { defaultValue: state.values?.quantity ?? String(defaultQuantity) })}
         error={state.fieldErrors?.quantity} />
       <SelectField id="invest-years" label="Lease tenure" name="tenureYears" options={leaseOptions(minYears, maxYears)}
-        defaultValue={state.values?.tenureYears ?? String(defaultYears)} error={state.fieldErrors?.tenureYears} />
+        {...(plan
+          ? { value: plan.years, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => plan.setYears(e.target.value) }
+          : { defaultValue: state.values?.tenureYears ?? String(defaultYears) })}
+        error={state.fieldErrors?.tenureYears} />
       <SubmitButton className="w-full" pendingLabel="Adding…">Add to cart</SubmitButton>
       <p className="text-xs text-muted">
         Containers are reserved when you check out; you then have 30 minutes to pay. Each container&apos;s number is

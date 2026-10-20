@@ -72,7 +72,7 @@ export default async function AdminSupportPage({ searchParams }: PageProps<"/adm
           {tickets.content.map((t) => (
             <tr key={t.id} className="hover:bg-background">
               <Cell>
-                <Link href={`/admin/support/${t.id}`} className="font-medium text-gold-text hover:underline">{t.subject}</Link>
+                <Link href={`/admin/support/${t.id}`} className="card-link font-medium text-gold-text hover:underline">{t.subject}</Link>
                 <span className="block font-mono text-xs text-muted">
                   {t.reference}{!financeOnly && t.team === "FINANCE" && <span className="ml-2 font-sans">· With finance</span>}
                 </span>

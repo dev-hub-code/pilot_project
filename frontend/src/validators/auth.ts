@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneCountry, validPhone } from "./phone";
 
 /** Mirrors the backend's PasswordPolicy (new passwords only); the backend remains authoritative. */
 export const PASSWORD_MIN = 6;
@@ -48,8 +49,8 @@ export const registerSchema = z
     firstName: z.string().trim().min(1, "Enter your first name").max(100),
     lastName: z.string().trim().min(1, "Enter your last name").max(100),
     email: z.email("Enter a valid email address").max(254),
-    phone: z.string().trim().min(1, "Enter your mobile number")
-      .regex(/^[+0-9 ()-]{6,20}$/, "Enter a mobile number (digits, spaces, +, brackets or dashes)"),
+    phone: z.string().trim().min(1, "Enter your mobile number").max(30),
+    phoneCountry,
     password: newPassword,
     confirmPassword: z.string(),
     referralCode: z.string().trim()
@@ -59,7 +60,8 @@ export const registerSchema = z
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],
     message: "Passwords do not match",
-  });
+  })
+  .superRefine(validPhone(true));
 
 export const changePasswordSchema = z
   .object({

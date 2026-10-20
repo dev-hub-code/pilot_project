@@ -19,6 +19,7 @@ import type { Order, Payment } from "@/types/order";
 import type { AdminUserDetail } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -59,7 +60,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
             Placed {formatDateTime(order.createdAt)} by{" "}
             {investor
               ? <Link href={`/admin/users/${order.userId}`} className="text-gold-text hover:underline">
-                {investor.firstName} {investor.lastName} ({investor.email})
+                {investor.firstName} {investor.lastName} (<EmailText>{investor.email}</EmailText>)
               </Link>
               : <span className="font-mono">{order.userId}</span>}
           </p>

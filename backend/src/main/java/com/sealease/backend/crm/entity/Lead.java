@@ -30,8 +30,13 @@ public class Lead extends BaseEntity {
 	@Column(name = "email", length = 254)
 	private String email;
 
+	/** In international (E.164) form, e.g. "+919876543210". */
 	@Column(name = "phone", length = 40)
 	private String phone;
+
+	/** The phone number's country (ISO 3166-1 alpha-2, a row of {@code countries}). */
+	@Column(name = "phone_country", length = 2)
+	private String phoneCountry;
 
 	@Column(name = "country", length = 2)
 	private String country;
@@ -101,9 +106,12 @@ public class Lead extends BaseEntity {
 		update(contact);
 	}
 
-	/** Contact and qualification details, as entered. {@code email} must already be normalised. */
-	public record Contact(String firstName, String lastName, String email, String phone, String country,
-			LeadInterest interest, Money estimate) {
+	/**
+	 * Contact and qualification details, as entered. {@code email} must already be normalised and {@code phone} be in
+	 * E.164 form, with {@code phoneCountry} its country.
+	 */
+	public record Contact(String firstName, String lastName, String email, String phone, String phoneCountry,
+			String country, LeadInterest interest, Money estimate) {
 	}
 
 	public void update(Contact c) {
@@ -111,6 +119,7 @@ public class Lead extends BaseEntity {
 		this.lastName = c.lastName();
 		this.email = c.email();
 		this.phone = c.phone();
+		this.phoneCountry = c.phoneCountry();
 		this.country = c.country();
 		this.interest = c.interest();
 		this.estimatedAmount = c.estimate() == null ? null : c.estimate().amount();
@@ -144,7 +153,7 @@ public class Lead extends BaseEntity {
 	}
 
 	public Contact contact() {
-		return new Contact(firstName, lastName, email, phone, country, interest, estimatedAmount == null ? null
+		return new Contact(firstName, lastName, email, phone, phoneCountry, country, interest, estimatedAmount == null ? null
 				: Money.of(estimatedAmount, Currency.getInstance(estimatedCurrency)));
 	}
 

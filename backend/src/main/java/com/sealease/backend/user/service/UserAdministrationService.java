@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -145,6 +146,10 @@ public class UserAdministrationService {
 			}
 			if (criteria.kycStatus() != null) {
 				predicates.add(cb.equal(root.get("kycStatus"), criteria.kycStatus()));
+			}
+			if (criteria.emailVerified() != null) {
+				Path<Instant> verifiedAt = user.get("emailVerifiedAt");
+				predicates.add(criteria.emailVerified() ? cb.isNotNull(verifiedAt) : cb.isNull(verifiedAt));
 			}
 			if (criteria.investorsOnly()) {
 				predicates.add(investor(user, query, cb));

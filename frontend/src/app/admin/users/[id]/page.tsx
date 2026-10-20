@@ -28,6 +28,8 @@ import { formatMoney } from "@/utils/money";
 import type { AdminBankAccount, AdminUserDetail, KycSubmission } from "@/types/user";
 import { kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
+import { EmailText } from "@/components/ui/email-text";
+import { formatPhone } from "@/lib/phone";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -77,6 +79,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
         <h1 className="text-2xl font-semibold tracking-tight">{summary.firstName} {summary.lastName}</h1>
         <span className="font-mono text-sm text-muted">{summary.userCode}</span>
         <StatusBadge tone={toneFor(summary.status)}>{humanize(summary.status)}</StatusBadge>
+        {!summary.emailVerifiedAt && <StatusBadge tone="warning">Email not verified</StatusBadge>}
         <StatusBadge tone={toneFor(summary.kycStatus)}>KYC {humanize(summary.kycStatus).toLowerCase()}</StatusBadge>
       </div>
 
@@ -84,8 +87,13 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
         <div className="space-y-6 lg:col-span-2">
           <Card title="Account">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <Item label="Email">{summary.email}</Item>
-              <Item label="Phone">{profile.phone ?? "—"}</Item>
+              <Item label="Email">
+                <EmailText>{summary.email}</EmailText>
+                <span className="block text-xs text-muted">
+                  {summary.emailVerifiedAt ? `Verified ${formatDateTime(summary.emailVerifiedAt)}` : "Not verified yet"}
+                </span>
+              </Item>
+              <Item label="Phone">{profile.phone ? formatPhone(profile.phone) : "—"}</Item>
               <Item label="Date of birth">{formatDayMonthYear(profile.dateOfBirth) || "—"}</Item>
               <Item label="Nationality">{profile.nationality ?? "—"}</Item>
               <Item label="Address">
@@ -182,7 +190,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                       <li key={u.userId}>
                         <span className="text-muted">L{u.level}</span>{" "}
                         <Link href={`/admin/users/${u.userId}`} className="text-gold-text hover:underline">{u.name}</Link>
-                        <span className="block text-xs text-muted">{u.email}</span>
+                        <span className="block text-xs text-muted"><EmailText>{u.email}</EmailText></span>
                       </li>
                     ))}
                   </ol>

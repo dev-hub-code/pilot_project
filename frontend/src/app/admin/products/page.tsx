@@ -47,7 +47,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
         <DataTable columns={["Code", "Title", "Container", "Price", "Lease", "Sold", "Status"]}>
           {products.content.map((p) => (
             <tr key={p.id} className="hover:bg-background">
-              <Cell><Link href={`/admin/products/${p.id}`} className="font-mono font-medium text-gold-text hover:underline">{p.code}</Link></Cell>
+              <Cell><Link href={`/admin/products/${p.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{p.code}</Link></Cell>
               <Cell className="max-w-xs truncate">{p.title}</Cell>
               <Cell>{CONTAINER_TYPE_LABEL[p.containerType]}</Cell>
               <Cell className="tabular-nums">{formatMoney(p.price)}</Cell>

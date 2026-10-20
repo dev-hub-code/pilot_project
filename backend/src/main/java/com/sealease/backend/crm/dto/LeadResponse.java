@@ -16,7 +16,10 @@ public record LeadResponse(
 		String firstName,
 		String lastName,
 		String email,
+		/** In international (E.164) form. */
 		String phone,
+		/** The phone number's country; null for a number saved before countries were asked. */
+		String phoneCountry,
 		String country,
 		LeadSource source,
 		LeadInterest interest,
@@ -36,7 +39,7 @@ public record LeadResponse(
 	public static LeadResponse of(Lead l, String ownerName) {
 		Lead.Contact c = l.contact();
 		return new LeadResponse(l.getId(), l.getReference(), c.firstName(), c.lastName(), c.email(), c.phone(),
-				c.country(), l.getSource(), c.interest(), c.estimate() == null ? null : MoneyResponse.from(c.estimate()),
+				c.phoneCountry(), c.country(), l.getSource(), c.interest(), c.estimate() == null ? null : MoneyResponse.from(c.estimate()),
 				l.getMessage(), l.getStage(), l.getLostReason(), l.getOwnerId(), ownerName, l.getUserId(),
 				l.won() == null ? null : MoneyResponse.from(l.won()), l.getNextFollowUpAt(), l.getClosedAt(),
 				l.getCreatedAt(), l.getUpdatedAt());

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneCountry, validPhone } from "./phone";
 import { parseDayMonthYear } from "@/utils/format";
 
 /** Client-side mirrors of backend validation; the backend remains authoritative. */
@@ -20,7 +21,8 @@ const dayMonthYear = z.string().transform((value, ctx) => {
 export const profileSchema = z.object({
   firstName: z.string().trim().min(1, "Enter your first name").max(100),
   lastName: z.string().trim().min(1, "Enter your last name").max(100),
-  phone: optional(z.string().regex(/^[+0-9 ()-]{6,20}$/, "Enter a phone number (digits, spaces, +, brackets or dashes)")),
+  phone: optional(z.string().trim().max(30)),
+  phoneCountry,
   dateOfBirth: optional(dayMonthYear),
   nationality: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
   line1: z.string().trim().min(1, "Enter the first line of your address").max(200),
@@ -29,7 +31,7 @@ export const profileSchema = z.object({
   stateRegion: z.string().trim().min(1, "Enter your state").max(100),
   postalCode: z.string().trim().min(1, "Enter your postal code").max(20),
   country: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
-});
+}).superRefine(validPhone(true));
 
 export const bankAccountSchema = z.object({
   bankName: z.string().trim().min(1, "Enter the bank's name").max(140),

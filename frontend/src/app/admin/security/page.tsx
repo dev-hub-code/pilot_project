@@ -12,6 +12,7 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { SecurityOverview, UserRef } from "@/types/security";
 import { formatDateTime } from "@/utils/format";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Security" };
 
@@ -163,7 +164,7 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
               <tr key={row.staff.id}>
                 <Cell className="max-w-64 truncate">
                   <Link href={log({ category: "SENSITIVE_DATA", actor: row.staff.id })} className="text-brand hover:underline"
-                    title={personLabel(row.staff)}>{row.staff.email ?? "Deleted account"}</Link>
+                    title={personLabel(row.staff)}>{row.staff.email ? <EmailText>{row.staff.email}</EmailText> : "Deleted account"}</Link>
                 </Cell>
                 {[row.kycDocuments, row.kycSubmissions, row.bankProofs, row.ticketAttachments, row.reports, row.auditExports].map((n, i) => (
                   <Cell key={i} className={`tabular-nums ${n === 0 ? "text-muted" : ""}`}>{n}</Cell>
@@ -194,7 +195,7 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
 function Person({ person }: { person: UserRef }) {
   return (
     <Link href={`/admin/users/${person.id}`} className="text-brand hover:underline" title={personLabel(person)}>
-      {person.email ?? "Deleted account"}
+      {person.email ? <EmailText>{person.email}</EmailText> : "Deleted account"}
     </Link>
   );
 }

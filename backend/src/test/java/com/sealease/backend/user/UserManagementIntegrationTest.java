@@ -164,6 +164,25 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isOk());
 	}
 
+	@Test
+	void theMobileNumberIsStoredInternationallyWithItsCountry() throws Exception {
+		Account investor = api.register();
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", "020 7946 0000", "1990-04-01")
+					.replace("\"phone\":", "\"phoneCountry\":\"GB\",\"phone\":")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[?(@.field == 'phone')].message",
+					hasItem("Enter a valid mobile number for the selected country")));
+
+		String uk = "7400" + String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1_000_000));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", "0" + uk, "1990-04-01")
+					.replace("\"phone\":", "\"phoneCountry\":\"GB\",\"phone\":")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.phone").value("+44" + uk))
+			.andExpect(jsonPath("$.phoneCountry").value("GB"));
+	}
+
 	/** A random Indian mobile number: tests share a database, and a number may belong to one account only. */
 	private static String mobile() {
 		return "9" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1_000_000_000));
@@ -865,6 +884,29 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.totalElements").value(0));
 		mvc.perform(get("/api/v1/admin/users").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void userDirectoryShowsAndFiltersUnverifiedEmails() throws Exception {
+		Account verified = api.register();
+		Account unverified = api.register();
+		jdbc.update("UPDATE users SET email_verified_at = now() WHERE id = ?", verified.id());
+		jdbc.update("UPDATE users SET email_verified_at = NULL WHERE id = ?", unverified.id());
+		Account support = api.staff("SUPPORT");
+
+		mvc.perform(get("/api/v1/admin/users").param("q", unverified.email()).header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.content[0].emailVerifiedAt").doesNotExist());
+		mvc.perform(get("/api/v1/admin/users").param("q", verified.email()).header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.content[0].emailVerifiedAt").isNotEmpty());
+		mvc.perform(get("/api/v1/admin/users").param("q", unverified.email()).param("emailVerified", "false")
+				.header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(1));
+		mvc.perform(get("/api/v1/admin/users").param("q", unverified.email()).param("emailVerified", "true")
+				.header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(0));
+		mvc.perform(get("/api/v1/admin/users").param("q", verified.email()).param("emailVerified", "false")
+				.header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(jsonPath("$.totalElements").value(0));
 	}
 
 	@Test

@@ -30,7 +30,7 @@ export default async function RolesPage() {
         {roles.map((role, i) => (
           <tr key={role.id} className="hover:bg-background">
             <Cell className="font-mono text-xs font-medium">
-              <Link href={`/admin/roles/${role.id}`} className="text-gold-text hover:underline">{role.name}</Link>
+              <Link href={`/admin/roles/${role.id}`} className="card-link text-gold-text hover:underline">{role.name}</Link>
             </Cell>
             <Cell className="text-muted">{role.description}</Cell>
             <Cell className="tabular-nums">{role.permissions.length}</Cell>

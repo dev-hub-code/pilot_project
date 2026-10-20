@@ -8,6 +8,7 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.crm.dto.ActivityRequest;
 import com.sealease.backend.crm.dto.Assignee;
 import com.sealease.backend.crm.dto.LeadDetail;
@@ -286,7 +287,8 @@ public class LeadService {
 
 	private Lead.Contact contact(LeadRequest r) {
 		String email = r.email() == null || r.email().isBlank() ? null : EmailNormalizer.normalize(r.email());
-		String phone = r.phone() == null || r.phone().isBlank() ? null : r.phone().strip();
+		// Validated by @ValidPhone; stored in international form with its country.
+		PhoneNumbers.Phone phone = PhoneNumbers.require(r.phone(), r.phoneCountry());
 		if (email == null && phone == null) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Give an email address or a phone number");
 		}
@@ -295,7 +297,8 @@ public class LeadService {
 		}
 		Money estimate = r.estimatedAmount() == null ? null
 				: Money.of(r.estimatedAmount(), Currency.getInstance(r.estimatedCurrency()));
-		return new Lead.Contact(r.firstName().strip(), blankToNull(r.lastName()), email, phone,
+		return new Lead.Contact(r.firstName().strip(), blankToNull(r.lastName()), email,
+				phone == null ? null : phone.e164(), phone == null ? null : phone.country(),
 				blankToNull(r.country()), r.interest(), estimate);
 	}
 

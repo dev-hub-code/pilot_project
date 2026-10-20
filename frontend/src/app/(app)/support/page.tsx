@@ -29,7 +29,7 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
             {tickets.content.map((t) => (
               <tr key={t.id} className="hover:bg-background">
                 <Cell>
-                  <Link href={`/support/${t.id}`} className="font-medium text-gold-text hover:underline">{t.subject}</Link>
+                  <Link href={`/support/${t.id}`} className="card-link font-medium text-gold-text hover:underline">{t.subject}</Link>
                   <span className="block font-mono text-xs text-muted">{t.reference}</span>
                 </Cell>
                 <Cell className="text-muted">{CATEGORY_LABEL[t.category]}{t.relatedLabel ? ` · ${t.relatedLabel}` : ""}</Cell>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ForgotPasswordForm } from "@/features/auth/forgot-password-form";
 import { ResetPasswordForm } from "@/features/auth/reset-password-form";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Set a new password" };
 
@@ -15,7 +16,7 @@ export default async function ResetPasswordPage({ searchParams }: PageProps<"/re
         <h1 className="text-4xl font-semibold tracking-tight">Set a new password</h1>
         <p className="text-sm text-muted">
           {email ? (
-            <>If <span className="font-medium text-foreground">{email}</span> belongs to an account, we emailed it a 6-digit code.</>
+            <>If <span className="font-medium text-foreground"><EmailText>{email}</EmailText></span> belongs to an account, we emailed it a 6-digit code.</>
           ) : (
             "Enter your email address and the 6-digit code we emailed you."
           )}{" "}

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { openNotificationAction, readAllNotificationsAction } from "@/features/notifications/actions";
+import { notificationAction } from "@/features/notifications/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AppNotification } from "@/types/support";
@@ -33,6 +34,9 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/no
                   <span className="min-w-0 flex-1">
                     <span className={`block text-sm ${n.read ? "text-muted" : "font-medium"}`}>{n.title}</span>
                     {n.body && <span className="block truncate text-xs text-muted">{n.body}</span>}
+                    {notificationAction(n) && (
+                      <span className="mt-1 block text-xs font-medium text-gold-text">{notificationAction(n)} →</span>
+                    )}
                   </span>
                   <span className="shrink-0 text-xs text-muted">{formatDateTime(n.createdAt)}</span>
                   {!n.read && <span className="sr-only">(unread)</span>}

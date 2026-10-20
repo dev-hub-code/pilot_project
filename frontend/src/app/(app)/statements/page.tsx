@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmailText } from "@/components/ui/email-text";
 import { PageHeader } from "@/components/ui/page-header";
 import { Notice } from "@/components/ui/notice";
 import { PeriodForm } from "@/features/reports/period-form";
@@ -39,7 +40,7 @@ export default async function StatementsPage({ searchParams }: PageProps<"/state
       {problem && <Notice tone="warning">{problem}</Notice>}
       {report && (
         <>
-          <p className="text-sm text-muted">{report.subtitle}</p>
+          <p className="text-sm text-muted"><EmailText>{report.subtitle}</EmailText></p>
           <ReportPreview report={report} />
         </>
       )}

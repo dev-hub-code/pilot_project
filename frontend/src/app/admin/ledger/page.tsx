@@ -73,7 +73,7 @@ export default async function LedgerPage({ searchParams }: PageProps<"/admin/led
             {accounts.content.map((a) => (
               <tr key={a.id} className="hover:bg-background">
                 <Cell>
-                  <Link href={`/admin/ledger/${a.id}`} className="text-gold-text hover:underline">{ACCOUNT_LABEL[a.accountType]}</Link>
+                  <Link href={`/admin/ledger/${a.id}`} className="card-link text-gold-text hover:underline">{ACCOUNT_LABEL[a.accountType]}</Link>
                 </Cell>
                 <Cell>
                   {a.ownerUserId

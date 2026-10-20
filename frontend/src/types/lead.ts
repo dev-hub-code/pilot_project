@@ -12,7 +12,10 @@ export interface Lead {
   firstName: string;
   lastName: string | null;
   email: string | null;
+  /** In international form, e.g. "+442079460000". */
   phone: string | null;
+  /** The phone number's country; null for a number saved before countries were asked. */
+  phoneCountry: string | null;
   country: string | null;
   source: LeadSource;
   interest: LeadInterest;

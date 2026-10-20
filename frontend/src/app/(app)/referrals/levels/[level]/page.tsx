@@ -36,7 +36,7 @@ export default async function ReferralLevelPage({ params }: PageProps<"/referral
           {members.map((m) => (
             <tr key={m.id} className="hover:bg-background">
               <Cell>
-                <Link href={`/referrals/members/${m.id}`} className="font-medium text-gold-text hover:underline">{m.displayName}</Link>
+                <Link href={`/referrals/members/${m.id}`} className="card-link font-medium text-gold-text hover:underline">{m.displayName}</Link>
               </Cell>
               <Cell className="text-muted">{m.parentId ? names.get(m.parentId) ?? "—" : "You"}</Cell>
               <Cell className="text-muted">{formatDate(m.joinedAt)}</Cell>

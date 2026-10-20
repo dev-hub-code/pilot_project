@@ -16,13 +16,15 @@ public record AdminUserSummary(
 		String lastName,
 		UserStatus status,
 		KycStatus kycStatus,
+		/** When the user confirmed their email address; null while it is unverified. */
+		Instant emailVerifiedAt,
 		Instant createdAt,
 		Instant lastLoginAt) {
 
 	public static AdminUserSummary from(UserProfile p) {
 		var u = p.getUser();
 		return new AdminUserSummary(u.getId(), u.getUserCode(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus(),
-				p.getKycStatus(), u.getCreatedAt(), u.getLastLoginAt());
+				p.getKycStatus(), u.getEmailVerifiedAt(), u.getCreatedAt(), u.getLastLoginAt());
 	}
 
 }

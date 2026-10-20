@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { LeadForm } from "@/features/admin/lead-forms";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { getPhoneCountries } from "@/lib/server/phone-countries";
 import type { Assignee } from "@/types/lead";
 
 export const metadata: Metadata = { title: "New lead" };
@@ -12,13 +13,16 @@ export const metadata: Metadata = { title: "New lead" };
 export default async function NewLeadPage() {
   const session = await requireStaff();
   if (!hasPermission(session.permissions, Permission.LEAD_CREATE)) redirect("/admin/leads");
-  const assignees = hasPermission(session.permissions, Permission.LEAD_ASSIGN)
-    ? await authFetch<Assignee[]>("/api/v1/admin/leads/assignees")
-    : undefined;
+  const [assignees, countries] = await Promise.all([
+    hasPermission(session.permissions, Permission.LEAD_ASSIGN)
+      ? authFetch<Assignee[]>("/api/v1/admin/leads/assignees")
+      : undefined,
+    getPhoneCountries(),
+  ]);
   return (
     <div className="space-y-6">
       <PageHeader title="New lead" description={assignees ? "Assign it now or leave it in the unassigned pool." : "The lead will be yours."} />
-      <Card><LeadForm assignees={assignees} /></Card>
+      <Card><LeadForm assignees={assignees} countries={countries} /></Card>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import com.sealease.backend.common.crypto.FieldEncryptor;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.user.dto.NotificationPreferencesRequest;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.dto.UpdateProfileRequest;
@@ -58,14 +59,12 @@ public class UserProfileService {
 
 	/** A self-registered investor's profile, with the mobile number they signed up with (unique across accounts). */
 	@Transactional(propagation = Propagation.MANDATORY)
-	void createFor(User user, String phone) {
-		String number = blankToNull(phone);
-		String key = PhoneNumbers.key(number);
-		if (key != null && profiles.phoneTakenByAnother(key, user.getId())) {
+	void createFor(User user, PhoneNumbers.Phone phone) {
+		if (phone != null && profiles.phoneTakenByAnother(phone.key(), user.getId())) {
 			throw phoneTaken();
 		}
 		UserProfile profile = new UserProfile(user);
-		profile.updatePersonal(number, key, null, null);
+		profile.updatePersonal(phone, null, null);
 		try {
 			profiles.saveAndFlush(profile);
 		}
@@ -99,13 +98,13 @@ public class UserProfileService {
 		List<String> changed = new ArrayList<>();
 		ProfileResponse before = ProfileResponse.from(profile);
 		var address = request.address();
-		String phone = blankToNull(request.phone());
-		String phoneKey = PhoneNumbers.key(phone);
-		if (phoneKey != null && profiles.phoneTakenByAnother(phoneKey, userId)) {
+		// Validated by @ValidPhone; stored in international form with its country.
+		PhoneNumbers.Phone phone = PhoneNumbers.require(request.phone(), request.phoneCountry());
+		if (phone != null && profiles.phoneTakenByAnother(phone.key(), userId)) {
 			throw phoneTaken();
 		}
 
-		profile.updatePersonal(phone, phoneKey, request.dateOfBirth(), orIndia(request.nationality()));
+		profile.updatePersonal(phone, request.dateOfBirth(), orIndia(request.nationality()));
 		profile.updateAddress(trim(address.line1()), trim(address.line2()), trim(address.city()),
 				trim(address.stateRegion()), trim(address.postalCode()), orIndia(address.country()));
 		try {

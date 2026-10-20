@@ -62,20 +62,21 @@ export async function loginAction(_previous: FormState, formData: FormData): Pro
 
 export async function registerAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const input = Object.fromEntries(
-    ["firstName", "lastName", "email", "phone", "password", "confirmPassword", "referralCode"].map((k) => [k, formData.get(k) ?? ""]),
+    ["firstName", "lastName", "email", "phone", "phoneCountry", "password", "confirmPassword", "referralCode"].map((k) => [k, formData.get(k) ?? ""]),
   );
   const values = {
     firstName: String(input.firstName),
     lastName: String(input.lastName),
     email: String(input.email),
     phone: String(input.phone),
+    phoneCountry: String(input.phoneCountry),
     referralCode: String(input.referralCode),
   };
   const parsed = registerSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
 
-  const { firstName, lastName, email, phone, password, referralCode } = parsed.data;
-  const body = { firstName, lastName, email, phone, password, ...(referralCode ? { referralCode } : {}) };
+  const { firstName, lastName, email, phone, phoneCountry, password, referralCode } = parsed.data;
+  const body = { firstName, lastName, email, phone, phoneCountry, password, ...(referralCode ? { referralCode } : {}) };
   let verifyEmail: string | null = null;
   try {
     const result = await backendFetch<AuthTokens | RegistrationPending>("/api/v1/auth/register", {

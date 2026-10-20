@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { CardField, CardList, CardListItem } from "@/components/ui/card-list";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
@@ -87,7 +88,27 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <DataTable columns={["Container type", "Container number", "Price", "Rent monthly", "Tenure"]}>
+          <CardList label="Containers">
+            {order.items.map((item) => (
+              <CardListItem key={item.id}>
+                <div>
+                  <Link href={`/marketplace/${item.productId}`} className="font-medium text-gold-text hover:underline">{item.productTitle}</Link>
+                  <p className="text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</p>
+                </div>
+                <dl className="grid grid-cols-2 gap-3">
+                  <CardField label="Price"><span className="font-medium tabular-nums">{formatMoney(item.amount)}</span></CardField>
+                  <CardField label="Rent monthly"><span className="tabular-nums">{formatMoney(item.monthlyPayout)}</span></CardField>
+                  <CardField label="Tenure"><span className="tabular-nums">{item.tenureMonths} months</span></CardField>
+                  <CardField label="Container number">
+                    {item.containerNumber
+                      ? <span className="font-mono font-medium">{item.containerNumber}</span>
+                      : <span className="text-muted">Assigned by our team after payment</span>}
+                  </CardField>
+                </dl>
+              </CardListItem>
+            ))}
+          </CardList>
+          <DataTable columns={["Container type", "Container number", "Price", "Rent monthly", "Tenure"]} className="hidden sm:block">
             {order.items.map((item) => (
               <tr key={item.id}>
                 <Cell>
@@ -109,7 +130,30 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
           {payments.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold tracking-tight">Payments</h2>
-              <DataTable columns={["Started", "Method", "Reference", "Amount", "Status"]}>
+              <CardList label="Payments">
+                {payments.map((p) => (
+                  <CardListItem key={p.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{METHOD_LABEL[p.method]}</p>
+                        {p.deposit && (
+                          <p className="text-xs text-muted">
+                            {DEPOSIT_MODE_LABEL[p.deposit.mode]} · <span className="font-mono">{p.deposit.reference}</span>
+                          </p>
+                        )}
+                      </div>
+                      <StatusBadge tone={PAYMENT_TONE[p.status]}>{humanize(p.status)}</StatusBadge>
+                    </div>
+                    {p.failureReason && <p className="text-xs text-muted">{p.failureReason}</p>}
+                    <dl className="grid grid-cols-2 gap-3">
+                      <CardField label="Amount"><span className="tabular-nums">{formatMoney(p.amount)}</span></CardField>
+                      <CardField label="Started"><span className="text-muted">{formatDateTime(p.createdAt)}</span></CardField>
+                      <CardField label="Reference" className="col-span-2"><span className="break-all font-mono text-xs">{p.providerReference}</span></CardField>
+                    </dl>
+                  </CardListItem>
+                ))}
+              </CardList>
+              <DataTable columns={["Started", "Method", "Reference", "Amount", "Status"]} className="hidden sm:block">
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <Cell className="text-muted">{formatDateTime(p.createdAt)}</Cell>

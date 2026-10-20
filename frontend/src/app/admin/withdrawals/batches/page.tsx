@@ -35,7 +35,7 @@ export default async function BatchesPage({ searchParams }: PageProps<"/admin/wi
           {batches.content.map((b) => (
             <tr key={b.id} className="hover:bg-background">
               <Cell className="text-muted">{formatDateTime(b.createdAt)}</Cell>
-              <Cell><Link href={`/admin/withdrawals/batches/${b.id}`} className="font-mono text-gold-text hover:underline">{b.reference}</Link></Cell>
+              <Cell><Link href={`/admin/withdrawals/batches/${b.id}`} className="card-link font-mono text-gold-text hover:underline">{b.reference}</Link></Cell>
               <Cell className="text-muted">
                 {b.period ? `${b.kind ? WITHDRAWAL_KIND_LABEL[b.kind] : ""} ${formatPeriod(b.period)}`.trim()
                   : `${b.kind ? `${WITHDRAWAL_KIND_LABEL[b.kind]} · ` : ""}${PAYOUT_METHOD_LABEL[b.payoutMethod]}`}

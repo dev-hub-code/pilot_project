@@ -4,6 +4,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { verifyEmailToken } from "@/features/auth/actions";
 import { ResendVerificationForm } from "@/features/auth/resend-verification-form";
 import { VerifyCodeForm } from "@/features/auth/verify-code-form";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Confirm your email" };
 
@@ -48,7 +49,7 @@ export default async function VerifyEmailPage({ searchParams }: PageProps<"/veri
         <h1 className="text-4xl font-semibold tracking-tight">Check your inbox</h1>
         <p className="text-sm text-muted">
           {email ? (
-            <>We sent a 6-digit code and a confirmation link to <span className="font-medium text-foreground">{email}</span>.</>
+            <>We sent a 6-digit code and a confirmation link to <span className="font-medium text-foreground"><EmailText>{email}</EmailText></span>.</>
           ) : (
             "We sent a 6-digit code and a confirmation link to your email address."
           )}{" "}

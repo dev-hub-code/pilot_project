@@ -18,7 +18,10 @@ public record ProfileResponse(
 		String firstName,
 		String lastName,
 		UserStatus status,
+		/** The mobile number in international (E.164) form, e.g. "+919876543210". */
 		String phone,
+		/** The mobile number's country (ISO 3166-1 alpha-2); null for a number saved before countries were asked. */
+		String phoneCountry,
 		LocalDate dateOfBirth,
 		String nationality,
 		Address address,
@@ -36,7 +39,7 @@ public record ProfileResponse(
 	public static ProfileResponse from(UserProfile p) {
 		var u = p.getUser();
 		return new ProfileResponse(u.getId(), u.getUserCode(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus(),
-				p.getPhone(), p.getDateOfBirth(), p.getNationality(),
+				p.getPhone(), p.getPhoneCountry(), p.getDateOfBirth(), p.getNationality(),
 				new Address(p.getAddressLine1(), p.getAddressLine2(), p.getCity(), p.getStateRegion(),
 						p.getPostalCode(), p.getCountry()),
 				p.getTaxResidencyCountry(), mask(p.getTaxIdLast4()), p.getKycStatus(),
@@ -47,7 +50,7 @@ public record ProfileResponse(
 	public ProfileResponse withMaskedPhone() {
 		String digits = phone == null ? "" : phone.replaceAll("\\D", "");
 		String masked = digits.isEmpty() ? phone : "•••••• " + digits.substring(Math.max(0, digits.length() - 4));
-		return new ProfileResponse(id, userCode, email, firstName, lastName, status, masked, dateOfBirth, nationality, address,
+		return new ProfileResponse(id, userCode, email, firstName, lastName, status, masked, phoneCountry, dateOfBirth, nationality, address,
 				taxResidencyCountry, taxIdMasked, kycStatus, emailNotifications, smsNotifications, twoFactorEnabled);
 	}
 

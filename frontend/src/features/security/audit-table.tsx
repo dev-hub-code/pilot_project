@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type { AuditLogEntry } from "@/types/security";
 import { formatDateTime, humanize } from "@/utils/format";
 import { actionLabel, actionTone, entityHref, personLabel } from "./labels";
+import { EmailText } from "@/components/ui/email-text";
 
 /** Audit entries, newest first; each row opens the entry. */
 export function AuditTable({ entries, showIp = true }: { entries: readonly AuditLogEntry[]; showIp?: boolean }) {
@@ -12,7 +13,7 @@ export function AuditTable({ entries, showIp = true }: { entries: readonly Audit
       {entries.map((entry) => (
         <tr key={entry.id} className="hover:bg-background">
           <Cell className="text-muted tabular-nums">
-            <Link href={`/admin/audit/${entry.id}`} className="hover:text-foreground hover:underline">
+            <Link href={`/admin/audit/${entry.id}`} className="card-link hover:text-foreground hover:underline">
               {formatDateTime(entry.createdAt)}
             </Link>
           </Cell>
@@ -24,7 +25,7 @@ export function AuditTable({ entries, showIp = true }: { entries: readonly Audit
           <Cell className="max-w-64 truncate">
             {entry.actor ? (
               <Link href={`/admin/users/${entry.actor.id}`} className="text-brand hover:underline" title={personLabel(entry.actor)}>
-                {entry.actor.email ?? "Deleted account"}
+                {entry.actor.email ? <EmailText>{entry.actor.email}</EmailText> : "Deleted account"}
               </Link>
             ) : (
               <span className="text-muted">{entry.action === "LOGIN_FAILED" ? "Unknown visitor" : "System"}</span>

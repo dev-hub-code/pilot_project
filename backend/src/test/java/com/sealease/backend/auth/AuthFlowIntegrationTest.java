@@ -87,6 +87,32 @@ class AuthFlowIntegrationTest {
 	}
 
 	@Test
+	void theMobileNumberMustBeAValidMobileOfTheChosenCountry() throws Exception {
+		String email = uniqueEmail();
+		// Too short for India, an Indian landline, a UK landline, and an unknown country.
+		for (String body : List.of("\"phone\":\"98765\"", "\"phone\":\"011 2345 6789\"",
+				"\"phone\":\"020 7946 0000\",\"phoneCountry\":\"GB\"", "\"phone\":\"9876543210\",\"phoneCountry\":\"XX\"")) {
+			mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+					{"email":"%s","password":"%s","firstName":"Test","lastName":"User",%s}""".formatted(email, PASSWORD, body)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.anyOf(
+						org.hamcrest.Matchers.hasItem("phone"), org.hamcrest.Matchers.hasItem("phoneCountry"))));
+		}
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email = ?", Integer.class, email)).isZero();
+
+		// A UAE mobile, typed nationally with its country chosen.
+		String uae = "50" + String.format("%07d", java.util.concurrent.ThreadLocalRandom.current().nextInt(10_000_000));
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
+				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"0%s","phoneCountry":"AE"}"""
+				.formatted(email, PASSWORD, uae)))
+			.andExpect(status().isCreated());
+		assertThat(jdbc.queryForMap("""
+				SELECT p.phone, p.phone_country FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE u.email = ?""", email))
+			.containsEntry("phone", "+971" + uae)
+			.containsEntry("phone_country", "AE");
+	}
+
+	@Test
 	void aMobileNumberIsRequiredAndBelongsToOneAccount() throws Exception {
 		String number = TestApi.mobile();
 		String email = uniqueEmail();
@@ -103,9 +129,13 @@ class AuthFlowIntegrationTest {
 				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"%s"}""".formatted(email, PASSWORD,
 				number.substring(0, 5) + " " + number.substring(5))))
 			.andExpect(status().isCreated());
-		assertThat(jdbc.queryForObject("""
-				SELECT p.phone_key FROM user_profiles p JOIN users u ON u.id = p.user_id WHERE u.email = ?""", String.class, email))
-			.isEqualTo(number);
+		// Stored in international form with its country (India unless another is chosen).
+		assertThat(jdbc.queryForMap("""
+				SELECT p.phone, p.phone_key, p.phone_country FROM user_profiles p JOIN users u ON u.id = p.user_id
+				WHERE u.email = ?""", email))
+			.containsEntry("phone", "+91" + number)
+			.containsEntry("phone_key", "91" + number)
+			.containsEntry("phone_country", "IN");
 
 		// The same number, however it is written, cannot open a second account; nothing of that attempt is kept.
 		String other = uniqueEmail();

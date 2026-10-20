@@ -2,15 +2,19 @@
 
 import { useActionState } from "react";
 import { FormFeedback } from "@/components/ui/form-feedback";
+import { PhoneField } from "@/components/ui/phone-field";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
+import type { Country } from "@/types/location";
 import type { FormState } from "@/validators/form-state";
 import { INTEREST_LABEL } from "./labels";
 import { submitInterestAction } from "./public-actions";
 
-export function InterestForm() {
+/** @param countries the country codes the phone number can be in */
+export function InterestForm({ countries }: { countries: Country[] }) {
   const [state, action] = useActionState<FormState, FormData>(submitInterestAction, {});
   const e = state.fieldErrors ?? {};
   const v = (name: string) => state.values?.[name];
@@ -22,7 +26,8 @@ export function InterestForm() {
         <TextField id="lead-first" label="First name" name="firstName" autoComplete="given-name" defaultValue={v("firstName")} error={e.firstName} />
         <TextField id="lead-last" label="Last name" name="lastName" autoComplete="family-name" defaultValue={v("lastName")} error={e.lastName} />
         <TextField id="lead-email" label="Email" name="email" type="email" autoComplete="email" defaultValue={v("email")} error={e.email} />
-        <TextField id="lead-phone" label="Phone (optional)" name="phone" type="tel" autoComplete="tel" defaultValue={v("phone")} error={e.phone} />
+        <PhoneField id="lead-phone" label="Phone (optional)" countries={countries} mobile={false} defaultNumber={v("phone")}
+          defaultCountry={v("phoneCountry") || DEFAULT_PHONE_COUNTRY} error={e.phone ?? e.phoneCountry} />
         <SelectField id="lead-country" label="Country (optional)" name="country" defaultValue={v("country") ?? ""} placeholder="—"
           options={COUNTRY_OPTIONS} />
         <SelectField id="lead-interest" label="Interested in" name="interest" defaultValue={v("interest") ?? "UNSURE"}

@@ -43,7 +43,7 @@ export default async function CartPage() {
         <div className="space-y-4">
           <ul className="space-y-4">
             {cart.items.map((line) => (
-              <li key={line.productId} className="space-y-4 border border-border bg-surface p-6">
+              <li key={line.productId} className="space-y-4 border border-border bg-surface p-4 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight">

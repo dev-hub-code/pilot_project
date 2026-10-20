@@ -1,6 +1,7 @@
 import type { Invoice } from "@/types/order";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { EmailText } from "@/components/ui/email-text";
 
 /** The invoice as a printable document (print styles strip the surrounding app chrome). */
 export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
@@ -24,7 +25,7 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           <dd className="mt-1 space-y-0.5">
             <p className="font-medium">{invoice.buyer.name}</p>
             {invoice.buyer.address && <p className="text-muted">{invoice.buyer.address}</p>}
-            <p className="text-muted">{invoice.buyer.email}</p>
+            <p className="text-muted"><EmailText>{invoice.buyer.email}</EmailText></p>
           </dd>
         </div>
         <div>

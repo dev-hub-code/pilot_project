@@ -3,11 +3,14 @@
 import { useActionState } from "react";
 import { currencyLabel } from "@/utils/money";
 import { FormFeedback } from "@/components/ui/form-feedback";
+import { PhoneField } from "@/components/ui/phone-field";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import { INTEREST_LABEL, STAGES, STAGE_LABEL } from "@/features/leads/labels";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { splitPhone } from "@/lib/phone";
+import type { Country } from "@/types/location";
 import type { Assignee, Lead, LeadStage } from "@/types/lead";
 import type { FormState } from "@/validators/form-state";
 import { TIME_ZONE_LABEL, isoToZonedInput } from "@/lib/time-zone";
@@ -15,10 +18,12 @@ import { assignLeadAction, changeStageAction, logActivityAction, saveLeadAction 
 
 
 /** "2026-10-07T09:30:00Z" → "2026-10-07T09:30" for a datetime-local input (UTC). */
-export function LeadForm({ lead, assignees }: { lead?: Lead; assignees?: Assignee[] }) {
+/** @param countries the country codes the phone number can be in */
+export function LeadForm({ lead, assignees, countries }: { lead?: Lead; assignees?: Assignee[]; countries: Country[] }) {
   const [state, action] = useActionState<FormState, FormData>(saveLeadAction.bind(null, lead?.id ?? null), {});
   const e = state.fieldErrors ?? {};
   const v = (name: string, fallback?: string | null) => state.values?.[name] ?? fallback ?? undefined;
+  const phone = splitPhone(lead?.phone, lead?.phoneCountry);
   return (
     <form action={action} className="space-y-4" noValidate>
       <FormFeedback state={state} />
@@ -26,7 +31,8 @@ export function LeadForm({ lead, assignees }: { lead?: Lead; assignees?: Assigne
         <TextField label="First name" name="firstName" defaultValue={v("firstName", lead?.firstName)} error={e.firstName} />
         <TextField label="Last name" name="lastName" defaultValue={v("lastName", lead?.lastName)} error={e.lastName} />
         <TextField label="Email" name="email" type="email" defaultValue={v("email", lead?.email)} error={e.email} />
-        <TextField label="Phone" name="phone" type="tel" defaultValue={v("phone", lead?.phone)} error={e.phone} />
+        <PhoneField label="Phone" countries={countries} mobile={false} defaultNumber={v("phone", phone.national)}
+          defaultCountry={v("phoneCountry") || phone.country} error={e.phone ?? e.phoneCountry} />
         <SelectField label="Country" name="country" defaultValue={v("country", lead?.country) ?? ""} placeholder="—" options={COUNTRY_OPTIONS} />
         <SelectField label="Interested in" name="interest" defaultValue={v("interest", lead?.interest ?? "UNSURE")}
           options={Object.entries(INTEREST_LABEL).map(([value, label]) => ({ value, label }))} />

@@ -8,7 +8,7 @@ export interface SubNavItem {
   label: string;
 }
 
-/** Horizontal tabs; the active tab is the longest matching prefix. */
+/** Horizontal tabs, wrapping onto more lines on narrow screens; the active tab is the longest matching prefix. */
 export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: string }) {
   const pathname = usePathname();
   const active = items
@@ -16,8 +16,8 @@ export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: 
     .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
-    <nav aria-label={label} className="overflow-x-auto border-b border-border">
-      <ul className="flex gap-6 text-sm">
+    <nav aria-label={label} className="border-b border-border">
+      <ul className="flex flex-wrap gap-x-5 gap-y-1 text-sm sm:gap-x-6">
         {items.map((item) => {
           const isActive = item === active;
           return (

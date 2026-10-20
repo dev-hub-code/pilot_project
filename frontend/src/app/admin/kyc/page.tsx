@@ -41,7 +41,7 @@ export default async function KycQueuePage({ searchParams }: PageProps<"/admin/k
           {queue.content.map((s) => (
             <tr key={s.id} className="hover:bg-background">
               <Cell>
-                <Link href={`/admin/kyc/${s.id}`} className="font-medium text-brand hover:underline">
+                <Link href={`/admin/kyc/${s.id}`} className="card-link font-medium text-brand hover:underline">
                   {s.legalFirstName} {s.legalLastName}
                 </Link>
               </Cell>

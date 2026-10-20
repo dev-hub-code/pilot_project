@@ -1,11 +1,11 @@
 import { z } from "zod";
+import { phoneCountry, validPhone } from "./phone";
 import { CURRENCY } from "@/lib/currency";
 import { zonedInputToIso } from "@/lib/time-zone";
 
 /** Client-side mirrors of the backend's lead validation; the backend is authoritative. */
 const optional = (max: number) => z.string().trim().max(max).optional().transform((v) => v || undefined);
-const phone = z.string().trim().optional().transform((v) => v || undefined)
-  .pipe(z.string().regex(/^[+0-9 ()-]{6,40}$/, "Enter a phone number").optional());
+const phone = z.string().trim().max(30).optional().transform((v) => v || undefined);
 const country = z.string().trim().optional().transform((v) => v || undefined)
   .pipe(z.string().regex(/^[A-Z]{2}$/).optional());
 const interest = z.enum(["STANDALONE", "UNSURE"]);
@@ -15,18 +15,20 @@ export const interestSchema = z.object({
   lastName: optional(100),
   email: z.email("Enter a valid email address").max(254),
   phone,
+  phoneCountry,
   country,
   interest,
   message: optional(2000),
   consent: z.literal("on", { message: "Please agree so we can contact you" }),
   website: z.string().max(200).optional(),
-});
+}).superRefine(validPhone(false));
 
 export const leadSchema = z.object({
   firstName: z.string().trim().min(1, "Enter a first name").max(100),
   lastName: optional(100),
   email: z.string().trim().optional().transform((v) => v || undefined).pipe(z.email("Enter a valid email").max(254).optional()),
   phone,
+  phoneCountry,
   country,
   interest,
   estimatedAmount: z.string().trim().optional().transform((v) => v || undefined)
@@ -39,6 +41,7 @@ export const leadSchema = z.object({
     .pipe(z.iso.datetime("Enter a valid date and time").optional()),
   ownerId: z.string().trim().optional().transform((v) => v || undefined).pipe(z.uuid().optional()),
 }).refine((d) => d.email || d.phone, { path: ["email"], message: "Give an email address or a phone number" })
+  .superRefine(validPhone(false))
   .transform((d) => ({ ...d, estimatedCurrency: d.estimatedAmount ? CURRENCY : undefined }));
 
 export const stageSchema = z.object({

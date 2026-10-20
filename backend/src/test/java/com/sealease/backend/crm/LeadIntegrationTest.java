@@ -122,6 +122,9 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.lead.source").value("STAFF"))
 			.andExpect(jsonPath("$.lead.ownerId").value(rep.id().toString()))
 			.andExpect(jsonPath("$.lead.estimate.amount").value("25000.00"))
+			// A UK landline, typed nationally with its country: leads may give any valid number.
+			.andExpect(jsonPath("$.lead.phone").value("+442079460000"))
+			.andExpect(jsonPath("$.lead.phoneCountry").value("GB"))
 			.andReturn().getResponse().getContentAsString(), "$.lead.id");
 		createLead(rep, email).andExpect(status().isConflict())
 			.andExpect(jsonPath("$.message").value(containsString("already exists")));
@@ -129,6 +132,11 @@ class LeadIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON).content("{\"firstName\":\"No\",\"interest\":\"STANDALONE\"}"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.message").value(containsString("email address or a phone number")));
+		mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, rep.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"firstName":"No","phone":"12345","phoneCountry":"IN","interest":"STANDALONE"}"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fieldErrors[*].field", org.hamcrest.Matchers.hasItem("phone")));
 
 		// The pipeline: lost needs a reason, a lost lead can be reopened, won is final.
 		stage(rep, leadId, "CONTACTED", null).andExpect(jsonPath("$.lead.stage").value("CONTACTED"));
@@ -212,7 +220,7 @@ class LeadIntegrationTest {
 	private ResultActions createLead(Account actor, String email) throws Exception {
 		return mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("""
-					{"firstName":"Grace","lastName":"Hopper","email":"%s","phone":"+44 20 7946 0000","country":"GB",
+					{"firstName":"Grace","lastName":"Hopper","email":"%s","phone":"020 7946 0000","phoneCountry":"GB","country":"GB",
 					 "interest":"STANDALONE","estimatedAmount":"25000","estimatedCurrency":"INR"}
 					""".formatted(email)));
 	}

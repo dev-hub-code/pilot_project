@@ -4,6 +4,7 @@ import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.ratelimit.FixedWindowRateLimiter;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.crm.dto.PublicLeadRequest;
 import com.sealease.backend.crm.entity.ActivityType;
@@ -64,8 +65,10 @@ public class PublicLeadService {
 					"Submitted the website form again" + (message == null ? "" : ": " + message), null);
 			return;
 		}
+		PhoneNumbers.Phone phone = PhoneNumbers.require(request.phone(), request.phoneCountry());
 		Lead lead = new Lead("LD-" + String.format("%06d", leads.nextNumber()), LeadSource.WEBSITE,
-				new Lead.Contact(request.firstName().strip(), blank(request.lastName()), email, blank(request.phone()),
+				new Lead.Contact(request.firstName().strip(), blank(request.lastName()), email,
+						phone == null ? null : phone.e164(), phone == null ? null : phone.country(),
 						blank(request.country()), request.interest(), null),
 				message, null, now);
 		leadService.linkExistingAccount(lead);

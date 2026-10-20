@@ -2,10 +2,12 @@
 
 import { useActionState } from "react";
 import { FormFeedback } from "@/components/ui/form-feedback";
+import { PhoneField } from "@/components/ui/phone-field";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { splitPhone } from "@/lib/phone";
 import type { Country } from "@/types/location";
 import type { Profile } from "@/types/user";
 import type { FormState } from "@/validators/form-state";
@@ -15,11 +17,12 @@ import { updateProfileAction } from "./actions";
 import { DateField } from "@/components/ui/date-field";
 import { formatDayMonthYear, latestBirthDate } from "@/utils/format";
 
-/** @param countries for the address: picking one loads its states, then its cities */
+/** @param countries for the mobile number's country code, and the address: picking one loads its states, then its cities */
 export function ProfileForm({ profile, countries }: { profile: Profile; countries: Country[] }) {
   const [state, action] = useActionState<FormState, FormData>(updateProfileAction, {});
   const e = state.fieldErrors ?? {};
   const v = (name: string, fallback: string | null) => state.values?.[name] ?? fallback ?? "";
+  const phone = splitPhone(profile.phone, profile.phoneCountry);
 
   return (
     <form action={action} className="space-y-6" noValidate>
@@ -34,8 +37,9 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
           defaultValue={v("dateOfBirth", formatDayMonthYear(profile.dateOfBirth))} error={e.dateOfBirth} />
         <SelectField label="Nationality" name="nationality" options={COUNTRY_OPTIONS} placeholder="Select…"
           defaultValue={v("nationality", profile.nationality ?? DEFAULT_COUNTRY)} error={e.nationality} />
-        <TextField label="Mobile phone" name="phone" type="tel" placeholder="98765 43210"
-          defaultValue={v("phone", profile.phone)} error={e.phone} autoComplete="tel" />
+        <PhoneField label="Mobile phone" countries={countries} placeholder="98765 43210"
+          defaultNumber={state.values?.phone ?? phone.national} defaultCountry={state.values?.phoneCountry || phone.country}
+          error={e.phone ?? e.phoneCountry} />
         <TextField label="Email" name="email" value={profile.email} readOnly disabled />
       </fieldset>
       <p className="-mt-3 text-xs text-muted">

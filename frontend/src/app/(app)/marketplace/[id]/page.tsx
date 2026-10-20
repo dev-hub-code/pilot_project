@@ -3,17 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ContainerScene } from "@/components/brand/container-scene";
 import { Eyebrow } from "@/components/brand/eyebrow";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
-import { SelectField } from "@/components/ui/select-field";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { TextField } from "@/components/ui/text-field";
 import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL } from "@/features/marketplace/labels";
+import { InvestmentPlan } from "@/features/marketplace/investment-plan";
 import { PhotoSlider } from "@/features/marketplace/photo-slider";
+import { ReturnCalculator } from "@/features/marketplace/return-calculator";
 import { AddToCartForm } from "@/features/orders/add-to-cart-form";
-import { leaseOptions, yearsLabel } from "@/features/orders/lease-years";
+import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
@@ -92,7 +91,8 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
             <p className="text-muted">{listing.summary}</p>
           </div>
 
-          <dl className="grid grid-cols-2 gap-px border border-border bg-border">
+          {/* Side by side only when both fit (a price is wide); stacked on phones and in a narrow column. */}
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-px border border-border bg-border">
             <Fact label="Price per container" value={formatMoney(listing.price)} emphasis />
             <Fact label="Minimum lease tenure"
               value={listing.maxTenureYears > listing.minTenureYears
@@ -139,77 +139,59 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
           </Card>
         </div>
 
-        <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-          <section className="space-y-5 border border-border bg-surface p-6" aria-labelledby="calculator">
-            <Eyebrow>Estimate your return</Eyebrow>
-            <form className="grid grid-cols-2 items-end gap-3 [&>*]:min-w-0" action={`/marketplace/${id}`}>
-              <TextField id="calculator" label="Containers" name="containers" type="number" inputMode="numeric" min={1} max={50}
-                defaultValue={String(requested)} />
-              <SelectField label="Lease" name="years" defaultValue={String(years)}
-                options={leaseOptions(listing.minTenureYears, listing.maxTenureYears)} />
-              <Button type="submit" className="col-span-2">Calculate</Button>
-            </form>
-            <dl className="grid grid-cols-2 gap-4 text-sm">
-              <Projection label="You invest" value={formatMoney(projection.amount)} />
-              <Projection label="Rent every month" value={formatMoney(projection.monthlyRent)}
-                note={`${formatPercent(projection.monthlyRentPercent)} of ${formatMoney(projection.amount)}`} />
-              <Projection label="Lease" value={`${yearsLabel(projection.tenureYears)} (${projection.payouts} payouts)`} />
-            </dl>
-            <p className="border-t border-border pt-3 text-sm">
-              Total rent over the tenure: <strong className="font-display text-lg">{formatMoney(projection.totalRent)}</strong>
-            </p>
-            <div className="border-t border-border pt-3 text-xs text-muted">
-              <p className="font-medium text-foreground">Rent by order value</p>
-              <p>Your whole order (every container in your cart) earns the rate for its total, on each container.</p>
-              {Number(minimumOrder.amount.amount) > 0 && (
-                <p>The minimum order is {formatMoney(minimumOrder.amount)}.</p>
-              )}
-              <ul className="mt-1 space-y-0.5 tabular-nums">
-                {rentTiers.tiers.map((t) => (
-                  <li key={t.fromAmount.amount}>
-                    {formatMoney(t.fromAmount)}{t.toAmount ? ` – ${formatMoney(t.toAmount)}` : " and above"}:
-                    {" "}{formatPercent(t.monthlyRentPercent)} a month
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {projection.problems.length > 0 && (
-              <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-300">
-                {projection.problems.map((problem) => <li key={problem}>• {problem}</li>)}
-              </ul>
-            )}
-          </section>
-
-          <Card title="Invest">
-            {!investor ? (
-              <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
-            ) : detail.eligibility.eligible ? (
-              <div className="space-y-4">
-                <Notice tone="success">
-                  {inCart
-                    ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this kind ${inCart.quantity === 1 ? "is" : "are"} in your cart. Add more below.`
-                    : "You can buy this container."}
-                </Notice>
-                <AddToCartForm productId={id} defaultQuantity={calculated ?? 1} defaultYears={years}
-                  minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={inCart?.quantity ?? 0} />
-                {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <ul className="space-y-2 text-sm">
-                  {detail.eligibility.reasons.map((reason) => <li key={reason}>• {reason}</li>)}
+        <InvestmentPlan quantity={String(calculated ?? 1)} years={String(years)}>
+          <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+            <section className="space-y-5 border border-border bg-surface p-6" aria-labelledby="calculator">
+              <Eyebrow>Estimate your return</Eyebrow>
+              <ReturnCalculator productId={id} minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} initial={projection} />
+              <div className="border-t border-border pt-3 text-xs text-muted">
+                <p className="font-medium text-foreground">Rent by order value</p>
+                <p>Your whole order (every container in your cart) earns the rate for its total, on each container.</p>
+                {Number(minimumOrder.amount.amount) > 0 && (
+                  <p>The minimum order is {formatMoney(minimumOrder.amount)}.</p>
+                )}
+                <ul className="mt-1 space-y-0.5 tabular-nums">
+                  {rentTiers.tiers.map((t) => (
+                    <li key={t.fromAmount.amount}>
+                      {formatMoney(t.fromAmount)}{t.toAmount ? ` – ${formatMoney(t.toAmount)}` : " and above"}:
+                      {" "}{formatPercent(t.monthlyRentPercent)} a month
+                    </li>
+                  ))}
                 </ul>
-                {detail.eligibility.reasons.some((r) => r.includes("identity")) && (
-                  <LinkButton href="/profile/verification" className="w-full">Verify my identity</LinkButton>
-                )}
-                {detail.eligibility.reasons.some((r) => r.includes("bank account")) && (
-                  <LinkButton href="/profile/bank-accounts" variant={detail.eligibility.reasons.some((r) => r.includes("identity")) ? "secondary" : "primary"}
-                    className="w-full">Add a bank account</LinkButton>
-                )}
               </div>
-            )}
-          </Card>
-        </aside>
+            </section>
+
+            <Card title="Invest">
+              {!investor ? (
+                <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
+              ) : detail.eligibility.eligible ? (
+                <div className="space-y-4">
+                  <Notice tone="success">
+                    {inCart
+                      ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this kind ${inCart.quantity === 1 ? "is" : "are"} in your cart. Add more below.`
+                      : "You can buy this container."}
+                  </Notice>
+                  <AddToCartForm productId={id} defaultQuantity={calculated ?? 1} defaultYears={years}
+                    minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={inCart?.quantity ?? 0} />
+                  {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <ul className="space-y-2 text-sm">
+                    {detail.eligibility.reasons.map((reason) => <li key={reason}>• {reason}</li>)}
+                  </ul>
+                  {detail.eligibility.reasons.some((r) => r.includes("identity")) && (
+                    <LinkButton href="/profile/verification" className="w-full">Verify my identity</LinkButton>
+                  )}
+                  {detail.eligibility.reasons.some((r) => r.includes("bank account")) && (
+                    <LinkButton href="/profile/bank-accounts" variant={detail.eligibility.reasons.some((r) => r.includes("identity")) ? "secondary" : "primary"}
+                      className="w-full">Add a bank account</LinkButton>
+                  )}
+                </div>
+              )}
+            </Card>
+          </aside>
+        </InvestmentPlan>
       </div>
     </div>
   );
@@ -224,12 +206,3 @@ function Fact({ label, value, emphasis }: { label: string; value: string; emphas
   );
 }
 
-function Projection({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
-      <dd className="mt-1 font-display text-xl font-semibold">{value}</dd>
-      {note && <dd className="mt-0.5 text-xs text-muted">{note}</dd>}
-    </div>
-  );
-}

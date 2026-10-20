@@ -103,6 +103,12 @@
 		</dependency>
 
 		<!-- Observability -->
+		<!-- Phone numbers: per-country validation (mobile or not) and E.164 formatting; the frontend uses libphonenumber-js. -->
+		<dependency>
+			<groupId>com.googlecode.libphonenumber</groupId>
+			<artifactId>libphonenumber</artifactId>
+			<version>9.0.40</version>
+		</dependency>
 		<!-- Excel (.xlsx) withdrawal files: written for finance and read back after paying. -->
 		<dependency>
 			<groupId>org.dhatim</groupId>

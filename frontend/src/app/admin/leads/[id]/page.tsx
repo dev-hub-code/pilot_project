@@ -11,10 +11,13 @@ import { ACTIVITY_LABEL, INTEREST_LABEL, STAGE_LABEL, STAGE_TONE } from "@/featu
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { getPhoneCountries } from "@/lib/server/phone-countries";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Assignee, LeadDetail } from "@/types/lead";
 import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { EmailText } from "@/components/ui/email-text";
+import { formatPhone } from "@/lib/phone";
 
 export const metadata: Metadata = { title: "Lead" };
 
@@ -34,6 +37,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
   const manager = can(Permission.LEAD_ASSIGN);
   const assignees = manager ? await authFetch<Assignee[]>("/api/v1/admin/leads/assignees") : [];
   const canWork = editable && can(Permission.LEAD_UPDATE);
+  const phoneCountries = canWork ? await getPhoneCountries() : [];
 
   return (
     <div className="space-y-6">
@@ -56,8 +60,8 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
         <div className="space-y-6">
           <Card title="Details">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Email">{l.email ?? "—"}</Item>
-              <Item label="Phone">{l.phone ?? "—"}</Item>
+              <Item label="Email">{l.email ? <EmailText>{l.email}</EmailText> : "—"}</Item>
+              <Item label="Phone">{l.phone ? formatPhone(l.phone) : "—"}</Item>
               <Item label="Country">{l.country ?? "—"}</Item>
               <Item label="Interested in">{INTEREST_LABEL[l.interest]}</Item>
               <Item label="Estimate">{formatMoney(l.estimate)}</Item>
@@ -88,7 +92,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
           </section>
 
           {canWork && (
-            <Card title="Edit details"><LeadForm lead={l} /></Card>
+            <Card title="Edit details"><LeadForm lead={l} countries={phoneCountries} /></Card>
           )}
         </div>
 

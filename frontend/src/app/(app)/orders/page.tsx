@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CardField, CardList, CardListItem } from "@/components/ui/card-list";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -27,23 +28,47 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
       {orders.content.length === 0 ? (
         <EmptyState title="No orders yet" description="Orders appear here once you check out your cart." />
       ) : (
-        <DataTable columns={["Order", "Placed", "Containers", "Total", "Status", ""]}>
-          {orders.content.map((o) => (
-            <tr key={o.id} className="hover:bg-background">
-              <Cell><Link href={`/orders/${o.id}`} className="font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
-              <Cell className="text-muted">{formatDateTime(o.createdAt)}</Cell>
-              <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
-              <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>
-              <Cell><StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge></Cell>
-              <Cell>
-                {o.status === "PENDING_PAYMENT" && (
-                  <ActionButton action={cancelOrderAction.bind(null, o.id)} label="Cancel" variant="quiet" pendingLabel="Cancelling…"
-                    confirm={`Cancel ${o.orderNumber}? If you have already paid for it, the money is refunded to you once it arrives.`} />
-                )}
-              </Cell>
-            </tr>
-          ))}
-        </DataTable>
+        <>
+          <CardList label="Orders">
+            {orders.content.map((o) => (
+              <CardListItem key={o.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <Link href={`/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link>
+                  <StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge>
+                </div>
+                <dl className="grid grid-cols-2 gap-3">
+                  <CardField label="Total"><span className="font-medium tabular-nums">{formatMoney(o.total)}</span></CardField>
+                  <CardField label="Placed"><span className="text-muted">{formatDateTime(o.createdAt)}</span></CardField>
+                  <CardField label="Containers" className="col-span-2">{containersSummary(o.items)}</CardField>
+                </dl>
+                <div className="flex items-center justify-between gap-3">
+                  <Link href={`/orders/${o.id}`} className="text-gold-text hover:underline">View order →</Link>
+                  {o.status === "PENDING_PAYMENT" && (
+                    <ActionButton action={cancelOrderAction.bind(null, o.id)} label="Cancel" variant="quiet" pendingLabel="Cancelling…"
+                      confirm={`Cancel ${o.orderNumber}? If you have already paid for it, the money is refunded to you once it arrives.`} />
+                  )}
+                </div>
+              </CardListItem>
+            ))}
+          </CardList>
+          <DataTable columns={["Order", "Placed", "Containers", "Total", "Status", ""]} className="hidden sm:block">
+            {orders.content.map((o) => (
+              <tr key={o.id} className="hover:bg-background">
+                <Cell><Link href={`/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
+                <Cell className="text-muted">{formatDateTime(o.createdAt)}</Cell>
+                <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
+                <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>
+                <Cell><StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge></Cell>
+                <Cell>
+                  {o.status === "PENDING_PAYMENT" && (
+                    <ActionButton action={cancelOrderAction.bind(null, o.id)} label="Cancel" variant="quiet" pendingLabel="Cancelling…"
+                      confirm={`Cancel ${o.orderNumber}? If you have already paid for it, the money is refunded to you once it arrives.`} />
+                  )}
+                </Cell>
+              </tr>
+            ))}
+          </DataTable>
+        </>
       )}
       <Pagination page={orders} basePath="/orders" params={{}} />
     </div>

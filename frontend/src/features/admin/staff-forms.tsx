@@ -11,6 +11,7 @@ import type { FormState } from "@/validators/form-state";
 import { type CredentialsState, createStaffAction, resetStaffPasswordAction, updateRolesAction } from "./staff-actions";
 import { copyText } from "@/utils/clipboard";
 import { formatDateTime } from "@/utils/format";
+import { EmailText } from "@/components/ui/email-text";
 
 function RoleChoices({ roles, selected, error }: { roles: Role[]; selected: string[]; error?: string }) {
   return (
@@ -34,7 +35,7 @@ export function IssuedCredentials({ credentials }: { credentials: StaffCredentia
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-3 border-l-4 border-gold bg-background p-4 text-sm">
-      <p className="font-medium">Temporary password for {credentials.firstName} {credentials.lastName} ({credentials.email})</p>
+      <p className="font-medium">Temporary password for {credentials.firstName} {credentials.lastName} (<EmailText>{credentials.email}</EmailText>)</p>
       <div className="flex flex-wrap items-center gap-3">
         <code className="bg-surface px-3 py-2 font-mono text-base tracking-wider">{credentials.temporaryPassword}</code>
         <Button type="button" variant="secondary" onClick={async () => {

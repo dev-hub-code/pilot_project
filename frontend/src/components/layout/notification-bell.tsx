@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { openNotificationAction, readAllNotificationsAction } from "@/features/notifications/actions";
+import { notificationAction } from "@/features/notifications/labels";
 import type { AppNotification } from "@/types/support";
 
 /** How often the open, visible page checks for new notifications. */
@@ -50,6 +51,13 @@ export function NotificationBell({ initial }: { initial: number }) {
   const [recent, setRecent] = useState<{ items: AppNotification[]; loadedAt: number } | null>(null);
   const [failed, setFailed] = useState(false);
   const pathname = usePathname();
+  // Close the popup once a notification has taken the user to its page. (Closing it on click would remove the
+  // clicked notification's form before it is submitted, and the browser would drop the submission.)
+  const [openedOn, setOpenedOn] = useState(pathname);
+  if (pathname !== openedOn) {
+    setOpenedOn(pathname);
+    setOpen(false);
+  }
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const panelId = useId();
@@ -119,6 +127,13 @@ export function NotificationBell({ initial }: { initial: number }) {
     };
   }, [open]);
 
+  /** Shows a clicked notification as read straight away; its form marks it read on the server and opens its page. */
+  function markRead(id: string) {
+    if (!recent?.items.some((n) => n.id === id && !n.read)) return;
+    setUnread((count) => Math.max(0, count - 1));
+    setRecent((r) => r && { ...r, items: r.items.map((n) => (n.id === id ? { ...n, read: true } : n)) });
+  }
+
   async function markAllRead() {
     await readAllNotificationsAction();
     setUnread(0);
@@ -164,12 +179,15 @@ export function NotificationBell({ initial }: { initial: number }) {
                   <li key={n.id}>
                     {/* Marks it read and opens what it points at. */}
                     <form action={openNotificationAction.bind(null, n.id, n.link)}>
-                      <button type="submit" onClick={() => setOpen(false)}
+                      <button type="submit" onClick={() => markRead(n.id)}
                         className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-background">
                         <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-gold"}`} />
                         <span className="min-w-0 flex-1">
                           <span className={`block text-sm ${n.read ? "text-muted" : "font-medium"}`}>{n.title}</span>
                           {n.body && <span className="block truncate text-xs text-muted">{n.body}</span>}
+                          {notificationAction(n) && (
+                            <span className="mt-1 block text-xs font-medium text-gold-text">{notificationAction(n)} →</span>
+                          )}
                           <span className="mt-0.5 block text-[11px] text-muted">{ago(n.createdAt, recent.loadedAt)}</span>
                         </span>
                         {!n.read && <span className="sr-only">(unread)</span>}

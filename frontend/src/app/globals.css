@@ -124,6 +124,126 @@ h1, h2, h3 {
   outline-offset: 2px;
 }
 
+/*
+ * A row or card whose main link is `.card-link` opens it on a click anywhere: the link's ::after is stretched over
+ * the row (still one link for keyboards and screen readers). Other links and controls in the row stay above it.
+ */
+:is(tr, li, article):has(.card-link) {
+  position: relative;
+}
+:is(tr, li):has(.card-link):hover {
+  background-color: var(--color-background);
+}
+.card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.card-link:focus-visible {
+  outline: none;
+}
+.card-link:focus-visible::after {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+:is(tr, li, article):has(.card-link) :is(a, button, input, select, textarea, label, summary):not(.card-link) {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * DataTable below `lg` (phones and tablets): each row becomes a card, each cell labelled with its column's heading
+ * (data-label). On phones a cell is a "label  value" line; on tablets the cells sit in a grid, label over value.
+ * Cells without a label (action columns) span the card; empty cells are hidden. From `lg` it is a plain table.
+ */
+.data-table-value {
+  display: contents;
+}
+
+@media (width < 64rem) {
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .data-table,
+  .data-table tbody,
+  .data-table tr {
+    display: block;
+  }
+  .data-table td {
+    max-width: none;
+    white-space: normal;
+  }
+  .data-table td::before {
+    content: attr(data-label);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .data-table td:not([data-label])::before {
+    content: none;
+  }
+  .data-table td:has(> .data-table-value:empty) {
+    display: none;
+  }
+  .data-table-value {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (width < 40rem) {
+  .data-table tr {
+    padding: 0.75rem 1rem;
+  }
+  .data-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3rem 0;
+    text-align: right;
+  }
+  .data-table td::before {
+    flex-shrink: 0;
+    max-width: 45%;
+    text-align: left;
+  }
+  .data-table td:not([data-label]) {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .data-table-value {
+    flex: 1 1 auto;
+  }
+}
+
+@media (40rem <= width < 64rem) {
+  .data-table tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.75rem 1.5rem;
+    padding: 1rem 1.25rem;
+  }
+  .data-table td {
+    display: block;
+    padding: 0;
+  }
+  .data-table td::before {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  .data-table td:not([data-label]) {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;

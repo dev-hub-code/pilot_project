@@ -18,6 +18,7 @@ import type { PageResponse } from "@/types/api";
 import type { FinanceTask, WithdrawalKind, WithdrawalPayoutMethod } from "@/types/withdrawal";
 import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { formatPhone } from "@/lib/phone";
 
 export const metadata: Metadata = { title: "Finance tasks" };
 
@@ -137,7 +138,7 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
                   {cash ? (
                     <>
                       Cash
-                      <span className="block text-xs text-muted">{t.phone ?? "No phone on file"}</span>
+                      <span className="block text-xs text-muted">{t.phone ? formatPhone(t.phone) : "No phone on file"}</span>
                     </>
                   ) : (
                     <>

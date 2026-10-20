@@ -8,6 +8,7 @@ import { ActionButton } from "@/features/orders/action-button";
 import { closeTicketAction, reopenTicketAction, replyTicketAction } from "@/features/support/actions";
 import { ReopenForm, ReplyForm } from "@/features/support/forms";
 import { CATEGORY_LABEL, TICKET_STATUS_LABEL, TICKET_TONE } from "@/features/support/labels";
+import { LiveRefresh } from "@/features/support/live-refresh";
 import { Thread } from "@/features/support/thread";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
@@ -49,6 +50,7 @@ export default async function TicketPage({ params }: PageProps<"/support/[id]">)
         <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Conversation &amp; updates</h2>
         <Thread messages={detail.messages} events={detail.events} viewer="customer"
           attachmentHref={(a) => `/support/${t.id}/attachments/${a}`} />
+        {t.status !== "CLOSED" && <LiveRefresh />}
       </section>
 
       {t.status === "RESOLVED" || t.status === "CLOSED" ? (

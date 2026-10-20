@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { buttonBase, buttonVariants } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
@@ -34,7 +35,8 @@ const HOLDING_TONE: Record<HoldingStatus, StatusTone> = {
   MATURED: "neutral",
 };
 
-export default async function PortfolioPage() {
+export default async function PortfolioPage({ searchParams }: PageProps<"/portfolio">) {
+  const accepted = (await searchParams).accepted;
   const credit = await getRentCredit();
   const [portfolio, earnings, agreementList] = await Promise.all([
     authFetch<Portfolio>("/api/v1/portfolio"),
@@ -52,6 +54,12 @@ export default async function PortfolioPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Portfolio" description="The containers you own, their leases and the rent they earn." />
+      {typeof accepted === "string" && agreements.get(accepted)?.acceptedAt && (
+        <Notice tone="success">
+          Agreement {agreements.get(accepted)?.agreementNumber} accepted. Your lease starts at the next full hour, and rent
+          is credited to your wallet {credit.label} from then on. You can download the agreement from the container below.
+        </Notice>
+      )}
       {firstToAccept && (
         <Notice tone="warning">
           <strong>{toAccept.length === 1 ? "A lease agreement is" : `${toAccept.length} lease agreements are`} waiting for you.</strong>{" "}
@@ -84,7 +92,7 @@ export default async function PortfolioPage() {
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
-        <DataTable columns={["Container", "Type", "Invested", "Rent", "Paid monthly", "Lease", "Rent credited", "Status"]}>
+        <DataTable columns={["Container", "Type", "Invested", "Rent", "Paid monthly", "Lease", "Rent credited", "Status", ""]}>
           {portfolio.holdings.map((h) => {
             const lease = leases.get(h.id);
             const agreement = agreements.get(h.id);
@@ -95,16 +103,6 @@ export default async function PortfolioPage() {
                     <>
                       <span className="font-mono font-medium">{h.container.containerNumber}</span>
                       <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[h.container.containerType]}{h.container.currentLocation ? ` · ${h.container.currentLocation}` : ""}</span>
-                      {h.status === "AWAITING_ACCEPTANCE" ? (
-                        <Link href={`/portfolio/${h.id}/agreement`} className="block text-xs font-medium text-gold-text hover:underline">
-                          Review and accept agreement
-                        </Link>
-                      ) : agreement && (
-                        <Link href={`/portfolio/${h.id}/agreement`} className="block text-xs text-gold-text hover:underline"
-                          title={`Lease agreement ${agreement.agreementNumber}`}>
-                          Lease agreement
-                        </Link>
-                      )}
                     </>
                   ) : (
                     <>
@@ -140,6 +138,18 @@ export default async function PortfolioPage() {
                 </Cell>
                 <Cell>
                   <StatusBadge tone={HOLDING_TONE[h.status]}>{HOLDING_LABEL[h.status]}</StatusBadge>
+                </Cell>
+                {/* Unlabelled: on phones it spans the bottom of the container's card. */}
+                <Cell>
+                  {h.status === "AWAITING_ACCEPTANCE" ? (
+                    <LinkButton href={`/portfolio/${h.id}/agreement`} className="w-full sm:w-auto">Accept agreement</LinkButton>
+                  ) : agreement && (
+                    <a href={`/portfolio/agreements/${h.id}`} download
+                      className={`${buttonBase} ${buttonVariants.quiet} w-full sm:w-auto`}
+                      title={`Lease agreement ${agreement.agreementNumber}`}>
+                      Download PDF
+                    </a>
+                  )}
                 </Cell>
               </tr>
             );

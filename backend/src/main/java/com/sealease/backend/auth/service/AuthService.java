@@ -15,6 +15,7 @@ import com.sealease.backend.auth.jwt.AccessTokenService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.ratelimit.FixedWindowRateLimiter;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.referral.service.ReferralService;
 import com.sealease.backend.role.dto.UserAuthorities;
@@ -95,7 +96,7 @@ public class AuthService {
 		boolean verify = emailVerification.isRequired();
 		return tx.execute(status -> {
 			UserAccount account = accounts.register(request.email(), request.password(), request.firstName(),
-					request.lastName(), request.phone(), !verify);
+					request.lastName(), PhoneNumbers.require(request.phone(), request.phoneCountry()), !verify);
 			userRoles.grantSystemRole(account.id(), properties.defaultRole());
 			if (request.referralCode() != null && !request.referralCode().isBlank()) {
 				referrals.link(account.id(), request.referralCode());

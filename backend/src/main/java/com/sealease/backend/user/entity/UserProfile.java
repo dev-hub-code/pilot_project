@@ -1,6 +1,7 @@
 package com.sealease.backend.user.entity;
 
 import com.sealease.backend.common.persistence.BaseEntity;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,12 +22,17 @@ public class UserProfile extends BaseEntity {
 	@JoinColumn(name = "user_id", nullable = false, updatable = false)
 	private User user;
 
+	/** The mobile number in international (E.164) form, e.g. "+919876543210". */
 	@Column(name = "phone", length = 20)
 	private String phone;
 
-	/** The phone number in comparable form (unique across accounts); see {@code PhoneNumbers}. */
+	/** The phone number in comparable form (unique across accounts); see {@code PhoneNumbers.Phone#key}. */
 	@Column(name = "phone_key", length = 20)
 	private String phoneKey;
+
+	/** The country of the mobile number (ISO 3166-1 alpha-2, a row of {@code countries}). */
+	@Column(name = "phone_country", length = 2)
+	private String phoneCountry;
 
 	@Column(name = "date_of_birth")
 	private LocalDate dateOfBirth;
@@ -78,9 +84,11 @@ public class UserProfile extends BaseEntity {
 		this.user = user;
 	}
 
-	public void updatePersonal(String phone, String phoneKey, LocalDate dateOfBirth, String nationality) {
-		this.phone = phone;
-		this.phoneKey = phoneKey;
+	/** @param phone the mobile number, or null for none */
+	public void updatePersonal(PhoneNumbers.Phone phone, LocalDate dateOfBirth, String nationality) {
+		this.phone = phone == null ? null : phone.e164();
+		this.phoneKey = phone == null ? null : phone.key();
+		this.phoneCountry = phone == null ? null : phone.country();
 		this.dateOfBirth = dateOfBirth;
 		this.nationality = nationality;
 	}
@@ -116,6 +124,10 @@ public class UserProfile extends BaseEntity {
 
 	public String getPhone() {
 		return phone;
+	}
+
+	public String getPhoneCountry() {
+		return phoneCountry;
 	}
 
 	public LocalDate getDateOfBirth() {

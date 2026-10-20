@@ -31,11 +31,13 @@ export function Thread({ messages, events = [], viewer, attachmentHref }: {
         </li>
       ) : (
         <li key={entry.message.id}
-          className={`border px-4 py-3 text-sm ${entry.message.internal ? "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10"
-            : entry.message.fromStaff ? "border-border bg-background" : "border-border bg-surface"}`}>
+          className={`border px-4 py-3 text-sm ${messageStyle(entry.message, viewer)}`}>
           <p className="text-xs text-muted">
             <span className="font-medium text-foreground">{entry.message.authorName ?? "—"}</span>
             {entry.message.internal && <span className="ml-2 uppercase tracking-[0.08em] text-amber-700 dark:text-amber-300">Internal note</span>}
+            {!entry.message.internal && entry.message.fromStaff && viewer === "customer" && (
+              <span className="ml-2 uppercase tracking-[0.08em] text-gold-text">Support</span>
+            )}
             {" · "}{formatDateTime(entry.message.createdAt)}
           </p>
           <p className="mt-2 whitespace-pre-line">{entry.message.body}</p>
@@ -55,4 +57,15 @@ export function Thread({ messages, events = [], viewer, attachmentHref }: {
       ))}
     </ol>
   );
+}
+
+/**
+ * Chat-style: the viewer's own side (the investor, or staff replying) on the right in gold; the other side on the left
+ * on white, with a gold edge on support's replies; internal notes full width in amber.
+ */
+function messageStyle(message: TicketMessage, viewer: "customer" | "staff"): string {
+  if (message.internal) return "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10";
+  const own = message.fromStaff === (viewer === "staff");
+  if (own) return "ml-auto w-fit min-w-[50%] max-w-[90%] border-gold/50 bg-gold/15 sm:max-w-[75%]";
+  return `mr-auto w-fit min-w-[50%] max-w-[90%] border-border bg-surface sm:max-w-[75%] ${message.fromStaff ? "border-l-4 border-l-gold" : ""}`;
 }

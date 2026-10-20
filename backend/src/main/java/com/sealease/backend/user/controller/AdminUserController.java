@@ -42,9 +42,10 @@ public class AdminUserController {
 			@RequestParam(required = false) @Size(max = 100) String q,
 			@RequestParam(required = false) UserStatus status,
 			@RequestParam(required = false) KycStatus kycStatus,
+			@RequestParam(required = false) Boolean emailVerified,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
 			AuthenticatedUser viewer) {
-		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, investorsOnly(viewer)),
+		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, emailVerified, investorsOnly(viewer)),
 				pageable));
 	}
 

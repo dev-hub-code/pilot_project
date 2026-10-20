@@ -168,7 +168,7 @@ export default async function AdminOverviewPage() {
           {roles.content.map((role) => (
             <tr key={role.id}>
               <Cell className="font-mono text-xs font-medium">
-                <Link href={`/admin/roles/${role.id}`} className="text-gold-text hover:underline">{role.name}</Link>
+                <Link href={`/admin/roles/${role.id}`} className="card-link text-gold-text hover:underline">{role.name}</Link>
               </Cell>
               <Cell className="text-muted">{role.description}</Cell>
               <Cell className="tabular-nums">{role.permissions.length}</Cell>

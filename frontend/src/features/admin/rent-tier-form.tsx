@@ -44,44 +44,47 @@ export function RentTierForm({ tiers }: { tiers: readonly RentTier[] }) {
   return (
     <form action={action} className="space-y-4" noValidate>
       <FormFeedback state={state} />
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-muted">
-            <th className="pb-2 font-medium">Order value from (₹)</th>
-            <th className="pb-2 pl-3 font-medium">To (₹, blank = and above)</th>
-            <th className="pb-2 pl-3 font-medium">Monthly rent (%)</th>
-            <th className="pb-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={row.key}>
-              <td className="py-1 align-middle">
-                <input name="fromAmount" value={row.from} inputMode="decimal" placeholder="e.g. 100000"
-                  aria-label={`Band ${i + 1}: order value from`} onChange={(e) => change(row.key, "from", e.target.value)}
-                  className={inputClass} />
-              </td>
-              <td className="py-1 pl-3 align-middle">
-                <input name="toAmount" value={row.to} inputMode="decimal" placeholder={i === rows.length - 1 ? "and above" : "e.g. 499999"}
-                  aria-label={`Band ${i + 1}: order value to`} onChange={(e) => change(row.key, "to", e.target.value)}
-                  className={inputClass} />
-              </td>
-              <td className="py-1 pl-3 align-middle">
-                <input name="monthlyRentPercent" value={row.percent} inputMode="decimal" placeholder="e.g. 5"
-                  aria-label={`Band ${i + 1}: monthly rent percent`} onChange={(e) => change(row.key, "percent", e.target.value)}
-                  className={inputClass} />
-              </td>
-              <td className="py-1 pl-3 text-right align-middle">
-                {rows.length > 1 && (
-                  <button type="button" onClick={() => remove(row.key)} className="text-xs text-muted underline hover:text-foreground">
-                    Remove
-                  </button>
-                )}
-              </td>
+      {/* Scrolls sideways on phones rather than squeezing three inputs into a narrow screen. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[32rem] text-sm">
+          <thead>
+            <tr className="text-left text-xs text-muted">
+              <th className="pb-2 font-medium">Order value from (₹)</th>
+              <th className="pb-2 pl-3 font-medium">To (₹, blank = and above)</th>
+              <th className="pb-2 pl-3 font-medium">Monthly rent (%)</th>
+              <th className="pb-2" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={row.key}>
+                <td className="py-1 align-middle">
+                  <input name="fromAmount" value={row.from} inputMode="decimal" placeholder="e.g. 100000"
+                    aria-label={`Band ${i + 1}: order value from`} onChange={(e) => change(row.key, "from", e.target.value)}
+                    className={inputClass} />
+                </td>
+                <td className="py-1 pl-3 align-middle">
+                  <input name="toAmount" value={row.to} inputMode="decimal" placeholder={i === rows.length - 1 ? "and above" : "e.g. 499999"}
+                    aria-label={`Band ${i + 1}: order value to`} onChange={(e) => change(row.key, "to", e.target.value)}
+                    className={inputClass} />
+                </td>
+                <td className="py-1 pl-3 align-middle">
+                  <input name="monthlyRentPercent" value={row.percent} inputMode="decimal" placeholder="e.g. 5"
+                    aria-label={`Band ${i + 1}: monthly rent percent`} onChange={(e) => change(row.key, "percent", e.target.value)}
+                    className={inputClass} />
+                </td>
+                <td className="py-1 pl-3 text-right align-middle">
+                  {rows.length > 1 && (
+                    <button type="button" onClick={() => remove(row.key)} className="text-xs text-muted underline hover:text-foreground">
+                      Remove
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={add} disabled={rows.length >= 20}
           className="min-h-11 border border-dashed border-border px-4 text-sm hover:border-foreground/40 disabled:opacity-60">

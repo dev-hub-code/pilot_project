@@ -59,7 +59,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
           {withdrawals.content.map((w) => (
             <tr key={w.id} className="hover:bg-background">
               <Cell className="text-muted">{formatDateTime(w.createdAt)}</Cell>
-              <Cell><Link href={`/admin/withdrawals/${w.id}`} className="font-mono text-gold-text hover:underline">{w.reference}</Link></Cell>
+              <Cell><Link href={`/admin/withdrawals/${w.id}`} className="card-link font-mono text-gold-text hover:underline">{w.reference}</Link></Cell>
               <Cell className="tabular-nums">{formatMoney(w.amount)}</Cell>
               <Cell>{EARNINGS_BALANCE_LABEL[w.balance]}</Cell>
               <Cell>

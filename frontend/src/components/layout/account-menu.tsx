@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { logoutAction } from "@/features/auth/actions";
+import { EmailText } from "@/components/ui/email-text";
 
 export interface MenuLink {
   href: string;
@@ -65,7 +66,7 @@ export function AccountMenu({ sections, name, email, userCode }: {
         <div id={menuId} className="absolute right-0 z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] border border-border bg-surface shadow-lg">
           <div className="border-b border-border px-4 py-3">
             <p className="truncate text-sm font-medium">{name}</p>
-            {email && <p className="truncate text-xs text-muted">{email}</p>}
+            {email && <p className="truncate text-xs text-muted"><EmailText>{email}</EmailText></p>}
             {userCode && <p className="mt-1 font-mono text-xs text-muted">ID {userCode}</p>}
           </div>
           <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm">

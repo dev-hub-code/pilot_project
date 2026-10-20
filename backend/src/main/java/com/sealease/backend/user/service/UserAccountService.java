@@ -6,6 +6,7 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
+import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.User;
 import com.sealease.backend.user.entity.UserCodes;
@@ -74,12 +75,12 @@ public class UserAccountService {
 	/**
 	 * Self-registration.
 	 *
-	 * @param phone         the mobile number, unique across accounts; saved on the new profile
+	 * @param phone         the mobile number (validated), unique across accounts; saved on the new profile
 	 * @param emailVerified {@code false} when the user must still confirm their address before signing in
 	 */
 	@Transactional
-	public UserAccount register(String email, String rawPassword, String firstName, String lastName, String phone,
-			boolean emailVerified) {
+	public UserAccount register(String email, String rawPassword, String firstName, String lastName,
+			PhoneNumbers.Phone phone, boolean emailVerified) {
 		String normalizedEmail = EmailNormalizer.normalize(email);
 		passwordPolicy.validate(rawPassword, normalizedEmail);
 		if (users.existsByEmail(normalizedEmail)) {

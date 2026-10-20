@@ -24,7 +24,7 @@ export function CartLineForm({ productId, title, quantity, tenureYears, minYears
     <div className="space-y-2">
       <FormFeedback state={state} />
       <div className="flex flex-wrap items-end gap-2">
-        <form action={action} className="flex items-end gap-2" noValidate>
+        <form action={action} className="flex flex-wrap items-end gap-2" noValidate>
           <label className="space-y-1.5">
             <span className="block text-sm font-medium text-foreground">Containers</span>
             <input name="quantity" type="number" inputMode="numeric" min={1} max={50}

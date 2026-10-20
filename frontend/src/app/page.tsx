@@ -11,6 +11,7 @@ import { ReviewCarousel, type Review } from "@/features/landing/review-carousel"
 import { InterestForm } from "@/features/leads/interest-form";
 import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stats";
 import { getPublicPlans } from "@/lib/server/public-plans";
+import { getPhoneCountries } from "@/lib/server/phone-countries";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
 import { formatMoney } from "@/utils/money";
 
@@ -278,7 +279,8 @@ const STEPS = [
 export default async function Home() {
   // System status must reflect the live backend, never a build-time snapshot.
   await connection();
-  const [backend, stats, plans] = await Promise.all([getBackendStatus(), getPlatformStats(), getPublicPlans()]);
+  const [backend, stats, plans, phoneCountries] = await Promise.all([getBackendStatus(), getPlatformStats(), getPublicPlans(),
+    getPhoneCountries()]);
   const production = process.env.NODE_ENV === "production";
   const usesSampleFigures = !production && Object.values(COMPANY_RECORD).some((value) => value === null);
   const figures = trackRecord(stats, usesSampleFigures);
@@ -584,7 +586,7 @@ export default async function Home() {
               whether you are buying your first container or adding to your fleet.
             </p>
           </div>
-          <InterestForm />
+          <InterestForm countries={phoneCountries} />
         </section>
 
         {/* ----------------------------------------------------------------- footer */}

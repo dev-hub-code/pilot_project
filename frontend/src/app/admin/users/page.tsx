@@ -15,12 +15,14 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AdminUserSummary } from "@/types/user";
 import { formatDate, humanize } from "@/utils/format";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Users" };
 
 const options = (values: readonly string[]) => values.map((value) => ({ value, label: humanize(value) }));
 const STATUS = ["ACTIVE", "SUSPENDED", "DISABLED"] as const;
 const KYC = ["NOT_SUBMITTED", "PENDING", "APPROVED", "REJECTED"] as const;
+const EMAIL = ["true", "false"] as const;
 
 function pick<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
@@ -33,6 +35,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
     q: typeof params.q === "string" ? params.q.slice(0, 100) : undefined,
     status: pick(params.status, STATUS),
     kycStatus: pick(params.kycStatus, KYC),
+    emailVerified: pick(params.emailVerified, EMAIL),
   };
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   const query = new URLSearchParams({ page: String(page), size: "25" });
@@ -45,17 +48,15 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
         description={hasPermission(session.permissions, Permission.STAFF_ACCOUNT_VIEW) ? "Investors and employees." : "Investors."}
         actions={hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
           ? <LinkButton href="/admin/users/new">New employee</LinkButton> : undefined} />
-      <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-5" role="search">
+      <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6" role="search">
         <div className="sm:col-span-2">
           <TextField label="Search" name="q" type="search" placeholder="Email, name or ID (SL03500)" defaultValue={filters.q} />
         </div>
         <SelectField label="Status" name="status" options={options(STATUS)} placeholder="Any" defaultValue={filters.status ?? ""} />
         <SelectField label="KYC" name="kycStatus" options={options(KYC)} placeholder="Any" defaultValue={filters.kycStatus ?? ""} />
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-          </div>
-          <Button type="submit">Filter</Button>
-        </div>
+        <SelectField label="Email" name="emailVerified" placeholder="Any" defaultValue={filters.emailVerified ?? ""}
+          options={[{ value: "true", label: "Verified" }, { value: "false", label: "Not verified" }]} />
+        <Button type="submit">Filter</Button>
       </form>
 
       {users.content.length === 0 ? (
@@ -66,12 +67,17 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
             <tr key={user.id} className="hover:bg-background">
               <Cell className="font-mono text-xs">{user.userCode}</Cell>
               <Cell>
-                <Link href={`/admin/users/${user.id}`} className="font-medium text-brand hover:underline">
+                <Link href={`/admin/users/${user.id}`} className="card-link font-medium text-brand hover:underline">
                   {user.firstName} {user.lastName}
                 </Link>
               </Cell>
-              <Cell className="text-muted">{user.email}</Cell>
-              <Cell><StatusBadge tone={toneFor(user.status)}>{humanize(user.status)}</StatusBadge></Cell>
+              <Cell className="text-muted"><EmailText>{user.email}</EmailText></Cell>
+              <Cell>
+                <span className="inline-flex flex-wrap gap-1.5">
+                  <StatusBadge tone={toneFor(user.status)}>{humanize(user.status)}</StatusBadge>
+                  {!user.emailVerifiedAt && <StatusBadge tone="warning">Email not verified</StatusBadge>}
+                </span>
+              </Cell>
               <Cell><StatusBadge tone={toneFor(user.kycStatus)}>{humanize(user.kycStatus)}</StatusBadge></Cell>
               <Cell className="text-muted">{formatDate(user.createdAt)}</Cell>
               <Cell className="text-muted">{formatDate(user.lastLoginAt)}</Cell>

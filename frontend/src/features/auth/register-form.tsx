@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PhoneField } from "@/components/ui/phone-field";
 import { TextField } from "@/components/ui/text-field";
+import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
+import type { Country } from "@/types/location";
 import { type FormState, PASSWORD_MAX, PASSWORD_MIN, PASSWORD_RULES } from "@/validators/auth";
 import { registerAction } from "./actions";
 
-export function RegisterForm({ referralCode }: { referralCode?: string }) {
+/** @param countries the country codes the mobile number can be in */
+export function RegisterForm({ referralCode, countries }: { referralCode?: string; countries: Country[] }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(registerAction, {});
   const errors = state.fieldErrors ?? {};
 
@@ -42,16 +46,14 @@ export function RegisterForm({ referralCode }: { referralCode?: string }) {
         defaultValue={state.values?.email}
         error={errors.email}
       />
-      <TextField
+      <PhoneField
         label="Mobile number"
-        name="phone"
-        type="tel"
-        autoComplete="tel"
-        inputMode="tel"
+        countries={countries}
         placeholder="98765 43210"
         required
-        defaultValue={state.values?.phone}
-        error={errors.phone}
+        defaultNumber={state.values?.phone}
+        defaultCountry={state.values?.phoneCountry || DEFAULT_PHONE_COUNTRY}
+        error={errors.phone ?? errors.phoneCountry}
       />
       <TextField
         label="Password"

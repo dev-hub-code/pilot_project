@@ -18,7 +18,7 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, UUID>,
 	@Query("select p from UserProfile p where p.user.id = :userId")
 	Optional<UserProfile> findByUserId(@Param("userId") UUID userId);
 
-	/** Whether another account already has this phone number (compared by {@code PhoneNumbers#key}). */
+	/** Whether another account already has this phone number (compared by {@code PhoneNumbers.Phone#key}). */
 	@Query("select count(p) > 0 from UserProfile p where p.phoneKey = :phoneKey and p.user.id <> :userId")
 	boolean phoneTakenByAnother(@Param("phoneKey") String phoneKey, @Param("userId") UUID userId);
 

@@ -58,7 +58,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
         <DataTable columns={["Order", "Placed", "Containers", "Total", "Status"]}>
           {orders.content.map((o) => (
             <tr key={o.id} className="hover:bg-background">
-              <Cell><Link href={`/admin/orders/${o.id}`} className="font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
+              <Cell><Link href={`/admin/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
               <Cell className="text-muted">{formatDateTime(o.createdAt)}</Cell>
               <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
               <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>

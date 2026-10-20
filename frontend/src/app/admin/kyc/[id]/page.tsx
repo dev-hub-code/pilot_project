@@ -13,6 +13,7 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { KycReviewDetail } from "@/types/user";
 import { formatAadhaar, KYC_DOCUMENT_LABEL, kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDate, formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "KYC review" };
 
@@ -61,7 +62,7 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
               <Item label="Submitted">{formatDateTime(s.submittedAt)}</Item>
               <Item label="Account">
                 <Link className="text-brand hover:underline" href={`/admin/users/${account.id}`}>
-                  {account.firstName} {account.lastName} ({account.email})
+                  {account.firstName} {account.lastName} (<EmailText>{account.email}</EmailText>)
                 </Link>
               </Item>
               {s.status !== "PENDING" && s.assignee && <Item label="Reviewed by">{s.assignee.name}</Item>}

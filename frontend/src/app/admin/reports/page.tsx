@@ -11,6 +11,7 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { ReportDocument } from "@/types/report";
+import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -69,7 +70,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
           <input type="hidden" name="report" value="statement" />
           <input type="hidden" name="from" value={from} />
           <input type="hidden" name="to" value={to} />
-          <div className="w-96"><TextField label="Investor user id" name="userId" defaultValue={userId ?? ""} autoComplete="off" /></div>
+          <div className="w-full sm:w-96"><TextField label="Investor user id" name="userId" defaultValue={userId ?? ""} autoComplete="off" /></div>
           <Button type="submit" variant="secondary">Load</Button>
         </form>
       )}
@@ -82,7 +83,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
       {problem && <Notice tone="warning">{problem}</Notice>}
       {document && (
         <>
-          <p className="text-sm text-muted">{document.subtitle}</p>
+          <p className="text-sm text-muted"><EmailText>{document.subtitle}</EmailText></p>
           <ReportPreview report={document} />
         </>
       )}

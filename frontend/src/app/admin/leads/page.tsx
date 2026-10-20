@@ -13,6 +13,8 @@ import type { PageResponse } from "@/types/api";
 import type { Lead, LeadStage, PipelineStage } from "@/types/lead";
 import { formatDate, formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { EmailText } from "@/components/ui/email-text";
+import { formatPhone } from "@/lib/phone";
 
 export const metadata: Metadata = { title: "Leads" };
 
@@ -85,12 +87,12 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
           {leads.content.map((l) => (
             <tr key={l.id} className="hover:bg-background">
               <Cell>
-                <Link href={`/admin/leads/${l.id}`} className="font-medium text-gold-text hover:underline">
+                <Link href={`/admin/leads/${l.id}`} className="card-link font-medium text-gold-text hover:underline">
                   {l.firstName} {l.lastName}
                 </Link>
                 <span className="block font-mono text-xs text-muted">{l.reference}</span>
               </Cell>
-              <Cell className="text-muted">{l.email ?? l.phone}</Cell>
+              <Cell className="text-muted"><EmailText>{l.email ?? (l.phone && formatPhone(l.phone))}</EmailText></Cell>
               <Cell className="text-muted">{l.source === "WEBSITE" ? "Website" : "Employee"}</Cell>
               <Cell><StatusBadge tone={STAGE_TONE[l.stage]}>{STAGE_LABEL[l.stage]}</StatusBadge></Cell>
               <Cell>{l.ownerName ?? <span className="text-muted">Unassigned</span>}</Cell>
