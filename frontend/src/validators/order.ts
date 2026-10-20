@@ -6,7 +6,7 @@ const amount = z.string().trim().regex(/^\d{1,13}(\.\d{1,2})?$/, "Enter an amoun
 /** Whole containers of a plan; mirrors the backend's 1-50 per plan in one order. */
 export const cartItemSchema = z.object({
   quantity: z.coerce.number({ message: "Enter how many containers" }).int("Enter a whole number of containers")
-    .min(1, "Buy at least one container").max(50, "At most 50 containers per plan in one order"),
+    .min(1, "Buy at least one container").max(50, "At most 50 containers of one listing in one order"),
   /** The lease in whole years, within the plan's limits (checked by the backend); omitted keeps the current one. */
   tenureYears: z.coerce.number({ message: "Choose the lease" }).int("Choose whole years").min(1).max(30).optional(),
 });
@@ -23,8 +23,8 @@ const reference = (message: string) =>
 
 export const depositSchema = z.object({
   companyBankAccountId: z.uuid("Choose the account you paid into"),
-  mode: z.enum(["ONLINE", "CHEQUE", "CASH_DEPOSIT"], { message: "Choose how you paid" }),
-  reference: reference("Enter the transaction ID, cheque number or receipt number"),
+  mode: z.enum(["ONLINE", "CHEQUE"], { message: "Choose how you paid" }),
+  reference: reference("Enter the transaction ID or cheque number"),
 });
 
 export const rejectPaymentSchema = z.object({

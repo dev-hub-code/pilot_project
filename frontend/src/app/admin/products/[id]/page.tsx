@@ -18,9 +18,9 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { PlanPhoto, Product } from "@/types/marketplace";
 import { formatDateTime } from "@/utils/format";
-import { formatMoney, formatPercent } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Plan" };
+export const metadata: Metadata = { title: "Container listing" };
 
 
 export default async function ProductPage({ params, searchParams }: PageProps<"/admin/products/[id]">) {
@@ -68,13 +68,13 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
           </Card>
           {photosFailed > 0 && (
             <Notice tone="warning">
-              The plan was saved, but {photosFailed === 1 ? "1 photo" : `${photosFailed} photos`} could not be uploaded. Add
+              The listing was saved, but {photosFailed === 1 ? "1 photo" : `${photosFailed} photos`} could not be uploaded. Add
               {photosFailed === 1 ? " it" : " them"} again below.
             </Notice>
           )}
           <Card title="Photos" description={`Shown in the marketplace, the first as the cover. Up to ${MAX_PHOTOS} photos.`}>
             {photos.length === 0 ? (
-              <p className="text-sm text-muted">No photos yet: the marketplace shows this plan without a picture.</p>
+              <p className="text-sm text-muted">No photos yet: the marketplace shows this container without a picture.</p>
             ) : (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {photos.map((photo, index) => (
@@ -88,7 +88,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
                     {index === 0 && <p className="text-xs text-muted">Cover</p>}
                     {canEdit && (
                       <ConfirmForm action={removePlanPhotoAction.bind(null, p.id, photo.id)} submitLabel="Remove"
-                        confirm="Remove this photo from the plan?" />
+                        confirm="Remove this photo from the listing?" />
                     )}
                   </li>
                 ))}
@@ -102,13 +102,10 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
           </Card>
           <Card title="Payout per container" description="Credited to the investor's wallet every hour for the lease they choose; part months at the start and end are paid by the hour.">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Price (without GST)">{formatMoney(p.price)}</Item>
-              <Item label={`GST (${formatPercent(p.gstRatePercent)})`}>{formatMoney(p.gstPerContainer)}</Item>
-              <Item label="Investor pays">{formatMoney(p.priceWithGst)}</Item>
-              <Item label={`Rent (${formatPercent(p.monthlyRentPercent)} a month)`}>{formatMoney(p.monthlyRent)}</Item>
+              <Item label="Price">{formatMoney(p.price)}</Item>
               <Item label="Lease (investor's choice)">{p.minTenureYears === p.maxTenureYears ? yearsLabel(p.minTenureYears)
                 : `${p.minTenureYears} to ${p.maxTenureYears} years`}</Item>
-              <Item label={`Total rent over ${yearsLabel(p.minTenureYears)} (the shortest)`}>{formatMoney(p.totalPayout)}</Item>
+              <Item label="Rent">Set by each order&apos;s total value (see Rent by order value)</Item>
             </dl>
           </Card>
           <Card title="Terms">
@@ -123,20 +120,20 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
         {decisions && (
           <div className="space-y-6">
             {p.status === "DRAFT" && (
-              <Card title="Publish" description="Terms become binding and investors can buy containers under the plan.">
-                <ConfirmForm action={publishProductAction.bind(null, p.id)} submitLabel="Publish plan"
+              <Card title="Publish" description="Terms become binding and investors can buy these containers.">
+                <ConfirmForm action={publishProductAction.bind(null, p.id)} submitLabel="Publish listing"
                   confirm={`Publish ${p.code}? Its terms can no longer be edited.`} />
               </Card>
             )}
             {p.status === "OPEN" && (
               <Card title="Close to new investors" description="Containers already sold keep their lease and keep earning rent every hour.">
-                <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close plan"
+                <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close listing"
                   confirm={`Close ${p.code}? Investors can no longer buy containers under it.`} />
               </Card>
             )}
             {p.status === "DRAFT" && (
               <Card title="Cancel draft">
-                <ReasonForm action={cancelProductAction.bind(null, p.id)} label="Reason" submitLabel="Cancel plan"
+                <ReasonForm action={cancelProductAction.bind(null, p.id)} label="Reason" submitLabel="Cancel listing"
                   confirm={`Cancel ${p.code}?`} />
               </Card>
             )}

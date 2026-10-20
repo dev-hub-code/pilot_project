@@ -135,7 +135,7 @@ class ReportIntegrationTest {
 				Integer.class, viewer.id())).isEqualTo(1);
 		List<String> sections = JsonPath.read(mvc.perform(get("/api/v1/admin/reports/offerings")
 				.header(HttpHeaders.AUTHORIZATION, viewer.bearer())).andReturn().getResponse().getContentAsString(), "$.sections[*].name");
-		assertThat(sections).containsExactly("Plans", "Payouts due and not yet paid");
+		assertThat(sections).containsExactly("Container listings", "Payouts due and not yet paid");
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'REPORT_GENERATED' AND actor_user_id = ?",
 				Integer.class, viewer.id())).isEqualTo(1);
 

@@ -30,7 +30,7 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "currency", nullable = false, length = 3, updatable = false)
 	private String currency;
 
-	@Column(name = "account_number_encrypted", nullable = false, updatable = false)
+	@Column(name = "account_number_encrypted", nullable = false, updatable = false, columnDefinition = "TEXT")
 	private String accountNumberEncrypted;
 
 	@Column(name = "account_number_last4", nullable = false, length = 4, updatable = false)
@@ -39,7 +39,7 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "account_fingerprint", nullable = false, length = 64, updatable = false)
 	private String accountFingerprint;
 
-	@Column(name = "routing_code_encrypted", nullable = false, updatable = false)
+	@Column(name = "routing_code_encrypted", nullable = false, updatable = false, columnDefinition = "TEXT")
 	private String routingCodeEncrypted;
 
 	@Enumerated(EnumType.STRING)

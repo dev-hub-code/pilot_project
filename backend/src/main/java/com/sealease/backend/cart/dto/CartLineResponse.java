@@ -11,8 +11,7 @@ import java.util.UUID;
 /**
  * Containers of one plan in the cart. Payout figures cover all {@code quantity} containers.
  *
- * @param amount         the price of all the containers, without GST
- * @param gstAmount      GST on {@code amount}; {@code amountWithGst} is what the investor pays for the line
+ * @param amount         the price of all the containers: what the investor pays for the line
  * @param tenureYears    the lease the investor chose for these containers
  * @param minTenureYears the plan's shortest lease, and {@code maxTenureYears} its longest (to choose from)
  * @param totalPayout    the rent over the chosen lease
@@ -27,9 +26,6 @@ public record CartLineResponse(
 		int quantity,
 		MoneyResponse pricePerContainer,
 		MoneyResponse amount,
-		BigDecimal gstRatePercent,
-		MoneyResponse gstAmount,
-		MoneyResponse amountWithGst,
 		BigDecimal monthlyRentPercent,
 		BigDecimal monthlyCapitalReturnPercent,
 		MoneyResponse monthlyPayout,

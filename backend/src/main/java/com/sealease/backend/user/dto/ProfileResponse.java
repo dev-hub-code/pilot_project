@@ -22,7 +22,6 @@ public record ProfileResponse(
 		LocalDate dateOfBirth,
 		String nationality,
 		Address address,
-		String gstNumber,
 		String taxResidencyCountry,
 		String taxIdMasked,
 		KycStatus kycStatus,
@@ -40,7 +39,6 @@ public record ProfileResponse(
 				p.getPhone(), p.getDateOfBirth(), p.getNationality(),
 				new Address(p.getAddressLine1(), p.getAddressLine2(), p.getCity(), p.getStateRegion(),
 						p.getPostalCode(), p.getCountry()),
-				p.getGstNumber(),
 				p.getTaxResidencyCountry(), mask(p.getTaxIdLast4()), p.getKycStatus(),
 				p.isEmailNotifications(), p.isSmsNotifications(), u.isMfaEnabled());
 	}
@@ -50,7 +48,7 @@ public record ProfileResponse(
 		String digits = phone == null ? "" : phone.replaceAll("\\D", "");
 		String masked = digits.isEmpty() ? phone : "•••••• " + digits.substring(Math.max(0, digits.length() - 4));
 		return new ProfileResponse(id, userCode, email, firstName, lastName, status, masked, dateOfBirth, nationality, address,
-				gstNumber, taxResidencyCountry, taxIdMasked, kycStatus, emailNotifications, smsNotifications, twoFactorEnabled);
+				taxResidencyCountry, taxIdMasked, kycStatus, emailNotifications, smsNotifications, twoFactorEnabled);
 	}
 
 	/**

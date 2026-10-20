@@ -23,8 +23,6 @@ export const profileSchema = z.object({
   phone: optional(z.string().regex(/^[+0-9 ()-]{6,20}$/, "Enter a phone number (digits, spaces, +, brackets or dashes)")),
   dateOfBirth: optional(dayMonthYear),
   nationality: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
-  gstNumber: optional(z.string().transform((v) => v.replace(/\s/g, "").toUpperCase())
-    .pipe(z.string().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, "Enter a 15-character GSTIN, e.g. 27ABCDE1234F1Z5"))),
   line1: z.string().trim().min(1, "Enter the first line of your address").max(200),
   line2: optional(z.string().max(200)),
   city: z.string().trim().min(1, "Enter your city").max(100),

@@ -63,12 +63,12 @@ export function formatPeriod(startsOn: string, endsOnExclusive: string): string 
 }
 
 /**
- * When rent next reaches the wallet: each hour is credited once it has ended, from the first full hour after a
- * container is assigned.
+ * When rent next reaches the wallet: credited once each interval (e.g. "every hour") has ended, from the first full
+ * hour after the lease agreement is accepted.
  */
-export function nextCreditNote(nextCreditAt: string | null): string {
-  if (!nextCreditAt) return "Credited every hour once a container is assigned";
+export function nextCreditNote(nextCreditAt: string | null, every = "every hour"): string {
+  if (!nextCreditAt) return `Credited ${every} once your lease starts`;
   return new Date(nextCreditAt).getTime() <= Date.now()
-    ? "Next hourly credit any minute now"
-    : `Next hourly credit ${formatDateTime(nextCreditAt)}`;
+    ? "Next credit any minute now"
+    : `Next credit ${formatDateTime(nextCreditAt)} (credited ${every})`;
 }

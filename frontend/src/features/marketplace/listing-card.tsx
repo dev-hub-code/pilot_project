@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ContainerScene } from "@/components/brand/container-scene";
 import { yearsLabel } from "@/features/orders/lease-years";
 import type { MarketplaceListing } from "@/types/marketplace";
-import { formatMoney, formatPercent } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { CONTAINER_TYPE_LABEL } from "./labels";
 
 export function ListingCard({ listing }: { listing: MarketplaceListing }) {
@@ -28,7 +28,6 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
 
       <div className="flex flex-1 flex-col gap-5 p-5">
         <div className="space-y-1.5">
-          <p className="font-mono text-xs text-muted">{listing.code}</p>
           <h3 className="text-lg leading-snug font-semibold tracking-tight">
             <Link href={href} className="hover:text-gold-text">{listing.title}</Link>
           </h3>
@@ -36,17 +35,11 @@ export function ListingCard({ listing }: { listing: MarketplaceListing }) {
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <Stat label="Monthly rent" value={formatPercent(listing.monthlyRentPercent)} emphasis />
-          <Stat label={Number(listing.gstRatePercent) > 0 ? "Price (before GST)" : "Price per container"}
-            value={formatMoney(listing.price)}
-            note={Number(listing.gstRatePercent) > 0 ? `${formatMoney(listing.priceWithGst)} with ${formatPercent(listing.gstRatePercent)} GST` : undefined} />
-          <Stat label="Rent paid monthly" value={formatMoney(listing.monthlyPayout)}
-            note={`${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(listing.price)}`} />
+          <Stat label="Price per container" value={formatMoney(listing.price)} emphasis />
           <Stat label="Minimum lease" value={yearsLabel(listing.minTenureYears)} />
         </dl>
         <p className="text-xs text-muted">
-          {formatPercent(listing.monthlyRentPercent)} of the price ({formatMoney(listing.price)}, before GST) paid to you as rent
-          every month of the lease.
+          Monthly rent is set by your order&apos;s total value; see it for your order on the container&apos;s page.
         </p>
 
         <div className="mt-auto flex items-center justify-between text-xs text-muted">

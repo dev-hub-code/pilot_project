@@ -21,7 +21,7 @@ export default async function NewTicketPage() {
   const related = [
     ...orders.content.map((o) => ({ value: `ORDER:${o.id}`, label: `Order ${o.orderNumber} · ${formatMoney(o.total)}` })),
     ...withdrawals.content.map((w) => ({ value: `WITHDRAWAL:${w.id}`, label: `Withdrawal ${w.reference} · ${formatMoney(w.amount)}` })),
-    ...portfolio.holdings.map((h) => ({ value: `HOLDING:${h.id}`, label: `Investment ${h.productCode} · ${formatMoney(h.amount)}` })),
+    ...portfolio.holdings.map((h) => ({ value: `HOLDING:${h.id}`, label: `${h.productTitle}${h.container ? ` ${h.container.containerNumber}` : ""} · ${formatMoney(h.amount)}` })),
   ];
   return (
     <div className="space-y-6">

@@ -47,7 +47,7 @@ public class Holding extends BaseEntity {
 	@Column(name = "monthly_rent_percent", nullable = false, updatable = false, precision = 5, scale = 2)
 	private BigDecimal monthlyRentPercent;
 
-	@Column(name = "monthly_capital_return_percent", nullable = false, updatable = false, precision = 5, scale = 2)
+	@Column(name = "monthly_capital_return_percent", nullable = false, updatable = false, precision = 9, scale = 4)
 	private BigDecimal monthlyCapitalReturnPercent;
 
 	@Column(name = "tenure_months", nullable = false, updatable = false)
@@ -115,17 +115,25 @@ public class Holding extends BaseEntity {
 		}
 	}
 
-	/** Finance assigned the container: the lease runs from {@code leaseStartsOn} for the tenure. */
-	public void assignContainer(UUID containerId, LocalDate leaseStartsOn, UUID assignedBy, Instant now) {
+	/** Finance assigned the container; the lease starts once the investor accepts the lease agreement. */
+	public void assignContainer(UUID containerId, UUID assignedBy, Instant now) {
 		if (status != HoldingStatus.AWAITING_CONTAINER) {
 			throw new IllegalStateException("Holding " + getId() + " is " + status + ", not awaiting a container");
 		}
 		this.containerId = containerId;
+		this.status = HoldingStatus.AWAITING_ACCEPTANCE;
+		this.assignedBy = assignedBy;
+		this.assignedAt = now;
+	}
+
+	/** The investor accepted the lease agreement: the lease runs from {@code leaseStartsOn} for the tenure. */
+	public void startLease(LocalDate leaseStartsOn) {
+		if (status != HoldingStatus.AWAITING_ACCEPTANCE) {
+			throw new IllegalStateException("Holding " + getId() + " is " + status + ", not awaiting acceptance");
+		}
 		this.leaseStartsOn = leaseStartsOn;
 		this.leaseEndsOn = leaseStartsOn.plusMonths(tenureMonths);
 		this.status = HoldingStatus.ACTIVE;
-		this.assignedBy = assignedBy;
-		this.assignedAt = now;
 	}
 
 	/** The last payout of the tenure has been paid. */

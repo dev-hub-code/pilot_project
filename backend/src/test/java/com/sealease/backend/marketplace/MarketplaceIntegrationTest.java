@@ -66,18 +66,13 @@ class MarketplaceIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2.25", 2, 5)))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("DRAFT"))
-			.andExpect(jsonPath("$.code").value(matchesPattern("PLAN-\\d{5,}")))
+			.andExpect(jsonPath("$.code").value(matchesPattern("LST-\\d{5,}")))
 			.andExpect(jsonPath("$.price.amount").value("300000.00"))
-			// Rent only: 2.25% of the price a month, for a lease of 2 to 5 years the investor chooses.
+			// A lease of 2 to 5 years. No rent: that is set by each order's total value.
 			.andExpect(jsonPath("$.minTenureYears").value(2))
 			.andExpect(jsonPath("$.maxTenureYears").value(5))
-			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(0))
-			.andExpect(jsonPath("$.monthlyPayoutPercent").value(2.25))
-			.andExpect(jsonPath("$.monthlyRent.amount").value("6750.00"))
-			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("0.00"))
-			.andExpect(jsonPath("$.monthlyPayout.amount").value("6750.00"))
-			// Shown for the shortest lease: 24 months of rent.
-			.andExpect(jsonPath("$.totalPayout.amount").value("162000.00"))
+			.andExpect(jsonPath("$.monthlyRent").doesNotExist())
+			.andExpect(jsonPath("$.monthlyRentPercent").doesNotExist())
 			.andReturn().getResponse().getContentAsString();
 		String productId = JsonPath.read(created, "$.id");
 
@@ -87,12 +82,8 @@ class MarketplaceIntegrationTest {
 			.andExpect(status().isNotFound());
 		// The lease limits are the plan's own; whatever they are, the plan pays rent only.
 		update(productId, planBody("DRY_20FT", "300000", "2.5", 1, 3)).andExpect(status().isOk())
-			.andExpect(jsonPath("$.monthlyRentPercent").value(2.5))
 			.andExpect(jsonPath("$.minTenureYears").value(1))
-			.andExpect(jsonPath("$.maxTenureYears").value(3))
-			.andExpect(jsonPath("$.monthlyCapitalReturnPercent").value(0))
-			.andExpect(jsonPath("$.monthlyCapitalReturn.amount").value("0.00"))
-			.andExpect(jsonPath("$.totalPayout.amount").value("90000.00"));
+			.andExpect(jsonPath("$.maxTenureYears").value(3));
 
 		publish(productId).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OPEN"));
 		publish(productId).andExpect(status().isConflict());
@@ -106,15 +97,12 @@ class MarketplaceIntegrationTest {
 		mvc.perform(get("/api/v1/marketplace/{id}", productId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.eligibility.eligible").value(false))
-			.andExpect(jsonPath("$.eligibility.reasons", hasItem("This plan is not accepting investments")));
+			.andExpect(jsonPath("$.eligibility.reasons", hasItem("This container is not accepting investments")));
 		assertThat(api.auditCount("PRODUCT_CLOSED", productId)).isEqualTo(1);
 	}
 
 	@Test
-	void draftPlansCanBeCancelledAndRentAndTenureAreBounded() throws Exception {
-		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "25", 1, 3)))
-			.andExpect(status().isBadRequest());
+	void draftPlansCanBeCancelledAndTenureIsBounded() throws Exception {
 		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content(planBody("DRY_20FT", "300000", "2", 0, 3)))
 			.andExpect(status().isBadRequest());
@@ -224,7 +212,7 @@ class MarketplaceIntegrationTest {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 
-		// 3 × ₹50,000; each pays 2% rent a month. Without a lease chosen, the plan's shortest: 1 year.
+		// 3 × ₹50,000 = ₹1,50,000, an order that earns 5% rent a month on each container. Without a lease chosen, the plan's shortest: 1 year.
 		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
@@ -233,15 +221,16 @@ class MarketplaceIntegrationTest {
 			.andExpect(jsonPath("$.minTenureYears").value(1))
 			.andExpect(jsonPath("$.maxTenureYears").value(5))
 			.andExpect(jsonPath("$.amount.amount").value("150000.00"))
-			.andExpect(jsonPath("$.monthlyRent.amount").value("3000.00"))
+			.andExpect(jsonPath("$.monthlyRentPercent").value(5))
+			.andExpect(jsonPath("$.monthlyRent.amount").value("7500.00"))
 			.andExpect(jsonPath("$.payouts").value(12))
-			.andExpect(jsonPath("$.totalRent.amount").value("36000.00"));
+			.andExpect(jsonPath("$.totalRent.amount").value("90000.00"));
 		// The investor chooses a longer lease: 3 years of rent.
 		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3").param("years", "3")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.valid").value(true))
 			.andExpect(jsonPath("$.payouts").value(36))
-			.andExpect(jsonPath("$.totalRent.amount").value("108000.00"));
+			.andExpect(jsonPath("$.totalRent.amount").value("270000.00"));
 		mvc.perform(get("/api/v1/marketplace/{id}/projection", product).param("containers", "3").param("years", "6")
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.valid").value(false))
@@ -264,7 +253,7 @@ class MarketplaceIntegrationTest {
 			.andExpect(jsonPath("$[0].containerType").value("DRY_40FT"))
 			.andExpect(jsonPath("$[0].containerTypeLabel").value("40ft dry"))
 			.andExpect(jsonPath("$[0].price.amount").value("300000.00"))
-			.andExpect(jsonPath("$[0].monthlyRent.amount").value("6000.00"))
+			.andExpect(jsonPath("$[0].monthlyRent").doesNotExist())
 			.andExpect(jsonPath("$[0].minTenureYears").value(2))
 			.andExpect(jsonPath("$[0].maxTenureYears").value(5))
 			.andExpect(jsonPath("$[0].id").doesNotExist())
@@ -273,14 +262,63 @@ class MarketplaceIntegrationTest {
 	}
 
 	@Test
-	void sortsByMonthlyRent() throws Exception {
-		String low = offerings.published(OfferingFixtures.TYPE, "50000", "1").toString();
-		String high = offerings.published(OfferingFixtures.TYPE, "50000", "3").toString();
-		Account investor = approvedInvestor();
-		List<String> ids = JsonPath.read(mvc.perform(get("/api/v1/marketplace").param("sort", "HIGHEST_RETURN").param("size", "100")
-				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andReturn().getResponse().getContentAsString(), "$.content[*].id");
-		assertThat(ids.indexOf(high)).isLessThan(ids.indexOf(low));
+	void unnamedListingsAreNamedAfterTheirContainerType() throws Exception {
+		mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(planBody("HIGH_CUBE_40FT", "300000", "2", 1, 3)
+					.replace("\"title\":\"20ft dry container plan\",", "")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.title").value("40ft High Cube container"));
+	}
+
+	@Test
+	void rentFollowsTheOrderValue() throws Exception {
+		// Minimum order ₹1,00,000; 5% from ₹1,00,000, 5.5% from ₹5,00,000, 6% from ₹10,00,000.
+		jdbc.update("UPDATE order_settings SET min_order_amount = 100000 WHERE id = 1");
+		setTiers("""
+				{"tiers":[{"fromAmount":"100000","toAmount":"499999","monthlyRentPercent":"5"},
+				          {"fromAmount":"500000","toAmount":"999999","monthlyRentPercent":"5.5"},
+				          {"fromAmount":"1000000","monthlyRentPercent":"6"}]}""").andExpect(status().isOk())
+			.andExpect(jsonPath("$.tiers[0].fromAmount.amount").value("100000.00"))
+			.andExpect(jsonPath("$.tiers[0].toAmount.amount").value("499999.00"))
+			.andExpect(jsonPath("$.tiers[2].toAmount").doesNotExist());
+		// Bands follow each other: no gap, no overlap, and only the last is open-ended.
+		setTiers("""
+				{"tiers":[{"fromAmount":"100000","toAmount":"400000","monthlyRentPercent":"5"},
+				          {"fromAmount":"500000","monthlyRentPercent":"6"}]}""").andExpect(status().isBadRequest());
+		setTiers("""
+				{"tiers":[{"fromAmount":"100000","monthlyRentPercent":"5"},
+				          {"fromAmount":"500000","monthlyRentPercent":"6"}]}""").andExpect(status().isBadRequest());
+		try {
+			String plan = offerings.published(OfferingFixtures.TYPE, "50000", "0", 1, 20).toString();
+			Account investor = approvedInvestor();
+			mvc.perform(get("/api/v1/marketplace/{id}", plan).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+				.andExpect(jsonPath("$.listing.monthlyRentPercent").doesNotExist());
+			// One ₹50,000 container is below the minimum order.
+			mvc.perform(get("/api/v1/marketplace/{id}/projection", plan).param("containers", "1")
+					.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+				.andExpect(jsonPath("$.problems[0]").value(org.hamcrest.Matchers.startsWith("The minimum order is")));
+			// ₹1,00,000 earns 5% (₹5,000 a month); ₹5,00,000 earns 5.5%; ₹10,00,000 earns 6% (₹60,000 a month).
+			for (String[] c : new String[][] { { "2", "5", "5000.00" }, { "10", "5.5", "27500.00" }, { "20", "6", "60000.00" } }) {
+				mvc.perform(get("/api/v1/marketplace/{id}/projection", plan).param("containers", c[0])
+						.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.problems").isEmpty())
+					.andExpect(jsonPath("$.monthlyRentPercent").value(Double.parseDouble(c[1])))
+					.andExpect(jsonPath("$.monthlyRent.amount").value(c[2]));
+			}
+		}
+		finally {
+			jdbc.update("UPDATE order_settings SET min_order_amount = 0 WHERE id = 1");
+			setTiers("""
+					{"tiers":[{"fromAmount":"0","toAmount":"99999","monthlyRentPercent":"2"},
+					          {"fromAmount":"100000","monthlyRentPercent":"5"}]}""")
+				.andExpect(status().isOk());
+		}
+	}
+
+	private ResultActions setTiers(String body) throws Exception {
+		return mvc.perform(put("/api/v1/admin/settings/rent-tiers").header(HttpHeaders.AUTHORIZATION, admin.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content(body));
 	}
 
 	// ------------------------------------------------------------------------------ helpers
@@ -326,7 +364,7 @@ class MarketplaceIntegrationTest {
 	private static String planBody(String type, String price, String rentPercent, int minYears, int maxYears) {
 		return """
 				{"containerType":"%s","title":"20ft dry container plan","summary":"Own a container, earn monthly",
-				 "description":"Buy a container and lease it out.","currency":"INR","price":"%s","gstRatePercent":"0",
+				 "description":"Buy a container and lease it out.","currency":"INR","price":"%s",
 				 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d,
 				 "riskDisclosure":"Payouts depend on the platform.","termsAndConditions":"Standard terms."}
 				""".formatted(type, price, rentPercent, minYears, maxYears);

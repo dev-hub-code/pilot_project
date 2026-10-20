@@ -20,7 +20,7 @@ type Filter = { key: string; status: PaymentStatus; method?: "BANK_TRANSFER" | "
 
 const FILTERS: readonly [Filter, ...Filter[]] = [
   { key: "bank", status: "PENDING", method: "BANK_TRANSFER", label: "Bank payments to verify" },
-  { key: "office", status: "PENDING", method: "OFFICE_CASH", label: "Cash expected at the office" },
+  { key: "office", status: "PENDING", method: "OFFICE_CASH", label: "Cash expected" },
   { key: "refunds", status: "REFUND_REQUIRED", label: "Refunds due" },
   { key: "succeeded", status: "SUCCEEDED", label: "Succeeded" },
   { key: "failed", status: "FAILED", label: "Failed" },

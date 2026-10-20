@@ -21,10 +21,7 @@ public record UpdateProfileRequest(
 		String phone,
 		@Past LocalDate dateOfBirth,
 		@IsoCountry String nationality,
-		@NotNull(message = "is required") @Valid AddressRequest address,
-		// Optional GSTIN: 2-digit state code, the PAN, an entity digit, Z and a check character.
-		@Pattern(regexp = "^\\s*$|^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][1-9A-Za-z][Zz][0-9A-Za-z]$",
-				message = "must be a 15-character GSTIN, e.g. 27ABCDE1234F1Z5") String gstNumber) {
+		@NotNull(message = "is required") @Valid AddressRequest address) {
 
 	public record AddressRequest(
 			@NotBlank(message = "Enter the first line of your address") @Size(max = 200) String line1,

@@ -1,7 +1,7 @@
 import type { ChangeEvent } from "react";
 
 /**
- * For codes always written in capitals (PAN, GSTIN, IFSC): turns what is typed or pasted into upper case as it is
+ * For codes always written in capitals (PAN, IFSC): turns what is typed or pasted into upper case as it is
  * entered, keeping the cursor where it was. For uncontrolled inputs (`onChange={upperCase}`).
  */
 export function upperCase(event: ChangeEvent<HTMLInputElement>): void {

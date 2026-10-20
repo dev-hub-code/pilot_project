@@ -1,14 +1,16 @@
 package com.sealease.backend.order.service;
 
+import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.money.MoneyResponse;
-import com.sealease.backend.earning.service.PayoutService;
-import com.sealease.backend.investment.dto.PayoutTerms;
+import com.sealease.backend.earning.service.RentCreditSettingsService;
+import com.sealease.backend.investment.dto.HoldingResponse;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.investment.service.HoldingService.AwaitingContainer;
 import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.order.dto.ContainerAssignmentQueue;
+import com.sealease.backend.order.dto.OrderResponse;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import org.springframework.data.domain.Page;
@@ -17,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,22 +28,26 @@ import java.util.stream.Stream;
 /**
  * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number, once a finance member
  * has taken the task (only they may then assign it). Assigning leases the
- * container to the investor and starts the lease and the monthly payout schedule that day; the investor is notified.
+ * container to the investor and issues the lease agreement (in the wording admins maintain); the investor is notified
+ * and starts the lease, and the payouts, by accepting it.
  */
 @Service
 public class ContainerAssignmentService {
 
 	private final HoldingService holdings;
-	private final PayoutService payouts;
 	private final OrderService orders;
 	private final UserAccountService accounts;
 	private final NotificationService notifications;
+	private final LeaseAgreementIssuer agreements;
+	private final RentCreditSettingsService credits;
 	private final Clock clock;
 
-	public ContainerAssignmentService(HoldingService holdings, PayoutService payouts,
-			OrderService orders, UserAccountService accounts, NotificationService notifications, Clock clock) {
+	public ContainerAssignmentService(HoldingService holdings,
+			OrderService orders, UserAccountService accounts, NotificationService notifications,
+			LeaseAgreementIssuer agreements, RentCreditSettingsService credits, Clock clock) {
 		this.holdings = holdings;
-		this.payouts = payouts;
+		this.credits = credits;
+		this.agreements = agreements;
 		this.orders = orders;
 		this.accounts = accounts;
 		this.notifications = notifications;
@@ -95,15 +100,36 @@ public class ContainerAssignmentService {
 		return holdings.awaitingContainerCount();
 	}
 
-	/** Records and leases the container finance typed in; the lease and hourly rent start at the next full hour. */
+	/**
+	 * Records the container finance typed in as the investor's and issues its lease agreement. The lease and hourly
+	 * rent start once the investor accepts the agreement ({@link AgreementAcceptanceService}).
+	 */
 	@Transactional
 	public void assign(UUID actorId, UUID holdingId, String containerNumber, String currentLocation) {
-		Instant now = clock.instant();
-		PayoutTerms terms = holdings.assignContainer(actorId, holdingId, containerNumber, currentLocation,
-				payouts.leaseStartAfter(now), now);
-		payouts.schedule(terms);
-		notifications.notify(terms.userId(), "CONTAINER_ASSIGNED", "Container " + terms.containerNumber() + " is now yours",
-				terms.productCode() + ": your lease starts now and rent is credited to your wallet every hour.", "/portfolio");
+		HoldingResponse assigned = holdings.assignContainer(actorId, holdingId, containerNumber, currentLocation,
+				clock.instant());
+		UUID userId = holdings.ownerOf(holdingId);
+		LeaseAgreementResponse agreement = agreements.issue(actorId, assigned, userId,
+				orders.orderNumbers(List.of(assigned.orderId())).get(assigned.orderId()));
+		notifications.notify(userId, "CONTAINER_ASSIGNED", "Container " + assigned.container().containerNumber()
+				+ " is now yours", assigned.productCode() + ": accept your lease agreement " + agreement.agreementNumber()
+				+ " to start your lease. Rent is credited to your wallet " + credits.current().label() + " from then on.",
+				"/portfolio/" + holdingId + "/agreement");
+	}
+
+	/**
+	 * Issues the lease agreement of each of an order's containers that has none: those assigned before agreements were
+	 * issued. Containers that already have one keep it.
+	 *
+	 * @return the order's agreements, old and new
+	 */
+	@Transactional
+	public List<LeaseAgreementResponse> issueMissingAgreements(UUID actorId, UUID orderId) {
+		OrderResponse order = orders.detail(orderId);
+		return holdings.forOrder(orderId).stream()
+			.filter(h -> h.container() != null)
+			.map(h -> agreements.issue(actorId, h, order.userId(), order.orderNumber()))
+			.toList();
 	}
 
 }

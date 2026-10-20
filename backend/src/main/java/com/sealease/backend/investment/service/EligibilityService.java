@@ -45,7 +45,7 @@ public class EligibilityService {
 			reasons.add("Add a bank account and have it verified before investing");
 		}
 		if (!product.isAcceptingInvestments()) {
-			reasons.add("This plan is not accepting investments");
+			reasons.add("This container is not accepting investments");
 		}
 		return InvestorEligibility.of(reasons);
 	}

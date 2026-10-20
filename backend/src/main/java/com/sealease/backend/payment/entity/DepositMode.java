@@ -7,7 +7,10 @@ public enum DepositMode {
 	ONLINE,
 	/** A cheque: its number. */
 	CHEQUE,
-	/** Cash paid in at a branch: the deposit receipt number. */
+	/**
+	 * Cash paid in at a branch: the deposit receipt number. No longer accepted; kept so earlier deposits stay
+	 * readable.
+	 */
 	CASH_DEPOSIT
 
 }

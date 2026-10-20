@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Locale;
 
-/** Countries, states and cities (reference data loaded by migrations V51-V52), alphabetical at each level. */
+/** Countries, states and cities (reference data loaded by migration V2), alphabetical at each level. */
 @Service
 public class LocationService {
 

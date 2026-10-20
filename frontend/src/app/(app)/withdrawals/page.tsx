@@ -12,6 +12,7 @@ import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals
 import { ReferralModeForm } from "@/features/withdrawals/referral-mode-form";
 import { CURRENCY } from "@/lib/currency";
 import { authFetch } from "@/lib/server/auth/session";
+import { getRentCredit } from "@/lib/server/rent-credit";
 import type { PageResponse } from "@/types/api";
 import type { EarningsBalance, EarningsSummary } from "@/types/earning";
 import type { Money } from "@/types/marketplace";
@@ -34,6 +35,7 @@ function wallet(summary: EarningsSummary, balances: EarningsBalance[]): Money {
 
 export default async function WithdrawalsPage({ searchParams }: PageProps<"/withdrawals">) {
   const page = Math.max(0, Number.parseInt(String((await searchParams).page ?? "0"), 10) || 0);
+  const credit = await getRentCredit();
   const [summary, accounts, profile, policy, referralMode, history] = await Promise.all([
     authFetch<EarningsSummary>("/api/v1/earnings/summary"),
     authFetch<BankAccount[]>("/api/v1/users/me/bank-accounts"),
@@ -51,9 +53,9 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
       amount: wallet(summary, ["RENT_BANK", "RENT_CASH"]),
       note: Number(rentCash.amount) > 0
         ? `${formatMoney(rentBank)} by bank · ${formatMoney(rentCash)} in cash at our office`
-        : nextCreditNote(summary.nextCreditAt),
+        : nextCreditNote(summary.nextCreditAt, credit.label),
     },
-    { label: "Referral wallet", amount: wallet(summary, ["REFERRAL"]), note: "Commission on your referrals' rent, credited every hour" },
+    { label: "Referral wallet", amount: wallet(summary, ["REFERRAL"]), note: `Commission on your referrals' rent, credited ${credit.label}` },
     { label: "Withdrawal in progress", amount: total(summary.withdrawalInProgress), note: "Being paid out by our team" },
     { label: "Total withdrawn", amount: total(summary.totalWithdrawn), note: "Paid out to you so far" },
   ];
@@ -64,7 +66,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
   return (
     <div className="space-y-6">
       <PageHeader title="Withdrawals"
-        description="Rent and referral earnings are credited to your wallets every hour, and paid out when our team makes a withdrawal: into your bank account, or in cash at our office." />
+        description={`Rent and referral earnings are credited to your wallets ${credit.label}, and paid out when our team makes a withdrawal: into your bank account, or in cash at our office.`} />
 
       <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Balances">
         {tiles.map((tile) => (
@@ -143,7 +145,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
                   <Cell>{EARNINGS_BALANCE_LABEL[w.balance]}</Cell>
                   <Cell>
                     {w.payoutMethod === "OFFICE_CASH"
-                      ? <>Cash at our office{w.payoutReference && <span className="block text-xs text-muted">Receipt {w.payoutReference}</span>}</>
+                      ? <>Cash{w.payoutReference && <span className="block text-xs text-muted">Receipt {w.payoutReference}</span>}</>
                       : <>{w.bankName} <span className="text-muted">{w.bankAccountMasked}</span></>}
                   </Cell>
                   <Cell className="tabular-nums">{formatMoney(w.amount)}</Cell>

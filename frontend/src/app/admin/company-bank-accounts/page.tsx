@@ -23,7 +23,7 @@ export default async function CompanyBankAccountsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Company bank accounts"
-        description="The accounts investors pay into. Investors choosing bank payment pick one of the active accounts, then give their transaction ID, cheque number or deposit receipt number." />
+        description="The accounts investors pay into. Investors choosing bank payment pick one of the active accounts, then give their transaction ID or cheque number." />
 
       {activeCount === 0 && (
         <Notice tone="warning">No active account: investors cannot pay by bank until one is added or activated.</Notice>

@@ -24,11 +24,9 @@ app:
       # Delivered to Mailpit (docker compose), viewable at http://localhost:8025.
       enabled: ${APP_NOTIFICATION_EMAIL_ENABLED:true}
   invoice:
-    issuer-name: ${INVOICE_ISSUER_NAME:SeaLease Demo Ltd}
-    issuer-address: ${INVOICE_ISSUER_ADDRESS:1 Harbour Street, Rotterdam, NL}
-    notes: ${INVOICE_NOTES:Demo invoice - local development only.}
-    # For GST: buyers in this state pay CGST + SGST, others IGST. Set INVOICE_ISSUER_TAX_ID (GSTIN) for real use.
-    issuer-state: ${INVOICE_ISSUER_STATE:Maharashtra}
+    issuer-name: ${INVOICE_ISSUER_NAME:Leasefleet Solutions Pvt. Ltd.}
+    issuer-address: ${INVOICE_ISSUER_ADDRESS:Akhade, Humgaon, Satara 415514 }
+    notes: ${INVOICE_NOTES:Invoice}
 
 logging:
   level:

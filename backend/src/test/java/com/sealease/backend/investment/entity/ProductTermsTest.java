@@ -21,25 +21,23 @@ class ProductTermsTest {
 
 	@Test
 	void plansPayRentOnlyForTheLeaseTheInvestorChooses() {
-		ProductTerms t = terms("500000", "2", 2, 5);
-		assertThat(t.monthlyRent()).isEqualTo(Money.of("10000", "INR"));
-		assertThat(t.monthlyCapitalReturn()).isEqualTo(Money.zero(INR));
-		assertThat(t.monthlyPayout()).isEqualTo(Money.of("10000", "INR"));
-		assertThat(t.monthlyPayoutPercent()).isEqualByComparingTo("2");
+		ProductTerms t = terms("500000", 2, 5);
+		BigDecimal rate = new BigDecimal("2");
+		assertThat(t.monthlyRent(rate)).isEqualTo(Money.of("10000", "INR"));
 		assertThat(t.minTenureMonths()).isEqualTo(24);
 		// 2 years: 24 months of rent (48% of the price); 5 years: 60 months. The price is not paid back.
-		assertThat(t.totalPayout(2)).isEqualTo(Money.of("240000", "INR"));
-		assertThat(t.totalPayout(5)).isEqualTo(Money.of("600000", "INR"));
+		assertThat(t.totalPayout(2, rate)).isEqualTo(Money.of("240000", "INR"));
+		assertThat(t.totalPayout(5, rate)).isEqualTo(Money.of("600000", "INR"));
 	}
 
 	@Test
 	void theLeaseMustBeWithinThePlansLimits() {
-		ProductTerms t = terms("500000", "2", 2, 5);
+		ProductTerms t = terms("500000", 2, 5);
 		assertThat(t.tenureProblems(2)).isEmpty();
 		assertThat(t.tenureProblems(5)).isEmpty();
 		assertThat(t.tenureProblems(1)).containsExactly("Choose a lease of 2 to 5 years");
 		assertThat(t.tenureProblems(6)).containsExactly("Choose a lease of 2 to 5 years");
-		assertThat(terms("500000", "2", 3, 3).tenureProblems(4)).containsExactly("This plan's lease is 3 years");
+		assertThat(terms("500000", 3, 3).tenureProblems(4)).containsExactly("The lease for this container is 3 years");
 	}
 
 	@Test
@@ -73,29 +71,13 @@ class ProductTermsTest {
 
 	@Test
 	void rentIsRoundedHalfUpToThePaisa() {
-		assertThat(terms("33333.33", "1.75", 1, 2).monthlyRent()).isEqualTo(Money.of("583.33", "INR"));
+		assertThat(terms("33333.33", 1, 2).monthlyRent(new BigDecimal("1.75"))).isEqualTo(Money.of("583.33", "INR"));
 		assertThat(ProductTerms.percentOf(Money.of("10.10", "INR"), new BigDecimal("5"))).isEqualTo(Money.of("0.51", "INR"));
 	}
 
-	@Test
-	void gstIsChargedOnThePriceAndRentStaysOnThePriceWithoutIt() {
-		ProductTerms t = terms("400000", "18", "6", 2, 10);
-		assertThat(t.gstPerContainer()).isEqualTo(Money.of("72000", "INR"));
-		assertThat(t.pricePerContainerWithGst()).isEqualTo(Money.of("472000", "INR"));
-		assertThat(t.monthlyRent()).isEqualTo(Money.of("24000", "INR"));
-		// Rounded half-up to the paisa.
-		assertThat(terms("33333.33", "18", "2", 1, 2).gstPerContainer()).isEqualTo(Money.of("6000.00", "INR"));
-		assertThat(terms("100.05", "5", "2", 1, 2).gstPerContainer()).isEqualTo(Money.of("5.00", "INR"));
-		assertThat(terms("500000", "0", "2", 1, 2).pricePerContainerWithGst()).isEqualTo(Money.of("500000", "INR"));
-	}
-
-	private static ProductTerms terms(String price, String rent, int minYears, int maxYears) {
-		return terms(price, "0", rent, minYears, maxYears);
-	}
-
-	private static ProductTerms terms(String price, String gst, String rent, int minYears, int maxYears) {
+	private static ProductTerms terms(String price, int minYears, int maxYears) {
 		return new ProductTerms(ContainerType.DRY_20FT, "Title", "Summary", "Description", INR, new BigDecimal(price),
-				new BigDecimal(gst), new BigDecimal(rent), BigDecimal.ZERO, minYears, maxYears, "Risk", "Terms");
+				BigDecimal.ZERO, minYears, maxYears, "Risk", "Terms");
 	}
 
 }

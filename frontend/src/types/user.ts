@@ -24,8 +24,6 @@ export interface Profile {
   dateOfBirth: string | null;
   nationality: string | null;
   address: Address;
-  /** Optional GSTIN, e.g. 27ABCDE1234F1Z5. */
-  gstNumber: string | null;
   taxResidencyCountry: string | null;
   taxIdMasked: string | null;
   kycStatus: KycStatus;

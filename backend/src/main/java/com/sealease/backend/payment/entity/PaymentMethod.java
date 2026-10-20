@@ -2,7 +2,7 @@ package com.sealease.backend.payment.entity;
 
 public enum PaymentMethod {
 	/**
-	 * Investor pays into a company bank account (online transfer, cheque or cash deposit) and submits
+	 * Investor pays into a company bank account (online transfer or cheque) and submits
 	 * the details; finance confirms receipt.
 	 */
 	BANK_TRANSFER,

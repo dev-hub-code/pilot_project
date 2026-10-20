@@ -116,8 +116,31 @@ public final class InvestorFixtures {
 		return orderId;
 	}
 
-	/** Finance assigns a new container, by number, to each of the order's paid investments. */
+	/**
+	 * Finance assigns a new container, by number, to each of the order's paid investments, and the investor accepts
+	 * each lease agreement, which starts the leases.
+	 */
 	public void assignContainers(String orderId) throws Exception {
+		List<UUID> holdings = assignContainersOnly(orderId);
+		if (holdings.isEmpty()) {
+			return;
+		}
+		String email = jdbc.queryForObject("SELECT u.email FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?::uuid",
+				String.class, orderId);
+		Account investor = api.login(email, TestApi.PASSWORD);
+		for (UUID holding : holdings) {
+			acceptAgreement(investor, holding);
+		}
+	}
+
+	/** The investor accepts the lease agreement of a container assigned to them. */
+	public void acceptAgreement(Account investor, UUID holdingId) throws Exception {
+		mvc.perform(post("/api/v1/agreements/{id}/accept", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk());
+	}
+
+	/** Finance assigns containers; the holdings then await the investor's acceptance. Returns the holdings assigned. */
+	public List<UUID> assignContainersOnly(String orderId) throws Exception {
 		List<UUID> awaiting = jdbc.queryForList(
 				"SELECT id FROM holdings WHERE order_id = ?::uuid AND status = 'AWAITING_CONTAINER' ORDER BY created_at",
 				UUID.class, orderId);
@@ -130,6 +153,7 @@ public final class InvestorFixtures {
 					.content("{\"containerNumber\":\"" + OfferingFixtures.containerNumber() + "\"}"))
 				.andExpect(status().isNoContent());
 		}
+		return awaiting;
 	}
 
 }

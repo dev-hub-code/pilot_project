@@ -71,7 +71,7 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
             <EmptyState title="No commissions yet" description="They are paid monthly, alongside each payout to a referred investor." />
           ) : (
             <>
-              <DataTable columns={["Paid", "To", "From", "Level", "Plan", "Investment", "Rate", "Commission"]}>
+              <DataTable columns={["Paid", "To", "From", "Level", "Listing", "Investment", "Rate", "Commission"]}>
                 {commissions.content.map((c) => (
                   <tr key={c.id}>
                     <Cell className="text-muted">{formatDateTime(c.paidAt)}</Cell>

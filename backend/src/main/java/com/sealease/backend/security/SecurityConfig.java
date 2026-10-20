@@ -47,6 +47,7 @@ public class SecurityConfig {
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
 	/** The website's public read-only data: the track record, the open plans, and countries, states and cities. */
 	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans",
+			"/api/v1/public/rent-credit", "/api/v1/public/rent-tiers", "/api/v1/public/minimum-order",
 			"/api/v1/public/locations/**" };
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { formatDayMonthYear, parseDayMonthYear } from "@/utils/format";
+import { formatDayMonthYear, maskDayMonthYear, parseDayMonthYear } from "@/utils/format";
 
 interface DateFieldProps {
   label: string;
@@ -15,7 +15,7 @@ interface DateFieldProps {
 }
 
 /**
- * A date typed as DD/MM/YYYY, or picked from the browser's calendar via the button. The calendar shows dates in the
+ * A date typed as DD/MM/YYYY (the slashes are added while typing), or picked from the browser's calendar via the button. The calendar shows dates in the
  * browser's own format, so the field itself always carries the DD/MM/YYYY text.
  */
 export function DateField({ label, name, defaultValue = "", error, max, autoComplete }: DateFieldProps) {
@@ -41,7 +41,7 @@ export function DateField({ label, name, defaultValue = "", error, max, autoComp
         {label}
       </label>
       <div className="relative flex">
-        <input id={inputId} name={name} value={text} onChange={(event) => setText(event.target.value)}
+        <input id={inputId} name={name} value={text} onChange={(event) => setText(maskDayMonthYear(event.target.value, text))}
           placeholder="DD/MM/YYYY" inputMode="numeric" maxLength={10} autoComplete={autoComplete}
           aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
           className="h-11 w-full rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />

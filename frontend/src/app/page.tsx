@@ -80,7 +80,7 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "Being able to choose the lease length in whole years mattered to me. I took a longer lease on one plan and a shorter one on another.",
+    quote: "Being able to choose the lease length in whole years mattered to me. I took a longer lease on one container and a shorter one on another.",
     name: "Sunita D.",
     detail: "Nagpur · 2 containers",
     sample: true,
@@ -92,7 +92,7 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "The plan page told me the monthly rent for the number of containers I picked before I paid anything. What I see in my wallet each month matches it.",
+    quote: "The container page told me the monthly rent for the number of containers I picked before I paid anything. What I see in my wallet each month matches it.",
     name: "Kavita N.",
     detail: "Mumbai · 4 containers",
     sample: true,
@@ -122,13 +122,13 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "My accountant needs everything on paper. I download the statement for the year and the invoice for each order, with my GST number on it.",
+    quote: "My accountant needs everything on paper. I download the statement for the year and the invoice for each order, all in my name.",
     name: "Nikhil T.",
     detail: "Jaipur · 6 containers",
     sample: true,
   },
   {
-    quote: "I liked seeing photos of the container type on each plan, with the price per container and the rent spelled out, before I bought anything.",
+    quote: "I liked seeing photos of each container type, with the price per container and the rent spelled out, before I bought anything.",
     name: "Lakshmi V.",
     detail: "Chennai · 2 containers",
     sample: true,
@@ -151,27 +151,27 @@ const REVIEWS: Review[] = [
 const FAQS = [
   {
     question: "What exactly am I investing in?",
-    answer: "You buy whole shipping containers. Each one is a specific container with its own container number, assigned to you once your payment is confirmed. We lease it out for the plan's lease period and pay you from it every month. There are no shared or fractional units.",
+    answer: "You buy whole shipping containers. Each one is a specific container with its own container number, assigned to you once your payment is confirmed. We lease it out for the lease period you choose and pay you from it every month. There are no shared or fractional units.",
   },
   {
     question: "How much will I receive every month?",
-    answer: "Every month of the lease you receive the plan's rent: a fixed percentage of the price you paid. For example, on a plan with 2% monthly rent, a ₹2,50,000 container pays you ₹5,000 every month. Each plan shows the exact monthly amount for the number of containers before you buy.",
+    answer: "Every month of the lease you receive rent: a fixed percentage of the price you paid, set by your order's total value (larger orders can earn a higher rate). For example, at 2% monthly rent, a ₹2,50,000 container pays you ₹5,000 every month. The marketplace shows the exact monthly amount for the number of containers before you buy.",
   },
   {
     question: "Do I get my investment back?",
-    answer: "No. Plans pay rent only: you receive the monthly rent for every month of the lease, and the price you paid is not paid back. Each plan shows the total rent over its lease before you buy.",
+    answer: "No. Containers pay rent only: you receive the monthly rent for every month of the lease, and the price you paid is not paid back. The marketplace shows the total rent over the lease before you buy.",
   },
   {
     question: "How much do I need to start?",
-    answer: "One container. The price per container is shown on each plan in the marketplace, and you can buy more containers whenever you like. Your monthly income grows with every container you own.",
+    answer: "One container. The price of each container is shown in the marketplace, and you can buy more containers whenever you like. Your monthly income grows with every container you own.",
   },
   {
     question: "What do I need before I can invest?",
-    answer: "Create a free account and complete identity verification (KYC). Once your KYC is approved, you can buy containers on any open plan. The marketplace tells you if anything is still pending.",
+    answer: "Create a free account and complete identity verification (KYC). Once your KYC is approved, you can buy any container on sale in the marketplace. The marketplace tells you if anything is still pending.",
   },
   {
     question: "How do I pay?",
-    answer: "By bank payment to one of our company bank accounts: online (NEFT, RTGS, IMPS or UPI), by cheque or by cash deposit. You then enter the transaction ID, cheque number or deposit receipt number, and our finance team confirms the payment. Card payments are not accepted.",
+    answer: "By bank payment to one of our company bank accounts: online (NEFT, RTGS, IMPS or UPI) or by cheque. You then enter the transaction ID or cheque number, and our finance team confirms the payment. Card payments are not accepted.",
   },
   {
     question: "When is rent credited, and where does the money go?",
@@ -183,7 +183,7 @@ const FAQS = [
   },
   {
     question: "What happens at the end of the lease?",
-    answer: "When the last hour of the lease is credited, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then invest again in any open plan.",
+    answer: "When the last hour of the lease is credited, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then buy new containers in the marketplace.",
   },
   {
     question: "Can I earn by referring others?",
@@ -194,13 +194,6 @@ const FAQS = [
     answer: "Sensitive details such as identity documents, tax IDs and bank account numbers are stored encrypted, and only authorised employees can view them. Every view of a KYC document is logged.",
   },
 ];
-
-/** A plan's figure for some containers or years: amounts are per container per month. */
-const times = (money: { amount: string; currency: string }, factor: number) =>
-  ({ amount: (Math.round(Number(money.amount) * factor * 100) / 100).toFixed(2), currency: money.currency });
-
-/** Container counts shown under each plan, so visitors see how income scales with what they own. */
-const CONTAINER_STEPS = [1, 3, 5] as const;
 
 /**
  * Example portfolio for the Investors section: one hypothetical investor holding two containers on the demo
@@ -269,8 +262,8 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
 
 const STEPS = [
   {
-    title: "Choose a plan",
-    body: "Each plan shows the container type, the price per container, the monthly rent and the length of the lease up front.",
+    title: "Choose your containers",
+    body: "Each container in the marketplace shows its type, price, monthly rent and the length of the lease up front.",
   },
   {
     title: "Buy your containers",
@@ -401,7 +394,7 @@ export default async function Home() {
               </dl>
             )}
             <p className="text-xs leading-relaxed text-muted">
-              Past payouts are not a guarantee of future returns. Each plan&apos;s rent and lease length are shown in
+              Past payouts are not a guarantee of future returns. Every container&apos;s rent and lease length are shown in
               full before you invest.
             </p>
           </div>
@@ -469,7 +462,7 @@ export default async function Home() {
             <Eyebrow tone="light">Monthly Payouts</Eyebrow>
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent, Every Month</h3>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
-              Each container is leased for the plan&apos;s tenure, and every month of it you receive the plan&apos;s
+              Each container is leased for the years you choose, and every month of it you receive
               rent. The price you paid is not paid back. Open to every verified investor.
             </p>
             <div className="max-w-md border border-on-ink/20">
@@ -501,91 +494,62 @@ export default async function Home() {
               </table>
             </div>
             <p className="max-w-md text-xs leading-relaxed text-on-ink/60">
-              Illustration on example plan terms. Each plan&apos;s actual price, rent and lease length are shown in the
+              Illustration on example terms. Each container&apos;s actual price, rent and lease length are shown in the
               marketplace before you buy.
             </p>
           </div>
         </section>
 
-        {/* ---------------------------------------------------------- earnings by plan */}
+        {/* ---------------------------------------------------------- earnings by container */}
         {plans.length > 0 && (
-          <section id="earnings-by-plan" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14">
+          <section id="earnings-by-container" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14">
             <div className="flex flex-wrap items-end justify-between gap-6">
               <div className="space-y-5">
                 <Eyebrow>Investor Earnings</Eyebrow>
                 <h2 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                  What Each Plan Pays You
+                  What Each Container Pays You
                 </h2>
                 <p className="max-w-2xl text-sm leading-relaxed text-muted">
-                  Our open plans and their terms. Every container pays its plan&apos;s rent each month of the lease, and
-                  you choose the lease length in whole years within the plan&apos;s range. Plans pay rent only: the
-                  price is not paid back.
+                  Containers on sale now and their terms. Every container pays rent each month of the lease, and you
+                  choose the lease length in whole years within its range. Containers pay rent only: the price is not
+                  paid back.
                 </p>
               </div>
               <LinkButton href="/register" variant="secondary">Start investing</LinkButton>
             </div>
             <div className="mt-12">
-              <Carousel label="Open plans and what they pay" itemsName="plans" itemClassName="flex flex-col gap-6 p-8">
+              <Carousel label="Containers on sale and what they pay" itemsName="containers" itemClassName="flex flex-col gap-6 p-8">
               {plans.map((plan) => {
                 const years = plan.minTenureYears === plan.maxTenureYears
                   ? `${plan.minTenureYears} ${plan.minTenureYears === 1 ? "year" : "years"}`
                   : `${plan.minTenureYears}–${plan.maxTenureYears} years`;
-                const leaseRent = (y: number) => formatMoney(times(plan.monthlyRent, 12 * y));
                 return (
                   <div key={plan.code} className="contents">
                     <div>
                       <p className="text-xs uppercase tracking-[0.1em] text-muted">{plan.containerTypeLabel} container</p>
                       <p className="mt-2 text-lg font-semibold tracking-tight">{plan.title}</p>
-                      <p className="font-mono text-xs text-muted">{plan.code}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted">Monthly rent per container</p>
-                      <p className="mt-1 font-display text-4xl font-semibold tabular-nums text-gold-text">{formatMoney(plan.monthlyRent)}</p>
-                      <p className="text-xs text-muted">{plan.monthlyRentPercent}% of the price, every month of the lease</p>
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-5 text-sm">
                       <div>
                         <dt className="text-muted">Price per container</dt>
                         <dd className="mt-1 font-display text-xl font-semibold tabular-nums">{formatMoney(plan.price)}</dd>
-                        {plan.priceWithGst.amount !== plan.price.amount && (
-                          <dd className="text-xs text-muted">{formatMoney(plan.priceWithGst)} with GST</dd>
-                        )}
                       </div>
                       <div>
                         <dt className="text-muted">Lease</dt>
                         <dd className="mt-1 font-display text-xl font-semibold">{years}</dd>
                       </div>
-                      <div className="col-span-2">
-                        <dt className="text-muted">Rent over the lease, per container</dt>
-                        <dd className="mt-1 font-display text-xl font-semibold tabular-nums">
-                          {plan.minTenureYears === plan.maxTenureYears
-                            ? leaseRent(plan.minTenureYears)
-                            : `${leaseRent(plan.minTenureYears)} – ${leaseRent(plan.maxTenureYears)}`}
-                        </dd>
-                      </div>
                     </dl>
-                    <table className="mt-auto w-full border-t border-border text-sm">
-                      <caption className="sr-only">Monthly rent by number of containers</caption>
-                      <tbody>
-                        {CONTAINER_STEPS.map((count) => (
-                          <tr key={count} className="border-b border-border last:border-b-0">
-                            <th scope="row" className="py-2 text-left font-normal text-muted">
-                              {count} {count === 1 ? "container" : "containers"}
-                            </th>
-                            <td className="py-2 text-right tabular-nums font-medium">
-                              {formatMoney(times(plan.monthlyRent, count))} a month
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <p className="mt-auto border-t border-border pt-4 text-sm text-muted">
+                      Monthly rent is set by your order&apos;s total value: the more you buy in one order, the higher the
+                      rate can be. The marketplace shows the rent for your order before you pay.
+                    </p>
                   </div>
                 );
               })}
               </Carousel>
             </div>
             <p className="mt-6 text-xs leading-relaxed text-muted">
-              Figures are the plans&apos; published terms, not a promise of future returns. Rent is credited to your
+              Figures are the published terms, not a promise of future returns. Rent is credited to your
               wallet every hour of the lease, from the full hour after your container is assigned.
             </p>
           </section>

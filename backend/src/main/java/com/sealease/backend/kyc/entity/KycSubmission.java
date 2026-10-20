@@ -43,7 +43,7 @@ public class KycSubmission extends BaseEntity {
 	@Column(name = "document_type", length = 20, updatable = false)
 	private IdentityDocumentType documentType;
 
-	@Column(name = "document_number_encrypted", updatable = false)
+	@Column(name = "document_number_encrypted", updatable = false, columnDefinition = "TEXT")
 	private String documentNumberEncrypted;
 
 	@Column(name = "document_number_last4", length = 4, updatable = false)
@@ -55,13 +55,13 @@ public class KycSubmission extends BaseEntity {
 	@Column(name = "document_expiry_date", updatable = false)
 	private LocalDate documentExpiryDate;
 
-	@Column(name = "aadhaar_number_encrypted")
+	@Column(name = "aadhaar_number_encrypted", columnDefinition = "TEXT")
 	private String aadhaarNumberEncrypted;
 
 	@Column(name = "aadhaar_number_last4", length = 4)
 	private String aadhaarNumberLast4;
 
-	@Column(name = "pan_number_encrypted")
+	@Column(name = "pan_number_encrypted", columnDefinition = "TEXT")
 	private String panNumberEncrypted;
 
 	@Column(name = "pan_number_last4", length = 4)

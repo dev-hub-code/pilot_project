@@ -61,30 +61,15 @@ public final class OfferingFixtures {
 		return productId;
 	}
 
-	/** A published plan charging GST at {@code gstRatePercent} on the price; leased for 1 to 5 years. */
-	public UUID publishedWithGst(String type, String price, String gstRatePercent, String monthlyRentPercent)
-			throws Exception {
-		UUID productId = draft(type, price, gstRatePercent, monthlyRentPercent, 1, 5);
-		mvc.perform(post("/api/v1/admin/investment-products/{id}/publish", productId)
-				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(status().isOk());
-		return productId;
-	}
-
 	public UUID draft(String type, String price, String monthlyRentPercent, int minTenureYears, int maxTenureYears)
 			throws Exception {
-		return draft(type, price, "0", monthlyRentPercent, minTenureYears, maxTenureYears);
-	}
-
-	private UUID draft(String type, String price, String gstRatePercent, String monthlyRentPercent, int minTenureYears,
-			int maxTenureYears) throws Exception {
 		String product = mvc.perform(post("/api/v1/admin/investment-products").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("""
 						{"containerType":"%s","title":"40ft dry container plan","summary":"Own a container, earn rent",
-						 "description":"Buy a cargo-worthy container and lease it out.","currency":"INR","price":"%s","gstRatePercent":"%s",
+						 "description":"Buy a cargo-worthy container and lease it out.","currency":"INR","price":"%s",
 						 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d,
 						 "riskDisclosure":"Payouts depend on the platform.","termsAndConditions":"Standard terms."}
-						""".formatted(type, price, gstRatePercent, monthlyRentPercent, minTenureYears, maxTenureYears)))
+						""".formatted(type, price, monthlyRentPercent, minTenureYears, maxTenureYears)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JsonPath.read(product, "$.id"));
 	}

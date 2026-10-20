@@ -11,12 +11,8 @@ export interface CartLine {
   productStatus: ProductStatus | null;
   quantity: number;
   pricePerContainer: Money | null;
-  /** The price of the containers, without GST. */
+  /** The price of the containers: what the investor pays for the line. */
   amount: Money | null;
-  gstRatePercent: number;
-  gstAmount: Money | null;
-  /** What the investor pays for the line: the price plus GST. */
-  amountWithGst: Money | null;
   monthlyRentPercent: number;
   monthlyCapitalReturnPercent: number;
   monthlyPayout: Money | null;
@@ -31,11 +27,12 @@ export interface CartLine {
 
 export interface Cart {
   items: CartLine[];
-  /** Everything without GST. */
-  subtotal: Money | null;
-  gstTotal: Money | null;
-  /** What the investor pays: the subtotal plus GST. */
+  /** What the investor pays: the price of everything. */
   total: Money | null;
+  /** The smallest total an order may have; zero when there is none. */
+  minimumOrder: Money;
+  /** Why the cart as a whole cannot be checked out (e.g. below the minimum order). */
+  problems: string[];
   checkoutReady: boolean;
 }
 
@@ -49,12 +46,8 @@ export interface OrderItem {
   productTitle: string;
   containerType: ContainerType;
   containerNumber: string | null;
-  /** The container's price, without GST (rent is based on it). */
+  /** The container's price: what the investor paid for it (rent is based on it). */
   amount: Money;
-  gstRatePercent: number;
-  gstAmount: Money;
-  /** What the investor paid for the container: the price plus GST. */
-  amountWithGst: Money;
   monthlyRentPercent: number;
   monthlyCapitalReturnPercent: number;
   monthlyPayout: Money;
@@ -73,8 +66,6 @@ export interface Order {
   closeReason: string | null;
   createdAt: string;
   items: OrderItem[];
-  /** Paid in cash at the office, so without GST; {@code total} still includes GST. */
-  gstWaived: boolean;
 }
 
 /**
@@ -115,6 +106,7 @@ export interface BankTransferInstructions {
   accounts: CompanyBankAccount[];
 }
 
+/** CASH_DEPOSIT is no longer accepted; it appears only on earlier payments. */
 export type DepositMode = "ONLINE" | "CHEQUE" | "CASH_DEPOSIT";
 
 /** How the investor says they paid a bank payment. */
@@ -147,10 +139,6 @@ export interface Payment {
   bankTransfer: BankTransferInstructions | null;
   deposit: DepositDetails | null;
   officeCash: OfficeCashInstructions | null;
-  /** The amount includes GST; office cash payments leave it out. */
-  gstIncluded: boolean;
-  /** Added to every container's monthly rent once this pays the order (office cash); 0 for none. */
-  rentBonusPercent: number;
   /** Staff views: the finance member confirming it, who alone may confirm or reject it. */
   assignee?: Assignee | null;
 }
@@ -170,16 +158,7 @@ export interface Invoice {
   issuedAt: string;
   issuer: InvoiceParty;
   buyer: InvoiceParty;
-  /** Each line's {@code amount} is its taxable value; {@code total} adds its GST. */
   lines: InvoiceLine[];
-  /** The total before GST. */
-  taxable: Money;
-  /** CGST + SGST within the seller's state, IGST across states. */
-  cgst: Money;
-  sgst: Money;
-  igst: Money;
-  /** The buyer's state, e.g. "Maharashtra (27)"; null when it could not be told. */
-  placeOfSupply: string | null;
   total: Money;
   notes: string | null;
 }
@@ -188,15 +167,10 @@ export interface InvoiceLine {
   lineNumber: number;
   description: string;
   amount: Money;
-  gstRatePercent: number;
-  cgst: Money;
-  sgst: Money;
-  igst: Money;
-  total: Money;
 }
 
 /** AWAITING_CONTAINER: paid; finance has not assigned a container yet, so no lease or payouts. */
-export type HoldingStatus = "AWAITING_CONTAINER" | "ACTIVE" | "MATURED";
+export type HoldingStatus = "AWAITING_CONTAINER" | "AWAITING_ACCEPTANCE" | "ACTIVE" | "MATURED";
 
 /** One container the investor owns under a plan, with its lease. */
 export interface Holding {
@@ -215,7 +189,7 @@ export interface Holding {
   monthlyPayout: Money;
   tenureMonths: number;
   totalPayout: Money;
-  /** ISO dates; the lease ends on leaseEndsOn (exclusive). Null until a container is assigned. */
+  /** ISO dates; the lease ends on leaseEndsOn (exclusive). Null until the investor accepts the lease agreement. */
   leaseStartsOn: string | null;
   leaseEndsOn: string | null;
   status: HoldingStatus;

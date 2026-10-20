@@ -11,7 +11,7 @@ export type ProductStatus = "DRAFT" | "OPEN" | "CLOSED" | "CANCELLED";
 export type ContainerStatus = "AVAILABLE" | "RESERVED" | "ON_LEASE" | "MAINTENANCE" | "RETIRED";
 export type ContainerCondition = "NEW" | "CARGO_WORTHY" | "WIND_WATERTIGHT";
 export type ContainerType =
-  | "DRY_20FT" | "DRY_40FT" | "HIGH_CUBE_40FT" | "HIGH_CUBE_45FT" | "REEFER_20FT" | "REEFER_40FT"
+  | "DRY_10FT" | "DRY_20FT" | "DRY_40FT" | "HIGH_CUBE_40FT" | "HIGH_CUBE_45FT" | "REEFER_20FT" | "REEFER_40FT"
   | "OPEN_TOP_20FT" | "OPEN_TOP_40FT" | "FLAT_RACK_20FT" | "FLAT_RACK_40FT" | "TANK_20FT";
 
 /** A container as finance recorded it when assigning it; details beyond number and type may be unknown. */
@@ -37,7 +37,7 @@ export interface PlanPhoto {
   createdAt: string;
 }
 
-/** A plan on the marketplace. Payout figures are per container. */
+/** A container listing on the marketplace. No rent: it is set by each order's total value. */
 export interface MarketplaceListing {
   id: string;
   code: string;
@@ -45,28 +45,17 @@ export interface MarketplaceListing {
   summary: string;
   status: ProductStatus;
   containerType: ContainerType;
-  /** Per container, without GST (rent is based on it). */
+  /** Per container (rent is based on it). */
   price: Money;
-  gstRatePercent: number;
-  /** What the investor pays per container: the price plus GST. */
-  priceWithGst: Money;
-  monthlyRentPercent: number;
-  monthlyCapitalReturnPercent: number;
-  monthlyPayoutPercent: number;
   /** The investor chooses a lease of whole years between these. */
   minTenureYears: number;
   maxTenureYears: number;
-  monthlyPayout: Money;
-  /** The rent over the shortest lease. */
-  totalPayout: Money;
   coverPhotoId: string | null;
 }
 
 export interface MarketplaceDetail {
   listing: MarketplaceListing;
   description: string;
-  monthlyRent: Money;
-  monthlyCapitalReturn: Money;
   riskDisclosure: string;
   termsAndConditions: string;
   /** Photos of containers of the plan's type; the container allocated may differ. */
@@ -80,11 +69,10 @@ export interface ReturnProjection {
   tenureYears: number;
   minTenureYears: number;
   maxTenureYears: number;
-  /** The price of the containers, without GST. */
+  /** The price of the containers: what the investor pays. */
   amount: Money;
-  gstAmount: Money;
-  /** What the investor pays: the price plus GST. */
-  amountWithGst: Money;
+  /** The rent rate for an order of this amount (rent by order value). */
+  monthlyRentPercent: number;
   monthlyRent: Money;
   /** Monthly payouts over the lease. */
   payouts: number;
@@ -104,19 +92,8 @@ export interface Product {
   summary: string;
   description: string;
   price: Money;
-  gstRatePercent: number;
-  gstPerContainer: Money;
-  /** What the investor pays per container: the price plus GST. */
-  priceWithGst: Money;
-  monthlyRentPercent: number;
-  monthlyCapitalReturnPercent: number;
-  monthlyPayoutPercent: number;
   minTenureYears: number;
   maxTenureYears: number;
-  monthlyRent: Money;
-  monthlyCapitalReturn: Money;
-  monthlyPayout: Money;
-  totalPayout: Money;
   riskDisclosure: string;
   termsAndConditions: string;
   /** Containers of the plan's type in stock now (shared by plans of that type). */
@@ -127,4 +104,26 @@ export interface Product {
   cancellationReason: string | null;
   createdAt: string;
   version: number;
+}
+
+/** One band of the monthly rent by order value: orders from {@link fromAmount} to {@link toAmount} (inclusive). */
+export interface RentTier {
+  fromAmount: Money;
+  /** The highest order total of the band; null for no upper limit. */
+  toAmount: Money | null;
+  /** Rent paid every month, as a percentage of each container's price. */
+  monthlyRentPercent: number;
+}
+
+export interface RentTiers {
+  tiers: RentTier[];
+  updatedAt: string | null;
+  updatedByName: string | null;
+}
+
+/** The smallest total an order may have; zero when there is none. */
+export interface MinimumOrder {
+  amount: Money;
+  updatedAt: string | null;
+  updatedByName: string | null;
 }

@@ -34,10 +34,10 @@ class BackendApplicationTests {
 	private KafkaAdmin kafkaAdmin;
 
 	@Test
-	void flywayAppliedBaseline() {
+	void flywayAppliedSchemaAndLocations() {
 		Integer applied = jdbc.queryForObject(
-				"SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2', '3') AND success", Integer.class);
-		assertThat(applied).isEqualTo(3);
+				"SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2') AND success", Integer.class);
+		assertThat(applied).isEqualTo(2);
 	}
 
 	@Test

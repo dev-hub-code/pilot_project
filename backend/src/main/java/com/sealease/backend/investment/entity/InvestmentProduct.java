@@ -43,13 +43,7 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "price", nullable = false, precision = 19, scale = 4)
 	private BigDecimal price;
 
-	@Column(name = "gst_rate_percent", nullable = false, precision = 5, scale = 2)
-	private BigDecimal gstRatePercent;
-
-	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
-	private BigDecimal monthlyRentPercent;
-
-	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 5, scale = 2)
+	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 9, scale = 4)
 	private BigDecimal monthlyCapitalReturnPercent;
 
 	@Column(name = "min_tenure_years", nullable = false)
@@ -102,8 +96,6 @@ public class InvestmentProduct extends BaseEntity {
 		this.description = t.description();
 		this.currency = t.currency().getCurrencyCode();
 		this.price = t.price();
-		this.gstRatePercent = t.gstRatePercent();
-		this.monthlyRentPercent = t.monthlyRentPercent();
 		this.monthlyCapitalReturnPercent = t.monthlyCapitalReturnPercent();
 		this.minTenureYears = t.minTenureYears();
 		this.maxTenureYears = t.maxTenureYears();
@@ -134,8 +126,7 @@ public class InvestmentProduct extends BaseEntity {
 	}
 
 	public ProductTerms terms() {
-		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price, gstRatePercent,
-				monthlyRentPercent,
+		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price,
 				monthlyCapitalReturnPercent, minTenureYears, maxTenureYears, riskDisclosure, termsAndConditions);
 	}
 

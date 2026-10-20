@@ -12,6 +12,8 @@ import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.entity.ProductTerms;
 import com.sealease.backend.investment.service.OfferingQuery;
+import com.sealease.backend.investment.service.RentRateService;
+import com.sealease.backend.order.service.MinimumOrderService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,35 +37,44 @@ public class CartService {
 
 	private final CartItemRepository items;
 	private final OfferingQuery offerings;
+	private final RentRateService rentRates;
+	private final MinimumOrderService minimumOrder;
 
-	public CartService(CartItemRepository items, OfferingQuery offerings) {
+	public CartService(CartItemRepository items, OfferingQuery offerings, RentRateService rentRates,
+			MinimumOrderService minimumOrder) {
 		this.items = items;
 		this.offerings = offerings;
+		this.rentRates = rentRates;
+		this.minimumOrder = minimumOrder;
 	}
 
 	@Transactional(readOnly = true)
 	public CartResponse view(UUID userId) {
 		List<CartItem> lines = items.findByUserIdOrderByCreatedAt(userId);
 		Map<UUID, OfferingTerms> terms = offerings.terms(lines.stream().map(CartItem::getProductId).toList());
-		List<CartLineResponse> responses = new ArrayList<>();
-		Money subtotal = null;
-		Money gst = null;
-		boolean ready = !lines.isEmpty();
+		Money total = null;
 		for (CartItem line : lines) {
 			OfferingTerms plan = terms.get(line.getProductId());
-			CartLineResponse response = describe(userId, line, plan);
-			ready &= response.problems().isEmpty();
 			if (plan != null) {
 				Money amount = amount(plan, line.getQuantity());
-				Money lineGst = plan.terms().gstPerContainer().times(BigDecimal.valueOf(line.getQuantity()));
-				subtotal = subtotal == null ? amount : subtotal.plus(amount);
-				gst = gst == null ? lineGst : gst.plus(lineGst);
+				total = total == null ? amount : total.plus(amount);
 			}
+		}
+		// Every container in the order earns the rate for the order's total.
+		BigDecimal rate = total == null ? null : rentRates.percentFor(total);
+		List<CartLineResponse> responses = new ArrayList<>();
+		boolean ready = !lines.isEmpty();
+		for (CartItem line : lines) {
+			CartLineResponse response = describe(userId, line, terms.get(line.getProductId()), rate);
+			ready &= response.problems().isEmpty();
 			responses.add(response);
 		}
-		return subtotal == null ? new CartResponse(responses, null, null, null, ready)
-				: new CartResponse(responses, MoneyResponse.from(subtotal), MoneyResponse.from(gst),
-						MoneyResponse.from(subtotal.plus(gst)), ready);
+		List<String> problems = total == null ? List.of() : minimumOrder.problems(total);
+		if (total != null && problems.isEmpty()) {
+			problems = rentRates.problems(total);
+		}
+		return new CartResponse(responses, total == null ? null : MoneyResponse.from(total),
+				MoneyResponse.from(minimumOrder.current()), problems, ready && problems.isEmpty());
 	}
 
 	/**
@@ -87,12 +98,12 @@ public class CartService {
 		else {
 			List<CartItem> current = items.findByUserIdOrderByCreatedAt(userId);
 			if (current.size() >= MAX_ITEMS) {
-				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A cart holds at most " + MAX_ITEMS + " plans");
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A cart holds at most " + MAX_ITEMS + " container listings");
 			}
 			Map<UUID, OfferingTerms> others = offerings.terms(current.stream().map(CartItem::getProductId).toList());
 			if (others.values().stream().anyMatch(o -> !o.terms().currency().equals(plan.terms().currency()))) {
 				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						"Your cart holds plans in another currency; check those out first");
+						"Your cart holds containers in another currency; check those out first");
 			}
 			items.save(new CartItem(userId, productId, quantity, years));
 		}
@@ -123,22 +134,27 @@ public class CartService {
 		items.deleteAllOfUser(userId);
 	}
 
-	private CartLineResponse describe(UUID userId, CartItem line, OfferingTerms plan) {
+	private CartLineResponse describe(UUID userId, CartItem line, OfferingTerms plan, BigDecimal rate) {
 		if (plan == null || !plan.status().isListed()) {
-			return new CartLineResponse(line.getProductId(), null, "Unavailable plan", null, null, line.getQuantity(),
-					null, null, BigDecimal.ZERO, null, null, BigDecimal.ZERO, BigDecimal.ZERO, null, line.getTenureYears(), 0, 0,
+			return new CartLineResponse(line.getProductId(), null, "Unavailable container", null, null, line.getQuantity(),
+					null, null, BigDecimal.ZERO, BigDecimal.ZERO, null, line.getTenureYears(), 0, 0,
 					null,
-					List.of("This plan is no longer available; remove it"));
+					List.of("This container is no longer available; remove it"));
 		}
 		ProductTerms t = plan.terms();
 		BigDecimal containers = BigDecimal.valueOf(line.getQuantity());
+		if (rate == null) {
+			// Below the lowest rent band: no rent to show until the order is large enough (the cart says so).
+			return new CartLineResponse(plan.id(), plan.code(), t.title(), t.containerType(), plan.status(),
+					line.getQuantity(), MoneyResponse.from(t.pricePerContainer()), MoneyResponse.from(amount(plan, line.getQuantity())),
+					BigDecimal.ZERO, t.monthlyCapitalReturnPercent(), null, line.getTenureYears(), t.minTenureYears(),
+					t.maxTenureYears(), null, offerings.problems(userId, plan.id(), line.getQuantity(), line.getTenureYears()));
+		}
 		return new CartLineResponse(plan.id(), plan.code(), t.title(), t.containerType(), plan.status(),
 				line.getQuantity(), MoneyResponse.from(t.pricePerContainer()), MoneyResponse.from(amount(plan, line.getQuantity())),
-				t.gstRatePercent(), MoneyResponse.from(t.gstPerContainer().times(containers)),
-				MoneyResponse.from(t.pricePerContainerWithGst().times(containers)),
-				t.monthlyRentPercent(), t.monthlyCapitalReturnPercent(), MoneyResponse.from(t.monthlyPayout().times(containers)),
+				rate, t.monthlyCapitalReturnPercent(), MoneyResponse.from(t.monthlyRent(rate).times(containers)),
 				line.getTenureYears(), t.minTenureYears(), t.maxTenureYears(),
-				MoneyResponse.from(t.totalPayout(line.getTenureYears()).times(containers)),
+				MoneyResponse.from(t.totalPayout(line.getTenureYears(), rate).times(containers)),
 				offerings.problems(userId, plan.id(), line.getQuantity(), line.getTenureYears()));
 	}
 

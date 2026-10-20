@@ -110,6 +110,7 @@ Modules (Phase 5):
 | `order`   | Checkout (idempotent), terms acceptance, container reservation, expiry, allocation on payment |
 | `payment` | Company bank accounts, bank payment with investor-submitted details, settlement, rejection, refunds |
 | `invoice` | Immutable, sequentially numbered invoices with seller/buyer snapshots              |
+| `agreement` | Lease agreements: admin-maintained, versioned wording with `{{placeholders}}`; each container assigned issues an immutable, numbered agreement (`AGR-2026-000042`) in the wording in force, downloadable as a PDF |
 | `investment` | + holdings (one allocated, leased container each) and the investor portfolio    |
 | `outbox`  | Transactional outbox → Kafka relay; consumer de-duplication (`processed_events`)   |
 
@@ -261,8 +262,9 @@ from a secret manager; keep `COOKIE_SECURE` on.
   containers keep their lease and payouts.
 - **Stock.** Sales are not limited by stock and checkout reserves nothing. Once an order is paid, each
   container bought is a holding `AWAITING_CONTAINER`; finance (`CONTAINER_ASSIGN`, *Admin → Assign containers*)
-  picks an `AVAILABLE` container of the plan's type for it, which moves it `AVAILABLE → ON_LEASE`, starts the
-  lease and payout schedule that day and notifies the investor. The container row is locked, so it can only go to
+  picks an `AVAILABLE` container of the plan's type for it, which moves it `AVAILABLE → ON_LEASE`, issues the lease
+  agreement and notifies the investor; the holding is then `AWAITING_ACCEPTANCE`. The investor's acceptance of the
+  agreement starts the lease and payout schedule at the next full hour; nothing is earned before. The container row is locked, so it can only go to
   one investment, and a DB index allows one active holding per container. It returns to `AVAILABLE` when the
   lease ends. (Orders placed before manual assignment reserved containers at checkout, `RESERVED`; those are
   still leased on payment or released when the order lapses.)
@@ -313,8 +315,8 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
   at most once (partial unique indexes). Finance maintains the company
   bank accounts investors may pay into (account number, IFSC, optional UPI ID;
   `COMPANY_BANK_ACCOUNT_MANAGE`, deactivated rather than deleted). The investor chooses one of the
-  active accounts, quotes a generated reference, pays online (NEFT/RTGS/IMPS/UPI), by cheque or by
-  cash deposit, and submits the transaction ID, cheque number or deposit receipt number. From then
+  active accounts, quotes a generated reference, pays online (NEFT/RTGS/IMPS/UPI) or by cheque
+  (cash deposits at the bank are not accepted), and submits the transaction ID or cheque number. From then
   on the order is held for verification (`APP_BANK_PAYMENT_VERIFICATION_WINDOW`, default 7 days)
   instead of lapsing after 30 minutes, and the investor may correct the details until finance
   decides. Finance confirms receipt (`PAYMENT_CONFIRM`; the amount
@@ -331,6 +333,19 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
   `investment.confirmed`, `invoice.generated`.
 - **Invoices** (`INV-2026-000042`) are append-only; corrections will be credit notes. The portal
   renders them for print, and offers a JasperReports PDF (see *Reporting*).
+- **Lease agreements.** Admins write the agreement's wording (*Admin → Lease agreement*) with placeholders such as
+  `{{investorName}}`, `{{containerNumber}}`, `{{monthlyRent}}` and `{{leaseEndDate}}`; unknown placeholders are refused
+  on save. A blank line separates paragraphs and a line starting with `# ` is a heading. Each save is a new version
+  (`agreement_templates`, append-only). Assigning a container (or leasing one on payment) issues the holding's agreement in
+  the same transaction: the wording in force, filled in and stored word for word (`lease_agreements`, append-only, one per
+  holding), so later wording changes never alter it. Investors download it from their portfolio, staff from the order.
+- **Acceptance starts earning.** A newly assigned container's holding is `AWAITING_ACCEPTANCE`: the container is the
+  investor's, but there are no lease dates and no rent. The investor reads the agreement (*Portfolio → Review and accept*)
+  and accepts it (`POST /api/v1/agreements/{holdingId}/accept`); in one transaction, under the holding's row lock, the
+  lease starts at the next full hour, the rent schedule is created and the acceptance (time, IP, user agent, lease dates)
+  is stored append-only in `lease_agreement_acceptances`. Until then `{{leaseStartDate}}`/`{{leaseEndDate}}` read "the day
+  this Agreement is accepted"; afterwards the agreement and PDF show the lease's dates. Holdings already on lease before
+  V74 need no acceptance.
 
 ### Cart, orders & payments API
 
@@ -340,7 +355,7 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 | `POST /api/v1/orders` (`Idempotency-Key`)             | `INVESTOR_PORTAL`   | Check out the cart with accepted terms      |
 | `GET /api/v1/orders[/{id}]`, `POST /…/{id}/cancel`    | `INVESTOR_PORTAL`   | Own orders; cancel while awaiting payment   |
 | `GET·POST /api/v1/orders/{id}/payments` (`Idempotency-Key`) | `INVESTOR_PORTAL` | Payment attempts / start a bank payment (`BANK_TRANSFER`) |
-| `POST /api/v1/payments/{id}/deposit`                  | `INVESTOR_PORTAL`   | Bank payment details: company account, mode (`ONLINE`, `CHEQUE`, `CASH_DEPOSIT`), reference |
+| `POST /api/v1/payments/{id}/deposit`                  | `INVESTOR_PORTAL`   | Bank payment details: company account, mode (`ONLINE`, `CHEQUE`), reference |
 | `GET /api/v1/orders/{id}/invoice`                     | `INVESTOR_PORTAL`   | Invoice of a confirmed order                |
 | `GET /api/v1/portfolio`                               | `INVESTOR_PORTAL`   | Holdings and totals per currency            |
 | `GET /api/v1/admin/orders[/{id}[/holdings·/invoice]]` | `ORDER_VIEW`        | Search, detail, holdings, invoice           |
@@ -349,6 +364,11 @@ cart ──checkout──▶ order PENDING_PAYMENT ──payment succeeded──
 | `POST /api/v1/admin/payments/{id}/reject`             | `PAYMENT_CONFIRM`   | Reject a bank payment that never arrived (reason) |
 | `GET·POST /api/v1/admin/company-bank-accounts`, `PUT /…/{id}`, `POST /…/{id}/activate·deactivate` | `COMPANY_BANK_ACCOUNT_MANAGE` (list: or `FINANCE_VIEW`) | Company bank accounts investors pay into |
 | `POST /api/v1/admin/payments/{id}/refund`             | `FINANCE_ADJUST`    | Record a refund                             |
+| `GET·PUT /api/v1/admin/agreement-template`, `POST /…/preview`, `GET /…/sample` | `AGREEMENT_TEMPLATE_MANAGE` | Lease agreement wording: read, save as a new version, preview / sample PDF with example values |
+| `GET /api/v1/agreements`, `/agreements/{holdingId}[/pdf]` | `INVESTOR_PORTAL` | Own lease agreements, with wording / as PDF |
+| `POST /api/v1/agreements/{holdingId}/accept`          | `INVESTOR_PORTAL`   | Accept the agreement: starts the lease and rent |
+| `GET /api/v1/admin/agreements?orderId`, `/admin/agreements/{holdingId}/pdf` | `ORDER_VIEW` | An order's lease agreements |
+| `POST /api/v1/admin/container-assignments/orders/{orderId}/agreements` | `CONTAINER_ASSIGN` | Issue agreements for containers assigned before agreements existed |
 
 ### Payouts & the ledger
 
@@ -370,6 +390,13 @@ last installment PAID ──▶ holding MATURED, container back to AVAILABLE
   amount. The job (`app.payouts.sweep-interval`, hourly) catches up any days missed, each installment in its own
   transaction under a row lock, so runs can overlap and repeat safely; a day is never credited twice (unique per
   installment and day). Finance can run it at once (`PAYOUT_PROCESS`).
+- **Credit interval (V75).** Rent accrues continuously and is credited once each *credit interval* ends: hourly
+  by default (`app.payouts.credit-interval`), changeable by admins on **Admin → Rent** (`PAYOUT_PROCESS` or
+  `SYSTEM_SETTINGS_MANAGE`; audited as `RENT_CREDIT_INTERVAL_CHANGED`) to 5 min – 1 day, any whole minutes dividing a
+  day. Intervals are counted in UTC from the epoch, so daily credits land at midnight UTC. Crediting is cumulative
+  (owed up to the boundary less already credited), so a change applies from the next run and loses or repeats
+  nothing. Leases still start at the full hour after acceptance (the interval's step if it is under an hour). The
+  website and portal read the wording ("every hour", "every day") from `GET /api/v1/public/rent-credit`.
 - **Ledger.** Every payout, commission and adjustment is one transaction of debit/credit entries. A deferred
   constraint trigger rejects any transaction that does not balance or mixes currencies, and accounts,
   transactions and entries are append-only. A day's rent debits *Rent paid to investors* (and *Capital returned to
@@ -468,6 +495,7 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 | `GET`, `PUT /api/v1/admin/users/{id}/referral-mode`                     | `WITHDRAWAL_VIEW` / `_PROCESS` | An investor's mode; change on request |
 | `GET`, `POST /api/v1/admin/withdrawal-runs?kind=RENT\|REFERRAL`         | `WITHDRAWAL_VIEW` / `_PROCESS` | Monthly runs; run this month now     |
 | `GET`, `PUT /api/v1/admin/settings/withdrawals`                         | `WITHDRAWAL_VIEW` / `SYSTEM_SETTINGS_MANAGE` | Rent and referral withdrawal days |
+| `GET`, `PUT /api/v1/admin/settings/rent-credit`                         | `FINANCE_VIEW` / `PAYOUT_PROCESS` | How often rent is credited (`intervalMinutes`) |
 | `GET /api/v1/admin/withdrawal-batches[/{id}]`, `/{id}/files`            | `WITHDRAWAL_VIEW`    | Files with paid/failed/outstanding counts      |
 | `GET /api/v1/admin/withdrawal-batches/{id}/file`, `/files/{fileId}`     | `WITHDRAWAL_PROCESS` | The Excel file, kept uploads (audited)         |
 | `POST /api/v1/admin/withdrawal-batches/{id}/reconciliation` (multipart) | `WITHDRAWAL_PROCESS` | Upload the file back with Status per row       |

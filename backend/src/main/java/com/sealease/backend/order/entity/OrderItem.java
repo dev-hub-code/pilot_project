@@ -55,17 +55,10 @@ public class OrderItem {
 	@Column(name = "currency", nullable = false, length = 3)
 	private String currency;
 
-	/** GST charged on {@code amount} at purchase; the investor paid amount + GST. */
-	@Column(name = "gst_rate_percent", nullable = false, precision = 5, scale = 2)
-	private BigDecimal gstRatePercent;
-
-	@Column(name = "gst_amount", nullable = false, precision = 19, scale = 4)
-	private BigDecimal gstAmount;
-
 	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
 	private BigDecimal monthlyRentPercent;
 
-	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 5, scale = 2)
+	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 9, scale = 4)
 	private BigDecimal monthlyCapitalReturnPercent;
 
 	@Column(name = "tenure_months", nullable = false)
@@ -78,7 +71,7 @@ public class OrderItem {
 	}
 
 	public OrderItem(UUID orderId, UUID productId, String productCode, String productTitle, ContainerType containerType,
-			UUID containerId, Money amount, BigDecimal gstRatePercent, Money gst, BigDecimal monthlyRentPercent,
+			UUID containerId, Money amount, BigDecimal monthlyRentPercent,
 			BigDecimal monthlyCapitalReturnPercent, int tenureMonths, Instant createdAt) {
 		this.orderId = orderId;
 		this.productId = productId;
@@ -88,30 +81,15 @@ public class OrderItem {
 		this.containerId = containerId;
 		this.amount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
-		this.gstRatePercent = gstRatePercent;
-		this.gstAmount = gst.amount();
 		this.monthlyRentPercent = monthlyRentPercent;
 		this.monthlyCapitalReturnPercent = monthlyCapitalReturnPercent;
 		this.tenureMonths = tenureMonths;
 		this.createdAt = createdAt;
 	}
 
-	/** The price of the container, without GST. */
+	/** The price of the container. */
 	public Money amount() {
 		return Money.of(amount, Currency.getInstance(currency));
-	}
-
-	public Money gst() {
-		return Money.of(gstAmount, Currency.getInstance(currency));
-	}
-
-	/** What the investor paid for the container: the price plus GST. */
-	public Money amountWithGst() {
-		return amount().plus(gst());
-	}
-
-	public BigDecimal getGstRatePercent() {
-		return gstRatePercent;
 	}
 
 	public UUID getId() {

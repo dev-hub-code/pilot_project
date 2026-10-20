@@ -2,18 +2,15 @@ import "server-only";
 import type { Money } from "@/types/marketplace";
 import { backendFetch } from "./backend-client";
 
-/** An open plan's published terms, as the backend gives them to the website. Figures are per container. */
+/** An open container listing's published terms, as the backend gives them to the website. No rent: it is set by each
+ * order's total value. */
 export interface PublicPlan {
   code: string;
   title: string;
   summary: string | null;
   containerType: string;
   containerTypeLabel: string;
-  /** Without GST; priceWithGst is what the investor pays. */
   price: Money;
-  priceWithGst: Money;
-  monthlyRentPercent: number;
-  monthlyRent: Money;
   minTenureYears: number;
   maxTenureYears: number;
 }

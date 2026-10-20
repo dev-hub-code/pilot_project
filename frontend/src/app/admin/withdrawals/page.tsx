@@ -64,7 +64,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
               <Cell>{EARNINGS_BALANCE_LABEL[w.balance]}</Cell>
               <Cell>
                 {w.payoutMethod === "OFFICE_CASH"
-                  ? <>Cash at the office{w.status === "APPROVED" && <span className="block text-xs text-gold-text">To hand over</span>}</>
+                  ? <>Cash{w.status === "APPROVED" && <span className="block text-xs text-gold-text">To hand over</span>}</>
                   : <>{w.bankHolderName} <span className="text-xs text-muted">{w.bankName} {w.bankAccountMasked}</span></>}
               </Cell>
               <Cell>{w.origin === "SCHEDULED" ? "Withdrawal run" : w.origin === "OFFICE" ? "At the office" : "Investor request"}</Cell>

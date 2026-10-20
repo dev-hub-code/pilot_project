@@ -42,7 +42,8 @@ import java.util.UUID;
 
 /**
  * Confirmed investments (one container each), their leases and the investor's portfolio view. A paid investment
- * awaits its container until finance assigns one; its lease and payouts start on that day.
+ * awaits its container until finance assigns one, then the investor's acceptance of the lease agreement; its lease and
+ * payouts start when they accept.
  */
 @Service
 public class HoldingService {
@@ -88,13 +89,12 @@ public class HoldingService {
 	}
 
 	/**
-	 * Leases the container finance typed in (of the plan's type) to a holding awaiting one. Its lease runs from
-	 * {@code leaseStartsAt} (on the hour); the caller schedules the payouts from the returned terms.
+	 * Leases the container finance typed in (of the plan's type) to a holding awaiting one. The holding then awaits the
+	 * investor's acceptance of the lease agreement; the lease and payouts start with {@link #startLease}.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public PayoutTerms assignContainer(UUID actorId, UUID holdingId, String containerNumber, String currentLocation,
-			Instant leaseStartsAt, Instant now) {
-		LocalDate leaseStartsOn = LocalDate.ofInstant(leaseStartsAt, ZoneOffset.UTC);
+	public HoldingResponse assignContainer(UUID actorId, UUID holdingId, String containerNumber, String currentLocation,
+			Instant now) {
 		Holding holding = holdings.findByIdForUpdate(holdingId)
 			.orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
 		if (holding.getStatus() != HoldingStatus.AWAITING_CONTAINER) {
@@ -103,11 +103,28 @@ public class HoldingService {
 		requireTaskOf(actorId, holding);
 		ContainerType type = offerings.terms(holding.getProductId()).terms().containerType();
 		ContainerSummary container = inventory.assign(containerNumber, type, currentLocation, actorId);
-		holding.assignContainer(container.id(), leaseStartsOn, actorId, now);
+		holding.assignContainer(container.id(), actorId, now);
 		holdings.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.HOLDING_CONTAINER_ASSIGNED, ENTITY, holdingId)
-			.withNewValue(Map.of("containerId", container.id().toString(), "containerNumber", container.containerNumber(),
-					"leaseStartsAt", leaseStartsAt.toString())));
+			.withNewValue(Map.of("containerId", container.id().toString(), "containerNumber", container.containerNumber())));
+		return summarise(List.of(holding)).holdings().getFirst();
+	}
+
+	/**
+	 * The investor accepted the lease agreement of their holding awaiting acceptance: its lease runs from
+	 * {@code leaseStartsAt} (on the hour); the caller schedules the payouts from the returned terms.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public PayoutTerms startLease(UUID userId, UUID holdingId, Instant leaseStartsAt) {
+		Holding holding = holdings.findByIdForUpdate(holdingId)
+			.filter(h -> h.getUserId().equals(userId))
+			.orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
+		if (holding.getStatus() != HoldingStatus.AWAITING_ACCEPTANCE) {
+			throw new BusinessException(ErrorCode.CONFLICT, holding.getStatus() == HoldingStatus.AWAITING_CONTAINER
+					? "This investment has no container yet" : "This lease agreement has already been accepted");
+		}
+		holding.startLease(LocalDate.ofInstant(leaseStartsAt, ZoneOffset.UTC));
+		holdings.flush();
 		return payoutTerms(holding, leaseStartsAt);
 	}
 
@@ -213,7 +230,21 @@ public class HoldingService {
 		return summarise(holdings.findByOrderIdOrderByCreatedAt(orderId)).holdings();
 	}
 
-	/** For support tickets: a label for one of the user's own holdings, e.g. "PLAN-10001 · SLSU1234565". */
+	/** One holding with its plan and container, e.g. for the lease agreement issued when its container is assigned. */
+	@Transactional(readOnly = true)
+	public HoldingResponse get(UUID holdingId) {
+		Holding holding = holdings.findById(holdingId).orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
+		return summarise(List.of(holding)).holdings().getFirst();
+	}
+
+	/** The investor a holding belongs to. */
+	@Transactional(readOnly = true)
+	public UUID ownerOf(UUID holdingId) {
+		return holdings.findById(holdingId).map(Holding::getUserId)
+			.orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
+	}
+
+	/** For support tickets: a label for one of the user's own holdings, e.g. "LST-10001 · SLSU1234565". */
 	@Transactional(readOnly = true)
 	public Optional<String> ownedLabel(UUID userId, UUID holdingId) {
 		return holdings.findById(holdingId)

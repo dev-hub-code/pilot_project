@@ -14,6 +14,7 @@ import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
+import { getRentCredit } from "@/lib/server/rent-credit";
 import type { CurrentUser } from "@/types/auth";
 import type { EarningsSummary, PayoutMonth } from "@/types/earning";
 import type { Money } from "@/types/marketplace";
@@ -22,6 +23,7 @@ import type { ReferralMonth } from "@/types/referral";
 import type { Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { holdingBreakdown } from "@/features/orders/holding-summary";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -44,6 +46,7 @@ const REFERRAL_SERIES: readonly ColumnSeries[] = [
 ];
 
 export default async function DashboardPage() {
+  const credit = await getRentCredit();
   const [me, profile] = await Promise.all([
     authFetch<CurrentUser>("/api/v1/auth/me"),
     authFetch<Profile>("/api/v1/users/me"),
@@ -69,12 +72,12 @@ export default async function DashboardPage() {
   const hasCapital = (earnings?.capitalReturned.length ?? 0) > 0
     || (payoutMonths ?? []).some((m) => Number(m.capitalPaid.amount) > 0 || Number(m.capitalScheduled.amount) > 0);
   const kpis = [
-    { label: "Total invested", value: invested, note: portfolio ? `${portfolio.activeHoldings} container(s) on lease` : "Investor accounts only" },
+    { label: "Total invested", value: invested, note: portfolio ? (holdingBreakdown(portfolio.holdings) || "No containers yet") : "Investor accounts only" },
     { label: "Total withdrawn", value: list(earnings?.totalWithdrawn),
       note: earnings ? (earnings.withdrawalInProgress.length > 0 ? `${list(earnings.withdrawalInProgress)} in progress` : "Paid out to you so far")
         : "Investor accounts only" },
     { label: "Available balance", value: list(earnings?.balances),
-      note: earnings ? nextCreditNote(earnings.nextCreditAt) : "Investor accounts only" },
+      note: earnings ? nextCreditNote(earnings.nextCreditAt, credit.label) : "Investor accounts only" },
   ];
 
   return (
@@ -116,7 +119,7 @@ export default async function DashboardPage() {
       {earnings && (
         <>
           <section className="grid gap-6 lg:grid-cols-3" aria-label="Rent">
-            <Card title="Monthly rent" description="Credited to your wallet every hour, by month"
+            <Card title="Monthly rent" description={`Credited to your wallet ${credit.label}, by month`}
               className="lg:col-span-2">
               {payoutMonths === null ? (
                 <EmptyState title="The chart could not be loaded" description="Your rent is listed on the Earnings page." />

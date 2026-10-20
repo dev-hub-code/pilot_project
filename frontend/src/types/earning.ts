@@ -112,3 +112,16 @@ export interface PayoutMonth {
   rentScheduled: Money;
   capitalScheduled: Money;
 }
+
+/** How often rent is credited, as admins set it. */
+export interface RentCreditSettings {
+  intervalMinutes: number;
+  /** e.g. "every hour". */
+  label: string;
+  /** The configured default, which applies until an admin sets one. */
+  defaultMinutes: number;
+  options: { minutes: number; label: string }[];
+  /** Null while the default applies. */
+  updatedAt: string | null;
+  updatedByName: string | null;
+}

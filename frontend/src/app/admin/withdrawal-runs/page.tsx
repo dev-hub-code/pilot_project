@@ -53,7 +53,7 @@ export default async function WithdrawalRunsPage() {
         {runs.length === 0 ? (
           <EmptyState title="No runs yet" description="Runs appear here once withdrawals are generated." />
         ) : (
-          <DataTable columns={["Run", "Kind", "Generated", "Bank sheet", "Cash at office", "Left out"]}>
+          <DataTable columns={["Run", "Kind", "Generated", "Bank sheet", "Cash", "Left out"]}>
             {runs.map((run) => (
               <tr key={run.id} className="align-top">
                 <Cell className="font-mono font-medium">{run.reference}</Cell>

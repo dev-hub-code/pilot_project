@@ -67,7 +67,7 @@ export async function publishProductAction(productId: string): Promise<FormState
     return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Published. Investors can now buy containers under this plan." };
+  return { success: "Published. Investors can now buy these containers." };
 }
 
 export async function closeProductAction(productId: string): Promise<FormState> {
@@ -77,7 +77,7 @@ export async function closeProductAction(productId: string): Promise<FormState> 
     return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Plan closed. Containers already sold keep their lease and payouts." };
+  return { success: "Listing closed. Containers already sold keep their lease and payouts." };
 }
 
 export async function cancelProductAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {
@@ -89,7 +89,7 @@ export async function cancelProductAction(productId: string, _p: FormState, form
     return failureState(error);
   }
   revalidatePath("/admin/products", "layout");
-  return { success: "Plan cancelled." };
+  return { success: "Listing cancelled." };
 }
 
 // ---------------------------------------------------------------------------- plan photos

@@ -62,18 +62,18 @@ public class PlanPhotoService {
 	@Transactional
 	public PlanPhotoResponse add(UUID actorId, UUID productId, MultipartFile file) {
 		InvestmentProduct product = products.findById(productId)
-			.orElseThrow(() -> new ResourceNotFoundException("Plan", productId));
+			.orElseThrow(() -> new ResourceNotFoundException("Container listing", productId));
 		if (product.getStatus() == ProductStatus.CANCELLED) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A cancelled plan takes no photos");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A cancelled listing takes no photos");
 		}
 		if (photos.countByProductId(productId) >= MAX_PHOTOS) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"A plan has at most " + MAX_PHOTOS + " photos; remove one first");
+					"A listing has at most " + MAX_PHOTOS + " photos; remove one first");
 		}
 		byte[] bytes = read(file);
 		String type = DocumentService.detectContentType(bytes);
 		if (!"image/jpeg".equals(type) && !"image/png".equals(type)) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Plan photos must be JPEG or PNG images");
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Photos must be JPEG or PNG images");
 		}
 		UUID documentId = documents.store(actorId, DocumentPurpose.PLAN_PHOTO, bytes);
 		PlanPhoto photo = photos.saveAndFlush(new PlanPhoto(productId, documentId, actorId, clock.instant()));

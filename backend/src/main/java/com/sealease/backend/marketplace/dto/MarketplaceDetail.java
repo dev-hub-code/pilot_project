@@ -15,8 +15,6 @@ import java.util.UUID;
 public record MarketplaceDetail(
 		MarketplaceListing listing,
 		String description,
-		MoneyResponse monthlyRent,
-		MoneyResponse monthlyCapitalReturn,
 		String riskDisclosure,
 		String termsAndConditions,
 		List<UUID> photoIds,
@@ -24,7 +22,7 @@ public record MarketplaceDetail(
 
 	public static MarketplaceDetail from(ProductResponse p, MarketplaceListing listing, List<UUID> photoIds,
 			InvestorEligibility eligibility) {
-		return new MarketplaceDetail(listing, p.description(), p.monthlyRent(), p.monthlyCapitalReturn(),
+		return new MarketplaceDetail(listing, p.description(),
 				p.riskDisclosure(), p.termsAndConditions(), photoIds, eligibility);
 	}
 

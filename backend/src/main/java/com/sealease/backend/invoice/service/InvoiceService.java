@@ -5,8 +5,6 @@ import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.common.tax.GstSplit;
-import com.sealease.backend.common.tax.GstStates;
 import com.sealease.backend.invoice.dto.InvoiceResponse;
 import com.sealease.backend.invoice.entity.Invoice;
 import com.sealease.backend.invoice.entity.InvoiceLine;
@@ -27,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -68,27 +65,14 @@ public class InvoiceService {
 		ProfileResponse buyer = profiles.getProfile(request.userId());
 		Money total = request.total();
 
-		// Place of supply: the buyer's state. In the seller's state GST is CGST + SGST, otherwise IGST.
-		Optional<GstStates.State> buyerState = buyerState(buyer);
-		boolean intraState = buyerState.isPresent() && sellerState().equals(buyerState);
-		List<GstSplit> splits = request.lines().stream().map(l -> GstSplit.of(l.gst(), intraState)).toList();
-		Money zero = Money.zero(total.currency());
-		Invoice.Tax tax = new Invoice.Tax(request.taxable(),
-				splits.stream().map(GstSplit::cgst).reduce(zero, Money::plus),
-				splits.stream().map(GstSplit::sgst).reduce(zero, Money::plus),
-				splits.stream().map(GstSplit::igst).reduce(zero, Money::plus),
-				buyerState.map(GstStates.State::toString).orElse(null), blankToNull(buyer.gstNumber()));
-
 		Invoice invoice = invoices.saveAndFlush(new Invoice(number, request.orderId(), request.userId(),
 				request.paymentId(), total, new Invoice.Party(properties.issuerName(), properties.issuerAddress()),
 				blankToNull(properties.issuerTaxId()),
 				new Invoice.Party(buyer.firstName() + " " + buyer.lastName(), address(buyer.address())), buyer.email(),
-				tax, blankToNull(properties.notes()), now));
+				blankToNull(properties.notes()), now));
 		int n = 1;
-		for (int i = 0; i < request.lines().size(); i++) {
-			InvoiceRequest.Line line = request.lines().get(i);
-			lines.save(new InvoiceLine(invoice.getId(), n++, line.description(), line.amount().amount(),
-					line.gstRatePercent(), splits.get(i)));
+		for (InvoiceRequest.Line line : request.lines()) {
+			lines.save(new InvoiceLine(invoice.getId(), n++, line.description(), line.amount().amount()));
 		}
 		lines.flush();
 
@@ -110,24 +94,6 @@ public class InvoiceService {
 			.filter(i -> ownerId == null || i.getUserId().equals(ownerId))
 			.orElseThrow(() -> new ResourceNotFoundException("Invoice for order", orderId));
 		return InvoiceResponse.from(invoice, orderNumber, lines.findByInvoiceIdOrderByLineNumber(invoice.getId()));
-	}
-
-	/** The seller's state: from its GSTIN, else the configured state. */
-	private Optional<GstStates.State> sellerState() {
-		return GstStates.ofGstin(properties.issuerTaxId()).or(() -> GstStates.byName(properties.issuerState()));
-	}
-
-	/** The buyer's state: from their GSTIN, else the state of their Indian address. */
-	private static Optional<GstStates.State> buyerState(ProfileResponse buyer) {
-		Optional<GstStates.State> fromGstin = GstStates.ofGstin(buyer.gstNumber());
-		if (fromGstin.isPresent()) {
-			return fromGstin;
-		}
-		ProfileResponse.Address a = buyer.address();
-		if (a == null || (a.country() != null && !a.country().isBlank() && !"IN".equalsIgnoreCase(a.country()))) {
-			return Optional.empty();
-		}
-		return GstStates.byName(a.stateRegion());
 	}
 
 	private static String address(ProfileResponse.Address a) {

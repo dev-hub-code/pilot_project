@@ -26,7 +26,7 @@ export const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
   BANK_TRANSFER: "Bank payment",
-  OFFICE_CASH: "Cash at our office",
+  OFFICE_CASH: "Cash",
   CARD: "Card",
 };
 

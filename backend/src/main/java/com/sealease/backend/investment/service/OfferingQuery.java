@@ -56,7 +56,7 @@ public class OfferingQuery {
 	private InvestmentProduct load(UUID productId) {
 		return products.findById(productId)
 			.filter(p -> p.getStatus().isListed())
-			.orElseThrow(() -> new ResourceNotFoundException("Plan", productId));
+			.orElseThrow(() -> new ResourceNotFoundException("Container listing", productId));
 	}
 
 }

@@ -1,6 +1,6 @@
 package com.sealease.backend.user.service;
 
-/** Compares mobile numbers however they were typed; kept in step with migration V39. */
+/** Compares mobile numbers however they were typed (the key stored in user_profiles.phone_key). */
 public final class PhoneNumbers {
 
 	private PhoneNumbers() {

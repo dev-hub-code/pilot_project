@@ -59,7 +59,7 @@ public class ProductService {
 	/** A new draft plan. */
 	@Transactional
 	public ProductResponse create(UUID actorId, ProductRequest request) {
-		InvestmentProduct product = new InvestmentProduct("PLAN-" + products.nextCodeNumber(), actorId);
+		InvestmentProduct product = new InvestmentProduct("LST-" + products.nextCodeNumber(), actorId);
 		product.defineTerms(validatedTerms(request));
 		products.saveAndFlush(product);
 		audit.record(AuditRecord.of(actorId, AuditAction.PRODUCT_CREATED, ENTITY, product.getId())
@@ -72,7 +72,7 @@ public class ProductService {
 	public ProductResponse update(UUID actorId, UUID productId, ProductRequest request) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only draft plans can be edited");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only draft listings can be edited");
 		}
 		Map<String, Object> before = snapshot(product);
 		product.defineTerms(validatedTerms(request));
@@ -87,7 +87,7 @@ public class ProductService {
 	public ProductResponse publish(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
-			throw new BusinessException(ErrorCode.CONFLICT, "Plan is already " + product.getStatus());
+			throw new BusinessException(ErrorCode.CONFLICT, "The listing is already " + product.getStatus());
 		}
 		product.publish(actorId, clock.instant());
 		products.flush();
@@ -104,7 +104,7 @@ public class ProductService {
 	public ProductResponse close(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.OPEN) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only open plans can be closed");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only open listings can be closed");
 		}
 		product.close(clock.instant());
 		products.flush();
@@ -120,7 +120,7 @@ public class ProductService {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Only draft plans can be cancelled; close a published plan instead");
+					"Only draft listings can be cancelled; close a published listing instead");
 		}
 		product.cancel(reason.strip(), clock.instant());
 		products.flush();
@@ -173,8 +173,10 @@ public class ProductService {
 		if (!problems.isEmpty()) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, String.join("; ", problems));
 		}
-		return new ProductTerms(r.containerType(), r.title().strip(), r.summary().strip(), r.description().strip(),
-				currency, r.price(), r.gstRatePercent(), r.monthlyRentPercent(), BigDecimal.ZERO, r.minTenureYears(),
+		// A listing is named after its container type unless staff give it a name.
+		String title = r.title() == null || r.title().isBlank() ? r.containerType().listingName() : r.title().strip();
+		return new ProductTerms(r.containerType(), title, r.summary().strip(), r.description().strip(),
+				currency, r.price(), BigDecimal.ZERO, r.minTenureYears(),
 				r.maxTenureYears(),
 				r.riskDisclosure().strip(), r.termsAndConditions().strip());
 	}
@@ -182,18 +184,17 @@ public class ProductService {
 	private static Map<String, Object> snapshot(InvestmentProduct p) {
 		ProductTerms t = p.terms();
 		return Map.of("code", p.getCode(), "containerType", t.containerType(), "currency", t.currency().getCurrencyCode(),
-				"price", t.price().toPlainString(), "gstRatePercent", t.gstRatePercent().toPlainString(),
-				"monthlyRentPercent", t.monthlyRentPercent().toPlainString(),
+				"price", t.price().toPlainString(),
 				"monthlyCapitalReturnPercent", t.monthlyCapitalReturnPercent().toPlainString(),
 				"minTenureYears", t.minTenureYears(), "maxTenureYears", t.maxTenureYears());
 	}
 
 	private InvestmentProduct load(UUID id) {
-		return products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Plan", id));
+		return products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Container listing", id));
 	}
 
 	private InvestmentProduct lock(UUID id) {
-		return products.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Plan", id));
+		return products.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Container listing", id));
 	}
 
 	private static Specification<InvestmentProduct> matching(ProductSearchCriteria c) {

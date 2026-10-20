@@ -49,7 +49,7 @@ export function ReferralModeAdminForm({ userId, mode }: { userId: string; mode: 
       <div className="w-full"><FormFeedback state={state} /></div>
       <div className="min-w-56">
         <SelectField label="Referral earnings paid" name="mode" defaultValue={mode}
-          options={[{ value: "BANK_TRANSFER", label: "Into the bank account" }, { value: "OFFICE_CASH", label: "In cash at the office" }]} />
+          options={[{ value: "BANK_TRANSFER", label: "Into the bank account" }, { value: "OFFICE_CASH", label: "Cash" }]} />
       </div>
       <SubmitButton variant="secondary" confirm="Change how this investor's referral earnings are paid this year?">Save</SubmitButton>
     </form>

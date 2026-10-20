@@ -28,10 +28,6 @@ public class UserProfile extends BaseEntity {
 	@Column(name = "phone_key", length = 20)
 	private String phoneKey;
 
-	/** Optional GSTIN, upper case. */
-	@Column(name = "gst_number", length = 15)
-	private String gstNumber;
-
 	@Column(name = "date_of_birth")
 	private LocalDate dateOfBirth;
 
@@ -59,7 +55,7 @@ public class UserProfile extends BaseEntity {
 	@Column(name = "tax_residency_country", length = 2)
 	private String taxResidencyCountry;
 
-	@Column(name = "tax_id_encrypted")
+	@Column(name = "tax_id_encrypted", columnDefinition = "TEXT")
 	private String taxIdEncrypted;
 
 	@Column(name = "tax_id_last4", length = 4)
@@ -87,14 +83,6 @@ public class UserProfile extends BaseEntity {
 		this.phoneKey = phoneKey;
 		this.dateOfBirth = dateOfBirth;
 		this.nationality = nationality;
-	}
-
-	public void updateGstNumber(String gstNumber) {
-		this.gstNumber = gstNumber;
-	}
-
-	public String getGstNumber() {
-		return gstNumber;
 	}
 
 	public void updateAddress(String line1, String line2, String city, String stateRegion, String postalCode,

@@ -3,13 +3,14 @@ import Link from "next/link";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { authFetch } from "@/lib/server/auth/session";
+import { getRentCredit } from "@/lib/server/rent-credit";
 import type { EarningsSummary } from "@/types/earning";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Earnings" };
 
 export default async function EarningsPage() {
-  const summary = await authFetch<EarningsSummary>("/api/v1/earnings/summary");
+  const [summary, credit] = await Promise.all([authFetch<EarningsSummary>("/api/v1/earnings/summary"), getRentCredit()]);
   // Plans pay rent only; capital shows only for containers bought before that.
   const hasCapital = summary.capitalReturned.length > 0 || summary.leases.some((l) => Number(l.capitalTotal.amount) > 0);
   const totals = (list: EarningsSummary["balances"]) => (list.length === 0 ? "—" : list.map((m) => formatMoney(m)).join(" · "));
@@ -17,7 +18,7 @@ export default async function EarningsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Earnings"
-        description="Each of your containers earns its rent every hour of its lease, credited to your wallet as each hour ends. Your wallet is paid out when our team makes a withdrawal (see Withdrawals)."
+        description={`Each of your containers earns rent throughout its lease, credited to your wallet ${credit.label}. Your wallet is paid out when our team makes a withdrawal (see Withdrawals).`}
         actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
       <section className={`grid gap-px bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">

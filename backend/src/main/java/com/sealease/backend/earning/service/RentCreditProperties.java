@@ -7,34 +7,37 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * How rent is credited.
+ * How rent is credited, by default. Admins can change the interval in the admin panel
+ * ({@link RentCreditSettingsService}); this applies until they do.
  *
- * @param creditInterval rent is credited in steps of this length, each once it has ended; leases start on a step
- *                       boundary. An hour in production; shorter (e.g. 5 minutes) only to test crediting quickly. It
- *                       must be whole minutes and divide a day evenly.
+ * @param creditInterval rent is credited in steps of this length, each once it has ended. An hour by default; shorter
+ *                       (e.g. 5 minutes) to test crediting quickly. It must be whole minutes and divide a day evenly.
  */
 @ConfigurationProperties(prefix = "app.payouts")
 public record RentCreditProperties(@DefaultValue("1h") Duration creditInterval) {
 
 	public RentCreditProperties {
-		long seconds = creditInterval.toSeconds();
-		if (seconds < 60 || seconds % 60 != 0 || Duration.ofDays(1).toSeconds() % seconds != 0) {
-			throw new IllegalArgumentException("app.payouts.credit-interval must be whole minutes dividing a day evenly, not "
-					+ creditInterval);
+		try {
+			new CreditInterval(creditInterval);
 		}
+		catch (IllegalArgumentException ex) {
+			throw new IllegalArgumentException("app.payouts.credit-interval must be whole minutes dividing a day evenly, not "
+					+ creditInterval, ex);
+		}
+	}
+
+	public CreditInterval interval() {
+		return new CreditInterval(creditInterval);
 	}
 
 	/** The start of the step {@code at} falls in (steps are counted from the epoch, so whole hours stay whole). */
 	public Instant stepStart(Instant at) {
-		long step = creditInterval.toSeconds();
-		long seconds = at.getEpochSecond();
-		return Instant.ofEpochSecond(seconds - Math.floorMod(seconds, step));
+		return interval().stepStart(at);
 	}
 
-	/** {@code at} itself if it is on a step boundary, otherwise the next boundary: when a lease made at {@code at} starts. */
+	/** {@code at} itself if it is on a step boundary, otherwise the next boundary. */
 	public Instant nextStepFrom(Instant at) {
-		Instant start = stepStart(at);
-		return start.equals(at) ? at : start.plus(creditInterval);
+		return interval().nextStepFrom(at);
 	}
 
 }

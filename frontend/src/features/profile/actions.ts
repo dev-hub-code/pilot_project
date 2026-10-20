@@ -13,7 +13,7 @@ function text(formData: FormData, ...names: string[]): Record<string, string> {
 
 export async function updateProfileAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const values = text(formData, "firstName", "lastName", "phone", "dateOfBirth", "nationality", "line1", "line2",
-    "city", "stateRegion", "postalCode", "country", "gstNumber");
+    "city", "stateRegion", "postalCode", "country");
   const parsed = profileSchema.safeParse(values);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
 
@@ -27,7 +27,6 @@ export async function updateProfileAction(_previous: FormState, formData: FormDa
         phone: p.phone ?? null,
         dateOfBirth: p.dateOfBirth ?? null,
         nationality: p.nationality,
-        gstNumber: p.gstNumber ?? null,
         address: {
           line1: p.line1,
           line2: p.line2 ?? null,

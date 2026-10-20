@@ -28,6 +28,27 @@ export function formatDayMonthYear(iso: string | null | undefined): string {
 }
 
 /**
+ * Formats a date as it is typed into DD/MM/YYYY, adding the slashes: "15" -> "15/", "1506" -> "15/06/",
+ * "15061985" -> "15/06/1985". A one-digit day or month followed by a separator is padded ("5/" -> "05/"), and dashes
+ * or dots become slashes. While the user deletes (the text got shorter) it is left as typed, so backspace can remove
+ * a slash.
+ */
+export function maskDayMonthYear(next: string, previous: string): string {
+  if (next.length < previous.length) return next;
+  const segments = next.replace(/[.\-\s]/g, "/").split("/");
+  const digits = segments
+    .map((segment, i) => {
+      const part = segment.replace(/\D/g, "");
+      return i < 2 && i < segments.length - 1 && part.length === 1 ? `0${part}` : part;
+    })
+    .join("")
+    .slice(0, 8);
+  if (digits.length < 2) return digits;
+  if (digits.length < 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+/**
  * "15/06/1985" (or 5/6/1985, 15-06-1985, 15.06.1985, 15061985) -> "1985-06-15"; null when it is not a real date in that
  * day-month-year order.
  */

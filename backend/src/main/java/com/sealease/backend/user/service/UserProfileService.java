@@ -25,7 +25,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -107,8 +106,6 @@ public class UserProfileService {
 		}
 
 		profile.updatePersonal(phone, phoneKey, request.dateOfBirth(), orIndia(request.nationality()));
-		String gst = blankToNull(request.gstNumber());
-		profile.updateGstNumber(gst == null ? null : gst.strip().toUpperCase(Locale.ROOT));
 		profile.updateAddress(trim(address.line1()), trim(address.line2()), trim(address.city()),
 				trim(address.stateRegion()), trim(address.postalCode()), orIndia(address.country()));
 		try {
@@ -129,9 +126,6 @@ public class UserProfileService {
 		}
 		if (!Objects.equals(before.address(), after.address())) {
 			changed.add("address");
-		}
-		if (!Objects.equals(before.gstNumber(), after.gstNumber())) {
-			changed.add("gstNumber");
 		}
 		if (!changed.isEmpty()) {
 			// Field names only: personal data does not belong in the audit log.

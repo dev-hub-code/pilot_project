@@ -1,19 +1,16 @@
 import type { Invoice } from "@/types/order";
 import { formatDate } from "@/utils/format";
-import { formatMoney, formatPercent } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 /** The invoice as a printable document (print styles strip the surrounding app chrome). */
 export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
-  // GST: CGST + SGST within the seller's state, IGST across states. Invoices without GST show the price alone.
-  const intraState = Number(invoice.cgst.amount) > 0 || Number(invoice.sgst.amount) > 0;
-  const hasGst = intraState || Number(invoice.igst.amount) > 0;
   return (
     <article className="mx-auto max-w-3xl space-y-10 border border-border bg-surface p-8 sm:p-12 print:max-w-none print:border-0 print:p-0">
       <header className="flex flex-wrap items-start justify-between gap-6">
         <div className="space-y-1 text-sm">
           <p className="text-lg font-semibold">{invoice.issuer.name}</p>
           <p className="whitespace-pre-line text-muted">{invoice.issuer.address}</p>
-          {invoice.issuer.taxId && <p className="text-muted">GSTIN {invoice.issuer.taxId}</p>}
+          {invoice.issuer.taxId && <p className="text-muted">Tax ID {invoice.issuer.taxId}</p>}
         </div>
         <div className="space-y-1 text-right">
           <h1 className="text-3xl font-semibold tracking-tight">Invoice</h1>
@@ -28,8 +25,6 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
             <p className="font-medium">{invoice.buyer.name}</p>
             {invoice.buyer.address && <p className="text-muted">{invoice.buyer.address}</p>}
             <p className="text-muted">{invoice.buyer.email}</p>
-            {invoice.buyer.taxId && <p className="text-muted">GSTIN {invoice.buyer.taxId}</p>}
-            {hasGst && <p className="text-muted">Place of supply: {invoice.placeOfSupply ?? "Not given"}</p>}
           </dd>
         </div>
         <div>
@@ -47,8 +42,7 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           <tr>
             <th scope="col" className="py-2 pr-4 font-medium">#</th>
             <th scope="col" className="py-2 pr-4 font-medium">Description</th>
-            {hasGst && <th scope="col" className="py-2 pr-4 text-right font-medium">GST</th>}
-            <th scope="col" className="py-2 text-right font-medium">{hasGst ? "Taxable value" : "Amount"}</th>
+            <th scope="col" className="py-2 text-right font-medium">Amount</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -56,39 +50,13 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
             <tr key={line.lineNumber}>
               <td className="py-3 pr-4 text-muted">{line.lineNumber}</td>
               <td className="py-3 pr-4">{line.description}</td>
-              {hasGst && <td className="py-3 pr-4 text-right tabular-nums text-muted">{formatPercent(line.gstRatePercent)}</td>}
               <td className="py-3 text-right tabular-nums">{formatMoney(line.amount)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          {hasGst && (
-            <>
-              <tr className="border-t border-border">
-                <th scope="row" colSpan={3} className="pt-3 text-right font-normal text-muted">Taxable value</th>
-                <td className="pt-3 text-right tabular-nums">{formatMoney(invoice.taxable)}</td>
-              </tr>
-              {intraState ? (
-                <>
-                  <tr>
-                    <th scope="row" colSpan={3} className="pt-1 text-right font-normal text-muted">CGST</th>
-                    <td className="pt-1 text-right tabular-nums">{formatMoney(invoice.cgst)}</td>
-                  </tr>
-                  <tr>
-                    <th scope="row" colSpan={3} className="pt-1 text-right font-normal text-muted">SGST</th>
-                    <td className="pt-1 text-right tabular-nums">{formatMoney(invoice.sgst)}</td>
-                  </tr>
-                </>
-              ) : (
-                <tr>
-                  <th scope="row" colSpan={3} className="pt-1 text-right font-normal text-muted">IGST</th>
-                  <td className="pt-1 text-right tabular-nums">{formatMoney(invoice.igst)}</td>
-                </tr>
-              )}
-            </>
-          )}
           <tr className="border-t border-foreground/80">
-            <th scope="row" colSpan={hasGst ? 3 : 2} className="pt-4 text-right font-medium">Total paid</th>
+            <th scope="row" colSpan={2} className="pt-4 text-right font-medium">Total paid</th>
             <td className="pt-4 text-right font-display text-xl font-semibold tabular-nums">{formatMoney(invoice.total)}</td>
           </tr>
         </tfoot>

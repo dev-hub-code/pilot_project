@@ -15,7 +15,6 @@ export const metadata: Metadata = { title: "Marketplace" };
 const STATUSES = [{ value: "OPEN", label: "Open for investment" }, { value: "CLOSED", label: "Closed" }];
 const SORTS = [
   { value: "NEWEST", label: "Newest" },
-  { value: "HIGHEST_RETURN", label: "Highest rent" },
   { value: "LOWEST_PRICE", label: "Lowest price" },
 ];
 
@@ -43,8 +42,8 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
           Container Investment Opportunities
         </h1>
         <p className="max-w-2xl text-muted">
-          Buy whole shipping containers under a plan. Once your payment is confirmed, a container is assigned to you by
-          its unique number and leased for the plan&apos;s tenure: every month of the lease you receive the plan&apos;s rent.
+          Buy whole shipping containers. Once your payment is confirmed, we assign each container you bought its unique
+          number and lease it out for the years you chose: every month of the lease you receive rent.
         </p>
       </header>
 
@@ -58,8 +57,8 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
 
       {listings.content.length === 0 ? (
         <EmptyState
-          title="No plans match these filters"
-          description={filters.containerType ? `No ${CONTAINER_TYPE_LABEL[filters.containerType]} plans right now.` : "New plans are listed regularly."}
+          title="No containers match these filters"
+          description={filters.containerType ? `No ${CONTAINER_TYPE_LABEL[filters.containerType]} containers right now.` : "New containers are listed regularly."}
         />
       ) : (
         <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">

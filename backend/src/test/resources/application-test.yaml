@@ -40,8 +40,6 @@ app:
     issuer-name: SeaLease Test Ltd
     issuer-address: 1 Test Street, Rotterdam, NL
     issuer-tax-id: NL000000000B01
-    # Not a GSTIN, so the seller's state for GST is given here.
-    issuer-state: Maharashtra
   # Tests compare dates with UTC "today": statements and reports use UTC days too.
   display:
     time-zone: UTC
@@ -49,3 +47,17 @@ app:
   withdrawals:
     minimum-amount: 50
     dual-approval-threshold: 10000
+
+# Tests build the schema with the Flyway scripts (seed data, triggers, locations) and check the entities against it.
+spring:
+  flyway:
+    enabled: true
+    # Schema only: tests create their own super admin and plans.
+    locations: classpath:db/migration
+  jpa:
+    defer-datasource-initialization: false
+    hibernate:
+      ddl-auto: validate
+  sql:
+    init:
+      mode: never

@@ -8,6 +8,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { runPayoutsAction } from "@/features/admin/ledger-actions";
+import { RentCreditCard } from "@/features/admin/rent-credit-card";
 import { ActionButton } from "@/features/orders/action-button";
 import { LEASE_STATUS_LABEL, LEASE_TONE, leaseNote, leasePercent } from "@/features/earnings/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
@@ -16,6 +17,7 @@ import type { PageResponse } from "@/types/api";
 import type { DuePayouts, LeaseRent, LeaseRentStatus } from "@/types/earning";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { getRentCredit } from "@/lib/server/rent-credit";
 
 export const metadata: Metadata = { title: "Rent" };
 
@@ -30,27 +32,32 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
   const view = VIEWS.find((v) => v.status === params.status) ?? VIEWS[0]!;
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   const query = new URLSearchParams({ page: String(page), size: "25", status: view.status });
-  const [leases, due] = await Promise.all([
+  const [leases, due, credit] = await Promise.all([
     authFetch<PageResponse<LeaseRent>>(`/api/v1/admin/payouts?${query}`),
     authFetch<DuePayouts[]>("/api/v1/admin/payouts/due"),
+    getRentCredit(),
   ]);
   const dueCount = due.reduce((n, d) => n + d.count, 0);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Rent"
-        description="Every container's rent is credited to its investor's wallet every hour of its lease, from the full hour after the container is assigned: the monthly rent × the lease months elapsed, so the whole lease pays exactly monthly rent × tenure. Referral commission on it is credited with it. Containers bought before plans became rent-only also get part of the price back, the same way." />
+        description={`Every container's rent is credited to its investor's wallet ${credit.label} of its lease, from the full hour after the investor accepts its agreement: the monthly rent × the lease months elapsed, so the whole lease pays exactly monthly rent × tenure. Referral commission on it is credited with it. Containers bought before plans became rent-only also get part of the price back, the same way.`} />
 
-      <Card title="Rent not yet credited" description="Hours that have ended are credited automatically within a minute or so.">
+      {(hasPermission(session.permissions, Permission.PAYOUT_PROCESS)
+        || hasPermission(session.permissions, Permission.SYSTEM_SETTINGS_MANAGE)
+        || hasPermission(session.permissions, Permission.FINANCE_VIEW)) && <RentCreditCard permissions={session.permissions} />}
+
+      <Card title="Rent not yet credited" description="Each interval that has ended is credited automatically within a minute or so.">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-sm">
             {dueCount === 0
-              ? "Nothing is waiting: every hour of rent so far has been credited."
+              ? "Nothing is waiting: all rent due so far has been credited."
               : due.map((d) => `${d.count} lease(s) behind · ${formatMoney(d.total)}`).join(" · ")}
           </p>
           {dueCount > 0 && hasPermission(session.permissions, Permission.PAYOUT_PROCESS) && (
             <ActionButton action={runPayoutsAction} label="Credit rent now" pendingLabel="Crediting…"
-              confirm="Credit every hour of rent that has ended to investors' wallets now?" />
+              confirm="Credit all rent due so far to investors' wallets now?" />
           )}
         </div>
       </Card>
@@ -67,7 +74,7 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
       {leases.content.length === 0 ? (
         <EmptyState title={view.status === "RUNNING" ? "No leases earning rent" : "No completed leases"} />
       ) : (
-        <DataTable columns={["Investor", "Plan", "Container", "Lease", "Monthly rent", "Rent credited", "Capital back", "Progress", "Status"]}>
+        <DataTable columns={["Investor", "Listing", "Container", "Lease", "Monthly rent", "Rent credited", "Capital back", "Progress", "Status"]}>
           {leases.content.map((l) => (
             <tr key={l.holdingId} className="align-top">
               <Cell>{l.userId && <Link href={`/admin/users/${l.userId}`} className="text-gold-text hover:underline">View</Link>}</Cell>

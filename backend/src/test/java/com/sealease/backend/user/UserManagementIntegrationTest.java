@@ -106,29 +106,10 @@ class UserManagementIntegrationTest {
 		assertThat(changes).contains("address", "phone", "notificationPreferences").doesNotContain(phone, "London");
 	}
 
-	@Test
-	void gstNumberIsOptionalAndChecked() throws Exception {
-		Account investor = api.register();
-		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(gstBody("27ABCDE1234F1Z")))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("gstNumber")));
-		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(gstBody("27abcde1234f1z5")))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.gstNumber").value("27ABCDE1234F1Z5"));
-		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(gstBody("")))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.gstNumber").doesNotExist());
-	}
-
-	private static String gstBody(String gst) {
-		return """
-				{"firstName":"Test","lastName":"Investor","gstNumber":"%s",
-				 "address":{"line1":"12 Marine Drive","city":"Mumbai","stateRegion":"Maharashtra","postalCode":"400020"}}
-				""".formatted(gst);
-	}
+	private static final String PROFILE_BODY = """
+			{"firstName":"Test","lastName":"Investor",
+			 "address":{"line1":"12 Marine Drive","city":"Mumbai","stateRegion":"Maharashtra","postalCode":"400020"}}
+			""";
 
 	@Test
 	void addressIsRequiredAndCountriesDefaultToIndia() throws Exception {
@@ -146,7 +127,7 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("address")));
 
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(gstBody("")))
+				.contentType(MediaType.APPLICATION_JSON).content(PROFILE_BODY))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.nationality").value("IN"))
 			.andExpect(jsonPath("$.address.country").value("IN"));

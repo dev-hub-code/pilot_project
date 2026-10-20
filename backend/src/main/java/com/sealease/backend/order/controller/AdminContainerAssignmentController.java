@@ -1,5 +1,6 @@
 package com.sealease.backend.order.controller;
 
+import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.order.dto.AssignContainerRequest;
 import com.sealease.backend.order.dto.ContainerAssignmentQueue;
 import com.sealease.backend.order.service.ContainerAssignmentService;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /** Paid investments awaiting a container, and assigning one (which starts the lease and payouts). */
@@ -51,6 +53,12 @@ public class AdminContainerAssignmentController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void assign(AuthenticatedUser actor, @PathVariable UUID holdingId, @Valid @RequestBody AssignContainerRequest request) {
 		assignments.assign(actor.userId(), holdingId, request.containerNumber(), request.currentLocation());
+	}
+
+	/** Issues lease agreements for an order's containers assigned before agreements were issued. */
+	@PostMapping("/orders/{orderId}/agreements")
+	public List<LeaseAgreementResponse> issueMissingAgreements(AuthenticatedUser actor, @PathVariable UUID orderId) {
+		return assignments.issueMissingAgreements(actor.userId(), orderId);
 	}
 
 }

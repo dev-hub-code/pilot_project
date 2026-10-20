@@ -92,7 +92,6 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 {[profile.address.line1, profile.address.city, profile.address.postalCode, profile.address.country]
                   .filter(Boolean).join(", ") || "—"}
               </Item>
-              <Item label="GST number">{profile.gstNumber ? <span className="font-mono">{profile.gstNumber}</span> : "—"}</Item>
               <Item label="Joined">{formatDateTime(summary.createdAt)}</Item>
               <Item label="Last sign-in">{formatDateTime(summary.lastLoginAt)}</Item>
               {user.statusReason && (
@@ -205,7 +204,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 <div className="space-y-2">
                   <p>
                     Referral earnings in {referralMode.year}:{" "}
-                    <span className="font-medium">{referralMode.mode === "OFFICE_CASH" ? "cash at the office" : "into the bank account"}</span>
+                    <span className="font-medium">{referralMode.mode === "OFFICE_CASH" ? "cash" : "into the bank account"}</span>
                     <span className="text-muted">{referralMode.chosen ? " (chosen by the investor)" : " (default; not chosen yet)"}</span>
                   </p>
                   {can(Permission.WITHDRAWAL_PROCESS) && <ReferralModeAdminForm userId={id} mode={referralMode.mode} />}

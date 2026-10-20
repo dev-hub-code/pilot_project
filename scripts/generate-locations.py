@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
-Generates the country, state and city data the backend loads into its database (migration V51): three gzipped,
+Generates the country, state and city data the backend loads into its database (migration V2): three gzipped,
 tab-separated files in backend/src/main/resources/db/locations/. The data comes from the open countries-states-cities
 database (https://github.com/dr5hn/countries-states-cities-database, ODbL-1.0).
-
-India's state names must match the backend's GstStates (place of supply on invoices); the script stops if one does not.
 
     python3 scripts/generate-locations.py
     python3 scripts/generate-locations.py path/to/countries+states+cities.json   # an already downloaded copy
 
-Changing the files after V51 has run changes nothing in existing databases: add a new migration to load updates.
+Changing the files after V2 has run changes nothing in existing databases: add a new migration to load updates.
 Uses only the Python standard library.
 """
 import gzip
@@ -23,7 +21,6 @@ SOURCE = ("https://raw.githubusercontent.com/dr5hn/countries-states-cities-datab
           "master/json/countries%2Bstates%2Bcities.json")
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "backend/src/main/resources/db/locations"
-GST_STATES = ROOT / "backend/src/main/java/com/sealease/backend/common/tax/GstStates.java"
 
 
 def load(argv):
@@ -61,11 +58,6 @@ def main(argv):
                 if name and name.casefold() not in seen:
                     seen.add(name.casefold())
                     cities.append((city["id"], state["id"], name))
-
-    gst = set(re.findall(r'add\("\d{2}", "([^"]+)"', GST_STATES.read_text(encoding="utf-8")))
-    india = {s[2] for s in states if s[1] == "IN"}
-    if india - gst:
-        sys.exit(f"Indian states not in GstStates (fix the names or GstStates first): {sorted(india - gst)}")
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     write("countries.tsv.gz", countries)

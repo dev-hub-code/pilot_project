@@ -20,8 +20,10 @@ spring:
 
   jpa:
     open-in-view: false
+    # Hibernate keeps the schema in step with the entities; db/sequences.sql then adds what it cannot create.
+    defer-datasource-initialization: true
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
         jdbc:
@@ -30,9 +32,15 @@ spring:
         order_inserts: true
         order_updates: true
 
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:db/sequences.sql
+
   flyway:
-    enabled: true
-    locations: classpath:db/migration
+    enabled: false
+    # db/seed adds the administrator and container listings; the test profile leaves it out.
+    locations: classpath:db/migration,classpath:db/seed
     validate-on-migrate: true
 
   kafka:
@@ -240,8 +248,6 @@ app:
     hours: ${APP_OFFICE_HOURS:Monday to Friday, 10:00 to 17:00}
     # An order paid at the office is held this long for the investor to come in.
     hold-window: ${APP_OFFICE_HOLD_WINDOW:3d}
-    # Cash paid at the office is without GST and adds this to every container's monthly rent (percentage points).
-    cash-rent-bonus-percent: ${APP_OFFICE_CASH_RENT_BONUS_PERCENT:0.50}
   payments:
     # The accounts investors pay into are managed in the admin console (Company bank accounts).
     bank-transfer:
@@ -260,10 +266,8 @@ app:
     # Printed on (and copied into) every invoice. Required: startup fails when unset.
     issuer-name: ${INVOICE_ISSUER_NAME:}
     issuer-address: ${INVOICE_ISSUER_ADDRESS:}
-    # The seller's GSTIN; its first two digits give the seller's state for GST (CGST + SGST vs IGST).
+    # The seller's tax registration number, printed on invoices when set.
     issuer-tax-id: ${INVOICE_ISSUER_TAX_ID:}
-    # Only when INVOICE_ISSUER_TAX_ID is not a GSTIN: the seller's state, by name or GST code (e.g. Maharashtra).
-    issuer-state: ${INVOICE_ISSUER_STATE:}
     notes: ${INVOICE_NOTES:}
   kafka:
     create-topics: false

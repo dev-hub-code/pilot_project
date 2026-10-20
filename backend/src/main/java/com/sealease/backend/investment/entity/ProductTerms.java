@@ -11,10 +11,9 @@ import java.util.List;
 /**
  * The commercial terms of a plan, as investors see and accept them. Each container bought costs
  * {@code price}; the investor chooses a lease of whole years between {@code minTenureYears} and
- * {@code maxTenureYears}, and for every month of it is paid, per container, {@code monthlyRentPercent}
- * of the price as rent. The price is not paid back: plans carry a {@code monthlyCapitalReturnPercent}
- * of zero. GST at {@code gstRatePercent} is charged on the price when the container is bought; rent is on the
- * price without GST.
+ * {@code maxTenureYears}, and for every month of it is paid, per container, a percentage of the price as
+ * rent. That percentage is not part of the plan: it follows from the order's total (see the rent rate tiers) and is
+ * fixed on the order. The price is not paid back: plans carry a {@code monthlyCapitalReturnPercent} of zero.
  *
  * <p>Plans sold before that returned the whole price over the tenure as well (price ÷ tenure a month,
  * {@code monthlyCapitalReturnPercent} = 100 ÷ tenure). Holdings bought under those terms keep them, so the
@@ -27,51 +26,25 @@ public record ProductTerms(
 		String description,
 		Currency currency,
 		BigDecimal price,
-		BigDecimal gstRatePercent,
-		BigDecimal monthlyRentPercent,
 		BigDecimal monthlyCapitalReturnPercent,
 		int minTenureYears,
 		int maxTenureYears,
 		String riskDisclosure,
 		String termsAndConditions) {
 
-	/** The price per container, without GST: what rent and referral commission are based on. */
+	/** The price per container: what the investor pays, and what rent and referral commission are based on. */
 	public Money pricePerContainer() {
 		return Money.of(price, currency);
 	}
 
-	/** GST on the price of one container, rounded half-up to the paisa. */
-	public Money gstPerContainer() {
-		return gstOn(pricePerContainer(), gstRatePercent);
-	}
-
-	/** What the investor pays per container: the price plus GST. */
-	public Money pricePerContainerWithGst() {
-		return pricePerContainer().plus(gstPerContainer());
-	}
-
-	/** GST at {@code ratePercent} on {@code amount}, rounded half-up to the currency's minor unit. */
-	public static Money gstOn(Money amount, BigDecimal ratePercent) {
-		return percentOf(amount, ratePercent == null ? BigDecimal.ZERO : ratePercent);
-	}
-
-	/** Rent per container per month, rounded to the currency's minor unit. */
-	public Money monthlyRent() {
-		return percentOfPrice(monthlyRentPercent);
-	}
-
-	/** Capital returned per container per month: none, plans pay rent only (enforced by the database). */
-	public Money monthlyCapitalReturn() {
-		return Money.zero(currency);
-	}
-
-	public Money monthlyPayout() {
-		return monthlyRent().plus(monthlyCapitalReturn());
+	/** Rent per container per month at {@code rentPercent}, rounded to the currency's minor unit. */
+	public Money monthlyRent(BigDecimal rentPercent) {
+		return percentOf(pricePerContainer(), rentPercent);
 	}
 
 	/** Everything paid per container over a lease of {@code tenureYears}: the rent for every month of it. */
-	public Money totalPayout(int tenureYears) {
-		return monthlyRent().times(BigDecimal.valueOf(monthsOf(tenureYears)));
+	public Money totalPayout(int tenureYears, BigDecimal rentPercent) {
+		return monthlyRent(rentPercent).times(BigDecimal.valueOf(monthsOf(tenureYears)));
 	}
 
 	/** The shortest lease, in months. */
@@ -83,7 +56,7 @@ public record ProductTerms(
 	public List<String> tenureProblems(int tenureYears) {
 		if (tenureYears < minTenureYears || tenureYears > maxTenureYears) {
 			return List.of(minTenureYears == maxTenureYears
-					? "This plan's lease is " + years(minTenureYears)
+					? "The lease for this container is " + years(minTenureYears)
 					: "Choose a lease of " + minTenureYears + " to " + maxTenureYears + " years");
 		}
 		return List.of();
@@ -95,15 +68,6 @@ public record ProductTerms(
 
 	private static String years(int n) {
 		return n == 1 ? "1 year" : n + " years";
-	}
-
-	/** Monthly rent and capital return together, as a percentage of the price. */
-	public BigDecimal monthlyPayoutPercent() {
-		return monthlyRentPercent.add(monthlyCapitalReturnPercent);
-	}
-
-	private Money percentOfPrice(BigDecimal percent) {
-		return percentOf(pricePerContainer(), percent);
 	}
 
 	/**

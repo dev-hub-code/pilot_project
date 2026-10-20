@@ -140,7 +140,9 @@ class BankPaymentIntegrationTest {
 		Account finance = api.staff("ADMIN", "FINANCE");
 		String orderId = placeOrder(investor, offerings.plan());
 		String payment = paymentId(startBankPayment(investor, orderId));
-		submit(investor, payment, account, "CASH_DEPOSIT", "RCPT-7781").andExpect(status().isOk());
+		// Cash deposits at the bank are no longer accepted.
+		submit(investor, payment, account, "CASH_DEPOSIT", "RCPT-7781").andExpect(status().isBadRequest());
+		submit(investor, payment, account, "CHEQUE", "RCPT-7781").andExpect(status().isOk());
 
 		reject(investor, payment).andExpect(status().isForbidden());
 		reject(finance, payment).andExpect(status().isOk())
@@ -148,12 +150,12 @@ class BankPaymentIntegrationTest {
 			.andExpect(jsonPath("$.failureReason").value("No deposit with this receipt number"));
 		reject(finance, payment).andExpect(status().isConflict());
 		assertThat(api.auditCount("PAYMENT_REJECTED", payment)).isEqualTo(1);
-		submit(investor, payment, account, "CASH_DEPOSIT", "RCPT-7782").andExpect(status().isConflict());
+		submit(investor, payment, account, "CHEQUE", "RCPT-7782").andExpect(status().isConflict());
 
 		// The order is still awaiting payment: the investor tries again.
 		String second = paymentId(startBankPayment(investor, orderId).andExpect(status().isCreated()));
 		assertThat(second).isNotEqualTo(payment);
-		submit(investor, second, account, "CASH_DEPOSIT", "RCPT-7782").andExpect(status().isOk());
+		submit(investor, second, account, "CHEQUE", "RCPT-7782").andExpect(status().isOk());
 
 	}
 

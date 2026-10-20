@@ -10,11 +10,12 @@ import { formatMoney } from "@/utils/money";
 import { submitDepositAction } from "./actions";
 import { DEPOSIT_MODE_HINT, DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL } from "./labels";
 
-const MODES = Object.keys(DEPOSIT_MODE_LABEL) as DepositMode[];
+/** Cash deposits at the bank are no longer accepted; their label stays for earlier payments. */
+const MODES: readonly DepositMode[] = ["ONLINE", "CHEQUE"];
 
 /**
  * Bank payment: the investor picks the company account they paid into, says how they paid and
- * gives the transaction ID, cheque number or deposit receipt number. They may correct it until
+ * gives the transaction ID or cheque number. They may correct it until
  * finance has verified the money.
  */
 export function DepositForm({ orderId, payment }: { orderId: string; payment: Payment }) {

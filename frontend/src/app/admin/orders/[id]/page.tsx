@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { issueMissingAgreementsAction } from "@/features/admin/agreement-actions";
+import { ConfirmForm } from "@/features/admin/decision-forms";
 import { RefundForm } from "@/features/admin/payment-forms";
 import { PaymentDecision } from "@/features/admin/payment-decision";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
@@ -12,10 +14,11 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
+import type { LeaseAgreement } from "@/types/agreement";
 import type { Order, Payment } from "@/types/order";
 import type { AdminUserDetail } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
-import { formatMoney, formatPercent } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -39,6 +42,10 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   // While a payment is pending (or one went through), payments it replaced are not confirmed: only money arriving
   // late for a cancelled payment, with nothing else live, is.
   const livePayment = payments.some((p) => p.status === "PENDING" || p.status === "SUCCEEDED");
+  const agreements = order.status === "CONFIRMED"
+    ? await authFetch<LeaseAgreement[]>(`/api/v1/admin/agreements?orderId=${order.id}`)
+    : [];
+  const containersAssigned = order.status === "CONFIRMED" ? order.items.filter((i) => i.containerNumber).length : 0;
   const investor = can(Permission.USER_VIEW)
     ? await authFetch<AdminUserDetail>(`/api/v1/admin/users/${order.userId}`).then((u) => u.summary).catch(() => null)
     : null;
@@ -72,7 +79,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </dl>
       </Card>
 
-      <DataTable columns={["Plan", "Container", "Price", "GST", "Paid", "Rent monthly", "Tenure"]}>
+      <DataTable columns={["Listing", "Container", "Price", "Rent monthly", "Tenure"]}>
         {order.items.map((item) => (
           <tr key={item.id}>
             <Cell><Link href={`/admin/products/${item.productId}`} className="font-mono text-gold-text hover:underline">{item.productCode}</Link></Cell>
@@ -90,18 +97,49 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 <span className="text-muted">Assigned after payment</span>
               )}
             </Cell>
-            <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
-                <Cell className="tabular-nums">
-                  {Number(item.gstRatePercent) > 0
-                    ? <>{formatMoney(item.gstAmount)}<span className="block text-xs text-muted">{formatPercent(item.gstRatePercent)}</span></>
-                    : "—"}
-                </Cell>
-                <Cell className="tabular-nums font-medium">{formatMoney(item.amountWithGst)}</Cell>
+            <Cell className="tabular-nums font-medium">{formatMoney(item.amount)}</Cell>
             <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
             <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
           </tr>
         ))}
       </DataTable>
+
+      {containersAssigned > 0 && (
+        <section className="space-y-3" aria-label="Lease agreements">
+          <h2 className="text-lg font-semibold tracking-tight">Lease agreements</h2>
+          {agreements.length > 0 && (
+            <DataTable columns={["Agreement", "Container", "Issued", "Investor acceptance", ""]}>
+              {agreements.map((a) => (
+                <tr key={a.id}>
+                  <Cell className="font-mono">{a.agreementNumber}</Cell>
+                  <Cell className="font-mono">{a.containerNumber}</Cell>
+                  <Cell className="text-muted">{formatDateTime(a.generatedAt)}</Cell>
+                  <Cell>
+                    {a.acceptedAt ? <StatusBadge tone="success">{`Accepted ${formatDateTime(a.acceptedAt)}`}</StatusBadge>
+                      : a.acceptanceRequired ? <StatusBadge tone="warning">Awaiting acceptance · no rent yet</StatusBadge>
+                        : <span className="text-xs text-muted">Not needed (lease already running)</span>}
+                  </Cell>
+                  <Cell>
+                    <a href={`/admin/orders/${order.id}/agreements/${a.holdingId}`} className="text-sm text-gold-text hover:underline">Download PDF</a>
+                  </Cell>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+          {agreements.length < containersAssigned && (
+            <div className="space-y-3 border border-border bg-surface p-5 text-sm">
+              <p className="text-muted">
+                {containersAssigned - agreements.length} container{containersAssigned - agreements.length === 1 ? " was" : "s were"} assigned
+                before lease agreements were issued.
+              </p>
+              {can(Permission.CONTAINER_ASSIGN) && (
+                <ConfirmForm action={issueMissingAgreementsAction.bind(null, order.id)} submitLabel="Issue agreements"
+                  variant="secondary" confirm="Issue lease agreements, in the wording in force, for the containers without one?" />
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight">Payments</h2>
@@ -114,7 +152,6 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                   <span>
                     <strong>{METHOD_LABEL[p.method]}</strong> · <span className="font-mono">{p.providerReference}</span> · {formatMoney(p.amount)}
-                    {p.method === "OFFICE_CASH" && <span className="text-muted">{p.gstIncluded ? " with GST" : " without GST"}</span>}
                   </span>
                   <StatusBadge tone={PAYMENT_TONE[p.status]}>{humanize(p.status)}</StatusBadge>
                 </div>
@@ -129,7 +166,6 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                       <Item label="Into account">{`${p.deposit.bankName ?? "—"} · ${p.deposit.accountNumber ?? ""}`}</Item>
                     </>
                   )}
-                  {p.rentBonusPercent > 0 && <Item label="Rent bonus">{`+${formatPercent(p.rentBonusPercent)} a month`}</Item>}
                   {p.failureReason && <Item label="Note">{p.failureReason}</Item>}
                   {p.refundedAt && <Item label="Refunded">{`${formatDateTime(p.refundedAt)} · ${p.refundReference}`}</Item>}
                 </dl>

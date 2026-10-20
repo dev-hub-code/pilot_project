@@ -136,7 +136,7 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
                 <Cell className="text-sm">
                   {cash ? (
                     <>
-                      Cash at the office
+                      Cash
                       <span className="block text-xs text-muted">{t.phone ?? "No phone on file"}</span>
                     </>
                   ) : (

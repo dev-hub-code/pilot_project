@@ -18,11 +18,11 @@ import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { MarketplaceDetail, ReturnProjection } from "@/types/marketplace";
+import type { MarketplaceDetail, MinimumOrder, RentTiers, ReturnProjection } from "@/types/marketplace";
 import type { Cart } from "@/types/order";
 import { formatMoney, formatPercent } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Plan" };
+export const metadata: Metadata = { title: "Container" };
 
 const CONTAINERS = /^\d{1,2}$/;
 
@@ -43,14 +43,18 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   const { listing } = detail;
   const [cart] = await Promise.all([investor ? authFetch<Cart>("/api/v1/cart") : Promise.resolve(null)]);
   const inCart = cart?.items.find((line) => line.productId === id);
-  const requested = typeof query.containers === "string" && CONTAINERS.test(query.containers) && Number(query.containers) >= 1
-    ? Number(query.containers) : inCart?.quantity ?? 1;
+  // From the calculator, if the investor used it; "Add to cart" then adds that many.
+  const calculated = typeof query.containers === "string" && CONTAINERS.test(query.containers) && Number(query.containers) >= 1
+    ? Number(query.containers) : null;
+  const requested = calculated ?? inCart?.quantity ?? 1;
   // The lease the investor is looking at: from the calculator, else the cart, else the plan's shortest.
   const asked = typeof query.years === "string" && CONTAINERS.test(query.years) ? Number(query.years) : null;
   const years = asked !== null && asked >= listing.minTenureYears && asked <= listing.maxTenureYears
     ? asked : inCart?.tenureYears ?? listing.minTenureYears;
-  const [projection] = await Promise.all([
+  const [projection, rentTiers, minimumOrder] = await Promise.all([
     authFetch<ReturnProjection>(`/api/v1/marketplace/${id}/projection?containers=${requested}&years=${years}`),
+    authFetch<RentTiers>("/api/v1/public/rent-tiers"),
+    authFetch<MinimumOrder>("/api/v1/public/minimum-order"),
   ]);
   const leaseRange = listing.minTenureYears === listing.maxTenureYears
     ? yearsLabel(listing.minTenureYears)
@@ -63,7 +67,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   return (
     <div className="space-y-10">
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href="/marketplace" className="hover:text-foreground">Marketplace</Link> / <span className="font-mono">{listing.code}</span>
+        <Link href="/marketplace" className="hover:text-foreground">Marketplace</Link> / <span>{listing.title}</span>
       </nav>
 
       <header className="grid gap-8 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
@@ -84,19 +88,12 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               <StatusBadge tone="neutral">{type}</StatusBadge>
               {listing.status !== "OPEN" && <StatusBadge tone="neutral">{PRODUCT_STATUS_LABEL[listing.status]}</StatusBadge>}
             </div>
-            <p className="font-mono text-sm text-muted">{listing.code}</p>
             <h1 className="text-3xl leading-tight font-bold tracking-tight sm:text-4xl">{listing.title}</h1>
             <p className="text-muted">{listing.summary}</p>
           </div>
 
           <dl className="grid grid-cols-2 gap-px border border-border bg-border">
-            <Fact label="Rent paid every month" value={formatPercent(listing.monthlyRentPercent)} emphasis />
-            <Fact label="Price per container"
-              value={Number(listing.gstRatePercent) > 0
-                ? `${formatMoney(listing.price)} + ${formatPercent(listing.gstRatePercent)} GST = ${formatMoney(listing.priceWithGst)}`
-                : formatMoney(listing.price)} />
-            <Fact label="Rent per container a month"
-              value={`${formatMoney(detail.monthlyRent)} (${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(listing.price)}${Number(listing.gstRatePercent) > 0 ? ", before GST" : ""})`} />
+            <Fact label="Price per container" value={formatMoney(listing.price)} emphasis />
             <Fact label="Minimum lease tenure"
               value={listing.maxTenureYears > listing.minTenureYears
                 ? `${yearsLabel(listing.minTenureYears)} (choose up to ${yearsLabel(listing.maxTenureYears)})`
@@ -114,17 +111,17 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
 
       <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
         <div className="space-y-8">
-          <Card title="About this plan">
+          <Card title="About this container">
             <div className="space-y-4 text-sm leading-relaxed whitespace-pre-line wrap-anywhere">{detail.description}</div>
           </Card>
 
           <Card title="How it works">
             <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-              <li>Choose how many containers to buy at {formatMoney(listing.price)} each{Number(listing.gstRatePercent) > 0 ? ` plus ${formatPercent(listing.gstRatePercent)} GST` : ""}, and check out. Rent is on the price without GST.</li>
-              <li>Pay by bank within 30 minutes. Online transfer, cheque or cash deposit are all accepted.</li>
+              <li>Choose how many containers to buy at {formatMoney(listing.price)} each, and check out.</li>
+              <li>Pay by bank within 30 minutes. Online transfer or cheque are accepted.</li>
               <li>Choose your lease: whole years, from {leaseRange}.</li>
               <li>Once your payment is confirmed, a {type} container is assigned to you by its unique container number and the lease you chose starts.</li>
-              <li>Every month of your lease you receive {formatMoney(detail.monthlyRent)} rent per container in your wallet. You can withdraw it to your bank account.</li>
+              <li>Every month of your lease you receive rent in your wallet, at the rate for your order&apos;s total value (see the calculator). You can withdraw it to your bank account.</li>
             </ol>
           </Card>
 
@@ -153,23 +150,29 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               <Button type="submit" className="col-span-2">Calculate</Button>
             </form>
             <dl className="grid grid-cols-2 gap-4 text-sm">
-              {Number(listing.gstRatePercent) > 0 ? (
-                <>
-                  <Projection label="Price (before GST)" value={formatMoney(projection.amount)} />
-                  <Projection label={`GST ${formatPercent(listing.gstRatePercent)}`} value={formatMoney(projection.gstAmount)}
-                    note="Not part of the rent calculation" />
-                  <Projection label="You pay (incl. GST)" value={formatMoney(projection.amountWithGst)} />
-                </>
-              ) : (
-                <Projection label="You invest" value={formatMoney(projection.amount)} />
-              )}
+              <Projection label="You invest" value={formatMoney(projection.amount)} />
               <Projection label="Rent every month" value={formatMoney(projection.monthlyRent)}
-                note={`${formatPercent(listing.monthlyRentPercent)} of ${formatMoney(projection.amount)}${Number(listing.gstRatePercent) > 0 ? " (before GST)" : ""}`} />
+                note={`${formatPercent(projection.monthlyRentPercent)} of ${formatMoney(projection.amount)}`} />
               <Projection label="Lease" value={`${yearsLabel(projection.tenureYears)} (${projection.payouts} payouts)`} />
             </dl>
             <p className="border-t border-border pt-3 text-sm">
               Total rent over the tenure: <strong className="font-display text-lg">{formatMoney(projection.totalRent)}</strong>
             </p>
+            <div className="border-t border-border pt-3 text-xs text-muted">
+              <p className="font-medium text-foreground">Rent by order value</p>
+              <p>Your whole order (every container in your cart) earns the rate for its total, on each container.</p>
+              {Number(minimumOrder.amount.amount) > 0 && (
+                <p>The minimum order is {formatMoney(minimumOrder.amount)}.</p>
+              )}
+              <ul className="mt-1 space-y-0.5 tabular-nums">
+                {rentTiers.tiers.map((t) => (
+                  <li key={t.fromAmount.amount}>
+                    {formatMoney(t.fromAmount)}{t.toAmount ? ` – ${formatMoney(t.toAmount)}` : " and above"}:
+                    {" "}{formatPercent(t.monthlyRentPercent)} a month
+                  </li>
+                ))}
+              </ul>
+            </div>
             {projection.problems.length > 0 && (
               <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-300">
                 {projection.problems.map((problem) => <li key={problem}>• {problem}</li>)}
@@ -184,11 +187,11 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               <div className="space-y-4">
                 <Notice tone="success">
                   {inCart
-                    ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this plan ${inCart.quantity === 1 ? "is" : "are"} in your cart.`
-                    : "You are eligible to invest in this plan."}
+                    ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this kind ${inCart.quantity === 1 ? "is" : "are"} in your cart. Add more below.`
+                    : "You can buy this container."}
                 </Notice>
-                <AddToCartForm productId={id} defaultQuantity={requested} defaultYears={years}
-                  minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={Boolean(inCart)} />
+                <AddToCartForm productId={id} defaultQuantity={calculated ?? 1} defaultYears={years}
+                  minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={inCart?.quantity ?? 0} />
                 {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
               </div>
             ) : (

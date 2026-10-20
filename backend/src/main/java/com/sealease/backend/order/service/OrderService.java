@@ -19,6 +19,7 @@ import com.sealease.backend.investment.entity.ProductTerms;
 import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.investment.service.OfferingQuery;
+import com.sealease.backend.investment.service.RentRateService;
 import com.sealease.backend.invoice.service.InvoiceRequest;
 import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.kafka.KafkaTopics;
@@ -85,11 +86,14 @@ public class OrderService {
 	private final OrderItemRepository items;
 	private final CartService cart;
 	private final OfferingQuery offerings;
+	private final RentRateService rentRates;
+	private final MinimumOrderService minimumOrder;
 	private final ContainerAllocationService inventory;
 	private final ContainerService containers;
 	private final HoldingService holdings;
 	private final PayoutService payouts;
 	private final InvoiceService invoices;
+	private final LeaseAgreementIssuer agreements;
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
@@ -98,19 +102,22 @@ public class OrderService {
 	private final Clock clock;
 
 	public OrderService(OrderRepository orders, OrderItemRepository items, CartService cart, OfferingQuery offerings,
-			ContainerAllocationService inventory, ContainerService containers, HoldingService holdings,
-			PayoutService payouts, InvoiceService invoices, OutboxPublisher outbox,
+			RentRateService rentRates, MinimumOrderService minimumOrder, ContainerAllocationService inventory, ContainerService containers, HoldingService holdings,
+			PayoutService payouts, InvoiceService invoices, LeaseAgreementIssuer agreements, OutboxPublisher outbox,
 			AuditService audit, ApplicationEventPublisher events, TransactionTemplate transactions,
 			OrderProperties properties, Clock clock) {
 		this.orders = orders;
 		this.items = items;
 		this.cart = cart;
 		this.offerings = offerings;
+		this.rentRates = rentRates;
+		this.minimumOrder = minimumOrder;
 		this.inventory = inventory;
 		this.containers = containers;
 		this.holdings = holdings;
 		this.payouts = payouts;
 		this.invoices = invoices;
+		this.agreements = agreements;
 		this.outbox = outbox;
 		this.audit = audit;
 		this.events = events;
@@ -146,12 +153,12 @@ public class OrderService {
 		Set<UUID> productIds = lines.stream().map(CartLine::productId).collect(Collectors.toSet());
 		if (!accepted.equals(productIds)) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Accept the terms of every plan in your cart, and only those");
+					"Accept the terms of every container listing in your cart, and only those");
 		}
 		Map<UUID, OfferingTerms> terms = offerings.terms(productIds);
 		for (UUID productId : productIds) {
 			if (!terms.containsKey(productId)) {
-				throw new ResourceNotFoundException("Plan", productId);
+				throw new ResourceNotFoundException("Container listing", productId);
 			}
 		}
 
@@ -162,11 +169,18 @@ public class OrderService {
 						terms.get(line.productId()).code() + ": " + String.join("; ", problems));
 			}
 		}
-		// What the investor pays: the price plus GST, for every container.
+		// What the investor pays: the price of every container.
 		Money total = lines.stream()
-			.map(l -> terms.get(l.productId()).terms().pricePerContainerWithGst().times(BigDecimal.valueOf(l.quantity())))
+			.map(l -> terms.get(l.productId()).terms().pricePerContainer().times(BigDecimal.valueOf(l.quantity())))
 			.reduce(Money::plus)
 			.orElseThrow();
+		List<String> belowMinimum = new ArrayList<>(minimumOrder.problems(total));
+		belowMinimum.addAll(rentRates.problems(total));
+		if (!belowMinimum.isEmpty()) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, belowMinimum.getFirst());
+		}
+		// The rent rate is fixed on the order: the rate for its total, on every container in it.
+		BigDecimal rentPercent = rentRates.percentFor(total);
 		Instant now = clock.instant();
 		InvestmentOrder order = orders.saveAndFlush(new InvestmentOrder("ORD-" + orders.nextNumber(), userId, total,
 				key, hash, now.plus(properties.paymentWindow())));
@@ -177,7 +191,7 @@ public class OrderService {
 			ProductTerms t = plan.terms();
 			for (int n = 0; n < line.quantity(); n++) {
 				items.save(new OrderItem(order.getId(), line.productId(), plan.code(), t.title(), t.containerType(),
-						null, t.pricePerContainer(), t.gstRatePercent(), t.gstPerContainer(), t.monthlyRentPercent(),
+						null, t.pricePerContainer(), rentPercent,
 						t.monthlyCapitalReturnPercent(),
 						ProductTerms.monthsOf(line.tenureYears()), now));
 			}
@@ -278,13 +292,10 @@ public class OrderService {
 	 * at once, with its payout schedule from today.
 	 *
 	 * @param paidAtOffice       the order was paid in cash at the office: its containers' rent is collected in cash there
-	 * @param gstPaid          the investor paid GST; cash at the office is paid without, and the invoice then carries none
-	 * @param rentBonusPercent added to every container's monthly rent (paying cash at the office earns one); zero for none
 	 * @return {@code false} when the order is no longer awaiting payment (the money must be refunded)
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
-	public boolean confirmPaid(UUID orderId, UUID paymentId, boolean paidAtOffice, boolean gstPaid,
-			BigDecimal rentBonusPercent) {
+	public boolean confirmPaid(UUID orderId, UUID paymentId, boolean paidAtOffice) {
 		InvestmentOrder order = lock(orderId);
 		if (!order.isPendingPayment()) {
 			return false;
@@ -295,9 +306,7 @@ public class OrderService {
 		List<InvoiceRequest.Line> invoiceLines = new ArrayList<>();
 		Instant leaseStartsAt = payouts.leaseStartAfter(now);
 		for (OrderItem item : lines) {
-			BigDecimal rentPercent = item.getMonthlyRentPercent().add(rentBonusPercent);
-			BigDecimal gstRate = gstPaid ? item.getGstRatePercent() : BigDecimal.ZERO;
-			Money gst = gstPaid ? item.gst() : Money.zero(item.amount().currency());
+			BigDecimal rentPercent = item.getMonthlyRentPercent();
 			if (item.getContainerId() == null) {
 				UUID holdingId = holdings.recordAwaitingContainer(order.getUserId(), item.getProductId(), orderId,
 						item.getId(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
@@ -306,7 +315,7 @@ public class OrderService {
 						"amount", item.amount().amount().toPlainString()));
 				invoiceLines.add(new InvoiceRequest.Line("%s %s - one %s container, %d-month lease".formatted(
 						item.getProductCode(), item.getProductTitle(), item.getContainerType().label(),
-						item.getTenureMonths()), item.amount(), gstRate, gst));
+						item.getTenureMonths()), item.amount()));
 				continue;
 			}
 			ContainerSummary container = inventory.lease(item.getContainerId(), orderId);
@@ -314,23 +323,21 @@ public class OrderService {
 					container.id(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
 					item.getTenureMonths(), leaseStartsAt, now, paidAtOffice);
 			payouts.schedule(holding);
+			agreements.issue(null, holding.holdingId(), order.getUserId(), order.getOrderNumber());
 			confirmed.add(Map.of("holdingId", holding.holdingId().toString(), "productId", item.getProductId().toString(),
 					"containerNumber", container.containerNumber(), "amount", item.amount().amount().toPlainString()));
 			invoiceLines.add(new InvoiceRequest.Line("%s %s - container %s (%s), %d-month lease".formatted(
 					item.getProductCode(), item.getProductTitle(), container.containerNumber(),
-					container.containerType().label(), item.getTenureMonths()), item.amount(), gstRate, gst));
+					container.containerType().label(), item.getTenureMonths()), item.amount()));
 		}
-		order.confirm(now, !gstPaid);
+		order.confirm(now);
 		orders.flush();
 		invoices.issue(new InvoiceRequest(orderId, order.getOrderNumber(), order.getUserId(), paymentId, invoiceLines));
 
 		Map<String, Object> audited = new HashMap<>(Map.of("paymentId", paymentId.toString(),
-				"holdings", confirmed.size(), "gstPaid", gstPaid));
-		if (rentBonusPercent.signum() != 0) {
-			audited.put("rentBonusPercent", rentBonusPercent.toPlainString());
-		}
+				"holdings", confirmed.size()));
 		audit.record(AuditRecord.of(null, AuditAction.ORDER_CONFIRMED, ENTITY, orderId).withNewValue(audited));
-		Money total = gstPaid ? order.total() : totalWithoutGst(lines);
+		Money total = order.total();
 		events.publishEvent(new OrderConfirmedEvent(orderId, order.getOrderNumber(), order.getUserId(), total));
 		outbox.publish(DomainEvent.of(KafkaTopics.INVESTMENT_CONFIRMED, "InvestmentConfirmed", ENTITY, orderId,
 				Map.of("orderId", orderId.toString(), "orderNumber", order.getOrderNumber(),
@@ -377,12 +384,7 @@ public class OrderService {
 	}
 
 	private PayableOrder payable(InvestmentOrder order) {
-		return PayableOrder.of(order, totalWithoutGst(items.findByOrderIdOrderByProductIdAscIdAsc(order.getId())));
-	}
-
-	/** The order's price without GST: what an investor paying cash at the office without GST pays. */
-	private static Money totalWithoutGst(List<OrderItem> lines) {
-		return lines.stream().map(OrderItem::amount).reduce(Money::plus).orElseThrow();
+		return PayableOrder.of(order);
 	}
 
 	/** The order with this whole order number ("ORD-…"), any case. */
@@ -440,7 +442,7 @@ public class OrderService {
 		Set<UUID> accepted = new HashSet<>();
 		for (UUID productId : request.acceptedTerms()) {
 			if (!accepted.add(productId)) {
-				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Plan " + productId + " is listed twice");
+				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Container listing " + productId + " is listed twice");
 			}
 		}
 		return accepted;

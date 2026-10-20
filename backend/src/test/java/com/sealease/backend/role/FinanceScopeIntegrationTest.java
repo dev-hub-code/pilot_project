@@ -98,7 +98,7 @@ class FinanceScopeIntegrationTest {
 		task(colleague, holding, "take").andExpect(status().isOk());
 		assignContainer(colleague, holding).andExpect(status().isNoContent());
 		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?::uuid", String.class, holding))
-			.isEqualTo("ACTIVE");
+			.isEqualTo("AWAITING_ACCEPTANCE");
 		assertThat(api.auditCount("CONTAINER_TASK_ASSIGNED", holding)).isEqualTo(2);
 		assertThat(api.auditCount("CONTAINER_TASK_UNASSIGNED", holding)).isEqualTo(1);
 	}

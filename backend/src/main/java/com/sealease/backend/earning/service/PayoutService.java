@@ -57,10 +57,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Rent to investors, credited to their wallet every hour. Each holding has one rent accrual for its lease: the
- * monthly rent (and, for holdings sold before capital returns ended, price ÷ tenure of capital back) owed for the lease
- * months elapsed. Each run credits every whole hour that has passed since the lease was last credited, in one
- * balanced ledger transaction per calendar month it covers (unique per holding and starting hour), so monthly
+ * Rent to investors, credited to their wallet once per credit interval (an hour by default; admins set it, see
+ * {@link RentCreditSettingsService}). Each holding has one rent accrual for its lease: the monthly rent (and, for
+ * holdings sold before capital returns ended, price ÷ tenure of capital back) owed for the lease months elapsed. Each
+ * run credits up to the last interval boundary that has passed, from where the lease was last credited, in one
+ * balanced ledger transaction per calendar month it covers (unique per holding and starting instant), so monthly
  * statements add up exactly. Referral commission on those hours is paid with them. Once the lease end is credited the
  * holding matures and its container returns to inventory.
  */
@@ -81,12 +82,12 @@ public class PayoutService {
 	private final TransactionTemplate transactions;
 	private final JdbcTemplate jdbc;
 	private final WithdrawalService withdrawals;
-	private final RentCreditProperties credits;
+	private final RentCreditSettingsService credits;
 	private final Clock clock;
 
 	public PayoutService(RentAccrualRepository accruals, HoldingService holdings, LedgerService ledger,
 			ReferralEarningService referralEarnings, ApplicationEventPublisher events, TransactionTemplate transactions,
-			JdbcTemplate jdbc, WithdrawalService withdrawals, RentCreditProperties credits, Clock clock) {
+			JdbcTemplate jdbc, WithdrawalService withdrawals, RentCreditSettingsService credits, Clock clock) {
 		this.accruals = accruals;
 		this.holdings = holdings;
 		this.ledger = ledger;
@@ -97,18 +98,21 @@ public class PayoutService {
 		this.withdrawals = withdrawals;
 		this.credits = credits;
 		this.clock = clock;
-		if (!credits.creditInterval().equals(Duration.ofHours(1))) {
-			log.warn("Rent is credited every {} instead of every hour: for testing only (app.payouts.credit-interval)",
-					credits.creditInterval());
-		}
 	}
 
 	/**
-	 * When a lease taken at {@code now} starts: the next credit step (the next full hour in production), or now if
-	 * exactly on one.
+	 * When a lease taken at {@code now} starts: the next full hour (or now, if exactly on one). With a credit interval
+	 * shorter than an hour, the next step of it instead. Leases start on the hour whatever the interval, so changing it
+	 * never delays a lease; the rent from the start is credited at the next boundary of the interval in force.
 	 */
 	public Instant leaseStartAfter(Instant now) {
-		return credits.nextStepFrom(now);
+		CreditInterval interval = credits.current();
+		return (interval.minutes() < 60 ? interval : CreditInterval.ofMinutes(60)).nextStepFrom(now);
+	}
+
+	/** How often rent is credited now, e.g. "every hour". */
+	public CreditInterval creditInterval() {
+		return credits.current();
 	}
 
 	/** Called when a holding's lease starts (its container is assigned), in that transaction. */
@@ -127,7 +131,8 @@ public class PayoutService {
 	 */
 	public int creditDue() {
 		Instant now = clock.instant();
-		Instant step = credits.stepStart(now);
+		CreditInterval interval = credits.current();
+		Instant step = interval.stepStart(now);
 		int credited = 0;
 		List<UUID> due;
 		do {
@@ -135,7 +140,7 @@ public class PayoutService {
 			int before = credited;
 			for (UUID id : due) {
 				try {
-					Integer hours = transactions.execute(status -> credit(id, now));
+					Integer hours = transactions.execute(status -> credit(id, now, interval));
 					credited += hours == null ? 0 : hours;
 				}
 				catch (RuntimeException e) {
@@ -152,13 +157,13 @@ public class PayoutService {
 	}
 
 	/** Credits the lease's hours that have passed by {@code now}: one credit per calendar month they fall in. */
-	private int credit(UUID accrualId, Instant now) {
+	private int credit(UUID accrualId, Instant now, CreditInterval interval) {
 		RentAccrual accrual = accruals.findByIdForUpdate(accrualId).orElse(null);
 		// Re-checked under the lock: another run may have credited it since it was selected.
 		if (accrual == null || accrual.isCompleted()) {
 			return 0;
 		}
-		Instant until = accrual.creditableUntil(credits.stepStart(now));
+		Instant until = accrual.creditableUntil(interval.stepStart(now));
 		if (!until.isAfter(accrual.getCreditedUntil())) {
 			return 0;
 		}
@@ -175,7 +180,7 @@ public class PayoutService {
 		if (accrual.isCompleted()) {
 			holdings.mature(accrual.getHoldingId(), now);
 		}
-		return (int) (Duration.between(before, accrual.getCreditedUntil()).toSeconds() / credits.creditInterval().toSeconds());
+		return (int) (Duration.between(before, accrual.getCreditedUntil()).toSeconds() / interval.length().toSeconds());
 	}
 
 	/** Credits the hours from {@code from} to {@code to} in one ledger transaction, and the commission on them. */
@@ -244,9 +249,9 @@ public class PayoutService {
 				capital.merge(a.currency().getCurrencyCode(), a.creditedCapital(), Money::plus);
 			}
 		}
-		// Hours are credited once they end: the earliest one not credited yet ends an hour after it starts.
+		// Steps are credited once they end: the earliest rent not credited yet goes at the next boundary after it.
 		Instant nextCreditAt = leases.stream().filter(a -> !a.isCompleted()).map(RentAccrual::getCreditedUntil)
-			.min(Comparator.naturalOrder()).map(from -> from.plus(credits.creditInterval())).orElse(null);
+			.min(Comparator.naturalOrder()).map(credits.current()::nextBoundaryAfter).orElse(null);
 		WithdrawalService.InvestorTotals withdrawn = withdrawals.totals(userId);
 		return new EarningsSummary(balances, wallet, responses(rent), responses(capital), referralEarnings.totalEarned(userId),
 				leases.stream().map(a -> LeaseRentResponse.from(a, labels.get(a.getHoldingId()), false)).toList(),
@@ -334,7 +339,7 @@ public class PayoutService {
 		Instant now = clock.instant();
 		Map<String, long[]> counts = new TreeMap<>();
 		Map<String, Money> owed = new TreeMap<>();
-		Instant step = credits.stepStart(now);
+		Instant step = credits.current().stepStart(now);
 		for (RentAccrual a : accruals.findBehind(step)) {
 			Money[] amounts = a.amountsUpTo(a.creditableUntil(step));
 			String currency = a.currency().getCurrencyCode();

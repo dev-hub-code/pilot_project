@@ -16,7 +16,7 @@ export function chosenPhotos(formData: FormData, name = "photos"): File[] {
 
 /** Why these photos cannot be uploaded together, or null. */
 export function photoProblem(files: File[], room: number): string | null {
-  if (files.length > room) return room === 0 ? "This plan already has the most photos it can have" : `Choose at most ${room} more photo${room === 1 ? "" : "s"}`;
+  if (files.length > room) return room === 0 ? "This listing already has the most photos it can have" : `Choose at most ${room} more photo${room === 1 ? "" : "s"}`;
   const tooBig = files.find((f) => f.size > MAX_PHOTO_BYTES);
   if (tooBig) return `${tooBig.name} is over 5 MB`;
   const wrongType = files.find((f) => !["image/jpeg", "image/png"].includes(f.type));

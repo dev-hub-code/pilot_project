@@ -2,6 +2,7 @@ import type { StatusTone } from "@/components/ui/status-badge";
 import type { ContainerCondition, ContainerStatus, ContainerType, ProductStatus } from "@/types/marketplace";
 
 export const CONTAINER_TYPE_LABEL: Record<ContainerType, string> = {
+  DRY_10FT: "10ft Dry",
   DRY_20FT: "20ft Dry",
   DRY_40FT: "40ft Dry",
   HIGH_CUBE_40FT: "40ft High Cube",

@@ -30,7 +30,7 @@ export function ReferralModeForm({ year, current, bankAvailable }: {
         <label className="flex items-start gap-2 text-sm">
           <input type="radio" name="mode" value="OFFICE_CASH" checked={mode === "OFFICE_CASH"}
             onChange={() => setMode("OFFICE_CASH")} className="mt-1" />
-          <span>In cash at our office</span>
+          <span>Cash</span>
         </label>
       </fieldset>
       <SubmitButton confirm={`You can choose only once in ${year}. Save this choice?`}>Save my choice for {year}</SubmitButton>

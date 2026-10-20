@@ -16,7 +16,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
-import { formatMoney, formatPercent } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -39,10 +39,6 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const rejected = payments.find((p) => p.method === "BANK_TRANSFER" && p.status === "FAILED" && p.deposit);
   const refunds = payments.filter((p) => p.status === "REFUND_REQUIRED" || p.status === "REFUNDED");
   const paid = payments.find((p) => p.status === "SUCCEEDED");
-  // Paying cash at the office adds a bonus to every container's monthly rent.
-  const rentBonus = paid?.rentBonusPercent ?? 0;
-  const withBonus = (item: Order["items"][number]) => rentBonus === 0 ? item.monthlyPayout
-    : { amount: (Number(item.amount.amount) * (Number(item.monthlyRentPercent) + rentBonus) / 100).toFixed(2), currency: item.amount.currency };
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -64,9 +60,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       {order.status === "CONFIRMED" && (
         <Notice tone="success">
-          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; their leases have started and earn rent every hour.
-          {order.gstWaived && <> You paid in cash at our office, so no GST was charged</>}
-          {order.gstWaived && (rentBonus > 0 ? <> and every container earns {formatPercent(rentBonus)} more rent a month.</> : <>.</>)}
+          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; each lease starts, and earns rent, once you accept its agreement there.
         </Notice>
       )}
       {(order.status === "EXPIRED" || order.status === "CANCELLED") && (
@@ -93,12 +87,11 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <DataTable columns={["Plan", "Container", "Price", "GST", "Paid", "Rent monthly", "Tenure"]}>
+          <DataTable columns={["Container type", "Container number", "Price", "Rent monthly", "Tenure"]}>
             {order.items.map((item) => (
               <tr key={item.id}>
                 <Cell>
-                  <Link href={`/marketplace/${item.productId}`} className="font-mono text-gold-text hover:underline">{item.productCode}</Link>
-                  <span className="block max-w-xs truncate text-xs text-muted">{item.productTitle}</span>
+                  <Link href={`/marketplace/${item.productId}`} className="text-gold-text hover:underline">{item.productTitle}</Link>
                 </Cell>
                 <Cell>
                   {item.containerNumber
@@ -106,14 +99,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     : <span className="text-muted">Assigned by our team after payment</span>}
                   <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</span>
                 </Cell>
-                <Cell className="tabular-nums">{formatMoney(item.amount)}</Cell>
-                <Cell className="tabular-nums">
-                  {order.gstWaived ? <span className="text-muted">Not charged</span> : Number(item.gstRatePercent) > 0
-                    ? <>{formatMoney(item.gstAmount)}<span className="block text-xs text-muted">{formatPercent(item.gstRatePercent)}</span></>
-                    : "—"}
-                </Cell>
-                <Cell className="tabular-nums font-medium">{formatMoney(order.gstWaived ? item.amount : item.amountWithGst)}</Cell>
-                <Cell className="tabular-nums">{formatMoney(withBonus(item))}</Cell>
+                <Cell className="tabular-nums font-medium">{formatMoney(item.amount)}</Cell>
+                <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
                 <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
               </tr>
             ))}
@@ -150,7 +137,6 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
         <aside className="space-y-6">
           <Card title="Total">
             <p className="font-display text-3xl font-semibold tabular-nums">{formatMoney(paid?.amount ?? pending?.amount ?? order.total)}</p>
-            {(paid ?? pending)?.gstIncluded === false && <p className="mt-1 text-xs text-muted">Without GST: paid in cash at our office</p>}
             {order.status === "PENDING_PAYMENT" && (
               <p className="mt-2 text-sm text-muted">
                 {awaitingVerification
@@ -168,14 +154,10 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                 {pending?.bankTransfer && <DepositForm key={pending.id} orderId={order.id} payment={pending} />}
                 {pending?.officeCash && (
                   <div className="space-y-3 text-sm">
-                    <p className="font-medium">Pay in cash at our office</p>
+                    <p className="font-medium">Pay in cash</p>
                     <dl className="space-y-2">
-                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">{pending.gstIncluded ? "Amount (with GST)" : "Amount (no GST)"}</dt>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Amount</dt>
                         <dd className="font-display text-xl font-semibold tabular-nums">{formatMoney(pending.officeCash.amount)}</dd></div>
-                      {pending.rentBonusPercent > 0 && (
-                        <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Rent bonus</dt>
-                          <dd>+{formatPercent(pending.rentBonusPercent)} a month on every container</dd></div>
-                      )}
                       <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Quote this reference</dt>
                         <dd className="font-mono text-base">{pending.officeCash.reference}</dd></div>
                       <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Office</dt>
@@ -195,15 +177,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     label="Pay now" className="w-full" />
                 )}
                 {pending?.method !== "OFFICE_CASH" && (
-                  <div className="space-y-1.5">
-                    <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
-                      label="Pay in cash at our office" variant="secondary" className="w-full" />
-                    <p className="text-xs text-muted">No GST, and your containers earn extra monthly rent.</p>
-                  </div>
-                )}
-                {pending?.officeCash && pending.gstIncluded && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
-                    label="Switch to paying without GST" variant="quiet" className="w-full" />
+                    label="Pay in cash" variant="secondary" className="w-full" />
                 )}
                 <div className="border-t border-border pt-4">
                   <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"

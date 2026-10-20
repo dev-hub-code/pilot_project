@@ -39,7 +39,7 @@ export function PlanPhotoInput({ room, error, required }: { room: number; error?
           made.current = Array.from(e.target.files ?? []).map((f) => URL.createObjectURL(f));
           setUrls(made.current);
         }} />
-      {urls.length > 0 && <p className="text-xs text-muted">{urls.length} chosen; the first is the cover if the plan has none yet.</p>}
+      {urls.length > 0 && <p className="text-xs text-muted">{urls.length} chosen; the first is the cover if the listing has none yet.</p>}
       <ChosenPhotos urls={urls} />
     </div>
   );

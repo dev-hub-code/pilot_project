@@ -34,7 +34,7 @@ class LocationIntegrationTest {
 		List<String> names = JsonPath.read(countries, "$[*].name");
 		assertThat(names).isSortedAccordingTo(String::compareTo);
 
-		// India's 36 states and union territories, named as GST place of supply names them.
+		// India's 36 states and union territories.
 		String states = mvc.perform(get("/api/v1/public/locations/countries/{code}/states", "in"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.length()").value(36))

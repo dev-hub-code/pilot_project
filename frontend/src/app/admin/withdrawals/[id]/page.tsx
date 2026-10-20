@@ -59,7 +59,7 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <Item label="Investor"><Link href={`/admin/users/${w.userId}`} className="text-gold-text hover:underline">View investor</Link></Item>
             <Item label="From">{EARNINGS_BALANCE_LABEL[w.balance]}</Item>
-            <Item label="Paid by">{cash ? "Cash collected at the office" : `${w.bankName} ${w.bankAccountMasked}`}</Item>
+            <Item label="Paid by">{cash ? "Cash" : `${w.bankName} ${w.bankAccountMasked}`}</Item>
             <Item label="Made">{made} · {formatDateTime(w.createdAt)}</Item>
             {w.origin === "INVESTOR" && <Item label="Approvals">{`${w.approvals} of ${w.requiredApprovals}`}</Item>}
             {w.batchId && (

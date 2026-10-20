@@ -1,0 +1,53 @@
+<!--
+  Lease agreements (see AgreementRenderer). The wording is the admin's template filled in for one investment: each
+  row is a paragraph, or a heading (bold) for a line that started with "# ". Same look and embedded DejaVu fonts
+  as document.jrxml.
+-->
+<jasperReport name="agreement" pageWidth="595" pageHeight="842" whenNoDataType="AllSectionsNoDetail" columnWidth="495" leftMargin="50" rightMargin="50" topMargin="40" bottomMargin="36" uuid="5b1f0c64-8f3e-4d55-9a4c-2d7e1f6b9c10">
+	<style name="Base" default="true" forecolor="#0B1F2A" fontName="DejaVu Sans" fontSize="9.5"/>
+	<style name="Paragraph" style="Base">
+		<conditionalStyle fontSize="11.0" bold="true">
+			<conditionExpression><![CDATA[$F{heading}]]></conditionExpression>
+		</conditionalStyle>
+	</style>
+	<parameter name="title" class="java.lang.String"/>
+	<parameter name="subtitle" class="java.lang.String"/>
+	<parameter name="footnote" class="java.lang.String"/>
+	<field name="text" class="java.lang.String"/>
+	<field name="heading" class="java.lang.Boolean"/>
+	<title height="80">
+		<element kind="textField" uuid="0f6a2a5e-3b8c-4c1e-9d8b-6e2f4a1c7b01" x="0" y="0" width="495" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA["SEALEASE"]]></expression>
+		</element>
+		<element kind="textField" uuid="7c3e1b9a-5d2f-4a6b-8e1c-9f0a3b5d7e02" x="0" y="16" width="495" height="26" forecolor="#0B1F2A" fontSize="18.0" textAdjust="StretchHeight" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{title}]]></expression>
+		</element>
+		<element kind="textField" uuid="2a9d4c7e-1b3f-4e5a-8c6d-0e7f9a1b3c03" x="0" y="46" width="495" height="16" forecolor="#5B6770" fontSize="9.5" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{subtitle}]]></expression>
+		</element>
+		<element kind="line" uuid="9e5b2d8f-4c1a-4b7e-a3d6-1f8c0e2a4b04" x="0" y="70" width="495" height="1" forecolor="#B8862B">
+			<pen lineWidth="1.5"/>
+		</element>
+	</title>
+	<detail>
+		<band height="18">
+			<element kind="textField" uuid="4d8f1a6c-2e9b-4c3d-b5a7-6c0e8f2a1d05" x="0" y="0" width="495" height="18" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Paragraph">
+				<paragraph lineSpacing="Proportional" lineSpacingSize="1.25"/>
+				<box topPadding="4" bottomPadding="4" style="Paragraph"/>
+				<expression><![CDATA[$F{text}]]></expression>
+			</element>
+		</band>
+	</detail>
+	<pageFooter height="26">
+		<element kind="textField" uuid="6b2c9e4a-7d1f-4a8b-9c3e-5f0d2a7b1c06" x="0" y="6" width="400" height="18" forecolor="#5B6770" fontSize="6.5" textAdjust="StretchHeight" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<expression><![CDATA[$P{footnote} == null ? "" : $P{footnote}]]></expression>
+		</element>
+		<element kind="textField" uuid="1e7a3c5b-9d2f-4b6a-8e4c-0a1b3d5f7e07" x="400" y="6" width="75" height="12" forecolor="#5B6770" fontSize="7.0" blankWhenNull="true" hTextAlign="Right" style="Base">
+			<expression><![CDATA["Page " + $V{PAGE_NUMBER} + " of "]]></expression>
+		</element>
+		<element kind="textField" uuid="8c4e6a2d-1f3b-4d5c-9a7e-2b0c4e6f8a08" x="475" y="6" width="20" height="12" forecolor="#5B6770" fontSize="7.0" evaluationTime="Report" blankWhenNull="true" hTextAlign="Left" style="Base">
+			<box leftPadding="3" style="Base"/>
+			<expression><![CDATA[$V{PAGE_NUMBER}]]></expression>
+		</element>
+	</pageFooter>
+</jasperReport>

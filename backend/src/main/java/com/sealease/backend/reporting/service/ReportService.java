@@ -124,7 +124,7 @@ public class ReportService {
 		for (WithdrawalResponse w : made) {
 			Money amount = Money.of(new java.math.BigDecimal(w.amount().amount()), Currency.getInstance(w.amount().currency()));
 			boolean cash = w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH;
-			String paidTo = cash ? "Cash at the office" : w.bankName() + " " + w.bankAccountMasked();
+			String paidTo = cash ? "Cash" : w.bankName() + " " + w.bankAccountMasked();
 			rows.add(Row.of(Format.date(w.createdAt(), zone()),
 					w.reference() + " · " + (w.balance() == EarningsBalance.REFERRAL ? "Referral" : "Rent"),
 					paidTo + " · " + statementStatus(w, cash), Format.money(amount)));
@@ -209,15 +209,14 @@ public class ReportService {
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
 					p.containersSold() + " sold · "
 							+ investors.getOrDefault(p.id(), 0L) + " investor(s)",
-					Format.money(p.price()) + " · " + Format.percent(p.monthlyRentPercent()) + " rent + "
-							+ Format.percent(p.monthlyCapitalReturnPercent()) + " capital a month"))
+					Format.money(p.price()) + " · rent by order value"))
 			.toList();
 		List<DuePayouts> due = payouts.due();
 		List<Row> unpaid = due.stream()
 			.map(d -> Row.of("Due and unpaid", d.count() + " payout(s)", "", Format.money(d.total())))
 			.toList();
-		return new ReportDocument("Plans & payouts", "As of " + Format.date(today), "plans-" + today, clock.instant(),
-				List.of(new Section("Plans", List.of("Plan", "Title", "Containers", "Terms"), plans),
+		return new ReportDocument("Containers & payouts", "As of " + Format.date(today), "containers-" + today, clock.instant(),
+				List.of(new Section("Container listings", List.of("Listing", "Name", "Containers", "Terms"), plans),
 						new Section("Payouts due and not yet paid", List.of("", "Payouts", "", "Amount"), unpaid)),
 				"Containers sold count confirmed purchases. Payouts are credited automatically as they fall due.");
 	}
@@ -228,30 +227,15 @@ public class ReportService {
 		InvoiceResponse.Party issuer = invoice.issuer();
 		InvoiceResponse.Party buyer = invoice.buyer();
 		List<Row> parties = new ArrayList<>();
-		parties.add(Row.of("From", issuer.name(), issuer.taxId() == null ? "" : "GSTIN " + issuer.taxId(), ""));
+		parties.add(Row.of("From", issuer.name(), issuer.taxId() == null ? "" : "Tax ID " + issuer.taxId(), ""));
 		parties.add(Row.of("", issuer.address(), "", ""));
-		parties.add(Row.of("Bill to", buyer.name(), buyer.email(), buyer.taxId() == null ? "" : "GSTIN " + buyer.taxId()));
+		parties.add(Row.of("Bill to", buyer.name(), buyer.email(), ""));
 		if (buyer.address() != null) {
 			parties.add(Row.of("", buyer.address(), "", ""));
 		}
-		parties.add(Row.of("Place of supply", invoice.placeOfSupply() == null ? "Not given" : invoice.placeOfSupply(), "", ""));
 		List<Row> lines = new ArrayList<>(invoice.lines().stream()
-			.map(l -> Row.of(String.valueOf(l.lineNumber()), l.description(),
-					l.gstRatePercent().signum() == 0 ? "" : "GST " + l.gstRatePercent().stripTrailingZeros().toPlainString() + "%",
-					Format.money(l.amount())))
+			.map(l -> Row.of(String.valueOf(l.lineNumber()), l.description(), "", Format.money(l.amount())))
 			.toList());
-		// When GST was charged: the taxable value, then CGST + SGST (within the seller's state) or IGST.
-		boolean intraState = positive(invoice.cgst()) || positive(invoice.sgst());
-		if (intraState || positive(invoice.igst())) {
-			lines.add(Row.of("", "Taxable value", "", Format.money(invoice.taxable())));
-			if (intraState) {
-				lines.add(Row.of("", "CGST", "", Format.money(invoice.cgst())));
-				lines.add(Row.of("", "SGST", "", Format.money(invoice.sgst())));
-			}
-			else {
-				lines.add(Row.of("", "IGST", "", Format.money(invoice.igst())));
-			}
-		}
 		lines.add(Row.total("", "Total", "", Format.money(invoice.total())));
 		return new ReportDocument("Invoice " + invoice.invoiceNumber(), "Order " + invoice.orderNumber() + " · issued "
 				+ Format.date(invoice.issuedAt(), zone()), "invoice-" + invoice.invoiceNumber(), clock.instant(),
@@ -262,10 +246,6 @@ public class ReportService {
 	}
 
 	// ----------------------------------------------------------------------------- internal
-
-	private static boolean positive(MoneyResponse m) {
-		return m != null && new java.math.BigDecimal(m.amount()).signum() > 0;
-	}
 
 	private static Money total(List<PeriodTotal> totals, Money zero, TransactionType type, AccountType account,
 			Direction direction) {

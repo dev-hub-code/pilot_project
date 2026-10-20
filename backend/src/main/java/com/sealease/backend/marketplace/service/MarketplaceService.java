@@ -16,6 +16,8 @@ import com.sealease.backend.investment.service.EligibilityService;
 import com.sealease.backend.investment.service.OfferingQuery;
 import com.sealease.backend.investment.service.PlanPhotoService;
 import com.sealease.backend.investment.service.ProductService;
+import com.sealease.backend.investment.service.RentRateService;
+import com.sealease.backend.order.service.MinimumOrderService;
 import com.sealease.backend.marketplace.dto.MarketplaceCriteria;
 import com.sealease.backend.marketplace.dto.MarketplaceDetail;
 import com.sealease.backend.marketplace.dto.MarketplaceListing;
@@ -50,14 +52,19 @@ public class MarketplaceService {
 	private final OfferingQuery offerings;
 	private final PlanPhotoService photos;
 	private final EligibilityService eligibility;
+	private final RentRateService rentRates;
+	private final MinimumOrderService minimumOrder;
 
 	public MarketplaceService(InvestmentProductRepository products, ProductService plans, OfferingQuery offerings,
-			PlanPhotoService photos, EligibilityService eligibility) {
+			PlanPhotoService photos, EligibilityService eligibility, RentRateService rentRates,
+			MinimumOrderService minimumOrder) {
 		this.products = products;
 		this.plans = plans;
 		this.offerings = offerings;
 		this.photos = photos;
 		this.eligibility = eligibility;
+		this.rentRates = rentRates;
+		this.minimumOrder = minimumOrder;
 	}
 
 	@Transactional(readOnly = true)
@@ -94,13 +101,22 @@ public class MarketplaceService {
 		ProductTerms t = listedProduct(productId).terms();
 		int years = tenureYears == null ? t.minTenureYears() : tenureYears;
 		BigDecimal n = BigDecimal.valueOf(Math.max(quantity, 0));
-		List<String> problems = offerings.problems(viewerId, productId, quantity, years);
-		// Plans pay rent only, for every month of the lease the investor chooses.
-		Money rent = t.monthlyRent().times(n);
+		List<String> problems = new ArrayList<>(offerings.problems(viewerId, productId, quantity, years));
+		// Plans pay rent only, for every month of the lease the investor chooses, at the rate for this many containers.
+		Money price = t.pricePerContainer().times(n);
+		BigDecimal found = quantity > 0 ? rentRates.percentFor(price) : null;
+		if (quantity > 0 && problems.isEmpty()) {
+			// Other containers in the cart count towards the order too; this is what these alone would do.
+			problems.addAll(minimumOrder.problems(price));
+			if (problems.isEmpty()) {
+				problems.addAll(rentRates.problems(price));
+			}
+		}
+		BigDecimal rate = found == null ? BigDecimal.ZERO : found;
+		Money rent = t.monthlyRent(rate).times(n);
 		return new ReturnProjection(quantity, years, t.minTenureYears(), t.maxTenureYears(),
-				MoneyResponse.from(t.pricePerContainer().times(n)), MoneyResponse.from(t.gstPerContainer().times(n)),
-				MoneyResponse.from(t.pricePerContainerWithGst().times(n)), MoneyResponse.from(rent), ProductTerms.monthsOf(years),
-				MoneyResponse.from(t.totalPayout(years).times(n)), problems.isEmpty(), problems);
+				MoneyResponse.from(price), rate, MoneyResponse.from(rent), ProductTerms.monthsOf(years),
+				MoneyResponse.from(t.totalPayout(years, rate).times(n)), problems.isEmpty(), problems);
 	}
 
 	@Transactional(readOnly = true)
@@ -113,7 +129,7 @@ public class MarketplaceService {
 	private InvestmentProduct listedProduct(UUID productId) {
 		return products.findById(productId)
 			.filter(p -> p.getStatus().isListed())
-			.orElseThrow(() -> new ResourceNotFoundException("Plan", productId));
+			.orElseThrow(() -> new ResourceNotFoundException("Container listing", productId));
 	}
 
 	private static Specification<InvestmentProduct> listed(MarketplaceCriteria c, ProductStatus status) {
@@ -127,7 +143,6 @@ public class MarketplaceService {
 			if (!countQuery && query != null) {
 				MarketplaceSort sort = c.sort() == null ? MarketplaceSort.NEWEST : c.sort();
 				switch (sort) {
-					case HIGHEST_RETURN -> query.orderBy(cb.desc(root.get("monthlyRentPercent")), cb.desc(root.get("publishedAt")));
 					case LOWEST_PRICE -> query.orderBy(cb.asc(root.get("price")), cb.desc(root.get("publishedAt")));
 					case NEWEST -> query.orderBy(cb.desc(root.get("publishedAt")));
 				}

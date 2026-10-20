@@ -33,7 +33,7 @@ export function CheckoutForm({ idempotencyKey, terms, total, disabled }: {
             <span>
               I have read and accept the terms and risk disclosure of{" "}
               <a href={`/marketplace/${t.productId}`} target="_blank" rel="noopener noreferrer" className="font-medium text-gold-text hover:underline">
-                {t.code}
+                {t.title}
               </a>.
             </span>
           </label>

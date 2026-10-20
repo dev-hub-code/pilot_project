@@ -17,7 +17,7 @@ public final class PlanRules {
 			return List.of("Buy at least one container");
 		}
 		if (quantity > MAX_CONTAINERS_PER_LINE) {
-			return List.of("At most " + MAX_CONTAINERS_PER_LINE + " containers per plan in one order");
+			return List.of("At most " + MAX_CONTAINERS_PER_LINE + " containers of one listing in one order");
 		}
 		return List.of();
 	}

@@ -37,8 +37,6 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
         <TextField label="Mobile phone" name="phone" type="tel" placeholder="98765 43210"
           defaultValue={v("phone", profile.phone)} error={e.phone} autoComplete="tel" />
         <TextField label="Email" name="email" value={profile.email} readOnly disabled />
-        <TextField label="GST number (optional)" name="gstNumber" placeholder="27ABCDE1234F1Z5" maxLength={15}
-          autoComplete="off" defaultValue={v("gstNumber", profile.gstNumber)} error={e.gstNumber} />
       </fieldset>
       <p className="-mt-3 text-xs text-muted">
         Your name is as given at registration and cannot be changed. Contact support if it needs correcting.
