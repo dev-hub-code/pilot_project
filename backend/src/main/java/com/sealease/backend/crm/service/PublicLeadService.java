@@ -25,7 +25,8 @@ import java.util.Optional;
 
 /**
  * The public interest form. Callers always get the same answer, so the form reveals nothing about
- * which emails are known; bots that fill the honeypot are dropped silently.
+ * which emails are known; bots that fill the honeypot are dropped silently, and so are registered users (they are
+ * already customers, not leads).
  */
 @Service
 public class PublicLeadService {
@@ -58,6 +59,10 @@ public class PublicLeadService {
 		Instant now = clock.instant();
 		String email = EmailNormalizer.normalize(request.email());
 		String message = request.message() == null || request.message().isBlank() ? null : request.message().strip();
+		if (leadService.hasAccount(email)) {
+			log.info("No lead for a website enquiry from a registered user");
+			return;
+		}
 
 		Optional<Lead> open = leads.lockOpenByEmail(email);
 		if (open.isPresent()) {

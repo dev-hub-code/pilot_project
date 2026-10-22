@@ -29,7 +29,8 @@ export const profileSchema = z.object({
   line2: optional(z.string().max(200)),
   city: z.string().trim().min(1, "Enter your city").max(100),
   stateRegion: z.string().trim().min(1, "Enter your state").max(100),
-  postalCode: z.string().trim().min(1, "Enter your postal code").max(20),
+  postalCode: z.string().trim().min(1, "Enter your postal code")
+    .regex(/^\d{6}$/, "Enter a 6-digit postal code, numbers only"),
   country: optional(country).transform((v) => v ?? DEFAULT_COUNTRY),
 }).superRefine(validPhone(true));
 

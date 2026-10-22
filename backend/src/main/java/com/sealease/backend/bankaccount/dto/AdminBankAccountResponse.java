@@ -10,5 +10,14 @@ import java.util.UUID;
  * request would retire, so the reviewer sees both. {@code assignee} is the reviewer the verification is assigned to.
  */
 public record AdminBankAccountResponse(UUID userId, BankAccountResponse account, UUID reviewedBy,
-		long otherUsersWithSameAccount, BankAccountResponse replaces, Assignee assignee) {
+		long otherUsersWithSameAccount, BankAccountResponse replaces, Assignee assignee, Ifsc ifsc) {
+
+	/**
+	 * The account's IFSC and where the online directory placed it when the account was added ({@code bank} and
+	 * {@code branch} null when it could not be checked then). {@code bankMatches} is false when the bank name the
+	 * investor typed is not the directory's bank: worth a look before verifying.
+	 */
+	public record Ifsc(String code, String bank, String branch, boolean bankMatches) {
+	}
+
 }

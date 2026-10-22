@@ -40,14 +40,17 @@ export function ReturnCalculator({ productId, minYears, maxYears, initial }: {
     // Still typing (empty): wait for a number before saying anything.
     if (nextContainers === "") {
       setError(null);
+      plan?.setReady(false);
       return;
     }
     const count = Number(nextContainers);
     if (!CONTAINERS.test(nextContainers) || count < 1 || count > 50) {
       setError("Enter 1 to 50 containers.");
+      plan?.setReady(false);
       return;
     }
     setError(null);
+    plan?.setReady(true);
     plan?.setQuantity(nextContainers);
     plan?.setYears(nextYears);
     window.history.replaceState(null, "", `?containers=${count}&years=${nextYears}`);

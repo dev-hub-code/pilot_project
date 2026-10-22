@@ -80,7 +80,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
 
       {profile.kycStatus !== "APPROVED" && (
         <Notice tone="warning">
-          Verify your identity to be paid. <Link href="/profile/verification" className="underline">Start verification</Link>
+          Verify your identity to be paid. <Link href="/onboarding" className="underline">Start verification</Link>
         </Notice>
       )}
 

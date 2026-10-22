@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { phoneCountryOf, phoneProblem } from "@/lib/phone";
+import { formatPhoneInput, phoneCountryOf, phoneProblem } from "@/lib/phone";
+import { formatAsTyped } from "@/utils/input";
 import type { Country } from "@/types/location";
 
 interface PhoneFieldProps {
@@ -60,7 +61,16 @@ export function PhoneField({ label, countries, defaultNumber, defaultCountry, er
       element.value = belongsTo;
       setCountry(belongsTo);
     }
+    relayout(element.value);
     setProblem(phoneProblem(number, element.value, mobile));
+  }
+
+  /** Lays the typed number out the way the chosen country writes it ("98765 43210"). */
+  function relayout(chosen: string) {
+    const number = select.current?.form?.elements.namedItem("phone");
+    if (!(number instanceof HTMLInputElement) || number.value === "") return;
+    number.value = formatPhoneInput(number.value, chosen);
+    number.dataset.formatted = number.value;
   }
 
   const shown = problem ?? error;
@@ -80,6 +90,7 @@ export function PhoneField({ label, countries, defaultNumber, defaultCountry, er
           <select ref={select} name="phoneCountry" aria-label="Country code" defaultValue={defaultCountry}
             onChange={(e) => {
               setCountry(e.currentTarget.value);
+              relayout(e.currentTarget.value);
               const number = e.currentTarget.form?.elements.namedItem("phone");
               if (number instanceof HTMLInputElement && number.value.trim() !== "") check(number.value, false);
             }}
@@ -93,7 +104,10 @@ export function PhoneField({ label, countries, defaultNumber, defaultCountry, er
           defaultValue={defaultNumber} placeholder={placeholder} maxLength={30}
           aria-invalid={shown ? true : undefined} aria-describedby={shown ? errorId : undefined}
           onBlur={(e) => check(e.currentTarget.value, true)}
-          onChange={() => setProblem(null)}
+          onChange={(e) => {
+            formatAsTyped((value) => formatPhoneInput(value, select.current?.value ?? defaultCountry))(e);
+            setProblem(null);
+          }}
           className="h-11 w-full min-w-0 rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
       </div>
       {shown && <p id={errorId} className="text-xs text-rose-600 dark:text-rose-400">{shown}</p>}

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { BackendError } from "@/lib/server/backend-client";
@@ -25,7 +24,6 @@ export default async function ReferralMemberPage({ params }: PageProps<"/referra
 
   return (
     <div className="space-y-6">
-      <Link href={`/referrals/levels/${member.level}`} className="text-sm text-muted hover:text-foreground">← Level {member.level}</Link>
       <PageHeader title={member.displayName} description={`Level ${member.level} · joined ${formatDate(member.joinedAt)}`} />
 
       <section className="grid gap-px bg-border" aria-label="Commission from this member">

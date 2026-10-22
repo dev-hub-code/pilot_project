@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { IfscDetails } from "@/features/admin/ifsc-details";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -72,9 +73,6 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
 
   return (
     <div className="space-y-6">
-      {fromBankVerification && (
-        <Link href="/admin/bank-accounts" className="text-sm text-muted hover:underline">← Back to bank verification</Link>
-      )}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{summary.firstName} {summary.lastName}</h1>
         <span className="font-mono text-sm text-muted">{summary.userCode}</span>
@@ -134,7 +132,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 <p className="text-sm text-muted">No bank accounts.</p>
               ) : (
                 <ul className="space-y-4">
-                  {banks.map(({ account, otherUsersWithSameAccount, assignee }) => (
+                  {banks.map(({ account, otherUsersWithSameAccount, assignee, ifsc }) => (
                     <li key={account.id} className="space-y-3 border border-border p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="font-medium">
@@ -146,6 +144,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                           <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
                         </span>
                       </div>
+                      <IfscDetails ifsc={ifsc} bankName={account.bankName} country={account.country} />
                       {otherUsersWithSameAccount > 0 && (
                         <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
                           Warning: this account is also registered by {otherUsersWithSameAccount} other user(s).

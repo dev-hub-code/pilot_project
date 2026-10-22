@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { BackButton } from "@/components/layout/back-button";
 import { requireStaff } from "@/lib/server/auth/session";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
@@ -7,7 +8,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <>
       <AppHeader session={session} />
-      <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-10 sm:px-6">{children}</main>
+      <BackButton home="/admin" />
+      <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 pt-3 pb-10 sm:px-6">{children}</main>
     </>
   );
 }

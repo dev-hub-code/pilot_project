@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
-import type { Cart, Order, Payment, PaymentMethod } from "@/types/order";
+import type { Order, Payment, PaymentMethod } from "@/types/order";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { cartItemSchema, depositSchema, idempotencyKeySchema } from "@/validators/order";
 
@@ -13,27 +13,23 @@ const id = (value: string) => encodeURIComponent(value);
 // ---------------------------------------------------------------------------------- cart
 
 /**
- * Puts containers of a listing in the cart. From the marketplace ("cart") the quantity is added to what the cart
- * already holds, then the investor goes to the cart; on the cart page ("stay") it sets the line's exact quantity.
+ * Puts containers of a listing in the cart. "Invest now" on a container page ("invest") sets the line to what the
+ * investor calculated, then takes them to the cart to accept the terms and pay; on the cart page ("stay") it sets
+ * the line's quantity in place.
  */
-export async function setCartItemAction(productId: string, then: "cart" | "stay", _p: FormState, formData: FormData): Promise<FormState> {
+export async function setCartItemAction(productId: string, then: "invest" | "stay", _p: FormState, formData: FormData): Promise<FormState> {
   const years = formData.get("tenureYears");
   const input: Record<string, string> = { quantity: String(formData.get("quantity") ?? "") };
   if (typeof years === "string" && years) input.tenureYears = years;
   const parsed = cartItemSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
-    let quantity = parsed.data.quantity;
-    if (then === "cart") {
-      const cart = await authFetch<Cart>("/api/v1/cart");
-      quantity += cart.items.find((line) => line.productId === productId)?.quantity ?? 0;
-    }
-    await authFetch(`/api/v1/cart/items/${id(productId)}`, { method: "PUT", json: { ...parsed.data, quantity } });
+    await authFetch(`/api/v1/cart/items/${id(productId)}`, { method: "PUT", json: parsed.data });
   } catch (error) {
     return failureState(error, input);
   }
   revalidatePath("/cart");
-  if (then === "cart") redirect("/cart");
+  if (then === "invest") redirect("/cart");
   return { success: "Cart updated." };
 }
 

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceDocument } from "@/features/orders/invoice-document";
 import { PrintButton } from "@/features/orders/print-button";
@@ -23,8 +22,7 @@ export default async function AdminInvoicePage({ params }: PageProps<"/admin/ord
   }
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
-        <Link href={`/admin/orders/${id}`} className="font-mono text-sm text-muted hover:text-foreground">← {invoice.orderNumber}</Link>
+      <div className="flex flex-wrap items-center justify-end gap-4 print:hidden">
         <div className="flex items-center gap-3">
           <a href={`/admin/orders/${id}/invoice/pdf`} className="text-sm text-gold-text hover:underline">Download PDF</a>
           <PrintButton />

@@ -14,8 +14,8 @@ public record AdminUserDetail(
 		String statusReason,
 		Instant statusChangedAt) {
 
-	public static AdminUserDetail from(UserProfile p) {
-		return new AdminUserDetail(AdminUserSummary.from(p), ProfileResponse.from(p), p.getUser().getStatusReason(),
+	public static AdminUserDetail from(UserProfile p, UserKind kind) {
+		return new AdminUserDetail(AdminUserSummary.from(p, kind), ProfileResponse.from(p), p.getUser().getStatusReason(),
 				p.getUser().getStatusChangedAt());
 	}
 

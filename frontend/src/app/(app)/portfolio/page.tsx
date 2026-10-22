@@ -8,7 +8,7 @@ import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { formatPeriod, leasePercent, nextCreditNote } from "@/features/earnings/labels";
-import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
+import { yearsLabel } from "@/features/orders/lease-years";
 import { CURRENCY } from "@/lib/currency";
 import { authFetch } from "@/lib/server/auth/session";
 import { getRentCredit } from "@/lib/server/rent-credit";
@@ -92,41 +92,36 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
           <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
         </div>
       ) : (
-        <DataTable columns={["Container", "Type", "Invested", "Rent", "Paid monthly", "Lease", "Rent credited", "Status", ""]}>
+        // Six columns that fit the page: secondary details sit under each value and wrap, instead of more columns.
+        <DataTable columns={["Container", "Invested", "Paid monthly", "Lease", "Rent credited", "Status"]}>
           {portfolio.holdings.map((h) => {
             const lease = leases.get(h.id);
             const agreement = agreements.get(h.id);
             return (
               <tr key={h.id} className="hover:bg-background">
-                <Cell>
+                <Cell wrap className="min-w-[12rem]">
                   {h.container ? (
-                    <>
-                      <span className="font-mono font-medium">{h.container.containerNumber}</span>
-                      <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[h.container.containerType]}{h.container.currentLocation ? ` · ${h.container.currentLocation}` : ""}</span>
-                    </>
+                    <span className="font-mono font-medium whitespace-nowrap">{h.container.containerNumber}</span>
                   ) : (
-                    <>
-                      <span className="text-muted">Being assigned</span>
-                      <span className="block text-xs text-muted">Our team assigns your container</span>
-                    </>
+                    <span className="text-muted">Being assigned</span>
                   )}
-                </Cell>
-                <Cell>
-                  <Link href={`/marketplace/${h.productId}`} className="text-gold-text hover:underline">{h.productTitle}</Link>
-                </Cell>
-                <Cell className="tabular-nums">{formatMoney(h.amount)}</Cell>
-                <Cell className="tabular-nums">
-                  {formatPercent(h.monthlyRentPercent)}
-                  <span className="block text-xs text-muted">a month</span>
+                  <span className="block text-xs text-muted">
+                    <Link href={`/marketplace/${h.productId}`} className="text-gold-text hover:underline">{h.productTitle}</Link>
+                    {h.container?.currentLocation ? ` · ${h.container.currentLocation}` : ""}
+                  </span>
                 </Cell>
                 <Cell className="tabular-nums">
-                  {formatMoney(h.monthlyPayout)}
+                  {formatMoney(h.amount)}
+                  <span className="block text-xs text-muted">{formatPercent(h.monthlyRentPercent)} a month</span>
+                </Cell>
+                <Cell wrap className="tabular-nums">
+                  <span className="whitespace-nowrap">{formatMoney(h.monthlyPayout)}</span>
                   {Number(h.monthlyCapitalReturn.amount) > 0 && (
                     <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
                   )}
                 </Cell>
-                <Cell>
-                  {h.tenureMonths} months
+                <Cell wrap className="min-w-[9rem]">
+                  <span className="whitespace-nowrap">{h.tenureMonths % 12 === 0 ? yearsLabel(h.tenureMonths / 12) : `${h.tenureMonths} months`}</span>
                   <span className="block text-xs text-muted">
                     {h.leaseStartsOn && h.leaseEndsOn ? formatPeriod(h.leaseStartsOn, h.leaseEndsOn)
                       : h.status === "AWAITING_ACCEPTANCE" ? "Starts when you accept the agreement" : "Starts when your container is assigned"}
@@ -137,19 +132,18 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
                   {lease && <span className="block text-xs text-muted">{Math.round(leasePercent(lease))}% of {formatMoney(lease.totalRent)}</span>}
                 </Cell>
                 <Cell>
-                  <StatusBadge tone={HOLDING_TONE[h.status]}>{HOLDING_LABEL[h.status]}</StatusBadge>
-                </Cell>
-                {/* Unlabelled: on phones it spans the bottom of the container's card. */}
-                <Cell>
-                  {h.status === "AWAITING_ACCEPTANCE" ? (
-                    <LinkButton href={`/portfolio/${h.id}/agreement`} className="w-full sm:w-auto">Accept agreement</LinkButton>
-                  ) : agreement && (
-                    <a href={`/portfolio/agreements/${h.id}`} download
-                      className={`${buttonBase} ${buttonVariants.quiet} w-full sm:w-auto`}
-                      title={`Lease agreement ${agreement.agreementNumber}`}>
-                      Download PDF
-                    </a>
-                  )}
+                  <div className="flex flex-col items-stretch gap-2 lg:items-start">
+                    <StatusBadge tone={HOLDING_TONE[h.status]}>{HOLDING_LABEL[h.status]}</StatusBadge>
+                    {h.status === "AWAITING_ACCEPTANCE" ? (
+                      <LinkButton href={`/portfolio/${h.id}/agreement`} className="w-full lg:w-auto">Accept agreement</LinkButton>
+                    ) : agreement && (
+                      <a href={`/portfolio/agreements/${h.id}`} download
+                        className={`${buttonBase} ${buttonVariants.quiet} w-full lg:w-auto`}
+                        title={`Lease agreement ${agreement.agreementNumber}`}>
+                        Download PDF
+                      </a>
+                    )}
+                  </div>
                 </Cell>
               </tr>
             );
@@ -157,7 +151,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Once your payment is confirmed, our team assigns each investment its container and issues its lease agreement. When you accept the agreement, the lease starts at the next full hour and rent is credited to your wallet every hour from then on. See{" "}
+        Once your payment is confirmed, our team assigns each investment its container and issues its lease agreement. When you accept the agreement, the lease starts at the next full hour and rent is credited to your wallet {credit.label} from then on. See{" "}
         <Link href="/earnings" className="underline">Earnings</Link> for each lease&apos;s rent.
       </p>
     </div>

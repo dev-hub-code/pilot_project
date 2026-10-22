@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
@@ -15,7 +16,8 @@ import { humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Bank accounts" };
 
-export default async function BankAccountsPage() {
+export default async function BankAccountsPage({ searchParams }: PageProps<"/profile/bank-accounts">) {
+  const fromIdentity = (await searchParams).step === "identity";
   const session = await requireSession();
   if (!hasPermission(session.permissions, Permission.INVESTOR_PORTAL)) {
     return <Notice>Payout accounts are only available to investor accounts.</Notice>;
@@ -27,11 +29,18 @@ export default async function BankAccountsPage() {
   // Bank accounts are always held in the investor's registered name.
   const holderName = `${profile.firstName} ${profile.lastName}`.trim();
   const verifiedCount = accounts.filter((a) => a.status === "VERIFIED").length;
+  // Account setup goes in order: a bank account is added once identity verification has been submitted.
+  const identitySubmitted = profile.kycStatus === "PENDING" || profile.kycStatus === "APPROVED";
 
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        {profile.kycStatus !== "APPROVED" && (
+        {fromIdentity && (
+          <Notice tone="success">
+            Your Aadhaar and PAN were sent for review. Last step: add the bank account you want payouts paid into.
+          </Notice>
+        )}
+        {identitySubmitted && profile.kycStatus !== "APPROVED" && (
           <Notice tone="warning">Accounts can be verified once your identity verification is approved.</Notice>
         )}
         {accounts.length === 0 ? (
@@ -107,7 +116,14 @@ export default async function BankAccountsPage() {
         )}
       </div>
       <Card title="Add a bank account">
-        <BankAccountForm holderName={holderName} />
+        {identitySubmitted ? <BankAccountForm holderName={holderName} /> : (
+          <div className="space-y-4">
+            <Notice tone="warning">
+              First verify your identity. Your bank account is checked against your verified name.
+            </Notice>
+            <LinkButton href="/onboarding">Continue account setup</LinkButton>
+          </div>
+        )}
       </Card>
     </div>
   );

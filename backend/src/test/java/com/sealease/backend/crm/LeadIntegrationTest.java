@@ -57,6 +57,13 @@ class LeadIntegrationTest {
 		mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
 				{"firstName":"Ada","email":"%s","interest":"STANDALONE","consent":false}
 				""".formatted(email()))).andExpect(status().isBadRequest());
+		// A phone number, its country and the person's country are required.
+		for (String given : List.of("\"phoneCountry\":\"IN\",\"country\":\"IN\"", "\"phone\":\"98765 43210\",\"phoneCountry\":\"IN\"",
+				"\"phone\":\"98765 43210\",\"country\":\"IN\"")) {
+			mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
+					{"firstName":"Ada","email":"%s","interest":"STANDALONE","consent":true,%s}
+					""".formatted(email(), given))).andExpect(status().isBadRequest());
+		}
 
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM leads WHERE email = ?", Integer.class, email)).isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM leads WHERE message = 'Bot text'", Integer.class)).isZero();
@@ -183,13 +190,17 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.activities[0].body").value(containsString("first investment confirmed")));
 		assertThat(api.auditCount("LEAD_WON", leadId)).isEqualTo(1);
 
-		// A lead entered for someone who already has an account is linked at once.
+		// Someone who already has an account is a user, not a lead: staff cannot add one
+		// and the website form makes none (answering as usual, so it reveals nothing).
 		Account existing = investorAccount();
 		mvc.perform(post("/api/v1/admin/leads").header(HttpHeaders.AUTHORIZATION, manager.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("""
 						{"firstName":"Known","email":"%s","interest":"STANDALONE"}
-						""".formatted(existing.email())))
-			.andExpect(jsonPath("$.lead.userId").value(existing.id().toString()));
+						""".formatted(existing.email().toUpperCase())))
+			.andExpect(status().isConflict());
+		submit(existing.email(), "Interested again", null).andExpect(status().isAccepted());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM leads WHERE email = ?", Integer.class,
+				existing.email().toLowerCase())).isZero();
 	}
 
 	// ----------------------------------------------------------------------------- helpers
@@ -204,7 +215,8 @@ class LeadIntegrationTest {
 
 	private ResultActions submit(String email, String message, String honeypot) throws Exception {
 		return mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
-				{"firstName":"Ada","lastName":"Lovelace","email":"%s","interest":"STANDALONE","consent":true%s%s}
+				{"firstName":"Ada","lastName":"Lovelace","email":"%s","phone":"98765 43210","phoneCountry":"IN","country":"IN",
+				 "interest":"STANDALONE","consent":true%s%s}
 				""".formatted(email, message == null ? "" : ",\"message\":\"" + message + "\"",
 				honeypot == null ? "" : ",\"website\":\"" + honeypot + "\"")));
 	}

@@ -58,7 +58,17 @@ class WithdrawalRunIntegrationTest {
 	void setUp() throws Exception {
 		api = new TestApi(mvc, jdbc);
 		investors = new InvestorFixtures(mvc, jdbc, api);
-		finance = api.staff("ADMIN", "FINANCE");
+		// Generating withdrawals is for super admins (V6); finance works the tasks the runs make.
+		finance = api.staff("SUPER_ADMIN", "FINANCE");
+	}
+
+	@Test
+	void adminsAssignContainersButDoNotGenerateWithdrawals() throws Exception {
+		Account admin = api.staff("ADMIN");
+		mvc.perform(get("/api/v1/admin/container-assignments").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isOk());
+		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isForbidden());
 	}
 
 	@Test
@@ -297,12 +307,13 @@ class WithdrawalRunIntegrationTest {
 		Account investor = withBank("Erin Minimum");
 		credit(investor, "1500", "RENT_BANK");
 		try {
-			// Admins set it (they generate the runs); finance and support do not.
+			// Super admins set it (they generate the runs); admins, finance and support do not.
+			minimum(api.staff("ADMIN"), "2000").andExpect(status().isForbidden());
 			minimum(api.staff("FINANCE"), "2000").andExpect(status().isForbidden());
 			minimum(api.staff("SUPPORT"), "2000").andExpect(status().isForbidden());
 			minimum(admin, "0").andExpect(status().isBadRequest());
 			minimum(admin, "12.345").andExpect(status().isBadRequest());
-			minimum(api.staff("ADMIN"), "2000").andExpect(status().isOk())
+			minimum(api.staff("SUPER_ADMIN"), "2000").andExpect(status().isOk())
 				.andExpect(jsonPath("$.minimumAmount").value(2000))
 				.andExpect(jsonPath("$.defaultAmount").value(50))
 				.andExpect(jsonPath("$.updatedAt").isNotEmpty());

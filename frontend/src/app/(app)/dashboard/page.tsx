@@ -93,8 +93,9 @@ export default async function DashboardPage() {
               <p className="text-on-ink/85">
                 Verify your identity to start investing and to receive withdrawals.
               </p>
-              <LinkButton href="/profile/verification">
-                {profile.kycStatus === "PENDING" ? "View Verification Status" : "Verify My Identity"}
+              {/* Account setup in order: personal details, identity verification, then a bank account. */}
+              <LinkButton href={profile.kycStatus === "PENDING" ? "/profile/verification" : "/onboarding"}>
+                {profile.kycStatus === "PENDING" ? "View Verification Status" : "Complete Onboarding"}
               </LinkButton>
             </div>
           ) : (

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Notice } from "@/components/ui/notice";
@@ -38,7 +37,6 @@ export default async function AgreementPage({ params }: PageProps<"/portfolio/[i
 
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <a href={`/portfolio/agreements/${id}`} className="text-gold-text hover:underline">Download PDF</a>
-        <Link href="/portfolio" className="text-muted hover:underline">Back to portfolio</Link>
       </div>
 
       <Card title="Accept the agreement">

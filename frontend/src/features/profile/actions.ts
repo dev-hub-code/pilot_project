@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { authFetch } from "@/lib/server/auth/session";
-import type { KycSubmission } from "@/types/user";
+import { redirect } from "next/navigation";
+import { isInvestor } from "@/lib/permissions";
+import { authFetch, requireSession } from "@/lib/server/auth/session";
+import { getOnboarding } from "@/lib/server/onboarding";
+import type { IfscLookup, KycSubmission } from "@/types/user";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { bankAccountSchema, kycNumberSchema, MAX_FILE_BYTES, profileSchema } from "@/validators/profile";
@@ -41,8 +44,19 @@ export async function updateProfileAction(_previous: FormState, formData: FormDa
   } catch (error) {
     return profileFailure(failureState(error, values));
   }
-  revalidatePath("/profile");
+  revalidatePath("/profile", "layout");
+  await continueSetup("personal");
   return { success: "Profile saved." };
+}
+
+/**
+ * During account setup, a finished step leads on to the next one still to do (personal details, then identity
+ * verification, then a bank account). Investors who have set up their account stay where they are.
+ */
+async function continueSetup(finished: "personal" | "identity") {
+  if (!isInvestor((await requireSession()).permissions)) return;
+  const next = await getOnboarding().then((o) => o.next, () => null);
+  if (next && next.key !== finished) redirect(`${next.href}?step=${finished}`);
 }
 
 /** Aadhaar or PAN: its number field and file field, as the KYC endpoint takes them. */
@@ -75,6 +89,7 @@ export async function submitKycDocumentAction(document: "AADHAAR" | "PAN", _prev
     return failureState(error, values);
   }
   revalidatePath("/profile", "layout");
+  if (result.status === "PENDING") await continueSetup("identity");
   return {
     success: result.status === "PENDING"
       ? "Thank you. Both documents are in and were sent for review."
@@ -103,15 +118,33 @@ function bankAccountUpload(formData: FormData): { upload: FormData } | { state: 
   return { upload };
 }
 
+/** Where an IFSC code belongs, for the bank account form to show as it is typed. */
+export async function lookupIfscAction(typed: string): Promise<IfscLookup> {
+  const code = typed.trim().toUpperCase();
+  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) return { status: "NOT_FOUND", bank: null, branch: null };
+  try {
+    return await authFetch<IfscLookup>(`/api/v1/users/me/bank-accounts/ifsc/${encodeURIComponent(code)}`);
+  } catch {
+    return { status: "UNAVAILABLE", bank: null, branch: null };
+  }
+}
+
+const IFSC_NOT_FOUND = "This IFSC code is not in the RBI list of bank branches. Check it on your cheque book or bank statement";
+
 export async function addBankAccountAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const prepared = bankAccountUpload(formData);
   if ("state" in prepared) return prepared.state;
+  // Indian IFSC codes are checked online; the backend refuses an unknown one too, this puts the error on the field.
+  const routingCode = String(formData.get("routingCode") ?? "");
+  if (formData.get("country") === "IN" && (await lookupIfscAction(routingCode)).status === "NOT_FOUND") {
+    return { fieldErrors: { routingCode: IFSC_NOT_FOUND }, values: text(formData, "bankName", "country", "routingCode", "proofType") };
+  }
   try {
     await authFetch("/api/v1/users/me/bank-accounts", { method: "POST", formData: prepared.upload });
   } catch (error) {
     return failureState(error, text(formData, "bankName", "country", "routingCode", "proofType"));
   }
-  revalidatePath("/profile/bank-accounts");
+  revalidatePath("/profile", "layout");
   return { success: "Bank account added. It will be verified by our finance team." };
 }
 

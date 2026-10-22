@@ -4,6 +4,7 @@ import com.sealease.backend.bankaccount.dto.AddBankAccountRequest;
 import com.sealease.backend.bankaccount.dto.BankAccountResponse;
 import com.sealease.backend.bankaccount.entity.BankProofType;
 import com.sealease.backend.bankaccount.service.BankAccountService;
+import com.sealease.backend.bankaccount.service.IfscDirectory;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,18 @@ public class BankAccountController {
 			@RequestParam(required = false) BankProofType proofType,
 			@RequestPart(value = "proof", required = false) MultipartFile proof) {
 		return bankAccounts.add(user.userId(), request, proofType, proof);
+	}
+
+	/** Where an IFSC code belongs, from the online directory of bank branches; checked as the investor types it. */
+	@GetMapping("/ifsc/{code}")
+	public IfscLookupResponse ifsc(@PathVariable String code) {
+		IfscDirectory.Lookup lookup = bankAccounts.lookupIfsc(code);
+		return new IfscLookupResponse(lookup.status(), lookup.branch() == null ? null : lookup.branch().bank(),
+				lookup.branch() == null ? null : lookup.branch().place());
+	}
+
+	/** {@code bank} and {@code branch} are set when the status is FOUND. */
+	public record IfscLookupResponse(IfscDirectory.Status status, String bank, String branch) {
 	}
 
 	@DeleteMapping("/{accountId}")

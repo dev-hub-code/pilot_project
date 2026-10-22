@@ -25,7 +25,6 @@ export default async function ReferralLevelPage({ params }: PageProps<"/referral
 
   return (
     <div className="space-y-6">
-      <Link href="/referrals" className="text-sm text-muted hover:text-foreground">← Referrals</Link>
       <PageHeader title={`Level ${level}`}
         description={`${level === 1 ? "People you invited" : `People invited by your level ${level - 1}`}. ${
           rate === undefined ? "" : `You earn ${formatPercent(rate, rate % 1 === 0 ? 0 : 2)} of what each invests, every month of its tenure.`}`} />

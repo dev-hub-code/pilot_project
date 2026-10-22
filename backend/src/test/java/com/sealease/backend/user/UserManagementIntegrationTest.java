@@ -198,6 +198,16 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("phone")))
 			.andExpect(jsonPath("$.fieldErrors[*].field", hasItem("address.country")));
 
+		// A postal code is exactly 6 digits.
+		for (String postalCode : List.of("40002", "4000201", "40 0020", "E14 5AB")) {
+			mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+					.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", null, "1990-04-01")
+						.replace("\"560001\"", "\"" + postalCode + "\"")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[?(@.field == 'address.postalCode')].message",
+						hasItem("Enter a 6-digit postal code, numbers only")));
+		}
+
 		String minor = java.time.LocalDate.now().minusYears(17).toString();
 		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", null, minor)))
@@ -253,7 +263,18 @@ class UserManagementIntegrationTest {
 					.andExpect(jsonPath("$.content.length()").value(1));
 			}
 			mvc.perform(get("/api/v1/admin/users/{id}", employee.id()).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-				.andExpect(status().isOk());
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.summary.kind").value("EMPLOYEE"));
+			// Each account is marked investor or employee, and the directory filters by it.
+			mvc.perform(get("/api/v1/admin/users").param("q", investor.email()).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andExpect(jsonPath("$.content[0].kind").value("INVESTOR"));
+			for (String kind : List.of("INVESTOR", "EMPLOYEE")) {
+				for (Account who : List.of(investor, employee)) {
+					mvc.perform(get("/api/v1/admin/users").param("q", who.email()).param("kind", kind)
+							.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+						.andExpect(jsonPath("$.content.length()").value((who == employee) == kind.equals("EMPLOYEE") ? 1 : 0));
+				}
+			}
 		}
 		for (String role : List.of("SUPPORT", "FINANCE", "VERIFICATION", "ADMINISTRATION")) {
 			Account viewer = api.staff(role);
@@ -1012,7 +1033,7 @@ class UserManagementIntegrationTest {
 	private static String profileBody(String firstName, String phone, String dateOfBirth) {
 		return """
 				{"firstName":"%s","lastName":"Investor",%s"dateOfBirth":%s,"nationality":"GB",
-				 "address":{"line1":"1 Dock Road","city":"London","stateRegion":"Greater London","postalCode":"E14 5AB","country":"GB"}}
+				 "address":{"line1":"1 Dock Road","city":"London","stateRegion":"Greater London","postalCode":"560001","country":"GB"}}
 				""".formatted(firstName, phone == null ? "" : "\"phone\":\"" + phone + "\",",
 				dateOfBirth == null ? "null" : "\"" + dateOfBirth + "\"");
 	}

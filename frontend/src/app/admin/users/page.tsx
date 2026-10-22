@@ -23,6 +23,7 @@ const options = (values: readonly string[]) => values.map((value) => ({ value, l
 const STATUS = ["ACTIVE", "SUSPENDED", "DISABLED"] as const;
 const KYC = ["NOT_SUBMITTED", "PENDING", "APPROVED", "REJECTED"] as const;
 const EMAIL = ["true", "false"] as const;
+const KIND = ["INVESTOR", "EMPLOYEE"] as const;
 
 function pick<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
@@ -31,8 +32,11 @@ function pick<T extends string>(value: unknown, allowed: readonly T[]): T | unde
 export default async function UsersPage({ searchParams }: PageProps<"/admin/users">) {
   const session = await requireStaff();
   const params = await searchParams;
+  // Only viewers who may see employees get the investor / employee filter; the rest only ever see investors.
+  const seesEmployees = hasPermission(session.permissions, Permission.STAFF_ACCOUNT_VIEW);
   const filters = {
     q: typeof params.q === "string" ? params.q.slice(0, 100) : undefined,
+    kind: seesEmployees ? pick(params.kind, KIND) : undefined,
     status: pick(params.status, STATUS),
     kycStatus: pick(params.kycStatus, KYC),
     emailVerified: pick(params.emailVerified, EMAIL),
@@ -45,13 +49,32 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
   return (
     <div className="space-y-6">
       <PageHeader title="Users"
-        description={hasPermission(session.permissions, Permission.STAFF_ACCOUNT_VIEW) ? "Investors and employees." : "Investors."}
+        description={seesEmployees ? "Investors and employees." : "Investors."}
         actions={hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
           ? <LinkButton href="/admin/users/new">New employee</LinkButton> : undefined} />
+      {seesEmployees && (
+        <nav aria-label="Show" className="flex flex-wrap gap-2">
+          {[{ value: undefined, label: "All users" }, { value: "INVESTOR", label: "Investors" }, { value: "EMPLOYEE", label: "Employees" }]
+            .map(({ value, label }) => {
+              const href = new URLSearchParams(Object.entries({ ...filters, kind: value })
+                .filter((entry): entry is [string, string] => Boolean(entry[1])));
+              const current = filters.kind === value;
+              return (
+                <Link key={label} href={`/admin/users${href.size ? `?${href}` : ""}`} aria-current={current ? "page" : undefined}
+                  className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${current
+                    ? "border-gold bg-gold text-on-gold" : "border-border bg-surface hover:border-gold"}`}>
+                  {label}
+                </Link>
+              );
+            })}
+        </nav>
+      )}
       <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6" role="search">
         <div className="sm:col-span-2">
           <TextField label="Search" name="q" type="search" placeholder="Email, name or ID (SL03500)" defaultValue={filters.q} />
         </div>
+        {/* Searching keeps the tab chosen above. */}
+        {filters.kind && <input type="hidden" name="kind" value={filters.kind} />}
         <SelectField label="Status" name="status" options={options(STATUS)} placeholder="Any" defaultValue={filters.status ?? ""} />
         <SelectField label="KYC" name="kycStatus" options={options(KYC)} placeholder="Any" defaultValue={filters.kycStatus ?? ""} />
         <SelectField label="Email" name="emailVerified" placeholder="Any" defaultValue={filters.emailVerified ?? ""}
@@ -70,6 +93,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
                 <Link href={`/admin/users/${user.id}`} className="card-link font-medium text-brand hover:underline">
                   {user.firstName} {user.lastName}
                 </Link>
+                {user.kind === "EMPLOYEE" && <> <StatusBadge tone="neutral">Employee</StatusBadge></>}
               </Cell>
               <Cell className="text-muted"><EmailText>{user.email}</EmailText></Cell>
               <Cell>

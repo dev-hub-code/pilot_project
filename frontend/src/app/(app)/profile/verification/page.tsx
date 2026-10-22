@@ -13,7 +13,8 @@ import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Identity verification" };
 
-export default async function VerificationPage() {
+export default async function VerificationPage({ searchParams }: PageProps<"/profile/verification">) {
+  const fromPersonal = (await searchParams).step === "personal";
   // The backend answers 204 (no body) when nothing has been uploaded yet.
   const [submitted, profile] = await Promise.all([
     authFetch<KycSubmission | undefined>("/api/v1/users/me/kyc"),
@@ -29,6 +30,9 @@ export default async function VerificationPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {fromPersonal && (
+          <Notice tone="success">Personal details saved. Next, verify your identity with your Aadhaar and PAN.</Notice>
+        )}
         {reviewed && (
           <Card title="Latest submission" actions={<StatusBadge tone={toneFor(reviewed.status)}>{humanize(reviewed.status)}</StatusBadge>}>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">

@@ -61,7 +61,12 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
           }}
           errors={{ country: e.country, stateRegion: e.stateRegion, city: e.city }} />
         <TextField label="Postal code" name="postalCode" defaultValue={v("postalCode", profile.address.postalCode)}
-          error={e.postalCode} autoComplete="postal-code" />
+          error={e.postalCode} autoComplete="postal-code" inputMode="numeric" maxLength={6} placeholder="400001"
+          onInput={(event) => {
+            // Digits only: drop anything else as it is typed or pasted.
+            const input = event.currentTarget;
+            input.value = input.value.replace(/\D/g, "").slice(0, 6);
+          }} />
       </fieldset>
 
       <SubmitButton>Save profile</SubmitButton>

@@ -30,11 +30,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.text.Normalizer;
 import java.time.Clock;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -65,10 +69,14 @@ public class BankAccountService {
 	private final NotificationService notifications;
 	private final Clock clock;
 
+	private final IfscDirectory ifscDirectory;
+
 	public BankAccountService(BankAccountRepository accounts, UserProfileService profiles, UserAccountService users,
 			FieldEncryptor encryptor,
-			AuditService audit, DocumentService documents, NotificationService notifications, Clock clock) {
+			AuditService audit, DocumentService documents, NotificationService notifications, IfscDirectory ifscDirectory,
+			Clock clock) {
 		this.accounts = accounts;
+		this.ifscDirectory = ifscDirectory;
 		this.profiles = profiles;
 		this.users = users;
 		this.encryptor = encryptor;
@@ -128,7 +136,31 @@ public class BankAccountService {
 				request.country(), request.currency(), encryptor.encrypt(accountNumber, ACCOUNT_NUMBER_CONTEXT),
 				FieldEncryptor.lastChars(accountNumber, 4), fingerprint,
 				encryptor.encrypt(routingCode, ROUTING_CODE_CONTEXT));
+		locate(account, request.country(), routingCode);
 		return account;
+	}
+
+	/**
+	 * Checks an Indian account's IFSC in the online directory of bank branches: an unknown code is refused, a known
+	 * one records its bank and branch for the reviewer. When the directory cannot be reached the account is accepted
+	 * unchecked; the reviewer checks it against the proof.
+	 */
+	private void locate(BankAccount account, String country, String routingCode) {
+		if (!"IN".equals(country)) {
+			return;
+		}
+		IfscDirectory.Lookup lookup = ifscDirectory.lookup(routingCode);
+		switch (lookup.status()) {
+			case NOT_FOUND -> throw new BusinessException(ErrorCode.VALIDATION_FAILED, "IFSC code " + routingCode
+					+ " is not in the RBI list of bank branches. Check it on your cheque book or bank statement");
+			case FOUND -> account.locatedAt(lookup.branch().bank(), lookup.branch().place());
+			case UNAVAILABLE -> { }
+		}
+	}
+
+	/** An IFSC code's branch, for the form to show as it is typed. */
+	public IfscDirectory.Lookup lookupIfsc(String code) {
+		return ifscDirectory.lookup(code);
 	}
 
 	/** The holder is always the investor's registered name (which cannot be changed), never what the client sends. */
@@ -376,7 +408,37 @@ public class BankAccountService {
 		return new AdminBankAccountResponse(account.getUserId(), BankAccountResponse.from(account),
 				account.getVerifiedBy(),
 				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()), replaces,
-				assignee(account));
+				assignee(account), new AdminBankAccountResponse.Ifsc(
+						encryptor.decrypt(account.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT),
+						account.getIfscBank(), account.getIfscBranch(),
+						account.getIfscBank() == null || sameBank(account.getBankName(), account.getIfscBank())));
+	}
+
+	/** Whether two ways of writing a bank's name are the same bank ("HDFC" and "HDFC Bank Ltd", "SBI" and "State Bank of India"). */
+	static boolean sameBank(String typed, String directory) {
+		String a = bankWords(typed);
+		String b = bankWords(directory);
+		if (a.isEmpty() || b.isEmpty()) {
+			return true;
+		}
+		return a.contains(b) || b.contains(a) || initials(directory).equals(a) || initials(typed).equals(b);
+	}
+
+	private static final Set<String> FILLER = Set.of("bank", "ltd", "limited", "the", "of", "co",
+			"cooperative", "operative", "india", "indian", "and");
+
+	private static String bankWords(String name) {
+		return String.join("", words(name).stream().filter(w -> !FILLER.contains(w)).toList());
+	}
+
+	private static String initials(String name) {
+		return words(name).stream().filter(w -> !Set.of("ltd", "limited", "the", "of", "and").contains(w))
+			.map(w -> w.substring(0, 1)).collect(Collectors.joining());
+	}
+
+	private static List<String> words(String name) {
+		String plain = Normalizer.normalize(name == null ? "" : name, Normalizer.Form.NFKD).toLowerCase(Locale.ROOT);
+		return Arrays.stream(plain.split("[^a-z0-9]+")).filter(w -> !w.isEmpty()).toList();
 	}
 
 	private Assignee assignee(BankAccount account) {

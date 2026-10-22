@@ -1,5 +1,6 @@
 "use client";
 
+import { labelOf, useConfirm } from "@/components/ui/confirm-dialog";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -81,10 +82,19 @@ function IntentButton({ intent, variant, confirm, children }: {
   children: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
+  const { ask, dialog } = useConfirm();
   return (
-    <Button type="submit" name="intent" value={intent} variant={variant} disabled={pending}
-      onClick={(event) => { if (confirm && !window.confirm(confirm)) event.preventDefault(); }}>
-      {children}
-    </Button>
+    <>
+      <Button type="submit" name="intent" value={intent} variant={variant} disabled={pending}
+        onClick={(event) => {
+          const button = event.currentTarget;
+          if (!confirm || !button.form) return;
+          event.preventDefault();
+          void ask(confirm, { confirmLabel: labelOf(children) }).then((ok) => { if (ok) button.form?.requestSubmit(button); });
+        }}>
+        {children}
+      </Button>
+      {dialog}
+    </>
   );
 }

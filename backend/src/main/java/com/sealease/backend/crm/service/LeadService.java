@@ -107,6 +107,7 @@ public class LeadService {
 	public LeadDetail create(Viewer viewer, LeadRequest request) {
 		Lead.Contact contact = contact(request);
 		if (contact.email() != null) {
+			requireNoAccount(contact.email());
 			leads.lockOpenByEmail(contact.email()).ifPresent(existing -> {
 				throw new BusinessException(ErrorCode.CONFLICT,
 						"An open lead for this email already exists (" + existing.getReference() + ")");
@@ -137,6 +138,7 @@ public class LeadService {
 		Lead lead = lockChangeable(viewer, leadId);
 		Lead.Contact contact = contact(request);
 		if (contact.email() != null && !contact.email().equals(lead.getEmail()) && lead.getStage().isOpen()) {
+			requireNoAccount(contact.email());
 			leads.lockOpenByEmail(contact.email()).ifPresent(existing -> {
 				throw new BusinessException(ErrorCode.CONFLICT,
 						"An open lead for this email already exists (" + existing.getReference() + ")");
@@ -303,6 +305,18 @@ public class LeadService {
 	}
 
 	/** A lead whose email belongs to an existing account is linked to it straight away. */
+	/** Whether someone has already registered with this (normalised) email: they are a user, not a lead. */
+	boolean hasAccount(String email) {
+		return accounts.findByEmail(email).isPresent();
+	}
+
+	private void requireNoAccount(String email) {
+		if (hasAccount(email)) {
+			throw new BusinessException(ErrorCode.CONFLICT,
+					"This email already belongs to a registered user: find them under Users instead of adding a lead");
+		}
+	}
+
 	void linkExistingAccount(Lead lead) {
 		if (lead.getUserId() == null && lead.getEmail() != null) {
 			accounts.findByEmail(lead.getEmail()).ifPresent(account -> {

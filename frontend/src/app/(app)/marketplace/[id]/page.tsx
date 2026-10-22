@@ -11,7 +11,7 @@ import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL } from "@/features/marketpla
 import { InvestmentPlan } from "@/features/marketplace/investment-plan";
 import { PhotoSlider } from "@/features/marketplace/photo-slider";
 import { ReturnCalculator } from "@/features/marketplace/return-calculator";
-import { AddToCartForm } from "@/features/orders/add-to-cart-form";
+import { InvestNowForm } from "@/features/orders/invest-now-form";
 import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
@@ -42,7 +42,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
   const { listing } = detail;
   const [cart] = await Promise.all([investor ? authFetch<Cart>("/api/v1/cart") : Promise.resolve(null)]);
   const inCart = cart?.items.find((line) => line.productId === id);
-  // From the calculator, if the investor used it; "Add to cart" then adds that many.
+  // From the calculator, if the investor used it; "Invest now" buys that many.
   const calculated = typeof query.containers === "string" && CONTAINERS.test(query.containers) && Number(query.containers) >= 1
     ? Number(query.containers) : null;
   const requested = calculated ?? inCart?.quantity ?? 1;
@@ -139,11 +139,21 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
           </Card>
         </div>
 
-        <InvestmentPlan quantity={String(calculated ?? 1)} years={String(years)}>
+        {/* The same containers and lease the calculator starts from, so "Invest now" buys what it shows. */}
+        <InvestmentPlan quantity={String(requested)} years={String(years)}>
           <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
             <section className="space-y-5 border border-border bg-surface p-6" aria-labelledby="calculator">
               <Eyebrow>Estimate your return</Eyebrow>
               <ReturnCalculator productId={id} minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} initial={projection} />
+              {/* Invest straight from the calculation: no second form to fill in. */}
+              {!investor ? (
+                <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
+              ) : detail.eligibility.eligible ? (
+                <InvestNowForm productId={id} inCart={inCart?.quantity ?? 0} />
+              ) : (
+                // The calculator lists what is missing; onboarding leads through it (identity, then a bank account).
+                <LinkButton href="/onboarding" className="w-full">Complete onboarding</LinkButton>
+              )}
               <div className="border-t border-border pt-3 text-xs text-muted">
                 <p className="font-medium text-foreground">Rent by order value</p>
                 <p>Your whole order (every container in your cart) earns the rate for its total, on each container.</p>
@@ -160,36 +170,6 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
                 </ul>
               </div>
             </section>
-
-            <Card title="Invest">
-              {!investor ? (
-                <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
-              ) : detail.eligibility.eligible ? (
-                <div className="space-y-4">
-                  <Notice tone="success">
-                    {inCart
-                      ? `${inCart.quantity} container${inCart.quantity === 1 ? "" : "s"} of this kind ${inCart.quantity === 1 ? "is" : "are"} in your cart. Add more below.`
-                      : "You can buy this container."}
-                  </Notice>
-                  <AddToCartForm productId={id} defaultQuantity={calculated ?? 1} defaultYears={years}
-                    minYears={listing.minTenureYears} maxYears={listing.maxTenureYears} inCart={inCart?.quantity ?? 0} />
-                  {inCart && <LinkButton href="/cart" variant="quiet" className="w-full">Go to cart</LinkButton>}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <ul className="space-y-2 text-sm">
-                    {detail.eligibility.reasons.map((reason) => <li key={reason}>• {reason}</li>)}
-                  </ul>
-                  {detail.eligibility.reasons.some((r) => r.includes("identity")) && (
-                    <LinkButton href="/profile/verification" className="w-full">Verify my identity</LinkButton>
-                  )}
-                  {detail.eligibility.reasons.some((r) => r.includes("bank account")) && (
-                    <LinkButton href="/profile/bank-accounts" variant={detail.eligibility.reasons.some((r) => r.includes("identity")) ? "secondary" : "primary"}
-                      className="w-full">Add a bank account</LinkButton>
-                  )}
-                </div>
-              )}
-            </Card>
           </aside>
         </InvestmentPlan>
       </div>

@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
@@ -30,7 +31,8 @@ public record UpdateProfileRequest(
 			@Size(max = 200) String line2,
 			@NotBlank(message = "Enter your city") @Size(max = 100) String city,
 			@NotBlank(message = "Enter your state") @Size(max = 100) String stateRegion,
-			@NotBlank(message = "Enter your postal code") @Size(max = 20) String postalCode,
+			@NotBlank(message = "Enter your postal code")
+			@Pattern(regexp = "^[0-9]{6}$", message = "Enter a 6-digit postal code, numbers only") String postalCode,
 			@IsoCountry String country) {
 	}
 

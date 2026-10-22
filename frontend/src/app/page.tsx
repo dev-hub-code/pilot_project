@@ -12,8 +12,10 @@ import { InterestForm } from "@/features/leads/interest-form";
 import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stats";
 import { getPublicPlans } from "@/lib/server/public-plans";
 import { getPhoneCountries } from "@/lib/server/phone-countries";
+import { getRentCredit } from "@/lib/server/rent-credit";
+import { getRentTerms, tierFor, type RentTerms } from "@/lib/server/rent-terms";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
 
 const stateTone: Record<ServiceState, StatusTone> = {
   UP: "success",
@@ -30,22 +32,23 @@ const NAV = [
   { href: "/login", label: "Sign In" },
 ];
 
-const BENEFITS = [
+/** "every hour" (or whatever admins set), so the copy below follows the live credit interval. */
+const BENEFITS = (credit: string) => [
   {
-    title: "Income every month",
-    body: "Each container you own pays you its monthly rent, credited straight to your SeaLease wallet.",
+    title: "Rent from your first hour",
+    body: `Your rent starts at the next full hour after you accept your container's lease agreement and is credited to your SeaLease wallet ${credit}.`,
   },
   {
-    title: "Your money comes back",
-    body: "Along with the rent, part of what you paid is returned every month, so your full investment is back with you by the end of the lease.",
+    title: "Bigger orders earn more",
+    body: "Your monthly rent is a percentage of each container's price, and the percentage is set by your order's total value: the more you invest in one order, the higher the rate.",
   },
   {
-    title: "Grows with your investment",
-    body: "Payouts are per container. Own two containers and your monthly income doubles; own ten and it is ten times as much.",
+    title: "A real container, by its number",
+    body: "You own whole containers, never shares. Each one is assigned to you by its unique container number, with its own lease agreement you can download.",
   },
   {
     title: "Clear from day one",
-    body: "You see the price, monthly rent and lease length before you buy, every payout is on record, and you can withdraw to your verified bank account.",
+    body: "The calculator shows your rent before you buy, every credit is on record under Earnings, and our team pays your earnings out to your verified bank account or in cash at our office.",
   },
 ];
 
@@ -53,11 +56,12 @@ const BENEFITS = [
  * Investor reviews, shown as a carousel. Only real reviews, published with the investor's consent, may go here. Entries
  * marked `sample` are layout placeholders, never shown in production. Every review must
  * match how the platform works today: whole containers, rent only (the price is not paid back), lease chosen in whole years,
- * rent credited to the wallet every hour, withdrawals to a verified bank account or in cash at the office.
+ * rent by order value, rent credited to the wallet as it accrues, onboarding (details, KYC, bank account), the lease
+ * starting when the agreement is accepted, payouts made by the team to a verified bank account or in cash at the office.
  */
 const REVIEWS: Review[] = [
   {
-    quote: "My rent reaches my SeaLease wallet every hour, and the Earnings page shows how much each container has earned. No chasing anyone.",
+    quote: "I can watch my wallet grow through the day, and the Earnings page shows how much each container has earned. No chasing anyone.",
     name: "Priya S.",
     detail: "Pune · 3 containers",
     sample: true,
@@ -69,7 +73,7 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "KYC took me ten minutes: Aadhaar, PAN and the two card photos. It was approved the next day and the marketplace opened up for me.",
+    quote: "Onboarding took me ten minutes: my details, Aadhaar and PAN with photos of the cards, then my bank account. Once both were verified the marketplace opened up for me.",
     name: "Ananya R.",
     detail: "Bengaluru · 1 container",
     sample: true,
@@ -93,13 +97,13 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "The container page told me the monthly rent for the number of containers I picked before I paid anything. What I see in my wallet each month matches it.",
+    quote: "The calculator on the container page showed my rent before I paid anything. I bought three in one order to get the higher rate, and my wallet matches it.",
     name: "Kavita N.",
     detail: "Mumbai · 4 containers",
     sample: true,
   },
   {
-    quote: "I set nothing up and my balance still lands in my primary bank account every month on the withdrawal day. When I need money sooner, I request a withdrawal myself.",
+    quote: "I set nothing up: when the team makes the monthly withdrawal, my balance lands in my primary bank account. The Withdrawals page shows each one.",
     name: "Deepak V.",
     detail: "Indore · 5 containers",
     sample: true,
@@ -111,13 +115,13 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "My container was assigned in the middle of the month and the rent started that same day, by the hour. No waiting for a payout date.",
+    quote: "My container was assigned in the middle of the month. I accepted the agreement from the notification and the rent started at the next hour. No waiting for a payout date.",
     name: "Meera J.",
     detail: "Kochi · 1 container",
     sample: true,
   },
   {
-    quote: "I asked support about adding a second bank account. The ticket was answered the same day, and the account was verified after I uploaded a cancelled cheque.",
+    quote: "I asked support about adding a second bank account. The ticket was answered the same day, and finance verified the new account soon after.",
     name: "Gurpreet S.",
     detail: "Ludhiana · 2 containers",
     sample: true,
@@ -135,7 +139,7 @@ const REVIEWS: Review[] = [
     sample: true,
   },
   {
-    quote: "I got an email when my KYC was approved, when my bank account was verified and when my container was assigned. Every payout is listed under Earnings, so I always know where things stand.",
+    quote: "I got a notification when my KYC was approved, when my bank account was verified and when my container was assigned. Tapping it took me straight there, so I always know where things stand.",
     name: "Arvind M.",
     detail: "Kolkata · 3 containers",
     sample: true,
@@ -148,66 +152,84 @@ const REVIEWS: Review[] = [
   },
 ];
 
-/** Every answer must match how the platform actually works (see the README's marketplace, earnings and withdrawal rules). */
-const FAQS = [
-  {
-    question: "What exactly am I investing in?",
-    answer: "You buy whole shipping containers. Each one is a specific container with its own container number, assigned to you once your payment is confirmed. We lease it out for the lease period you choose and pay you from it every month. There are no shared or fractional units.",
-  },
-  {
-    question: "How much will I receive every month?",
-    answer: "Every month of the lease you receive rent: a fixed percentage of the price you paid, set by your order's total value (larger orders can earn a higher rate). For example, at 2% monthly rent, a ₹2,50,000 container pays you ₹5,000 every month. The marketplace shows the exact monthly amount for the number of containers before you buy.",
-  },
-  {
-    question: "Do I get my investment back?",
-    answer: "No. Containers pay rent only: you receive the monthly rent for every month of the lease, and the price you paid is not paid back. The marketplace shows the total rent over the lease before you buy.",
-  },
-  {
-    question: "How much do I need to start?",
-    answer: "One container. The price of each container is shown in the marketplace, and you can buy more containers whenever you like. Your monthly income grows with every container you own.",
-  },
-  {
-    question: "What do I need before I can invest?",
-    answer: "Create a free account and complete identity verification (KYC). Once your KYC is approved, you can buy any container on sale in the marketplace. The marketplace tells you if anything is still pending.",
-  },
-  {
-    question: "How do I pay?",
-    answer: "By bank payment to one of our company bank accounts: online (NEFT, RTGS, IMPS or UPI) or by cheque. You then enter the transaction ID or cheque number, and our finance team confirms the payment. Card payments are not accepted.",
-  },
-  {
-    question: "When is rent credited, and where does the money go?",
-    answer: "Every day. Each container's rent for the day (that month's rent ÷ its days) is credited to your SeaLease wallet, and every credit is recorded under Earnings.",
-  },
-  {
-    question: "How is my money paid out?",
-    answer: "Automatically, every month. Rent on containers you paid for by bank is paid into your verified bank account on the 10th; rent on containers paid in cash at our office is collected in cash there from the 10th. Referral earnings are paid on the 15th, into your bank account or in cash at our office, as you choose once a year.",
-  },
-  {
-    question: "What happens at the end of the lease?",
-    answer: "When the last hour of the lease is credited, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then buy new containers in the marketplace.",
-  },
-  {
-    question: "Can I earn by referring others?",
-    answer: "Yes. Share your referral link from the Referrals page. When people you refer receive their monthly rent, you earn a commission on it, and the platform pays it, so their own payout is never reduced. The current rates are shown on your Referrals page.",
-  },
-  {
-    question: "Is my personal and bank information safe?",
-    answer: "Sensitive details such as identity documents, tax IDs and bank account numbers are stored encrypted, and only authorised employees can view them. Every view of a KYC document is logged.",
-  },
-];
+/** Every answer must match how the platform works today; rates, the minimum order and the credit interval are live. */
+function faqs(terms: RentTerms | null, credit: string) {
+  const rates = terms
+    ? terms.tiers.map((t) => `${formatPercent(t.monthlyRentPercent)} a month for orders ${t.toAmount
+      ? `of ${formatMoney(t.fromAmount)} to ${formatMoney(t.toAmount)}` : `of ${formatMoney(t.fromAmount)} and above`}`).join(", ")
+    : null;
+  const example = terms?.tiers[0];
+  return [
+    {
+      question: "What exactly am I investing in?",
+      answer: "You buy whole shipping containers. Each one is a specific container with its own container number, assigned to you once your payment is confirmed, with a lease agreement for the years you choose. We lease it out and pay you rent from it. There are no shared or fractional units.",
+    },
+    {
+      question: "How much rent will I receive?",
+      answer: `Every month of the lease you receive rent on each container: a percentage of its price, set by your order's total value${rates ? ` (currently ${rates})` : ""}. ${example
+        ? `For example, at ${formatPercent(example.monthlyRentPercent)}, a ₹1,00,000 container pays you ${formatMoney({ amount: String(1000 * example.monthlyRentPercent), currency: "INR" })} a month. `
+        : ""}The calculator on each container's page shows your exact rent before you buy.`,
+    },
+    {
+      question: "Do I get my investment back?",
+      answer: "No. Containers pay rent only: you receive rent for the whole lease, and the price you paid is not paid back. The calculator shows the total rent over the lease before you buy.",
+    },
+    {
+      question: "How much do I need to start?",
+      answer: terms?.minimumOrder
+        ? `The minimum order is ${formatMoney(terms.minimumOrder)}. Each container's price is shown in the marketplace, and you can invest again whenever you like.`
+        : "One container. Each container's price is shown in the marketplace, and you can invest again whenever you like.",
+    },
+    {
+      question: "What do I need before I can invest?",
+      answer: "A free account and three onboarding steps: your personal details, identity verification (Aadhaar and PAN) and a bank account for payouts. Once our team has verified your identity and bank account, you can invest in any container on sale.",
+    },
+    {
+      question: "How do I pay?",
+      answer: "By bank payment to one of our company bank accounts, online (NEFT, RTGS, IMPS or UPI) or by cheque, quoting your payment reference and entering the transaction ID or cheque number; or in cash at our office. Our finance team confirms the payment. Card payments are not accepted.",
+    },
+    {
+      question: "When does my rent start, and how is it credited?",
+      answer: `Once your payment is confirmed, our team assigns each container to you and you accept its lease agreement. The lease starts at the next full hour, and your rent is credited to your SeaLease wallet ${credit}, every credit recorded under Earnings.`,
+    },
+    {
+      question: "How is my money paid out?",
+      answer: "Our team makes withdrawals every month: rent on containers paid by bank goes to your verified primary bank account, and rent on containers paid in cash is collected in cash at our office. Referral earnings are paid to your bank or in cash, as you choose once a year. Small balances wait for the next withdrawal.",
+    },
+    {
+      question: "What happens at the end of the lease?",
+      answer: "When the last rent of the lease is credited, your holding is marked as matured: you have received the rent for the whole lease, and the container returns to SeaLease. You can then invest in new containers in the marketplace.",
+    },
+    {
+      question: "Can I earn by referring others?",
+      answer: "Yes. Share your referral link from the Referrals page. When people in your network (up to four levels) receive their rent, you earn a commission on it. The platform pays it, so their own rent is never reduced. The current rates are shown on your Referrals page.",
+    },
+    {
+      question: "Is my personal and bank information safe?",
+      answer: "Sensitive details such as identity documents, tax IDs and bank account numbers are stored encrypted, and only authorised employees can view them. Every view of a KYC document is logged.",
+    },
+  ];
+}
 
 /**
- * Example portfolio for the Investors section: one hypothetical investor holding two containers on the demo
- * plans (scripts/seed-demo-data.py). Amounts follow the payout rule: rent = price × rent %, paid every month of the
- * tenure (plans pay rent only).
+ * Example portfolio for the Investors section: one hypothetical investor who bought two containers in one order.
+ * Rent follows the live rule: each container's price × the rate for the order's total, every month of the lease.
  */
 const EXAMPLE_HOLDINGS = [
-  { number: "SLSU 100501 3", type: "20ft dry", location: "Nhava Sheva (JNPT), Mumbai", price: "250000", tenure: 16, rent: "5000" },
-  { number: "SLSU 100401 7", type: "40ft dry", location: "Mundra Port, Gujarat", price: "400000", tenure: 18, rent: "9000" },
+  { number: "SLSU 100501 3", type: "20ft dry", location: "Nhava Sheva (JNPT), Mumbai", price: 250000, years: 3 },
+  { number: "SLSU 100401 7", type: "40ft dry", location: "Mundra Port, Gujarat", price: 400000, years: 5 },
 ];
-const EXAMPLE_MONTHLY_TOTAL = "14000";
+/** Used when the rates cannot be loaded. */
+const EXAMPLE_FALLBACK_PERCENT = 5;
 
-const inr = (amount: string) => formatMoney({ amount, currency: "INR" });
+function examplePortfolio(terms: RentTerms | null) {
+  const total = EXAMPLE_HOLDINGS.reduce((sum, h) => sum + h.price, 0);
+  const percent = (terms && tierFor(terms, total)?.monthlyRentPercent) ?? EXAMPLE_FALLBACK_PERCENT;
+  const holdings = EXAMPLE_HOLDINGS.map((h) => ({ ...h, rent: Math.round(h.price * percent) / 100 }));
+  return { holdings, total, percent, monthly: holdings.reduce((sum, h) => sum + h.rent, 0) };
+}
+
+const inr = (amount: number) => formatMoney({ amount: String(amount), currency: "INR" });
 
 /**
  * The company's track record since 2022, shown in the "Since 2022" block. Enter the REAL, verifiable totals
@@ -261,26 +283,28 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
   return Object.values(figures).every(Boolean) ? (figures as Record<keyof typeof figures, string>) : null;
 }
 
-const STEPS = [
+const STEPS = (credit: string) => [
   {
-    title: "Choose your containers",
-    body: "Each container in the marketplace shows its type, price, monthly rent and the length of the lease up front.",
+    title: "Complete onboarding",
+    body: "Create your free account, add your personal details, verify your identity with Aadhaar and PAN, and add the bank account your earnings are paid into.",
   },
   {
-    title: "Buy your containers",
-    body: "Buy one or more whole containers and pay by bank. Once your payment is confirmed, each container is assigned to you by its unique container number.",
+    title: "Invest in containers",
+    body: "Pick a container, set how many and the lease in years in the calculator to see your rent, then invest now and pay by bank or in cash at our office.",
   },
   {
-    title: "Get paid every month",
-    body: "Every month of the lease you receive rent plus an equal part of your investment back, so it is all returned by the end. Payouts are credited to an auditable ledger and withdrawable to your verified bank account.",
+    title: "Earn rent",
+    body: `Once your payment is confirmed, each container is assigned to you by its number. Accept its lease agreement and rent is credited to your wallet ${credit}, then paid out to your bank account.`,
   },
 ];
 
 export default async function Home() {
   // System status must reflect the live backend, never a build-time snapshot.
   await connection();
-  const [backend, stats, plans, phoneCountries] = await Promise.all([getBackendStatus(), getPlatformStats(), getPublicPlans(),
-    getPhoneCountries()]);
+  const [backend, stats, plans, phoneCountries, terms, rentCredit] = await Promise.all([getBackendStatus(), getPlatformStats(),
+    getPublicPlans(), getPhoneCountries(), getRentTerms(), getRentCredit()]);
+  const credit = rentCredit.label;
+  const example = examplePortfolio(terms);
   const production = process.env.NODE_ENV === "production";
   const usesSampleFigures = !production && Object.values(COMPANY_RECORD).some((value) => value === null);
   const figures = trackRecord(stats, usesSampleFigures);
@@ -329,8 +353,8 @@ export default async function Home() {
             </h1>
             <div className="max-w-lg space-y-7 lg:justify-self-end">
               <p className="text-base leading-relaxed text-on-ink/90">
-                Buy Whole Shipping Containers, Each Assigned To You By Its Own Number, And Receive
-                Rent Every Month Of The Lease.
+                Buy Whole Shipping Containers, Each Assigned To You By Its Own Number, And Earn
+                Rent From The First Hour Of The Lease.
               </p>
               <div className="flex flex-wrap gap-3">
                 <LinkButton href="/register">Start Investing</LinkButton>
@@ -349,15 +373,15 @@ export default async function Home() {
         <section id="about" className="scroll-mt-8 px-5 py-20 text-center sm:px-10 lg:py-28">
           <Eyebrow>About SeaLease</Eyebrow>
           <h2 className="mx-auto mt-8 max-w-4xl text-3xl leading-tight font-normal tracking-tight sm:text-4xl lg:text-5xl">
-            Own Real Shipping Containers And Earn From Them Every Month. The More You Invest, The More You Receive.
+            Own Real Shipping Containers And Earn Rent From Them. The More You Invest, The Higher Your Rate.
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted">
             With SeaLease™ you buy real shipping containers that are leased to businesses moving goods around the
             world. We handle the leasing; you collect the income. You don&apos;t need any shipping experience, and
-            you can start with a single container.
+            you can start with a single order{terms?.minimumOrder ? ` from ${formatMoney(terms.minimumOrder)}` : ""}.
           </p>
           <ul className="mt-14 grid gap-px bg-border text-left sm:grid-cols-2 lg:grid-cols-4">
-            {BENEFITS.map((benefit) => (
+            {BENEFITS(credit).map((benefit) => (
               <li key={benefit.title} className="space-y-3 bg-surface p-8">
                 <h3 className="text-lg font-semibold tracking-tight">{benefit.title}</h3>
                 <p className="text-sm leading-relaxed text-muted">{benefit.body}</p>
@@ -369,9 +393,9 @@ export default async function Home() {
             <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Trusted By Investors Around The World</h3>
             <p className="text-sm leading-relaxed text-muted">
               Since 2022, investors from around the world have invested with SeaLease, and we have been leasing
-              their containers and paying them their monthly rent and capital ever since.
-              Every payout is recorded in our ledger, and investors can see each one in their account and withdraw it
-              to their own bank.
+              their containers and paying them their rent ever since.
+              Every credit is recorded in our ledger, and investors can see each one in their account and are paid
+              out to their own bank.
             </p>
             {figures && usesSampleFigures && (
               <p className="pt-2">
@@ -416,13 +440,13 @@ export default async function Home() {
             <div className="space-y-5">
               <Eyebrow>How It Works</Eyebrow>
               <h2 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Three Steps From Sign-Up To Monthly Payouts
+                Three Steps From Sign-Up To Earning Rent
               </h2>
             </div>
             <LinkButton href="/register" variant="secondary">Create Your Account</LinkButton>
           </div>
           <ol className="mt-12 grid gap-px bg-border md:grid-cols-3">
-            {STEPS.map((step, index) => (
+            {STEPS(credit).map((step, index) => (
               <li key={step.title} className="space-y-4 bg-surface p-8">
                 <span className="font-display text-4xl font-semibold text-gold-text">0{index + 1}</span>
                 <h3 className="text-xl font-semibold tracking-tight">{step.title}</h3>
@@ -439,7 +463,7 @@ export default async function Home() {
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">A Container With Your Name On It</h3>
             <p className="max-w-md text-sm leading-relaxed text-muted">
               Every container you buy is a specific, identified container: you see its ISO number, type and
-              location in your portfolio as soon as your payment is confirmed.
+              location in your portfolio once it is assigned, with its lease agreement to accept and download.
             </p>
             <div className="max-w-md border border-border bg-surface">
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
@@ -447,40 +471,40 @@ export default async function Home() {
                 <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">Example</span>
               </div>
               <ul className="divide-y divide-border">
-                {EXAMPLE_HOLDINGS.map((holding) => (
+                {example.holdings.map((holding) => (
                   <li key={holding.number} className="space-y-1 px-5 py-4 text-sm">
                     <div className="flex items-center justify-between gap-4">
                       <p className="font-display font-semibold tracking-wide">{holding.number}</p>
                       <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs text-gold-text">On lease</span>
                     </div>
                     <p className="text-muted">{holding.type} · {holding.location}</p>
-                    <p className="text-muted">Bought for {inr(holding.price)} · {holding.tenure}-month lease</p>
+                    <p className="text-muted">Bought for {inr(holding.price)} · {holding.years}-year lease</p>
                   </li>
                 ))}
               </ul>
             </div>
           </div>
           <div className="space-y-5 bg-ink px-5 py-16 text-on-ink sm:px-10 lg:px-14">
-            <Eyebrow tone="light">Monthly Payouts</Eyebrow>
-            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent, Every Month</h3>
+            <Eyebrow tone="light">Your Rent</Eyebrow>
+            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent At Your Order&apos;s Rate</h3>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
-              Each container is leased for the years you choose, and every month of it you receive
-              rent. The price you paid is not paid back. Open to every verified investor.
+              Each container is leased for the years you choose. The rate is set by your order&apos;s total, and rent is
+              credited to your wallet {credit}. The price you paid is not paid back. Open to every verified investor.
             </p>
             <div className="max-w-md border border-on-ink/20">
               <div className="flex items-center justify-between gap-4 border-b border-on-ink/20 px-5 py-3">
-                <p className="text-sm font-semibold">The same investor&apos;s monthly payout</p>
+                <p className="text-sm font-semibold">The same investor&apos;s rent</p>
                 <span className="rounded-full border border-on-ink/30 px-3 py-1 text-xs text-on-ink/70">Example</span>
               </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-on-ink/60">
                     <th scope="col" className="px-5 pt-3 pb-1 font-normal">Container</th>
-                    <th scope="col" className="px-5 pt-3 pb-1 text-right font-normal">Rent</th>
+                    <th scope="col" className="px-5 pt-3 pb-1 text-right font-normal">Rent a month</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {EXAMPLE_HOLDINGS.map((holding) => (
+                  {example.holdings.map((holding) => (
                     <tr key={holding.number}>
                       <td className="px-5 py-2 text-on-ink/80">{holding.type}</td>
                       <td className="px-5 py-2 text-right tabular-nums">{inr(holding.rent)}</td>
@@ -489,15 +513,15 @@ export default async function Home() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-on-ink/20">
-                    <th scope="row" className="px-5 py-3 text-left font-semibold">Paid every month</th>
-                    <td className="px-5 py-3 text-right font-display text-lg font-semibold text-gold tabular-nums">{inr(EXAMPLE_MONTHLY_TOTAL)}</td>
+                    <th scope="row" className="px-5 py-3 text-left font-semibold">Earned every month</th>
+                    <td className="px-5 py-3 text-right font-display text-lg font-semibold text-gold tabular-nums">{inr(example.monthly)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
             <p className="max-w-md text-xs leading-relaxed text-on-ink/60">
-              Illustration on example terms. Each container&apos;s actual price, rent and lease length are shown in the
-              marketplace before you buy.
+              Illustration: one {inr(example.total)} order earns {formatPercent(example.percent)} a month on each container.
+              Each container&apos;s actual price and your rent are shown in the marketplace before you buy.
             </p>
           </div>
         </section>
@@ -542,8 +566,9 @@ export default async function Home() {
                       </div>
                     </dl>
                     <p className="mt-auto border-t border-border pt-4 text-sm text-muted">
-                      Monthly rent is set by your order&apos;s total value: the more you buy in one order, the higher the
-                      rate can be. The marketplace shows the rent for your order before you pay.
+                      {terms
+                        ? <>Rent from {formatPercent(terms.tiers[0]?.monthlyRentPercent ?? 0)} of the price a month, higher for larger orders.</>
+                        : <>Monthly rent is set by your order&apos;s total value: the more you buy in one order, the higher the rate.</>}
                     </p>
                   </div>
                 );
@@ -552,8 +577,34 @@ export default async function Home() {
             </div>
             <p className="mt-6 text-xs leading-relaxed text-muted">
               Figures are the published terms, not a promise of future returns. Rent is credited to your
-              wallet every hour of the lease, from the full hour after your container is assigned.
+              wallet {credit}, from the full hour after you accept your container&apos;s lease agreement.
             </p>
+            {terms && (
+              <div className="mt-8 max-w-xl border border-border">
+                <p className="border-b border-border px-5 py-3 text-sm font-semibold">Rent by order value</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted">
+                      <th scope="col" className="px-5 pt-3 pb-1 font-normal">Your order&apos;s total</th>
+                      <th scope="col" className="px-5 pt-3 pb-1 text-right font-normal">Rent a month, on each container</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {terms.tiers.map((t) => (
+                      <tr key={t.fromAmount.amount}>
+                        <td className="px-5 py-2 tabular-nums">
+                          {formatMoney(t.fromAmount)}{t.toAmount ? ` – ${formatMoney(t.toAmount)}` : " and above"}
+                        </td>
+                        <td className="px-5 py-2 text-right font-semibold tabular-nums">{formatPercent(t.monthlyRentPercent)} of its price</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {terms.minimumOrder && (
+                  <p className="border-t border-border px-5 py-3 text-xs text-muted">The minimum order is {formatMoney(terms.minimumOrder)}.</p>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -563,7 +614,7 @@ export default async function Home() {
             <Eyebrow>FAQ</Eyebrow>
             <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Questions Investors Ask Us</h2>
             <div className="mt-10 divide-y divide-border border-y border-border">
-              {FAQS.map((faq) => (
+              {faqs(terms, credit).map((faq) => (
                 <details key={faq.question} className="group py-5">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-base font-semibold [&::-webkit-details-marker]:hidden">
                     {faq.question}

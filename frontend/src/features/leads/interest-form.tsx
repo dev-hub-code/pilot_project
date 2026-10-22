@@ -26,10 +26,10 @@ export function InterestForm({ countries }: { countries: Country[] }) {
         <TextField id="lead-first" label="First name" name="firstName" autoComplete="given-name" defaultValue={v("firstName")} error={e.firstName} />
         <TextField id="lead-last" label="Last name" name="lastName" autoComplete="family-name" defaultValue={v("lastName")} error={e.lastName} />
         <TextField id="lead-email" label="Email" name="email" type="email" autoComplete="email" defaultValue={v("email")} error={e.email} />
-        <PhoneField id="lead-phone" label="Phone (optional)" countries={countries} mobile={false} defaultNumber={v("phone")}
+        <PhoneField id="lead-phone" label="Phone" required countries={countries} mobile={false} defaultNumber={v("phone")}
           defaultCountry={v("phoneCountry") || DEFAULT_PHONE_COUNTRY} error={e.phone ?? e.phoneCountry} />
-        <SelectField id="lead-country" label="Country (optional)" name="country" defaultValue={v("country") ?? ""} placeholder="—"
-          options={COUNTRY_OPTIONS} />
+        <SelectField id="lead-country" label="Country" name="country" required defaultValue={v("country") ?? ""}
+          placeholder="Choose your country" options={COUNTRY_OPTIONS} error={e.country} />
         <SelectField id="lead-interest" label="Interested in" name="interest" defaultValue={v("interest") ?? "UNSURE"}
           options={Object.entries(INTEREST_LABEL).map(([value, label]) => ({ value, label }))} />
       </div>

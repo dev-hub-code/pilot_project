@@ -1,4 +1,4 @@
-import { type CountryCode, parsePhoneNumberFromString } from "libphonenumber-js/max";
+import { AsYouType, type CountryCode, parsePhoneNumberFromString } from "libphonenumber-js/max";
 
 /**
  * Phone numbers, checked as the backend checks them (libphonenumber there, libphonenumber-js here): a number typed
@@ -51,4 +51,18 @@ export function splitPhone(stored: string | null | undefined, country: string | 
 export function formatPhone(stored: string): string {
   const parsed = stored.startsWith("+") ? parse(stored, undefined) : undefined;
   return parsed ? parsed.formatInternational() : stored;
+}
+
+/**
+ * A number as it is being typed, laid out the way its country writes it ("98765 43210" in India, "07400 123456" in
+ * the UK, "+971 50 123 4567" when typed with its country code). Only digits and a leading "+" are kept.
+ */
+export function formatPhoneInput(value: string, country: string): string {
+  const cleaned = value.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+  if (!cleaned) return "";
+  try {
+    return new AsYouType((country || DEFAULT_PHONE_COUNTRY) as CountryCode).input(cleaned);
+  } catch {
+    return cleaned;
+  }
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { IfscDetails } from "@/features/admin/ifsc-details";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,7 +33,7 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
         <EmptyState title="No bank accounts awaiting verification" />
       ) : (
         <ul className="space-y-4">
-          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces, assignee }) => (
+          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces, assignee, ifsc }) => (
             <li key={account.id} className="space-y-4 border border-border bg-surface p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
                 <div>
@@ -49,6 +50,7 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                   <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
                 </div>
               </div>
+              <IfscDetails ifsc={ifsc} bankName={account.bankName} country={account.country} />
               {replaces && (
                 <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
                   Replaces <span className="font-medium">{replaces.bankName}</span>{" "}

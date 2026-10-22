@@ -12,6 +12,7 @@ import com.sealease.backend.role.entity.Role;
 import com.sealease.backend.role.entity.UserRole;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
+import com.sealease.backend.user.dto.UserKind;
 import com.sealease.backend.user.dto.UserSearchCriteria;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.User;
@@ -42,7 +43,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Staff operations on accounts: directory search and suspension. */
 @Service
@@ -65,13 +68,22 @@ public class UserAdministrationService {
 
 	@Transactional(readOnly = true)
 	public Page<AdminUserSummary> search(UserSearchCriteria criteria, Pageable pageable) {
-		return profiles.findAll(matching(criteria), pageable).map(AdminUserSummary::from);
+		Page<UserProfile> page = profiles.findAll(matching(criteria), pageable);
+		// Which accounts on the page are investors, in one query (the rest are employees).
+		List<UUID> ids = page.getContent().stream().map(p -> p.getUser().getId()).toList();
+		Set<UUID> investors = ids.isEmpty() ? Set.of() : profiles.findAll((root, query, cb) -> cb.and(
+				root.get("user").get("id").in(ids), investor(root.get("user"), query, cb))).stream()
+			.map(p -> p.getUser().getId()).collect(Collectors.toSet());
+		return page.map(p -> AdminUserSummary.from(p,
+				investors.contains(p.getUser().getId()) ? UserKind.INVESTOR : UserKind.EMPLOYEE));
 	}
 
 	@Transactional(readOnly = true)
 	public AdminUserDetail detail(UUID userId) {
 		UserProfile profile = profiles.findByUserId(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-		return AdminUserDetail.from(profile);
+		boolean investor = profiles.count((root, query, cb) -> cb.and(
+				cb.equal(root.get("user").get("id"), userId), investor(root.get("user"), query, cb))) > 0;
+		return AdminUserDetail.from(profile, investor ? UserKind.INVESTOR : UserKind.EMPLOYEE);
 	}
 
 	/** One account; with {@code investorsOnly}, a staff account is not found. */
@@ -151,8 +163,11 @@ public class UserAdministrationService {
 				Path<Instant> verifiedAt = user.get("emailVerifiedAt");
 				predicates.add(criteria.emailVerified() ? cb.isNotNull(verifiedAt) : cb.isNull(verifiedAt));
 			}
-			if (criteria.investorsOnly()) {
+			if (criteria.investorsOnly() || criteria.kind() == UserKind.INVESTOR) {
 				predicates.add(investor(user, query, cb));
+			}
+			else if (criteria.kind() == UserKind.EMPLOYEE) {
+				predicates.add(cb.not(investor(user, query, cb)));
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};

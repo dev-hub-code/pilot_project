@@ -21,11 +21,12 @@ export function DataTable({ columns, children, className = "" }: { columns: read
   );
 }
 
-export function Cell({ children, className = "", label }: { children: ReactNode; className?: string; label?: string }) {
+/** {@code wrap}: the cell's text may wrap onto more lines (long titles, notes), so the table fits the page. */
+export function Cell({ children, className = "", label, wrap = false }: { children: ReactNode; className?: string; label?: string; wrap?: boolean }) {
   // The inner element is `display: contents` on wider screens (no box: the cell lays out as before) and one block on
   // phones, so a cell's mixed content stays together beside its label.
   return (
-    <td data-label={label || undefined} className={`whitespace-nowrap px-4 py-3 ${className}`}>
+    <td data-label={label || undefined} className={`${wrap ? "whitespace-normal" : "whitespace-nowrap"} px-4 py-3 ${className}`}>
       <div className="data-table-value">{children}</div>
     </td>
   );

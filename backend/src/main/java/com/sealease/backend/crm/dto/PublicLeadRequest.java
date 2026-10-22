@@ -20,10 +20,10 @@ public record PublicLeadRequest(
 		@NotBlank @Size(max = 100) String firstName,
 		@Size(max = 100) String lastName,
 		@NotBlank @Email @Size(max = 254) String email,
-		@Size(max = 30) String phone,
-		/** The country the phone number was typed in; India when not given. */
-		@IsoCountry String phoneCountry,
-		@IsoCountry String country,
+		@NotBlank(message = "Enter your phone number") @Size(max = 30) String phone,
+		/** The country the phone number was typed in. */
+		@NotBlank(message = "Choose the phone number's country") @IsoCountry String phoneCountry,
+		@NotBlank(message = "Choose your country") @IsoCountry String country,
 		@NotNull LeadInterest interest,
 		@Size(max = 2000) String message,
 		@NotNull @AssertTrue(message = "is required to contact you") Boolean consent,

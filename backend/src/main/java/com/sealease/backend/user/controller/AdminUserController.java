@@ -6,6 +6,7 @@ import com.sealease.backend.permission.PermissionCode;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.user.dto.AdminUserDetail;
 import com.sealease.backend.user.dto.AdminUserSummary;
+import com.sealease.backend.user.dto.UserKind;
 import com.sealease.backend.user.dto.UserSearchCriteria;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserStatus;
@@ -43,9 +44,10 @@ public class AdminUserController {
 			@RequestParam(required = false) UserStatus status,
 			@RequestParam(required = false) KycStatus kycStatus,
 			@RequestParam(required = false) Boolean emailVerified,
+			@RequestParam(required = false) UserKind kind,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
 			AuthenticatedUser viewer) {
-		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, emailVerified, investorsOnly(viewer)),
+		return PageResponse.from(administration.search(new UserSearchCriteria(q, status, kycStatus, emailVerified, kind, investorsOnly(viewer)),
 				pageable));
 	}
 
