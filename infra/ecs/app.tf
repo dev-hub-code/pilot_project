@@ -123,8 +123,8 @@ resource "aws_ecs_task_definition" "backend" {
     environment  = [for k, v in local.backend_environment : { name = k, value = v }]
     secrets      = local.backend_secrets
     healthCheck = {
-      # No curl in the image: ask the liveness probe over bash's /dev/tcp.
-      command     = ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/liveness HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      # No curl in the image: ask the liveness probe over bash's /dev/tcp (the image's /bin/sh has none).
+      command     = ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/liveness HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
       interval    = 15
       timeout     = 5
       retries     = 3
