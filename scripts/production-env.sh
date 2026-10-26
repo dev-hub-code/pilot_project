@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates .secrets/production.env (git-ignored): the production API's settings and secrets, with fresh JWT and
-# field-encryption keys, the Lightsail database from infra/lightsail, and the SMTP settings from .env.
+# field-encryption keys, and the Lightsail database and SES email from infra/lightsail.
 # Run once. BACK THE FILE UP (e.g. in a password manager): without its encryption keys the KYC documents, tax ids and
 # bank accounts in the database can never be read again. It refuses to overwrite an existing file.
 set -euo pipefail
@@ -10,10 +10,8 @@ if [[ -e "$out" ]]; then
   echo "$out already exists; not overwriting its keys." >&2
   exit 1
 fi
-mail() { grep -E "^$1=" .env | head -1 | cut -d= -f2-; }
-for key in MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_PASSWORD; do
-  [[ -n "$(mail $key)" ]] || { echo "Set $key in .env first (the production site sends email through it)." >&2; exit 1; }
-done
+tf() { terraform -chdir=infra/lightsail output -raw "$@"; }
+smtp() { terraform -chdir=infra/lightsail output -json smtp | jq -r ".$1"; }
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -25,9 +23,9 @@ mkdir -p .secrets
 umask 077
 cat > "$out" <<ENV
 SPRING_PROFILES_ACTIVE=prod
-DB_URL=$(terraform -chdir=infra/lightsail output -raw database_url)
+DB_URL=$(tf database_url)
 DB_USERNAME=sealease
-DB_PASSWORD=$(terraform -chdir=infra/lightsail output -raw database_password)
+DB_PASSWORD=$(tf database_password)
 JWT_ISSUER=https://sealease.in
 JWT_AUDIENCE=sealease-api
 JWT_PRIVATE_KEY_LOCATION=base64:$(base64 -w0 "$work/jwt-private.pem")
@@ -39,10 +37,11 @@ APP_KAFKA_CREATETOPICS=true
 APP_PUBLIC_URL=https://www.sealease.in
 APP_CORS_ALLOWED_ORIGINS=https://www.sealease.in
 APP_NOTIFICATION_EMAIL_ENABLED=true
-MAIL_HOST=$(mail MAIL_HOST)
-MAIL_PORT=$(mail MAIL_PORT)
-MAIL_USERNAME=$(mail MAIL_USERNAME)
-MAIL_PASSWORD=$(mail MAIL_PASSWORD)
+APP_NOTIFICATION_EMAIL_FROM=SeaLease <no-reply@sealease.in>
+MAIL_HOST=$(smtp host)
+MAIL_PORT=$(smtp port)
+MAIL_USERNAME=$(smtp username)
+MAIL_PASSWORD=$(tf smtp_password)
 MAIL_SMTP_AUTH=true
 MAIL_SMTP_STARTTLS=true
 INVOICE_ISSUER_NAME=Leasefleet Solutions Pvt. Ltd.

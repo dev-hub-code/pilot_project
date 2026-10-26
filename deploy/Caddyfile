@@ -3,8 +3,6 @@
 # the API for rate limits and audit records.
 {
 	email admin@sealease.in
-	# Browsers send no server name for an IP address; present the IP's certificate then (temporary, see below).
-	default_sni 52.62.97.231
 }
 
 www.sealease.in {
@@ -14,12 +12,4 @@ www.sealease.in {
 
 sealease.in {
 	redir https://www.sealease.in{uri} permanent
-}
-
-# Temporary: the site at the server's IP until the domain resolves. The certificate is Caddy's own (browsers warn);
-# HTTPS is still needed because the sign-in cookies are Secure. Remove once www.sealease.in works.
-https://52.62.97.231 {
-	tls internal
-	encode zstd gzip
-	reverse_proxy frontend:3000
 }
