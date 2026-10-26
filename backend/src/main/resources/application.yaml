@@ -188,6 +188,11 @@ app:
     fingerprint-key: ${APP_CRYPTO_FINGERPRINT_KEY}
   documents:
     max-file-size: 5MB
+    s3:
+      # New documents' encrypted bytes go to this bucket (credentials: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+      # Blank keeps them in the database, as in local development and the tests.
+      bucket: ${APP_DOCUMENTS_S3_BUCKET:}
+      region: ${APP_DOCUMENTS_S3_REGION:ap-southeast-2}
   bootstrap:
     super-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:}

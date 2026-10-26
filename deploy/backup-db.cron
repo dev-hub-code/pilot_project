@@ -1,0 +1,2 @@
+# Installed as /etc/cron.d/sealease-backup by scripts/deploy.sh. Every night at 02:00 IST (20:30 UTC).
+30 20 * * * root /opt/sealease/backup-db.sh >> /var/log/sealease-backup.log 2>&1

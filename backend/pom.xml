@@ -19,9 +19,42 @@
 		<springdoc.version>3.1.1</springdoc.version>
 		<bouncycastle.version>1.86</bouncycastle.version>
 		<jasperreports.version>7.0.8</jasperreports.version>
+		<awssdk.version>2.55.16</awssdk.version>
 	</properties>
 
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${awssdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
+		<!-- Document storage in S3 (app.documents.s3.bucket), over the small URLConnection HTTP client (no Netty or Apache). -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>url-connection-client</artifactId>
+		</dependency>
+
 		<!-- Web / API -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

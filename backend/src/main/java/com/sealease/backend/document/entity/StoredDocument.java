@@ -38,9 +38,13 @@ public class StoredDocument {
 	@Column(name = "sha256", nullable = false, length = 64)
 	private String sha256;
 
-	/** Encrypted bytes. Documents are only ever loaded individually, never in lists. */
-	@Column(name = "content", nullable = false)
+	/** Encrypted bytes, when kept in the database. Documents are only ever loaded individually, never in lists. */
+	@Column(name = "content")
 	private byte[] content;
+
+	/** The S3 object holding the encrypted bytes, when kept in S3 (exactly one of this and content is set). */
+	@Column(name = "storage_key", length = 200)
+	private String storageKey;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -49,13 +53,14 @@ public class StoredDocument {
 	}
 
 	public StoredDocument(UUID ownerUserId, DocumentPurpose purpose, String contentType, int sizeBytes, String sha256,
-			byte[] content, Instant createdAt) {
+			byte[] content, String storageKey, Instant createdAt) {
 		this.ownerUserId = ownerUserId;
 		this.purpose = purpose;
 		this.contentType = contentType;
 		this.sizeBytes = sizeBytes;
 		this.sha256 = sha256;
 		this.content = content;
+		this.storageKey = storageKey;
 		this.createdAt = createdAt;
 	}
 
@@ -85,6 +90,10 @@ public class StoredDocument {
 
 	public byte[] getContent() {
 		return content;
+	}
+
+	public String getStorageKey() {
+		return storageKey;
 	}
 
 }

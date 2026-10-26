@@ -7,6 +7,8 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.document.entity.DocumentPurpose;
 import com.sealease.backend.document.entity.StoredDocument;
 import com.sealease.backend.document.repository.StoredDocumentRepository;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,12 +21,15 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
  * Encrypted document storage. File type is decided from the file's magic bytes, never from the
  * client-supplied name or Content-Type, and only PDF, JPEG and PNG are accepted. Each file is
  * encrypted with a context bound to its owner and purpose, and its SHA-256 is checked on read.
+ * The encrypted bytes go to the S3 bucket when one is configured ({@code app.documents.s3.bucket}),
+ * otherwise into the database; documents stored either way stay readable.
  */
 @Service
 @EnableConfigurationProperties(DocumentProperties.class)
@@ -38,13 +43,29 @@ public class DocumentService {
 	private final FieldEncryptor encryptor;
 	private final DocumentProperties properties;
 	private final Clock clock;
+	private final S3DocumentStore s3;
 
+	@Autowired
 	public DocumentService(StoredDocumentRepository documents, FieldEncryptor encryptor, DocumentProperties properties,
 			Clock clock) {
+		this(documents, encryptor, properties, clock,
+				properties.s3().enabled() ? new S3DocumentStore(properties.s3()) : null);
+	}
+
+	DocumentService(StoredDocumentRepository documents, FieldEncryptor encryptor, DocumentProperties properties,
+			Clock clock, S3DocumentStore s3) {
 		this.documents = documents;
 		this.encryptor = encryptor;
 		this.properties = properties;
 		this.clock = clock;
+		this.s3 = s3;
+	}
+
+	@PreDestroy
+	void close() {
+		if (s3 != null) {
+			s3.close();
+		}
 	}
 
 	@Transactional(propagation = Propagation.MANDATORY)
@@ -66,9 +87,15 @@ public class DocumentService {
 			throw invalid(purpose, "must be a PDF, JPEG or PNG file");
 		}
 		byte[] encrypted = encryptor.encryptBytes(bytes, context(ownerUserId, purpose));
+		String key = null;
+		if (s3 != null) {
+			// Uploaded before the row is saved: if saving fails, an unreferenced (encrypted) object is all that is left.
+			key = purpose.name().toLowerCase(Locale.ROOT) + "/" + UUID.randomUUID();
+			s3.put(key, encrypted);
+		}
 		// Flushed so rows referencing it by id (e.g. kyc_documents) can be inserted safely.
 		StoredDocument saved = documents.saveAndFlush(new StoredDocument(ownerUserId, purpose, contentType, bytes.length,
-				sha256(bytes), encrypted, clock.instant()));
+				sha256(bytes), key == null ? encrypted : null, key, clock.instant()));
 		return saved.getId();
 	}
 
@@ -76,13 +103,23 @@ public class DocumentService {
 	public DocumentContent load(UUID documentId) {
 		StoredDocument document = documents.findById(documentId)
 			.orElseThrow(() -> new ResourceNotFoundException("Document", documentId));
-		byte[] bytes = encryptor.decryptBytes(document.getContent(),
+		byte[] bytes = encryptor.decryptBytes(encryptedBytes(document),
 				context(document.getOwnerUserId(), document.getPurpose()));
 		if (!sha256(bytes).equals(document.getSha256())) {
 			throw new IllegalStateException("Integrity check failed for document " + documentId);
 		}
 		return new DocumentContent(document.getId(), document.getOwnerUserId(), document.getPurpose(),
 				document.getContentType(), bytes);
+	}
+
+	private byte[] encryptedBytes(StoredDocument document) {
+		if (document.getStorageKey() == null) {
+			return document.getContent();
+		}
+		if (s3 == null) {
+			throw new IllegalStateException("Document " + document.getId() + " is in S3, but no bucket is configured");
+		}
+		return s3.get(document.getStorageKey());
 	}
 
 	public static String detectContentType(byte[] bytes) {
