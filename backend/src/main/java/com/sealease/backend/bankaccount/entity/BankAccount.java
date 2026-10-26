@@ -42,13 +42,6 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "routing_code_encrypted", nullable = false, updatable = false, columnDefinition = "TEXT")
 	private String routingCodeEncrypted;
 
-	/** The bank and branch the IFSC belongs to, from the online directory when the account was added; null if unchecked. */
-	@Column(name = "ifsc_bank", length = 140)
-	private String ifscBank;
-
-	@Column(name = "ifsc_branch", length = 400)
-	private String ifscBranch;
-
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 25)
 	private BankAccountStatus status;
@@ -230,18 +223,5 @@ public class BankAccount extends BaseEntity {
 		return replacesAccountId;
 	}
 
-	/** Records where the IFSC was found in the directory. */
-	public void locatedAt(String bank, String branch) {
-		this.ifscBank = bank;
-		this.ifscBranch = branch;
-	}
-
-	public String getIfscBank() {
-		return ifscBank;
-	}
-
-	public String getIfscBranch() {
-		return ifscBranch;
-	}
 
 }

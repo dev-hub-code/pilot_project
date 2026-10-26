@@ -222,12 +222,6 @@ app:
       after: ${APP_KYC_FOLLOW_UP_AFTER:24h}
       # How often investors are checked for one.
       interval: ${APP_KYC_FOLLOW_UP_INTERVAL:15m}
-  bank-accounts:
-    # Indian accounts' IFSC codes are checked against the online directory of bank branches (only the code is sent).
-    ifsc-lookup:
-      enabled: ${APP_IFSC_LOOKUP_ENABLED:true}
-      base-url: ${APP_IFSC_LOOKUP_URL:https://ifsc.razorpay.com}
-      timeout: 5s
   crm:
     # Public interest form: submissions accepted per client IP.
     public-form-per-ip: { requests: 5, window: 1h }

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { IfscDetails } from "@/features/admin/ifsc-details";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -144,7 +143,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                           <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
                         </span>
                       </div>
-                      <IfscDetails ifsc={ifsc} bankName={account.bankName} country={account.country} />
+                      <p className="text-sm"><span className="text-muted">IFSC</span> <span className="font-mono">{ifsc.code}</span></p>
                       {otherUsersWithSameAccount > 0 && (
                         <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
                           Warning: this account is also registered by {otherUsersWithSameAccount} other user(s).

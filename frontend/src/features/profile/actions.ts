@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { isInvestor } from "@/lib/permissions";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { getOnboarding } from "@/lib/server/onboarding";
-import type { IfscLookup, KycSubmission } from "@/types/user";
+import type { KycSubmission } from "@/types/user";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { bankAccountSchema, kycNumberSchema, MAX_FILE_BYTES, profileSchema } from "@/validators/profile";
@@ -118,27 +118,9 @@ function bankAccountUpload(formData: FormData): { upload: FormData } | { state: 
   return { upload };
 }
 
-/** Where an IFSC code belongs, for the bank account form to show as it is typed. */
-export async function lookupIfscAction(typed: string): Promise<IfscLookup> {
-  const code = typed.trim().toUpperCase();
-  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) return { status: "NOT_FOUND", bank: null, branch: null };
-  try {
-    return await authFetch<IfscLookup>(`/api/v1/users/me/bank-accounts/ifsc/${encodeURIComponent(code)}`);
-  } catch {
-    return { status: "UNAVAILABLE", bank: null, branch: null };
-  }
-}
-
-const IFSC_NOT_FOUND = "This IFSC code is not in the RBI list of bank branches. Check it on your cheque book or bank statement";
-
 export async function addBankAccountAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const prepared = bankAccountUpload(formData);
   if ("state" in prepared) return prepared.state;
-  // Indian IFSC codes are checked online; the backend refuses an unknown one too, this puts the error on the field.
-  const routingCode = String(formData.get("routingCode") ?? "");
-  if (formData.get("country") === "IN" && (await lookupIfscAction(routingCode)).status === "NOT_FOUND") {
-    return { fieldErrors: { routingCode: IFSC_NOT_FOUND }, values: text(formData, "bankName", "country", "routingCode", "proofType") };
-  }
   try {
     await authFetch("/api/v1/users/me/bank-accounts", { method: "POST", formData: prepared.upload });
   } catch (error) {

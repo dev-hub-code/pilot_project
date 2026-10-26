@@ -27,10 +27,6 @@ app:
     # Most tests sign up and use the account at once; email verification has its own test.
     email-verification:
       required: false
-  bank-accounts:
-    # No network in tests: IFSC codes are checked by format only (IfscDirectoryTest covers the lookup).
-    ifsc-lookup:
-      enabled: false
   crm:
     # Integration tests submit the interest form from one address.
     public-form-per-ip: { requests: 10000, window: 1m }

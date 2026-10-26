@@ -12,12 +12,8 @@ import java.util.UUID;
 public record AdminBankAccountResponse(UUID userId, BankAccountResponse account, UUID reviewedBy,
 		long otherUsersWithSameAccount, BankAccountResponse replaces, Assignee assignee, Ifsc ifsc) {
 
-	/**
-	 * The account's IFSC and where the online directory placed it when the account was added ({@code bank} and
-	 * {@code branch} null when it could not be checked then). {@code bankMatches} is false when the bank name the
-	 * investor typed is not the directory's bank: worth a look before verifying.
-	 */
-	public record Ifsc(String code, String bank, String branch, boolean bankMatches) {
+	/** The account's IFSC, for the reviewer to check against the proof. */
+	public record Ifsc(String code) {
 	}
 
 }

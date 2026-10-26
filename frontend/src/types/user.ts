@@ -120,18 +120,8 @@ export interface AdminBankAccount {
   /** The account a change request would retire once verified. */
   replaces: BankAccount | null;
   assignee: Assignee | null;
-  /**
-   * The account's IFSC and where the online directory of bank branches placed it when the account was added (bank and
-   * branch null when it could not be checked). bankMatches is false when the bank name typed is not the directory's.
-   */
-  ifsc: { code: string; bank: string | null; branch: string | null; bankMatches: boolean };
-}
-
-/** An IFSC code looked up in the online directory of bank branches (bank and branch set when FOUND). */
-export interface IfscLookup {
-  status: "FOUND" | "NOT_FOUND" | "UNAVAILABLE";
-  bank: string | null;
-  branch: string | null;
+  /** The account's IFSC, for the reviewer to check against the proof. */
+  ifsc: { code: string };
 }
 
 export interface AdminUserSummary {

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { IfscDetails } from "@/features/admin/ifsc-details";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -50,7 +49,7 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                   <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
                 </div>
               </div>
-              <IfscDetails ifsc={ifsc} bankName={account.bankName} country={account.country} />
+              <p className="text-sm"><span className="text-muted">IFSC</span> <span className="font-mono">{ifsc.code}</span></p>
               {replaces && (
                 <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
                   Replaces <span className="font-medium">{replaces.bankName}</span>{" "}
