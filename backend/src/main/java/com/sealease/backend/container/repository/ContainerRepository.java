@@ -18,6 +18,9 @@ public interface ContainerRepository extends JpaRepository<Container, UUID>, Jpa
 
 	boolean existsByContainerNumber(String containerNumber);
 
+	@Query(value = "select nextval('container_serial_seq')", nativeQuery = true)
+	long nextSerial();
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select c from Container c where c.id = :id")
 	Optional<Container> findByIdForUpdate(@Param("id") UUID id);

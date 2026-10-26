@@ -4,6 +4,7 @@ import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.container.service.ContainerAllocationService;
 import com.sealease.backend.earning.service.RentCreditSettingsService;
 import com.sealease.backend.investment.dto.HoldingResponse;
 import com.sealease.backend.investment.service.HoldingService;
@@ -26,7 +27,8 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
- * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number, once a finance member
+ * Finance assigns a container to each paid investment (CONTAINER_ASSIGN) by typing its number (or generating a new
+ * one), once a finance member
  * has taken the task (only they may then assign it). Assigning leases the
  * container to the investor and issues the lease agreement (in the wording admins maintain); the investor is notified
  * and starts the lease, and the payouts, by accepting it.
@@ -40,12 +42,15 @@ public class ContainerAssignmentService {
 	private final NotificationService notifications;
 	private final LeaseAgreementIssuer agreements;
 	private final RentCreditSettingsService credits;
+	private final ContainerAllocationService containers;
 	private final Clock clock;
 
 	public ContainerAssignmentService(HoldingService holdings,
 			OrderService orders, UserAccountService accounts, NotificationService notifications,
-			LeaseAgreementIssuer agreements, RentCreditSettingsService credits, Clock clock) {
+			LeaseAgreementIssuer agreements, RentCreditSettingsService credits, ContainerAllocationService containers,
+			Clock clock) {
 		this.holdings = holdings;
+		this.containers = containers;
 		this.credits = credits;
 		this.agreements = agreements;
 		this.orders = orders;
@@ -93,6 +98,11 @@ public class ContainerAssignmentService {
 				MoneyResponse.from(a.amount()), a.tenureMonths(), a.paidAt(),
 				assignee == null ? null : new Assignee(assignee.id(),
 						(assignee.firstName() + " " + assignee.lastName()).strip(), a.taskAssignedAt()));
+	}
+
+	/** A new container number for finance to assign, instead of typing one in. */
+	public String generateContainerNumber() {
+		return containers.generateNumber();
 	}
 
 	@Transactional(readOnly = true)

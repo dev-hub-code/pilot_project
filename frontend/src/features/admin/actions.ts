@@ -102,6 +102,17 @@ export async function releaseContainerTaskAction(holdingId: string): Promise<For
     "/admin/container-assignments");
 }
 
+/** A new container number (ISO 6346, with its check digit) for finance to assign instead of typing one in. */
+export async function generateContainerNumberAction(): Promise<{ containerNumber?: string; error?: string }> {
+  try {
+    const { containerNumber } = await authFetch<{ containerNumber: string }>(
+      "/api/v1/admin/container-assignments/container-numbers", { method: "POST" });
+    return { containerNumber };
+  } catch (error) {
+    return { error: failureState(error).error ?? "Could not generate a container number" };
+  }
+}
+
 /** Assigns the container finance typed in to a paid investment, which starts its lease and payouts today. */
 export async function assignContainerAction(holdingId: string, _state: FormState, formData: FormData): Promise<FormState> {
   const values = {

@@ -3,6 +3,7 @@ package com.sealease.backend.order.controller;
 import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.order.dto.AssignContainerRequest;
 import com.sealease.backend.order.dto.ContainerAssignmentQueue;
+import com.sealease.backend.order.dto.GeneratedContainerNumber;
 import com.sealease.backend.order.service.ContainerAssignmentService;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -47,6 +48,12 @@ public class AdminContainerAssignmentController {
 	@PostMapping("/{holdingId}/release")
 	public ContainerAssignmentQueue.Pending release(AuthenticatedUser actor, @PathVariable UUID holdingId) {
 		return assignments.release(actor.userId(), holdingId);
+	}
+
+	/** A new ISO 6346 container number to assign; it is recorded only when a container is assigned under it. */
+	@PostMapping("/container-numbers")
+	public GeneratedContainerNumber generateContainerNumber() {
+		return new GeneratedContainerNumber(assignments.generateContainerNumber());
 	}
 
 	@PostMapping("/{holdingId}")

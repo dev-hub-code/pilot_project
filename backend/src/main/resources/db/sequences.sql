@@ -5,6 +5,8 @@
 
 CREATE SEQUENCE IF NOT EXISTS agreement_number_seq;
 CREATE SEQUENCE IF NOT EXISTS investment_product_code_seq START WITH 10001;
+-- Serials of generated container numbers; the demo stock uses 1xxxxx.
+CREATE SEQUENCE IF NOT EXISTS container_serial_seq START WITH 200001;
 CREATE SEQUENCE IF NOT EXISTS invoice_number_seq;
 CREATE SEQUENCE IF NOT EXISTS lead_number_seq;
 CREATE SEQUENCE IF NOT EXISTS order_number_seq START WITH 100001;

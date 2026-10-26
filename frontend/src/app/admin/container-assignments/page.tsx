@@ -4,7 +4,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { assignContainerAction, releaseContainerTaskAction, takeContainerTaskAction } from "@/features/admin/actions";
+import {
+  assignContainerAction, generateContainerNumberAction, releaseContainerTaskAction, takeContainerTaskAction,
+} from "@/features/admin/actions";
 import { AssignContainerForm } from "@/features/admin/assign-container-form";
 import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
@@ -52,7 +54,7 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
   return (
     <div className="space-y-6">
       <PageHeader title="Assign containers"
-        description="Paid investments waiting for a container, oldest first. Assign one to yourself, then type the number of the container you are assigning; the investor\u2019s lease starts at the next full hour and rent is credited every hour from then, and they are notified." />
+        description="Paid investments waiting for a container, oldest first. Assign one to yourself, then type the number of the container you are assigning (or generate a new one); the investor\u2019s lease starts at the next full hour and rent is credited every hour from then, and they are notified." />
       {queue.pending.content.length === 0 ? (
         <EmptyState title="Nothing to assign" description="Every paid investment has its container." />
       ) : (
@@ -82,7 +84,8 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
                 <ReviewAssignment assignee={p.assignee} viewerId={session.userId}
                   assign={takeContainerTaskAction.bind(null, p.holdingId)}
                   unassign={releaseContainerTaskAction.bind(null, p.holdingId)}>
-                  <AssignContainerForm action={assignContainerAction.bind(null, p.holdingId)} investorName={name}
+                  <AssignContainerForm action={assignContainerAction.bind(null, p.holdingId)} generate={generateContainerNumberAction}
+                    investorName={name}
                     typeLabel={CONTAINER_TYPE_LABEL[p.containerType]} />
                 </ReviewAssignment>
               </li>

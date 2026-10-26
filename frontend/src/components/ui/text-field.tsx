@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type InputHTMLAttributes } from "react";
+import { useState, type InputHTMLAttributes, type Ref } from "react";
 
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   name: string;
   error?: string;
+  /** Passed on to the input. */
+  ref?: Ref<HTMLInputElement>;
 }
 
 export function TextField({ label, name, error, id, type, ...props }: TextFieldProps) {

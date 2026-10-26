@@ -197,6 +197,9 @@ app:
     super-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  containers:
+    # Owner code (3 letters) of the ISO 6346 container numbers finance generates when assigning a container.
+    owner-code: ${APP_CONTAINER_OWNER_CODE:SLS}
   money:
     default-currency: ${APP_DEFAULT_CURRENCY:INR}
   security:

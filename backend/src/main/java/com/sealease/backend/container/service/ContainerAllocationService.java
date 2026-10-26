@@ -24,10 +24,35 @@ import java.util.UUID;
 @Service
 public class ContainerAllocationService {
 
-	private final ContainerRepository containers;
+	/** ISO 6346 serials are 6 digits. */
+	private static final long MAX_SERIAL = 999_999;
 
-	public ContainerAllocationService(ContainerRepository containers) {
+	private final ContainerRepository containers;
+	private final ContainerProperties properties;
+
+	public ContainerAllocationService(ContainerRepository containers, ContainerProperties properties) {
 		this.containers = containers;
+		this.properties = properties;
+	}
+
+	/**
+	 * A new ISO 6346 container number (owner code + U + the next serial + check digit) for finance to assign. Each call
+	 * takes a serial no other call gets; numbers already recorded (typed in by hand) are skipped. The number is only
+	 * recorded once it is assigned.
+	 */
+	@Transactional
+	public String generateNumber() {
+		while (true) {
+			long serial = containers.nextSerial();
+			if (serial > MAX_SERIAL) {
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Every " + properties.ownerCode()
+						+ " container number has been used; type the container number in");
+			}
+			String number = ContainerNumbers.withCheckDigit(properties.ownerCode() + "U" + "%06d".formatted(serial));
+			if (!containers.existsByContainerNumber(number)) {
+				return number;
+			}
+		}
 	}
 
 	/**

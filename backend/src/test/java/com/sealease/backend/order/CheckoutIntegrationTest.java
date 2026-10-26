@@ -1,6 +1,7 @@
 package com.sealease.backend.order;
 
 import com.jayway.jsonpath.JsonPath;
+import com.sealease.backend.container.service.ContainerNumbers;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.outbox.OutboxRelay;
 import com.sealease.backend.outbox.ProcessedEvents;
@@ -349,6 +350,18 @@ class CheckoutIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.pending.content[?(@.orderId == '%s')].investorEmail".formatted(orderId))
 				.value(containsInAnyOrder(investor.email(), investor.email())));
+
+		// Or generates one: a valid ISO 6346 number under the company's owner code, never the same twice.
+		mvc.perform(post("/api/v1/admin/container-assignments/container-numbers").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isForbidden());
+		List<String> generated = new ArrayList<>();
+		for (int i = 0; i < 2; i++) {
+			generated.add(JsonPath.read(mvc.perform(post("/api/v1/admin/container-assignments/container-numbers")
+					.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString(), "$.containerNumber"));
+		}
+		assertThat(generated).allMatch(n -> n.startsWith("SLSU") && ContainerNumbers.isValid(n)).doesNotHaveDuplicates();
 
 		// Finance types each container's number: validated, of the plan's type, and not already leased.
 		String first = OfferingFixtures.containerNumber();
