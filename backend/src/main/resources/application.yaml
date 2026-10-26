@@ -173,12 +173,13 @@ app:
       link-ttl: ${APP_EMAIL_VERIFICATION_LINK_TTL:24h}
       # Wrong 6-digit codes allowed per email; then the user asks for a new one.
       max-code-attempts: 5
+      # Sender and link address of the verification and password-reset emails: the same as notifications'.
+      from: ${app.notifications.email.from}
+      app-url: ${app.notifications.email.app-url}
     password-reset:
       # A forgot-password code works this long, and stops after this many wrong guesses.
       code-ttl: ${APP_PASSWORD_RESET_CODE_TTL:15m}
       max-attempts: 5
-      from: ${app.notifications.email.from}
-      app-url: ${app.notifications.email.app-url}
   crypto:
     # Field-level AES-256-GCM keys, "keyId:base64Key[,keyId:base64Key...]". Generate with
     # scripts/generate-encryption-keys.sh. Keep retired keys listed so old data stays readable.
