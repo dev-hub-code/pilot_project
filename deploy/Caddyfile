@@ -3,6 +3,8 @@
 # the API for rate limits and audit records.
 {
 	email admin@sealease.in
+	# Browsers send no server name for an IP address; present the IP's certificate then (temporary, see below).
+	default_sni 52.62.97.231
 }
 
 www.sealease.in {
