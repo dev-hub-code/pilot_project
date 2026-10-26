@@ -21,16 +21,26 @@ public interface RentAccrualRepository extends JpaRepository<RentAccrual, UUID>,
 	@Query("select a from RentAccrual a where a.id = :id")
 	Optional<RentAccrual> findByIdForUpdate(@Param("id") UUID id);
 
-	/** Leases with at least one whole hour (ended by {@code hour}) still to credit. */
+	/**
+	 * Leases with at least one whole hour (ended by {@code hour}) still to credit, of active accounts: a suspended or
+	 * disabled investor's rent is held back, and credited from where it stopped once the account is active again.
+	 */
 	@Query("""
 			select a.id from RentAccrual a
 			where a.completedAt is null and a.creditedUntil < :hour
+			  and exists (select u.id from User u where u.id = a.userId
+			              and u.status = com.sealease.backend.user.entity.UserStatus.ACTIVE)
 			order by a.creditedUntil, a.id
 			""")
 	List<UUID> findUncreditedIds(@Param("hour") Instant hour, Pageable limit);
 
-	/** Leases with hours ended by {@code hour} and not credited yet. */
-	@Query("select a from RentAccrual a where a.completedAt is null and a.creditedUntil < :hour")
+	/** Leases of active accounts with hours ended by {@code hour} and not credited yet (held-back rent is not due). */
+	@Query("""
+			select a from RentAccrual a
+			where a.completedAt is null and a.creditedUntil < :hour
+			  and exists (select u.id from User u where u.id = a.userId
+			              and u.status = com.sealease.backend.user.entity.UserStatus.ACTIVE)
+			""")
 	List<RentAccrual> findBehind(@Param("hour") Instant hour);
 
 	List<RentAccrual> findByUserIdOrderByStartsAtAsc(UUID userId);

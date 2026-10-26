@@ -888,6 +888,33 @@ class UserManagementIntegrationTest {
 	}
 
 	@Test
+	void onlySuperAdminsDisableAndEnableAccounts() throws Exception {
+		Account investor = api.register();
+		Account admin = api.staff("ADMIN");
+		Account superAdmin = api.admin();
+
+		statusChange(admin, investor, "disable").andExpect(status().isForbidden());
+		statusChange(admin, investor, "suspend").andExpect(status().isOk());
+		// A suspended account can be disabled; it then stays disabled until a super administrator enables it.
+		statusChange(superAdmin, investor, "disable").andExpect(status().isOk())
+			.andExpect(jsonPath("$.summary.status").value("DISABLED"));
+		statusChange(admin, investor, "reactivate").andExpect(status().isUnprocessableEntity());
+		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isUnauthorized());
+		statusChange(admin, investor, "enable").andExpect(status().isForbidden());
+		statusChange(superAdmin, investor, "enable").andExpect(status().isOk())
+			.andExpect(jsonPath("$.summary.status").value("ACTIVE"));
+		assertThat(api.auditCount("USER_DISABLED", investor.id())).isEqualTo(1);
+		assertThat(api.auditCount("USER_ENABLED", investor.id())).isEqualTo(1);
+	}
+
+	private org.springframework.test.web.servlet.ResultActions statusChange(Account actor, Account user, String action)
+			throws Exception {
+		return mvc.perform(post("/api/v1/admin/users/{id}/" + action, user.id()).header(HttpHeaders.AUTHORIZATION, actor.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Test\"}"));
+	}
+
+	@Test
 	void userDirectorySearchAndFilters() throws Exception {
 		Account investor = api.register();
 		Account support = api.staff("SUPPORT");

@@ -19,7 +19,7 @@ export const ACTIONS_BY_CATEGORY: Record<AuditCategory, readonly string[]> = {
     "LOGIN", "LOGIN_FAILED", "ACCOUNT_LOCKED", "LOGOUT", "LOGOUT_ALL", "TOKEN_REFRESH_REUSE_DETECTED", "PASSWORD_CHANGE",
     "TEMPORARY_PASSWORD_ISSUED"],
   ACCESS_CONTROL: ["ROLE_CREATED", "ROLE_UPDATED", "ROLE_DELETED", "USER_ROLES_CHANGED", "STAFF_ACCOUNT_CREATED",
-    "USER_SUSPENDED", "USER_REACTIVATED", "INVESTOR_CLASSIFIED"],
+    "USER_SUSPENDED", "USER_REACTIVATED", "USER_DISABLED", "USER_ENABLED", "INVESTOR_CLASSIFIED"],
   SENSITIVE_DATA: ["KYC_DOCUMENT_VIEWED", "KYC_SUBMISSION_VIEWED", "BANK_ACCOUNT_PROOF_VIEWED", "TICKET_ATTACHMENT_VIEWED",
     "REPORT_GENERATED", "AUDIT_LOG_EXPORTED"],
   VERIFICATION: ["KYC_SUBMITTED", "KYC_DOCUMENT_UPLOADED", "KYC_APPROVED", "KYC_REJECTED", "BANK_ACCOUNT_ADDED",
@@ -78,7 +78,7 @@ export function actionLabel(action: string): string {
 /** The events that call for a look: shown in red or amber. */
 export function actionTone(action: string): "danger" | "warning" | "neutral" {
   if (action === "TOKEN_REFRESH_REUSE_DETECTED" || action === "ACCOUNT_LOCKED") return "danger";
-  if (action === "LOGIN_FAILED" || action === "USER_SUSPENDED" || action === "ROLE_DELETED") return "warning";
+  if (action === "LOGIN_FAILED" || action === "USER_SUSPENDED" || action === "USER_DISABLED" || action === "ROLE_DELETED") return "warning";
   return "neutral";
 }
 

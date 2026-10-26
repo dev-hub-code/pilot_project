@@ -63,7 +63,8 @@ import java.util.stream.Collectors;
  * run credits up to the last interval boundary that has passed, from where the lease was last credited, in one
  * balanced ledger transaction per calendar month it covers (unique per holding and starting instant), so monthly
  * statements add up exactly. Referral commission on those hours is paid with them. Once the lease end is credited the
- * holding matures and its container returns to inventory.
+ * holding matures and its container returns to inventory. A suspended or disabled investor's rent (and so the
+ * commission on it) is held back, and credited in full once the account is active again.
  */
 @Service
 public class PayoutService {

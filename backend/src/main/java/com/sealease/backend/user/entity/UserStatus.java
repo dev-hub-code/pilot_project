@@ -6,7 +6,7 @@ public enum UserStatus {
 	ACTIVE,
 	/** Temporarily blocked by an administrator; reversible. */
 	SUSPENDED,
-	/** Permanently closed. */
+	/** Closed by a super administrator; only a super administrator can enable it again. */
 	DISABLED
 
 }

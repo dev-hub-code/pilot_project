@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import {
+  disableUserAction,
+  enableUserAction,
   reactivateUserAction,
   assignBankAccountAction,
   rejectBankAccountAction,
@@ -225,13 +227,28 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           )}
           {can(Permission.USER_SUSPEND) && !isSelf && summary.status !== "DISABLED" && !fromBankVerification && (
             <Card title={summary.status === "ACTIVE" ? "Suspend account" : "Reactivate account"}
-              description={summary.status === "ACTIVE" ? "Signs the user out everywhere immediately." : undefined}>
+              description={summary.status === "ACTIVE"
+                ? "Signs the user out everywhere immediately. While suspended, their rent is held back (paid on reactivation) and they earn no referral commission."
+                : "Rent held back while suspended is credited at the next run."}>
               {summary.status === "ACTIVE" ? (
                 <ReasonForm action={suspendUserAction.bind(null, id)} label="Reason" submitLabel="Suspend"
                   confirm={`Suspend ${summary.email}? They will be signed out immediately.`} />
               ) : (
                 <ReasonForm action={reactivateUserAction.bind(null, id)} label="Reason" submitLabel="Reactivate"
                   variant="primary" />
+              )}
+            </Card>
+          )}
+          {can(Permission.USER_DISABLE) && !isSelf && !fromBankVerification && (
+            <Card title={summary.status === "DISABLED" ? "Enable account" : "Disable account"}
+              description={summary.status === "DISABLED"
+                ? "Lets the user sign in again. Rent held back while disabled is credited at the next run."
+                : "Super administrators only. Signs the user out, holds back their rent and stops their referral commission until enabled again."}>
+              {summary.status === "DISABLED" ? (
+                <ReasonForm action={enableUserAction.bind(null, id)} label="Reason" submitLabel="Enable" variant="primary" />
+              ) : (
+                <ReasonForm action={disableUserAction.bind(null, id)} label="Reason" submitLabel="Disable"
+                  confirm={`Disable ${summary.email}? They will be signed out and stop earning until enabled again.`} />
               )}
             </Card>
           )}

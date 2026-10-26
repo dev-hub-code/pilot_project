@@ -96,27 +96,48 @@ public class UserAdministrationService {
 		return detail(userId);
 	}
 
+	/**
+	 * Suspends an active account: it is signed out everywhere and, until reactivated, earns nothing - its rent is
+	 * held back (credited on reactivation) and the commission it would earn as an upline is forfeited.
+	 */
 	@Transactional
 	public AdminUserDetail suspend(UUID actorId, UUID userId, String reason) {
-		return changeStatus(actorId, userId, UserStatus.ACTIVE, UserStatus.SUSPENDED, reason, AuditAction.USER_SUSPENDED);
+		return changeStatus(actorId, userId, Set.of(UserStatus.ACTIVE), UserStatus.SUSPENDED, reason,
+				AuditAction.USER_SUSPENDED);
 	}
 
 	@Transactional
 	public AdminUserDetail reactivate(UUID actorId, UUID userId, String reason) {
-		return changeStatus(actorId, userId, UserStatus.SUSPENDED, UserStatus.ACTIVE, reason,
+		return changeStatus(actorId, userId, Set.of(UserStatus.SUSPENDED), UserStatus.ACTIVE, reason,
 				AuditAction.USER_REACTIVATED);
 	}
 
-	private AdminUserDetail changeStatus(UUID actorId, UUID userId, UserStatus from, UserStatus to, String reason,
-			AuditAction action) {
+	/** Disables an active or suspended account; it is then blocked as a suspended one is, until enabled. */
+	@Transactional
+	public AdminUserDetail disable(UUID actorId, UUID userId, String reason) {
+		return changeStatus(actorId, userId, Set.of(UserStatus.ACTIVE, UserStatus.SUSPENDED), UserStatus.DISABLED, reason,
+				AuditAction.USER_DISABLED);
+	}
+
+	/** Enables a disabled account again; the rent held back meanwhile is credited at the next run. */
+	@Transactional
+	public AdminUserDetail enable(UUID actorId, UUID userId, String reason) {
+		return changeStatus(actorId, userId, Set.of(UserStatus.DISABLED), UserStatus.ACTIVE, reason,
+				AuditAction.USER_ENABLED);
+	}
+
+	private AdminUserDetail changeStatus(UUID actorId, UUID userId, Set<UserStatus> allowed, UserStatus to,
+			String reason, AuditAction action) {
 		requireNotSelf(actorId, userId);
 		authorityGuard.requireActorCovers(actorId, userId);
 		UserProfile profile = profiles.findByUserIdForUpdate(userId)
 			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
 		User user = profile.getUser();
-		if (user.getStatus() != from) {
+		UserStatus from = user.getStatus();
+		if (!allowed.contains(from)) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Account is " + user.getStatus() + "; expected " + from);
+					"Account is " + from + "; expected " + allowed.stream().map(Enum::name).sorted()
+						.collect(Collectors.joining(" or ")));
 		}
 		user.changeStatus(to, reason.strip(), actorId, clock.instant());
 		audit.record(AuditRecord.of(actorId, action, "USER", userId)

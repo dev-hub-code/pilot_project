@@ -81,4 +81,18 @@ public class AdminUserController {
 		return forViewer(actor, administration.reactivate(actor.userId(), userId, request.reason()));
 	}
 
+	@PostMapping("/{userId}/disable")
+	@PreAuthorize("hasAuthority('USER_DISABLE')")
+	public AdminUserDetail disable(AuthenticatedUser actor, @PathVariable UUID userId,
+			@Valid @RequestBody ReasonRequest request) {
+		return forViewer(actor, administration.disable(actor.userId(), userId, request.reason()));
+	}
+
+	@PostMapping("/{userId}/enable")
+	@PreAuthorize("hasAuthority('USER_DISABLE')")
+	public AdminUserDetail enable(AuthenticatedUser actor, @PathVariable UUID userId,
+			@Valid @RequestBody ReasonRequest request) {
+		return forViewer(actor, administration.enable(actor.userId(), userId, request.reason()));
+	}
+
 }

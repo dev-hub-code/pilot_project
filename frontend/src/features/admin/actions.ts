@@ -32,6 +32,16 @@ export async function reactivateUserAction(userId: string, _p: FormState, formDa
     "Account reactivated.");
 }
 
+export async function disableUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  return withReason(`/api/v1/admin/users/${id(userId)}/disable`, formData, [`/admin/users/${userId}`],
+    "Account disabled; all sessions were signed out and its earnings are held back.");
+}
+
+export async function enableUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  return withReason(`/api/v1/admin/users/${id(userId)}/enable`, formData, [`/admin/users/${userId}`],
+    "Account enabled. Rent held back while it was disabled is credited at the next run.");
+}
+
 /** Takes a KYC review or bank-account verification, or gives it back: only the assignee may decide it. */
 async function assignment(path: string, success: string, revalidate: string): Promise<FormState> {
   try {

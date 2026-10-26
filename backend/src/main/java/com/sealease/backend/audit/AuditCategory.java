@@ -21,7 +21,8 @@ public enum AuditCategory {
 	ACCESS_CONTROL(EnumSet.of(AuditAction.ROLE_CREATED, AuditAction.ROLE_UPDATED, AuditAction.ROLE_DELETED,
 			AuditAction.ROLE_DASHBOARD_CARDS_CHANGED,
 			AuditAction.USER_ROLES_CHANGED, AuditAction.STAFF_ACCOUNT_CREATED, AuditAction.USER_SUSPENDED,
-			AuditAction.USER_REACTIVATED, AuditAction.INVESTOR_CLASSIFIED)),
+			AuditAction.USER_REACTIVATED, AuditAction.USER_DISABLED, AuditAction.USER_ENABLED,
+			AuditAction.INVESTOR_CLASSIFIED)),
 
 	/** Staff opening personal documents or taking data out of the platform. */
 	SENSITIVE_DATA(EnumSet.of(AuditAction.KYC_DOCUMENT_VIEWED, AuditAction.KYC_SUBMISSION_VIEWED,

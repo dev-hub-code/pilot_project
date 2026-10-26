@@ -183,6 +183,38 @@ class EarningsIntegrationTest {
 	}
 
 	@Test
+	void rentAndItsCommissionAreHeldBackWhileTheAccountIsBlockedAndPaidOnceEnabled() throws Exception {
+		Account referrer = investors.approvedInvestor();
+		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
+			.andReturn().getResponse().getContentAsString(), "$.code");
+		Account investor = investors.approve(api.register(code));
+		String orderId = investors.invest(investor, offerings.plan(), 1);
+		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
+		backdate(holding, 2);
+
+		// Disabled (a super administrator's action): no rent, so no commission on it, and nothing shown as due.
+		changeStatus(investor, "disable").andExpect(status().isOk());
+		payouts.creditDue();
+		assertThat(credits(holding)).isZero();
+		assertThat(referralBalance(referrer)).isEqualByComparingTo("0");
+		assertThat(payouts.due()).isEmpty();
+
+		// Enabled again: the rent held back is credited in full, with the commission on it.
+		changeStatus(investor, "enable").andExpect(status().isOk());
+		payouts.creditDue();
+		assertThat(jdbc.queryForObject("SELECT sum(rent_amount) FROM rent_credits WHERE holding_id = ?", BigDecimal.class,
+				holding)).isEqualByComparingTo("2000");
+		assertThat(referralBalance(referrer)).isEqualByComparingTo("2000");
+		assertLedgerBalanced();
+	}
+
+	private ResultActions changeStatus(Account user, String action) throws Exception {
+		return mvc.perform(post("/api/v1/admin/users/{id}/" + action, user.id())
+			.header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Test\"}"));
+	}
+
+	@Test
 	void financeCanRunDueRentNow() throws Exception {
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
