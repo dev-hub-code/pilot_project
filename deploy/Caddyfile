@@ -13,3 +13,11 @@ www.sealease.in {
 sealease.in {
 	redir https://www.sealease.in{uri} permanent
 }
+
+# Temporary: the site at the server's IP until the domain resolves. The certificate is Caddy's own (browsers warn);
+# HTTPS is still needed because the sign-in cookies are Secure. Remove once www.sealease.in works.
+https://52.62.97.231 {
+	tls internal
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
