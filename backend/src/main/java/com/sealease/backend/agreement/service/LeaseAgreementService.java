@@ -4,9 +4,11 @@ import com.sealease.backend.agreement.dto.AgreementPdf;
 import com.sealease.backend.agreement.dto.LeaseAgreementDocument;
 import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.agreement.entity.AgreementAcceptance;
+import com.sealease.backend.agreement.entity.AgreementReviewTask;
 import com.sealease.backend.agreement.entity.AgreementTemplate;
 import com.sealease.backend.agreement.entity.LeaseAgreement;
 import com.sealease.backend.agreement.repository.AgreementAcceptanceRepository;
+import com.sealease.backend.agreement.repository.AgreementReviewTaskRepository;
 import com.sealease.backend.agreement.repository.AgreementTemplateRepository;
 import com.sealease.backend.agreement.repository.LeaseAgreementRepository;
 import com.sealease.backend.audit.AuditAction;
@@ -58,6 +60,7 @@ public class LeaseAgreementService {
 	private final LeaseAgreementRepository agreements;
 	private final AgreementAcceptanceRepository acceptances;
 	private final AgreementTemplateRepository templates;
+	private final AgreementReviewTaskRepository reviewTasks;
 	private final AgreementTemplateService wording;
 	private final AgreementRenderer renderer;
 	private final UserProfileService profiles;
@@ -67,11 +70,12 @@ public class LeaseAgreementService {
 	private final Clock clock;
 
 	public LeaseAgreementService(LeaseAgreementRepository agreements, AgreementAcceptanceRepository acceptances,
-			AgreementTemplateRepository templates, AgreementTemplateService wording, AgreementRenderer renderer,
+			AgreementTemplateRepository templates, AgreementReviewTaskRepository reviewTasks, AgreementTemplateService wording, AgreementRenderer renderer,
 			UserProfileService profiles, InvoiceProperties company, DisplayTimeZone display, AuditService audit, Clock clock) {
 		this.agreements = agreements;
 		this.acceptances = acceptances;
 		this.templates = templates;
+		this.reviewTasks = reviewTasks;
 		this.wording = wording;
 		this.renderer = renderer;
 		this.profiles = profiles;
@@ -101,6 +105,8 @@ public class LeaseAgreementService {
 		LeaseAgreement agreement = agreements.saveAndFlush(new LeaseAgreement(number, facts.holdingId(), facts.orderId(),
 				facts.userId(), facts.containerNumber(), template.getId(), Placeholder.fill(template.getTitle(), values),
 				Placeholder.fill(template.getBody(), values), facts.awaitsAcceptance(), actorId, now));
+		// Opens its review task (AgreementReviewService).
+		reviewTasks.save(new AgreementReviewTask(agreement.getId()));
 		audit.record(AuditRecord.of(actorId, AuditAction.LEASE_AGREEMENT_ISSUED, ENTITY, agreement.getId())
 			.withNewValue(Map.of("agreementNumber", number, "holdingId", facts.holdingId().toString(),
 					"containerNumber", facts.containerNumber(), "templateVersion", template.getVersion(),
@@ -135,6 +141,11 @@ public class LeaseAgreementService {
 	@Transactional(readOnly = true)
 	public List<LeaseAgreementResponse> mine(UUID userId) {
 		return responses(agreements.findByUserIdOrderByGeneratedAtDesc(userId));
+	}
+
+	@Transactional(readOnly = true)
+	public List<LeaseAgreementResponse> byIds(List<UUID> agreementIds) {
+		return responses(agreements.findAllById(agreementIds));
 	}
 
 	@Transactional(readOnly = true)

@@ -15,6 +15,7 @@ export function adminNavLinks(permissions: readonly string[]): MenuLink[] {
     { href: "/admin/container-assignments", label: "Assign containers", show: can(Permission.CONTAINER_ASSIGN) },
     { href: "/admin/products", label: "Containers", show: can(Permission.INVESTMENT_VIEW) },
     { href: "/admin/orders", label: "Orders", show: can(Permission.ORDER_VIEW) },
+    { href: "/admin/agreement-reviews", label: "Agreement reviews", show: can(Permission.AGREEMENT_REVIEW) },
     { href: "/admin/agreement", label: "Lease agreement", show: can(Permission.AGREEMENT_TEMPLATE_MANAGE) },
     { href: "/admin/payments", label: "Payments", show: can(Permission.FINANCE_VIEW) || can(Permission.PAYMENT_CONFIRM) || can(Permission.PAYMENT_SEARCH) },
     { href: "/admin/company-bank-accounts", label: "Company accounts",
