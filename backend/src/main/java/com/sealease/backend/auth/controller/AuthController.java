@@ -78,7 +78,7 @@ public class AuthController {
 	}
 
 	/** Public so that a client holding only a refresh token (expired access token) can still sign out. */
-	/** Forgot password: emails a reset code. Always 202, whether or not the address is registered. */
+	/** Forgot password: emails a reset code. 404 when no account uses the address, 403 when it is not active. */
 	@PostMapping("/password-reset/request")
 	@ResponseStatus(HttpStatus.ACCEPTED)
 	public void requestPasswordReset(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest http) {

@@ -115,9 +115,10 @@ class PasswordResetIntegrationTest {
 	}
 
 	@Test
-	void unknownAddressesGetTheSameAnswerAndNoEmail() throws Exception {
+	void unknownAddressesAreToldSoAndGetNoEmail() throws Exception {
 		clearInvocations(mail);
-		request("nobody-" + System.nanoTime() + "@example.com").andExpect(status().isAccepted());
+		request("nobody-" + System.nanoTime() + "@example.com").andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("EMAIL_NOT_REGISTERED"));
 		verify(mail, never()).send(any(SimpleMailMessage.class));
 		reset("nobody@example.com", "123456", NEW_PASSWORD).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_RESET_CODE"));

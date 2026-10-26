@@ -152,8 +152,8 @@ export async function verifyCodeAction(_previous: FormState, formData: FormData)
 }
 
 /**
- * Forgot password, step 1: emails a reset code. The answer is the same whether or not the address is registered,
- * so the user is always taken on to enter the code.
+ * Forgot password, step 1: emails a reset code and takes the user on to enter it. An address with no account is
+ * reported on the email field.
  */
 export async function requestPasswordResetAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -167,10 +167,13 @@ export async function requestPasswordResetAction(_previous: FormState, formData:
       headers: forwardedClientHeaders(await headers()),
     });
   } catch (error) {
+    if (error instanceof BackendError && error.apiError?.code === "EMAIL_NOT_REGISTERED") {
+      return { fieldErrors: { email: "No account uses this email address. Check it, or create an account." }, values };
+    }
     return { error: describe(error), values };
   }
   if (formData.get("stay") === "1") {
-    return { success: "If that address belongs to an account, a new code is on its way. Check your inbox and spam folder.", values };
+    return { success: "A new code is on its way. Check your inbox and spam folder.", values };
   }
   redirect(`/reset-password?email=${encodeURIComponent(parsed.data.email)}`);
 }

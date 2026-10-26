@@ -24,12 +24,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * "Forgot password": a 6-digit code is emailed to the account's address, and entering it with a new password
- * sets that password and signs the account out everywhere. Requests never reveal whether an address is
- * registered. Guessing is bounded: a code works for minutes, stops after a few wrong attempts, and both
+ * sets that password and signs the account out everywhere. A request for an address with no account, or with a
+ * suspended or closed one, is refused with that reason (rate limited like every request, which bounds probing for
+ * registered addresses). Guessing is bounded: a code works for minutes, stops after a few wrong attempts, and both
  * requests and attempts are rate limited.
  */
 @Service
@@ -64,18 +64,20 @@ public class PasswordResetService {
 	}
 
 	/**
-	 * Emails a reset code to an active account with this address, retiring any earlier code. Says nothing about
-	 * whether the address is registered: unknown and inactive accounts are ignored silently.
+	 * Emails a reset code to the active account with this address, retiring any earlier code.
+	 *
+	 * @throws BusinessException {@code EMAIL_NOT_REGISTERED} when no account uses the address, {@code ACCOUNT_DISABLED}
+	 * when its account is suspended or closed
 	 */
 	@Transactional
 	public void request(String email, ClientInfo client) {
 		requestsPerIp.acquire(keyOf(client));
 		requestsPerAddress.acquire(EmailNormalizer.normalize(email));
-		Optional<UserAccount> found = accounts.findByEmail(email).filter(a -> a.status() == UserStatus.ACTIVE);
-		if (found.isEmpty()) {
-			return;
+		UserAccount account = accounts.findByEmail(email)
+			.orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_NOT_REGISTERED, "No account uses this email address"));
+		if (account.status() != UserStatus.ACTIVE) {
+			throw new BusinessException(ErrorCode.ACCOUNT_DISABLED, "This account is not active");
 		}
-		UserAccount account = found.get();
 		Instant now = clock.instant();
 		codes.retireUnused(account.id(), now);
 		String code = VerificationCodes.generate();

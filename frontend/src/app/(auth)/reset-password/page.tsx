@@ -16,7 +16,7 @@ export default async function ResetPasswordPage({ searchParams }: PageProps<"/re
         <h1 className="text-4xl font-semibold tracking-tight">Set a new password</h1>
         <p className="text-sm text-muted">
           {email ? (
-            <>If <span className="font-medium text-foreground"><EmailText>{email}</EmailText></span> belongs to an account, we emailed it a 6-digit code.</>
+            <>We emailed a 6-digit code to <span className="font-medium text-foreground"><EmailText>{email}</EmailText></span>.</>
           ) : (
             "Enter your email address and the 6-digit code we emailed you."
           )}{" "}
