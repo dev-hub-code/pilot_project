@@ -20,10 +20,9 @@ spring:
 
   jpa:
     open-in-view: false
-    # Hibernate keeps the schema in step with the entities; db/sequences.sql then adds what it cannot create.
-    defer-datasource-initialization: true
+    # Flyway owns the schema (db/migration); Hibernate only checks the entities against it.
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         jdbc:
@@ -32,13 +31,8 @@ spring:
         order_inserts: true
         order_updates: true
 
-  sql:
-    init:
-      mode: always
-      data-locations: classpath:db/sequences.sql
-
   flyway:
-    enabled: false
+    enabled: true
     # db/seed adds the administrator and container listings; the test profile leaves it out.
     locations: classpath:db/migration,classpath:db/seed
     validate-on-migrate: true
