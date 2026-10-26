@@ -1,5 +1,6 @@
 package com.sealease.backend.notification.email;
 
+import com.sealease.backend.common.mail.BrandedEmail;
 import com.sealease.backend.notification.entity.Notification;
 import com.sealease.backend.notification.repository.NotificationRepository;
 import com.sealease.backend.user.dto.UserAccount;
@@ -8,7 +9,6 @@ import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import java.util.UUID;
@@ -47,31 +47,27 @@ public class NotificationEmailSender {
 		if (user.status() != UserStatus.ACTIVE || !profiles.wantsEmailNotifications(user.id())) {
 			return false;
 		}
-		SimpleMailMessage message = new SimpleMailMessage();
-		message.setFrom(properties.from());
-		message.setTo(user.email());
-		message.setSubject(n.getTitle());
-		message.setText(text(user, n));
-		mail.send(message);
+		mail.send(email(user, n).message(properties.from(), user.email()));
 		log.debug("Emailed notification {} ({}) to user {}", n.getId(), n.getType(), user.id());
 		return true;
 	}
 
-	private String text(UserAccount user, Notification n) {
+	private BrandedEmail email(UserAccount user, Notification n) {
 		String appUrl = properties.appUrl().replaceAll("/+$", "");
-		StringBuilder text = new StringBuilder();
-		text.append(user.firstName() == null || user.firstName().isBlank() ? "Hello," : "Hello " + user.firstName() + ",")
-			.append("\n\n").append(n.getTitle()).append('\n');
-		if (n.getBody() != null && !n.getBody().isBlank()) {
-			text.append('\n').append(n.getBody()).append('\n');
+		boolean hasBody = n.getBody() != null && !n.getBody().isBlank();
+		BrandedEmail.Builder email = BrandedEmail.builder(n.getTitle(), appUrl)
+			.preheader(hasBody ? n.getBody() : n.getTitle())
+			.greeting(user.firstName())
+			.paragraph(n.getTitle());
+		if (hasBody) {
+			email.paragraph(n.getBody());
 		}
 		if (n.getLink() != null && !n.getLink().isBlank()) {
-			text.append("\nView it here: ").append(appUrl).append(n.getLink()).append('\n');
+			email.button("View in SeaLease", appUrl + n.getLink());
 		}
-		text.append("\n-- \nSeaLease\n")
-			.append("You receive these emails because email notifications are on. Turn them off in Settings: ")
-			.append(appUrl).append("/settings\n");
-		return text.toString();
+		return email.footer("You receive these emails because email notifications are on.", "Turn them off in Settings",
+				appUrl + "/settings")
+			.build();
 	}
 
 }

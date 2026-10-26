@@ -1,17 +1,19 @@
 package com.sealease.backend.role.service;
 
+import com.sealease.backend.common.mail.BrandedEmail;
 import com.sealease.backend.role.dto.StaffCredentialsResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Emails an employee the credentials an administrator issued: their sign-in email and temporary password, which
@@ -41,25 +43,27 @@ public class CredentialsEmailSender {
 	 * @return whether the email was handed to the mail server
 	 */
 	public boolean send(StaffCredentialsResponse credentials, boolean reset) {
-		SimpleMailMessage message = new SimpleMailMessage();
-		message.setFrom(from);
-		message.setTo(credentials.email());
-		message.setSubject(reset ? "Your new SeaLease temporary password" : "Your SeaLease employee account");
-		String name = credentials.firstName() == null || credentials.firstName().isBlank() ? "" : " " + credentials.firstName();
-		message.setText("Hello" + name + ",\n\n"
-				+ (reset ? "An administrator issued you a new temporary password for SeaLease.\n\n"
-						: "An administrator created a SeaLease employee account for you"
-								+ (credentials.roles().isEmpty() ? "" : " (" + String.join(", ", credentials.roles()) + ")")
-								+ ".\n\n")
-				+ "Sign in at: " + appUrl + "/login\n"
-				+ "Email: " + credentials.email() + "\n"
-				+ "Temporary password: " + credentials.temporaryPassword() + "\n\n"
-				+ "You will be asked to choose your own password when you sign in. The temporary password stops working on "
-				+ EXPIRY.format(credentials.expiresAt()) + "; after that, ask an administrator for a new one.\n\n"
-				+ "Never share this password. SeaLease will never ask you for it.\n"
-				+ "If you were not expecting this email, tell your administrator.\n\n-- \nSeaLease\n");
+		Map<String, String> signIn = new LinkedHashMap<>();
+		signIn.put("Email", credentials.email());
+		signIn.put("Temporary password", credentials.temporaryPassword());
+		BrandedEmail message = BrandedEmail.builder(
+				reset ? "Your new SeaLease temporary password" : "Your SeaLease employee account", appUrl)
+			.preheader(reset ? "An administrator issued you a new temporary password."
+					: "An administrator created a SeaLease employee account for you.")
+			.greeting(credentials.firstName())
+			.paragraph(reset ? "An administrator issued you a new temporary password for SeaLease."
+					: "An administrator created a SeaLease employee account for you"
+							+ (credentials.roles().isEmpty() ? "" : " (" + String.join(", ", credentials.roles()) + ")") + ".")
+			.details(signIn)
+			.button("Sign in", appUrl + "/login")
+			.paragraph("You will be asked to choose your own password when you sign in. The temporary password stops"
+					+ " working on " + EXPIRY.format(credentials.expiresAt()) + "; after that, ask an administrator for a"
+					+ " new one.")
+			.note("Never share this password: SeaLease will never ask you for it. If you were not expecting this email,"
+					+ " tell your administrator.")
+			.build();
 		try {
-			mail.send(message);
+			mail.send(message.message(from, credentials.email()));
 			log.info("Emailed {} credentials to user {}", reset ? "new temporary" : "new account", credentials.userId());
 			return true;
 		}

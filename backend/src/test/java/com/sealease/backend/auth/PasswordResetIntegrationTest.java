@@ -2,27 +2,25 @@ package com.sealease.backend.auth;
 
 import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.SentMail;
 import com.sealease.backend.support.TestApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.MimeMessagePreparator;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -119,7 +117,7 @@ class PasswordResetIntegrationTest {
 		clearInvocations(mail);
 		request("nobody-" + System.nanoTime() + "@example.com").andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.code").value("EMAIL_NOT_REGISTERED"));
-		verify(mail, never()).send(any(SimpleMailMessage.class));
+		verify(mail, never()).send(any(MimeMessagePreparator.class));
 		reset("nobody@example.com", "123456", NEW_PASSWORD).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_RESET_CODE"));
 	}
@@ -135,12 +133,11 @@ class PasswordResetIntegrationTest {
 	}
 
 	private String lastCodeSentTo(String email) {
-		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
-		verify(mail, atLeastOnce()).send(sent.capture());
-		SimpleMailMessage last = sent.getAllValues().stream().filter(m -> List.of(m.getTo()).contains(email)).toList().getLast();
-		assertThat(last.getSubject()).endsWith(" is your SeaLease password reset code");
-		Matcher code = CODE.matcher(last.getText());
-		assertThat(code.find()).as("code in: %s", last.getText()).isTrue();
+		SentMail last = SentMail.lastTo(mail, email);
+		assertThat(last.subject()).endsWith(" is your SeaLease password reset code");
+		Matcher code = CODE.matcher(last.text());
+		assertThat(code.find()).as("code in: %s", last.text()).isTrue();
+		assertThat(last.html()).contains(code.group(1), "cid:sealease-logo");
 		return code.group(1);
 	}
 

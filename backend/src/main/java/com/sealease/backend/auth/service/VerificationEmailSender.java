@@ -1,10 +1,10 @@
 package com.sealease.backend.auth.service;
 
 import com.sealease.backend.auth.config.AuthProperties;
+import com.sealease.backend.common.mail.BrandedEmail;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 
@@ -33,19 +33,22 @@ class VerificationEmailSender {
 	void send(UUID userId, String email, String firstName, String token, String code) {
 		String link = properties.appUrl().replaceAll("/+$", "") + "/verify-email?token="
 				+ URLEncoder.encode(token, StandardCharsets.US_ASCII);
-		SimpleMailMessage message = new SimpleMailMessage();
-		message.setFrom(properties.from());
-		message.setTo(email);
-		message.setSubject(code + " is your SeaLease verification code");
-		message.setText((firstName == null || firstName.isBlank() ? "Hello," : "Hello " + firstName + ",")
-				+ "\n\nThanks for signing up to SeaLease. Confirm your email address to activate your account.\n\n"
-				+ "Enter this code on the verification page:\n\n    " + code + "\n\n"
-				+ "Or open this link:\n\n" + link + "\n\n"
-				+ "The code and link work for " + describe(properties.linkTtl()) + ". If they have expired, sign in"
-				+ " and ask for a new email.\n\nNever share this code. SeaLease will never ask you for it.\n"
-				+ "If you did not create a SeaLease account, ignore this email.\n\n-- \nSeaLease\n");
+		String validity = describe(properties.linkTtl());
+		BrandedEmail message = BrandedEmail.builder(code + " is your SeaLease verification code", properties.appUrl())
+			.preheader("Your verification code is " + code + ". It works for " + validity + ".")
+			.greeting(firstName)
+			.paragraph("Thanks for signing up to SeaLease. Confirm your email address to activate your account: "
+					+ "enter this code on the verification page.")
+			.code(code)
+			.paragraph("Or confirm with one click:")
+			.button("Confirm my email", link)
+			.paragraph("The code and the button work for " + validity + ". If they have expired, sign in and ask for a"
+					+ " new email.")
+			.note("Never share this code: SeaLease will never ask you for it. If you did not create a SeaLease"
+					+ " account, ignore this email.")
+			.build();
 		try {
-			mail.send(message);
+			mail.send(message.message(properties.from(), email));
 			log.debug("Sent the email verification link to user {}", userId);
 		}
 		catch (MailException ex) {

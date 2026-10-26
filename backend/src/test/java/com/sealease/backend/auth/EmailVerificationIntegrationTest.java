@@ -1,25 +1,23 @@
 package com.sealease.backend.auth;
 
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.SentMail;
 import com.sealease.backend.support.TestApi;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.MimeMessagePreparator;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -144,7 +142,7 @@ class EmailVerificationIntegrationTest {
 	void resendSaysNothingAboutUnknownOrVerifiedAddresses() throws Exception {
 		clearInvocations(mail);
 		resend(uniqueEmail()).andExpect(status().isAccepted());
-		verify(mail, never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
+		verify(mail, never()).send(org.mockito.ArgumentMatchers.any(MimeMessagePreparator.class));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions login(String email) throws Exception {
@@ -163,14 +161,11 @@ class EmailVerificationIntegrationTest {
 	}
 
 	private String lastCodeSentTo(String email) {
-		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
-		verify(mail, atLeastOnce()).send(sent.capture());
-		SimpleMailMessage last = sent.getAllValues().stream()
-			.filter(m -> m.getTo() != null && List.of(m.getTo()).contains(email))
-			.toList().getLast();
-		Matcher code = CODE.matcher(last.getText());
-		assertThat(code.find()).as("verification code in: %s", last.getText()).isTrue();
-		assertThat(last.getSubject()).startsWith(code.group(1));
+		SentMail last = SentMail.lastTo(mail, email);
+		Matcher code = CODE.matcher(last.text());
+		assertThat(code.find()).as("verification code in: %s", last.text()).isTrue();
+		assertThat(last.subject()).startsWith(code.group(1));
+		assertThat(last.html()).contains(code.group(1), "/verify-email?token=");
 		return code.group(1);
 	}
 
@@ -180,16 +175,10 @@ class EmailVerificationIntegrationTest {
 	}
 
 	private String lastLinkTokenSentTo(String email) {
-		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
-		verify(mail, atLeastOnce()).send(sent.capture());
-		List<SimpleMailMessage> toUser = sent.getAllValues().stream()
-			.filter(m -> m.getTo() != null && List.of(m.getTo()).contains(email))
-			.toList();
-		assertThat(toUser).isNotEmpty();
-		SimpleMailMessage last = toUser.getLast();
-		assertThat(last.getSubject()).endsWith(" is your SeaLease verification code");
-		Matcher link = LINK.matcher(last.getText());
-		assertThat(link.find()).as("verification link in: %s", last.getText()).isTrue();
+		SentMail last = SentMail.lastTo(mail, email);
+		assertThat(last.subject()).endsWith(" is your SeaLease verification code");
+		Matcher link = LINK.matcher(last.text());
+		assertThat(link.find()).as("verification link in: %s", last.text()).isTrue();
 		return link.group(1);
 	}
 

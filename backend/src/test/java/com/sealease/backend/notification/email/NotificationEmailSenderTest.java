@@ -8,8 +8,8 @@ import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.mail.SimpleMailMessage;
+import com.sealease.backend.support.SentMail;
+import org.springframework.mail.javamail.MimeMessagePreparator;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -50,17 +50,17 @@ class NotificationEmailSenderTest {
 	void emailsTheNotificationWithAnAbsoluteLink() {
 		assertThat(sender.send(notification.getId())).isTrue();
 
-		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
-		verify(mail).send(sent.capture());
-		SimpleMailMessage message = sent.getValue();
-		assertThat(message.getTo()).containsExactly("asha@example.com");
-		assertThat(message.getFrom()).isEqualTo("SeaLease <no-reply@sealease.test>");
-		assertThat(message.getSubject()).isEqualTo("Your ticket was answered");
-		assertThat(message.getText())
+		SentMail message = SentMail.all(mail).getFirst();
+		assertThat(message.to()).containsExactly("asha@example.com");
+		assertThat(message.from()).isEqualTo("SeaLease <no-reply@sealease.test>");
+		assertThat(message.subject()).isEqualTo("Your ticket was answered");
+		assertThat(message.text())
 			.startsWith("Hello Asha,")
 			.contains("Support replied to ticket #42.")
-			.contains("View it here: https://app.sealease.test/support/42")
+			.contains("View in SeaLease: https://app.sealease.test/support/42")
 			.contains("https://app.sealease.test/settings");
+		assertThat(message.html())
+			.contains("Support replied to ticket #42.", "href=\"https://app.sealease.test/support/42\"", "cid:sealease-logo");
 	}
 
 	@Test
@@ -68,7 +68,7 @@ class NotificationEmailSenderTest {
 		when(profiles.wantsEmailNotifications(userId)).thenReturn(false);
 
 		assertThat(sender.send(notification.getId())).isFalse();
-		verify(mail, never()).send(any(SimpleMailMessage.class));
+		verify(mail, never()).send(any(MimeMessagePreparator.class));
 	}
 
 	@Test
@@ -76,7 +76,7 @@ class NotificationEmailSenderTest {
 		when(accounts.getAccount(userId)).thenReturn(account(UserStatus.SUSPENDED));
 
 		assertThat(sender.send(notification.getId())).isFalse();
-		verify(mail, never()).send(any(SimpleMailMessage.class));
+		verify(mail, never()).send(any(MimeMessagePreparator.class));
 	}
 
 	private UserAccount account(UserStatus status) {
