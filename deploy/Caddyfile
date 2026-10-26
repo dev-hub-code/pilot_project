@@ -1,0 +1,15 @@
+# HTTPS certificates for both names come from Let's Encrypt automatically, once GoDaddy points them at the server.
+# Caddy sets X-Forwarded-For to the visitor's address (ignoring any the visitor sent), which the web app passes on to
+# the API for rate limits and audit records.
+{
+	email admin@sealease.in
+}
+
+www.sealease.in {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+sealease.in {
+	redir https://www.sealease.in{uri} permanent
+}

@@ -1,0 +1,86 @@
+# Production on the Lightsail server (/opt/sealease), started by scripts/deploy.sh. Caddy is the only service with
+# public ports; the API is reachable only from the web app. PostgreSQL is the managed Lightsail database.
+#   .env          TAG=<git commit> of the images to run (written by the deploy)
+#   backend.env   the API's settings and secrets (.secrets/production.env, see scripts/production-env.sh)
+name: sealease
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [frontend]
+    logging: *logging
+
+  frontend:
+    image: sealease-frontend:${TAG:?set TAG in .env}
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
+      JWT_ISSUER: https://sealease.in
+      JWT_AUDIENCE: sealease-api
+    depends_on:
+      backend: { condition: service_healthy }
+    mem_limit: 1g
+    logging: *logging
+
+  backend:
+    image: sealease-backend:${TAG}
+    restart: unless-stopped
+    env_file: backend.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/liveness HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    mem_limit: 3g
+    logging: *logging
+
+  kafka:
+    image: apache/kafka:4.3.1
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # The application creates its topics (APP_KAFKA_CREATETOPICS).
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: -Xms768m -Xmx768m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    mem_limit: 1536m
+    logging: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:
+  kafka-data:

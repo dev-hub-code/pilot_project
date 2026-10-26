@@ -17,6 +17,8 @@ const UPLOAD_LIMIT = "22mb";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // A self-contained server (.next/standalone) for the production image (Dockerfile).
+  output: "standalone",
   // `next dev` refuses its dev resources to hosts other than localhost; list LAN hosts/IPs here
   // (comma-separated) to open the dev server from another device, e.g. DEV_ALLOWED_ORIGINS=192.168.1.22
   allowedDevOrigins: process.env.DEV_ALLOWED_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean),
