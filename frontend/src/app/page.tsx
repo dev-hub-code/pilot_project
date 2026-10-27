@@ -12,7 +12,7 @@ import { InterestForm } from "@/features/leads/interest-form";
 import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stats";
 import { getPublicPlans } from "@/lib/server/public-plans";
 import { getPhoneCountries } from "@/lib/server/phone-countries";
-import { getRentCredit } from "@/lib/server/rent-credit";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { getRentTerms, tierFor, type RentTerms } from "@/lib/server/rent-terms";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
 import { formatMoney, formatPercent } from "@/utils/money";
@@ -303,7 +303,7 @@ export default async function Home() {
   await connection();
   const [backend, stats, plans, phoneCountries, terms, rentCredit] = await Promise.all([getBackendStatus(), getPlatformStats(),
     getPublicPlans(), getPhoneCountries(), getRentTerms(), getRentCredit()]);
-  const credit = rentCredit.label;
+  const credit = creditLabel(rentCredit);
   const example = examplePortfolio(terms);
   const production = process.env.NODE_ENV === "production";
   const usesSampleFigures = !production && Object.values(COMPANY_RECORD).some((value) => value === null);

@@ -17,7 +17,7 @@ import type { PageResponse } from "@/types/api";
 import type { DuePayouts, LeaseRent, LeaseRentStatus } from "@/types/earning";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
-import { getRentCredit } from "@/lib/server/rent-credit";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 
 export const metadata: Metadata = { title: "Rent" };
 
@@ -32,17 +32,18 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
   const view = VIEWS.find((v) => v.status === params.status) ?? VIEWS[0]!;
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
   const query = new URLSearchParams({ page: String(page), size: "25", status: view.status });
-  const [leases, due, credit] = await Promise.all([
+  const [leases, due, rentCredit] = await Promise.all([
     authFetch<PageResponse<LeaseRent>>(`/api/v1/admin/payouts?${query}`),
     authFetch<DuePayouts[]>("/api/v1/admin/payouts/due"),
     getRentCredit(),
   ]);
+  const credit = creditLabel(rentCredit);
   const dueCount = due.reduce((n, d) => n + d.count, 0);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Rent"
-        description={`Every container's rent is credited to its investor's wallet ${credit.label} of its lease, from the full hour after the investor accepts its agreement: the monthly rent × the lease months elapsed, so the whole lease pays exactly monthly rent × tenure. Referral commission on it is credited with it. Containers bought before plans became rent-only also get part of the price back, the same way.`} />
+        description={`Every container's rent is credited to its investor's wallet ${credit} throughout its lease, from the full hour after the investor accepts its agreement: the monthly rent × the lease months elapsed, so the whole lease pays exactly monthly rent × tenure. Referral commission on it is credited with it. Containers bought before plans became rent-only also get part of the price back, the same way.`} />
 
       {(hasPermission(session.permissions, Permission.PAYOUT_PROCESS)
         || hasPermission(session.permissions, Permission.SYSTEM_SETTINGS_MANAGE)

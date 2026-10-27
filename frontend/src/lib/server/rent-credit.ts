@@ -8,13 +8,19 @@ export interface RentCredit {
   label: string;
 }
 
-const HOURLY: RentCredit = { intervalMinutes: 60, label: "every hour" };
-
-/** The interval admins have set; hourly if the backend cannot be reached, so pages still render. */
-export async function getRentCredit(): Promise<RentCredit> {
+/**
+ * The interval admins have set. If the backend cannot be reached, pages still render with general wording ("regularly")
+ * rather than a guessed interval that may contradict what admins configured.
+ */
+export async function getRentCredit(): Promise<RentCredit | null> {
   try {
     return await backendFetch<RentCredit>("/api/v1/public/rent-credit");
   } catch {
-    return HOURLY;
+    return null;
   }
+}
+
+/** For wording: "every 6 hours", or "regularly" when the interval is not known. */
+export function creditLabel(credit: RentCredit | null): string {
+  return credit?.label ?? "regularly";
 }

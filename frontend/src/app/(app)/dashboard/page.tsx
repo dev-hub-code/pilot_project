@@ -14,7 +14,7 @@ import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
-import { getRentCredit } from "@/lib/server/rent-credit";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { CurrentUser } from "@/types/auth";
 import type { EarningsSummary, PayoutMonth } from "@/types/earning";
 import type { Money } from "@/types/marketplace";
@@ -46,7 +46,7 @@ const REFERRAL_SERIES: readonly ColumnSeries[] = [
 ];
 
 export default async function DashboardPage() {
-  const credit = await getRentCredit();
+  const credit = creditLabel(await getRentCredit());
   const [me, profile] = await Promise.all([
     authFetch<CurrentUser>("/api/v1/auth/me"),
     authFetch<Profile>("/api/v1/users/me"),
@@ -77,7 +77,7 @@ export default async function DashboardPage() {
       note: earnings ? (earnings.withdrawalInProgress.length > 0 ? `${list(earnings.withdrawalInProgress)} in progress` : "Paid out to you so far")
         : "Investor accounts only" },
     { label: "Available balance", value: list(earnings?.balances),
-      note: earnings ? nextCreditNote(earnings.nextCreditAt, credit.label) : "Investor accounts only" },
+      note: earnings ? nextCreditNote(earnings.nextCreditAt, credit) : "Investor accounts only" },
   ];
 
   return (
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
       {earnings && (
         <>
           <section className="grid gap-6 lg:grid-cols-3" aria-label="Rent">
-            <Card title="Monthly rent" description={`Credited to your wallet ${credit.label}, by month`}
+            <Card title="Monthly rent" description={`Credited to your wallet ${credit}, by month`}
               className="lg:col-span-2">
               {payoutMonths === null ? (
                 <EmptyState title="The chart could not be loaded" description="Your rent is listed on the Earnings page." />

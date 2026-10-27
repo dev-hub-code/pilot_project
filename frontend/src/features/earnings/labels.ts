@@ -66,7 +66,7 @@ export function formatPeriod(startsOn: string, endsOnExclusive: string): string 
  * When rent next reaches the wallet: credited once each interval (e.g. "every hour") has ended, from the first full
  * hour after the lease agreement is accepted.
  */
-export function nextCreditNote(nextCreditAt: string | null, every = "every hour"): string {
+export function nextCreditNote(nextCreditAt: string | null, every: string): string {
   if (!nextCreditAt) return `Credited ${every} once your lease starts`;
   return new Date(nextCreditAt).getTime() <= Date.now()
     ? "Next credit any minute now"

@@ -11,7 +11,7 @@ import { formatPeriod, leasePercent, nextCreditNote } from "@/features/earnings/
 import { yearsLabel } from "@/features/orders/lease-years";
 import { CURRENCY } from "@/lib/currency";
 import { authFetch } from "@/lib/server/auth/session";
-import { getRentCredit } from "@/lib/server/rent-credit";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { LeaseAgreement } from "@/types/agreement";
 import type { EarningsSummary } from "@/types/earning";
 import type { HoldingStatus, Portfolio } from "@/types/order";
@@ -37,7 +37,7 @@ const HOLDING_TONE: Record<HoldingStatus, StatusTone> = {
 
 export default async function PortfolioPage({ searchParams }: PageProps<"/portfolio">) {
   const accepted = (await searchParams).accepted;
-  const credit = await getRentCredit();
+  const credit = creditLabel(await getRentCredit());
   const [portfolio, earnings, agreementList] = await Promise.all([
     authFetch<Portfolio>("/api/v1/portfolio"),
     authFetch<EarningsSummary>("/api/v1/earnings/summary"),
@@ -57,7 +57,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
       {typeof accepted === "string" && agreements.get(accepted)?.acceptedAt && (
         <Notice tone="success">
           Agreement {agreements.get(accepted)?.agreementNumber} accepted. Your lease starts at the next full hour, and rent
-          is credited to your wallet {credit.label} from then on. You can download the agreement from the container below.
+          is credited to your wallet {credit} from then on. You can download the agreement from the container below.
         </Notice>
       )}
       {firstToAccept && (
@@ -82,7 +82,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">Rent wallet</p>
           <p className="font-display text-4xl font-semibold tabular-nums">{rentWallet}</p>
-          <p className="text-xs text-muted">{nextCreditNote(earnings.nextCreditAt, credit.label)}</p>
+          <p className="text-xs text-muted">{nextCreditNote(earnings.nextCreditAt, credit)}</p>
         </div>
       </section>
 
@@ -151,7 +151,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Once your payment is confirmed, our team assigns each investment its container and issues its lease agreement. When you accept the agreement, the lease starts at the next full hour and rent is credited to your wallet {credit.label} from then on. See{" "}
+        Once your payment is confirmed, our team assigns each investment its container and issues its lease agreement. When you accept the agreement, the lease starts at the next full hour and rent is credited to your wallet {credit} from then on. See{" "}
         <Link href="/earnings" className="underline">Earnings</Link> for each lease&apos;s rent.
       </p>
     </div>

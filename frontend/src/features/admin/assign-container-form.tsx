@@ -23,10 +23,12 @@ function upperCase(event: FormEvent<HTMLInputElement>) {
 /**
  * Finance types the number of the container it assigns (or generates a new one), and optionally where it is.
  */
-export function AssignContainerForm({ action, generate, investorName, typeLabel }: {
+export function AssignContainerForm({ action, generate, investorName, credit, typeLabel }: {
   action: Action;
   generate: Generate;
   investorName: string;
+  /** How often rent is credited, e.g. "every 6 hours". */
+  credit: string;
   typeLabel: string;
 }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {});
@@ -64,7 +66,7 @@ export function AssignContainerForm({ action, generate, investorName, typeLabel 
       <TextField label="Location (optional)" name="currentLocation" placeholder="e.g. Nhava Sheva (JNPT), Mumbai"
         defaultValue={state.success ? "" : state.values?.currentLocation} error={e.currentLocation} />
       <SubmitButton className="w-full" pendingLabel="Assigning…"
-        confirm={`Assign this container to ${investorName}? Their lease starts and rent is credited every hour from the next full hour.`}>
+        confirm={`Assign this container to ${investorName}? Their lease starts and rent is credited ${credit} from the next full hour.`}>
         Assign container
       </SubmitButton>
     </form>

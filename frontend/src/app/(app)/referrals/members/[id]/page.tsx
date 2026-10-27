@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { DownlineMember } from "@/types/referral";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
@@ -20,6 +21,7 @@ export default async function ReferralMemberPage({ params }: PageProps<"/referra
     if (error instanceof BackendError && error.status === 404) notFound();
     throw error;
   }
+  const credit = creditLabel(await getRentCredit());
   const earned = member.earned.length === 0 ? "—" : member.earned.map((m) => formatMoney(m)).join(" · ");
 
   return (
@@ -30,7 +32,7 @@ export default async function ReferralMemberPage({ params }: PageProps<"/referra
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">You earned from {member.displayName}</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
-          <p className="text-xs text-muted">Commission is credited every hour, alongside the rent on this member&apos;s containers.</p>
+          <p className="text-xs text-muted">Commission is credited {credit}, alongside the rent on this member&apos;s containers.</p>
         </div>
       </section>
     </div>

@@ -15,6 +15,7 @@ import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { PlanPhoto, Product } from "@/types/marketplace";
 import { formatDateTime } from "@/utils/format";
@@ -36,6 +37,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
     if (error instanceof BackendError && error.status === 404) notFound();
     throw error;
   }
+  const credit = creditLabel(await getRentCredit());
   const decisions = can(Permission.INVESTMENT_APPROVE) && (p.status === "DRAFT" || p.status === "OPEN");
   const canEdit = can(Permission.INVESTMENT_UPDATE) && p.status !== "CANCELLED";
   const photos = await authFetch<PlanPhoto[]>(`/api/v1/admin/investment-products/${id}/photos`);
@@ -100,7 +102,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
               </div>
             )}
           </Card>
-          <Card title="Payout per container" description="Credited to the investor's wallet every hour for the lease they choose; part months at the start and end are paid by the hour.">
+          <Card title="Payout per container" description={`Credited to the investor's wallet ${credit} for the lease they choose; part months at the start and end are paid by the hour.`}>
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
               <Item label="Price">{formatMoney(p.price)}</Item>
               <Item label="Lease (investor's choice)">{p.minTenureYears === p.maxTenureYears ? yearsLabel(p.minTenureYears)

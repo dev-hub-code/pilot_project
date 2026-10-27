@@ -12,6 +12,7 @@ import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { PageResponse } from "@/types/api";
 import type { ContainerType, Money } from "@/types/marketplace";
 import type { Assignee } from "@/types/user";
@@ -49,12 +50,14 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
     return <Notice tone="warning">Assigning containers needs the Container assign permission.</Notice>;
   }
   const canViewOrders = hasPermission(session.permissions, Permission.ORDER_VIEW);
-  const queue = await authFetch<AssignmentQueue>(`/api/v1/admin/container-assignments?page=${page}&size=20`);
+  const [queue, rentCredit] = await Promise.all([
+    authFetch<AssignmentQueue>(`/api/v1/admin/container-assignments?page=${page}&size=20`), getRentCredit()]);
+  const credit = creditLabel(rentCredit);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Assign containers"
-        description="Paid investments waiting for a container, oldest first. Assign one to yourself, then type the number of the container you are assigning (or generate a new one); the investor\u2019s lease starts at the next full hour and rent is credited every hour from then, and they are notified." />
+        description={`Paid investments waiting for a container, oldest first. Assign one to yourself, then type the number of the container you are assigning (or generate a new one); the investor\u2019s lease starts at the next full hour and rent is credited ${credit} from then, and they are notified.`} />
       {queue.pending.content.length === 0 ? (
         <EmptyState title="Nothing to assign" description="Every paid investment has its container." />
       ) : (
@@ -85,7 +88,7 @@ export default async function ContainerAssignmentsPage({ searchParams }: PagePro
                   assign={takeContainerTaskAction.bind(null, p.holdingId)}
                   unassign={releaseContainerTaskAction.bind(null, p.holdingId)}>
                   <AssignContainerForm action={assignContainerAction.bind(null, p.holdingId)} generate={generateContainerNumberAction}
-                    investorName={name}
+                    investorName={name} credit={credit}
                     typeLabel={CONTAINER_TYPE_LABEL[p.containerType]} />
                 </ReviewAssignment>
               </li>
