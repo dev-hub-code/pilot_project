@@ -74,7 +74,7 @@ class ReportIntegrationTest {
 			.andExpect(jsonPath("$.sections[0].rows.length()").value(0));
 
 		// A rent withdrawal run takes the ₹500: it is listed, in progress.
-		Account finance = api.staff("ADMIN", "FINANCE");
+		Account finance = api.staff("SUPER_ADMIN", "FINANCE");
 		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isCreated());
 		String withdrawal = jdbc.queryForObject("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid", String.class,

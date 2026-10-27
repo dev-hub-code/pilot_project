@@ -254,9 +254,11 @@ class AuthFlowIntegrationTest {
 
 	@Test
 	void bootstrapSuperAdminExistsExactlyOnce() {
+		// Other tests make staff super admins in the shared database: count the bootstrap account only.
 		Integer admins = jdbc.queryForObject("""
-				SELECT count(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.name = 'SUPER_ADMIN'
-				""", Integer.class);
+				SELECT count(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id
+				WHERE r.name = 'SUPER_ADMIN' AND lower(u.email) = lower(?)
+				""", Integer.class, ADMIN_EMAIL);
 		assertThat(admins).isEqualTo(1);
 	}
 
