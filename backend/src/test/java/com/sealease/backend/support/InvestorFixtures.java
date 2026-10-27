@@ -82,7 +82,7 @@ public final class InvestorFixtures {
 	 */
 	public String invest(Account investor, UUID product, int containers) throws Exception {
 		String orderId = paidOrder(investor, product, containers);
-		assignContainers(orderId);
+		assignContainers(investor, orderId);
 		return orderId;
 	}
 
@@ -118,16 +118,11 @@ public final class InvestorFixtures {
 
 	/**
 	 * Finance assigns a new container, by number, to each of the order's paid investments, and the investor accepts
-	 * each lease agreement, which starts the leases.
+	 * each lease agreement, which starts the leases. The investor is the order's, already signed in: signing in again
+	 * would end the session their test is holding.
 	 */
-	public void assignContainers(String orderId) throws Exception {
+	public void assignContainers(Account investor, String orderId) throws Exception {
 		List<UUID> holdings = assignContainersOnly(orderId);
-		if (holdings.isEmpty()) {
-			return;
-		}
-		String email = jdbc.queryForObject("SELECT u.email FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?::uuid",
-				String.class, orderId);
-		Account investor = api.login(email, TestApi.PASSWORD);
 		for (UUID holding : holdings) {
 			acceptAgreement(investor, holding);
 		}

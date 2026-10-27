@@ -106,7 +106,7 @@ public class AuthService {
 				emailVerification.sendLink(account);
 				return new RegistrationResponse(true, account.email());
 			}
-			return openSession(account.id(), client);
+			return openSession(account.id(), client, 0);
 		});
 	}
 
@@ -132,7 +132,12 @@ public class AuthService {
 		return switch (result) {
 			case CredentialVerification.Verified verified -> {
 				loginPerEmail.reset(emailKey);
-				yield tx.execute(status -> openSession(verified.account().id(), client));
+				// One session per user: signing in signs out every other device and browser.
+				yield tx.execute(status -> {
+					UUID userId = verified.account().id();
+					int ended = sessions.revokeAll(userId, SessionRevocationReason.SIGNED_IN_ELSEWHERE);
+					return openSession(userId, client, ended);
+				});
 			}
 			case CredentialVerification.InvalidCredentials ignored ->
 				throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "Invalid email or password");
@@ -212,9 +217,11 @@ public class AuthService {
 				accounts.isEmailVerified(user.userId()));
 	}
 
-	private AuthTokensResponse openSession(UUID userId, ClientInfo client) {
+	/** @param endedSessions the user's other sessions this sign-in ended, recorded with it */
+	private AuthTokensResponse openSession(UUID userId, ClientInfo client, int endedSessions) {
 		SessionService.OpenedSession session = sessions.open(userId, client);
-		audit.record(AuditRecord.of(userId, AuditAction.LOGIN, ENTITY_SESSION, session.sessionId()));
+		AuditRecord login = AuditRecord.of(userId, AuditAction.LOGIN, ENTITY_SESSION, session.sessionId());
+		audit.record(endedSessions > 0 ? login.withNewValue(Map.of("otherSessionsEnded", endedSessions)) : login);
 		UserAuthorities authorities = userRoles.authoritiesOf(userId);
 		AccessTokenService.IssuedAccessToken access = accessTokens.issue(userId, session.sessionId(), authorities,
 				accounts.getAccount(userId).mustChangePassword());

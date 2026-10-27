@@ -17,7 +17,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <div className="space-y-2">
         <h1 className="text-4xl font-semibold tracking-tight">Sign in</h1>
         <p className="text-sm text-muted">
-          {expired ? "Your session ended. Please sign in again." : "Welcome back to your portfolio."}
+          {expired
+            ? "You were signed out, for example because your account signed in on another device. Please sign in again."
+            : "Welcome back to your portfolio."}
         </p>
       </div>
       {verified && <Notice tone="success">Your email address is confirmed. Sign in to continue.</Notice>}

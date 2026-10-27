@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
@@ -97,8 +98,21 @@ public final class TestApi {
 		mvc.perform(post("/api/v1/admin/finance-tasks/{id}/take", withdrawalId).header(HttpHeaders.AUTHORIZATION, actor.bearer()));
 	}
 
+	/** The admin's current session, shared by every test while it lasts. */
+	private static Account admin;
+
+	/**
+	 * The bootstrap admin, signed in. A sign-in ends the user's other sessions, so the session is reused while it is
+	 * active: signing in afresh for every call would end the token a test is still holding.
+	 */
 	public Account admin() throws Exception {
-		return login(ADMIN_EMAIL, ADMIN_PASSWORD);
+		synchronized (TestApi.class) {
+			if (admin == null || mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+				.andReturn().getResponse().getStatus() != 200) {
+				admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+			}
+			return admin;
+		}
 	}
 
 	/** A new account holding exactly the given roles, signed in again so its token carries them. */

@@ -8,5 +8,7 @@ public enum SessionRevocationReason {
 	PASSWORD_RESET,
 	REFRESH_TOKEN_REUSE,
 	AUTHORITIES_CHANGED,
-	ACCOUNT_INACTIVE
+	ACCOUNT_INACTIVE,
+	/** The user signed in again (on another device or browser): one session per user. */
+	SIGNED_IN_ELSEWHERE
 }

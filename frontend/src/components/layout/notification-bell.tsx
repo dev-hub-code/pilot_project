@@ -10,10 +10,19 @@ import type { AppNotification } from "@/types/support";
 /** How often the open, visible page checks for new notifications. */
 const POLL_MS = 15_000;
 
-/** The current unread count, or null when it could not be read (offline, server restarting, signed out). */
+/**
+ * The current unread count, or null when it could not be read (offline, server restarting). A session that has ended
+ * (signed in on another device, signed out elsewhere) leaves the page for sign-in: the poll is how an open page notices.
+ */
 async function fetchUnread(): Promise<number | null> {
   try {
     const response = await fetch("/notifications/unread", { cache: "no-store" });
+    if (response.status === 401 || response.redirected) {
+      // A full page load, as on sign-out: the client router's copies of signed-in pages go with it.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/session-expired");
+      return null;
+    }
     if (!response.ok) return null;
     const body = (await response.json()) as { unread: number | null };
     return typeof body.unread === "number" ? body.unread : null;

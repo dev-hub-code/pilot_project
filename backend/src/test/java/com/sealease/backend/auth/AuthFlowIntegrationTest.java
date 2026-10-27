@@ -214,10 +214,27 @@ class AuthFlowIntegrationTest {
 	}
 
 	@Test
-	void passwordChangeKeepsCurrentSessionAndEndsOthers() throws Exception {
+	void signingInAgainSignsOutTheOtherDevice() throws Exception {
 		String email = uniqueEmail();
-		Tokens current = register(email);
-		Tokens otherDevice = tokensOf(login(email, PASSWORD));
+		Tokens firstDevice = register(email);
+		Tokens secondDevice = tokensOf(login(email, PASSWORD));
+
+		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, firstDevice.bearer()))
+			.andExpect(status().isUnauthorized());
+		mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+				.content(refreshBody(firstDevice.refreshToken())))
+			.andExpect(status().isUnauthorized());
+		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, secondDevice.bearer()))
+			.andExpect(status().isOk());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM auth_sessions WHERE user_id = ? AND revoked_reason = 'SIGNED_IN_ELSEWHERE'",
+				Long.class, userIdByEmail(email))).isEqualTo(1);
+	}
+
+	@Test
+	void passwordChangeKeepsCurrentSession() throws Exception {
+		String email = uniqueEmail();
+		register(email);
+		Tokens current = tokensOf(login(email, PASSWORD));
 		String newPassword = "Brand-New-Pass-1";
 
 		mvc.perform(post("/api/v1/auth/password").header(HttpHeaders.AUTHORIZATION, current.bearer())
@@ -227,8 +244,6 @@ class AuthFlowIntegrationTest {
 
 		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, current.bearer()))
 			.andExpect(status().isOk());
-		mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, otherDevice.bearer()))
-			.andExpect(status().isUnauthorized());
 		assertThat(login(email, PASSWORD).getResponse().getStatus()).isEqualTo(401);
 		assertThat(login(email, newPassword).getResponse().getStatus()).isEqualTo(200);
 		assertThat(auditCount("PASSWORD_CHANGE", userIdByEmail(email))).isEqualTo(1);
