@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { logoutAction } from "@/features/auth/actions";
 import { EmailText } from "@/components/ui/email-text";
 
 export interface MenuLink {
@@ -95,7 +94,8 @@ export function AccountMenu({ sections, name, email, userCode }: {
               </div>
             ))}
           </nav>
-          <form action={logoutAction} className="border-t border-border">
+          {/* A full page request (see app/logout/route.ts), so no signed-in page stays in the browser. */}
+          <form action="/logout" method="post" className="border-t border-border">
             <button type="submit" className="block w-full px-4 py-3 text-left text-sm text-muted hover:bg-background hover:text-foreground">
               Sign out
             </button>

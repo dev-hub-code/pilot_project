@@ -5,7 +5,6 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { BackendError, backendFetch } from "@/lib/server/backend-client";
 import {
   type AuthTokens,
-  clearSessionCookies,
   cookieNames,
   writeSessionCookies,
 } from "@/lib/server/auth/cookies";
@@ -221,21 +220,6 @@ export async function verifyEmailToken(token: string): Promise<{ ok: true } | { 
     }
     return { ok: false, message: describe(error) };
   }
-}
-
-export async function logoutAction(): Promise<void> {
-  const jar = await cookies();
-  const refreshToken = jar.get(cookieNames().refresh)?.value;
-  if (refreshToken) {
-    try {
-      await backendFetch<void>("/api/v1/auth/logout", { method: "POST", json: { refreshToken } });
-    } catch (error) {
-      // Cookies are cleared regardless; the session still expires server-side.
-      console.error("Backend logout failed", error);
-    }
-  }
-  clearSessionCookies(jar);
-  redirect("/login");
 }
 
 function describe(error: unknown): string {

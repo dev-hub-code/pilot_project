@@ -36,8 +36,11 @@ export async function proxy(request: NextRequest) {
   const access = request.cookies.get(names.access)?.value;
   const refresh = request.cookies.get(names.refresh)?.value;
 
+  const { pathname, search } = request.nextUrl;
+
   let renewed: AuthTokens | null = null;
-  if (refresh && (!access || expiresWithin(access, REFRESH_AHEAD_MS))) {
+  // Not while signing out: the logout route revokes the refresh token the browser sent.
+  if (refresh && pathname !== "/logout" && (!access || expiresWithin(access, REFRESH_AHEAD_MS))) {
     renewed = await tryRefresh(refresh, request.headers);
     if (renewed) {
       request.cookies.set(names.access, renewed.accessToken);
@@ -49,7 +52,6 @@ export async function proxy(request: NextRequest) {
 
   const effectiveAccess = renewed?.accessToken ?? access;
   const session = effectiveAccess ? await verifyAccessToken(effectiveAccess) : null;
-  const { pathname, search } = request.nextUrl;
 
   let response: NextResponse;
   if (!session && matches(pathname, PROTECTED_PREFIXES)) {
@@ -81,6 +83,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (renewed) writeSessionCookies(response.cookies, renewed);
+  // Signed-in pages are never kept by the browser or a proxy, so none can be shown again after signing out.
+  if (session || matches(pathname, PROTECTED_PREFIXES)) {
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  }
   return response;
 }
 
