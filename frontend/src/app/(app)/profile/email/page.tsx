@@ -6,6 +6,7 @@ import { Notice } from "@/components/ui/notice";
 import { ResendVerificationForm } from "@/features/auth/resend-verification-form";
 import { VerifyCodeForm } from "@/features/auth/verify-code-form";
 import { authFetch } from "@/lib/server/auth/session";
+import { onboardingHref } from "@/lib/server/onboarding";
 import type { CurrentUser } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Email address" };
@@ -22,7 +23,7 @@ export default async function EmailAddressPage() {
       <Card title="Email address">
         <div className="space-y-4">
           <Notice tone="success"><EmailText>{me.email}</EmailText> is confirmed.</Notice>
-          <LinkButton href="/onboarding">Continue account setup</LinkButton>
+          <LinkButton href={await onboardingHref()}>Continue account setup</LinkButton>
         </div>
       </Card>
     );

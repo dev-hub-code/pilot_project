@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isInvestor } from "@/lib/permissions";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
-import { getOnboarding } from "@/lib/server/onboarding";
-import type { KycSubmission } from "@/types/user";
+import { type OnboardingStep, getOnboarding } from "@/lib/server/onboarding";
+import { missingPersonalDetails } from "@/features/profile/kyc-labels";
+import type { KycSubmission, Profile } from "@/types/user";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { bankAccountSchema, kycNumberSchema, MAX_FILE_BYTES, profileSchema } from "@/validators/profile";
@@ -45,18 +46,41 @@ export async function updateProfileAction(_previous: FormState, formData: FormDa
     return profileFailure(failureState(error, values));
   }
   revalidatePath("/profile", "layout");
-  await continueSetup("personal");
+  const next = await continueSetup("personal");
+  // Saved, but setup cannot go on without what is still blank: say so at the fields, not just "saved".
+  if (next?.key === "personal") return stillMissing(await authFetch<Profile>("/api/v1/users/me"), values);
   return { success: "Profile saved." };
+}
+
+/** Each personal detail setup needs, by the form field that holds it. */
+const NEEDED: Record<string, { field: string; message: string }> = {
+  "mobile phone": { field: "phone", message: "Enter your mobile number" },
+  "date of birth": { field: "dateOfBirth", message: "Enter your date of birth (DD/MM/YYYY)" },
+  nationality: { field: "nationality", message: "Select your nationality" },
+  address: { field: "line1", message: "Complete your address" },
+};
+
+function stillMissing(profile: Profile, values: Record<string, string>): FormState {
+  const missing = missingPersonalDetails(profile);
+  return {
+    error: `Saved. To continue setting up your account, add your ${missing.join(", ")}.`,
+    fieldErrors: Object.fromEntries(missing.flatMap((m) => (NEEDED[m] ? [[NEEDED[m].field, NEEDED[m].message]] : []))),
+    values,
+  };
 }
 
 /**
  * During account setup, a finished step leads on to the next one still to do (personal details, then identity
  * verification, then a bank account). Investors who have set up their account stay where they are.
+ *
+ * @return the step still to do (the finished one, when it is not complete after all); null when setup is done or the
+ *         user is not an investor
  */
-async function continueSetup(finished: "personal" | "identity") {
-  if (!isInvestor((await requireSession()).permissions)) return;
+async function continueSetup(finished: "personal" | "identity"): Promise<OnboardingStep | null> {
+  if (!isInvestor((await requireSession()).permissions)) return null;
   const next = await getOnboarding().then((o) => o.next, () => null);
   if (next && next.key !== finished) redirect(`${next.href}?step=${finished}`);
+  return next;
 }
 
 /** Aadhaar or PAN: its number field and file field, as the KYC endpoint takes them. */

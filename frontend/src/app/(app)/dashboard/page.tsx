@@ -17,6 +17,7 @@ import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { cookieNames } from "@/lib/server/auth/cookies";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
+import { onboardingHref } from "@/lib/server/onboarding";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { CurrentUser } from "@/types/auth";
 import type { EarningsSummary, PayoutMonth } from "@/types/earning";
@@ -55,6 +56,8 @@ export default async function DashboardPage() {
     authFetch<Profile>("/api/v1/users/me"),
   ]);
   const needsVerification = profile.kycStatus !== "APPROVED";
+  const setupHref = !needsVerification ? null
+    : profile.kycStatus === "PENDING" ? "/profile/verification" : await onboardingHref();
   // The email reminder pops up once per sign-in; onboarding keeps asking after that.
   const emailPromptShown = (await cookies()).get(cookieNames().emailPrompt)?.value === (await requireSession()).sessionId;
   const investor = hasPermission(me.permissions, Permission.INVESTOR_PORTAL);
@@ -101,7 +104,7 @@ export default async function DashboardPage() {
                 Verify your identity to start investing and to receive withdrawals.
               </p>
               {/* Account setup in order: personal details, identity verification, then a bank account. */}
-              <LinkButton href={profile.kycStatus === "PENDING" ? "/profile/verification" : "/onboarding"}>
+              <LinkButton href={setupHref ?? "/profile/verification"}>
                 {profile.kycStatus === "PENDING" ? "View Verification Status" : "Complete Onboarding"}
               </LinkButton>
             </div>

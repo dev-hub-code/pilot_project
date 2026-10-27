@@ -11,7 +11,7 @@ import { BankAccountForm } from "@/features/profile/bank-account-form";
 import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
-import { requireEmailVerified } from "@/lib/server/onboarding";
+import { onboardingHref, requireEmailVerified } from "@/lib/server/onboarding";
 import type { BankAccount, Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
 
@@ -123,7 +123,7 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
             <Notice tone="warning">
               First verify your identity. Your bank account is checked against your verified name.
             </Notice>
-            <LinkButton href="/onboarding">Continue account setup</LinkButton>
+            <LinkButton href={await onboardingHref()}>Continue account setup</LinkButton>
           </div>
         )}
       </Card>

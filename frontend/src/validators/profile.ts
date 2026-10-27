@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { phoneCountry, validPhone } from "./phone";
-import { parseDayMonthYear } from "@/utils/format";
+import { latestBirthDate, parseDayMonthYear } from "@/utils/format";
 
 /** Client-side mirrors of backend validation; the backend remains authoritative. */
 const optional = (schema: z.ZodType<string>) =>
@@ -13,6 +13,11 @@ const dayMonthYear = z.string().transform((value, ctx) => {
   const iso = parseDayMonthYear(value);
   if (!iso) {
     ctx.addIssue({ code: "custom", message: "Enter the date as DD/MM/YYYY, e.g. 15/06/1985" });
+    return z.NEVER;
+  }
+  // YYYY-MM-DD compares as text; the backend also refuses dates not in the past.
+  if (iso >= latestBirthDate()) {
+    ctx.addIssue({ code: "custom", message: "Enter a date of birth in the past" });
     return z.NEVER;
   }
   return iso;

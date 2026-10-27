@@ -24,6 +24,15 @@ export interface Onboarding {
  * verification takes the name, date of birth and nationality from them), then identity verification (submitted is enough to move on), then a
  * bank account for payouts (added is enough; finance verifies it once the identity is approved).
  */
+/**
+ * Where "Complete onboarding" and similar buttons go: the first setup step still to do, or the verification status once
+ * all are done. Linking straight there, rather than to the /onboarding route that redirects, spares a client-side
+ * navigation a redirect (which also trips Next's development tools when the app is opened by network address).
+ */
+export async function onboardingHref(): Promise<string> {
+  return (await getOnboarding()).next?.href ?? "/profile/verification";
+}
+
 export async function getOnboarding(): Promise<Onboarding> {
   const [me, profile, accounts] = await Promise.all([
     authFetch<CurrentUser>("/api/v1/auth/me"),

@@ -16,6 +16,7 @@ import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
+import { onboardingHref } from "@/lib/server/onboarding";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { MarketplaceDetail, MinimumOrder, RentTiers, ReturnProjection } from "@/types/marketplace";
 import type { Cart } from "@/types/order";
@@ -152,7 +153,7 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
                 <InvestNowForm productId={id} inCart={inCart?.quantity ?? 0} />
               ) : (
                 // The calculator lists what is missing; onboarding leads through it (identity, then a bank account).
-                <LinkButton href="/onboarding" className="w-full">Complete onboarding</LinkButton>
+                <LinkButton href={await onboardingHref()} className="w-full">Complete onboarding</LinkButton>
               )}
               <div className="border-t border-border pt-3 text-xs text-muted">
                 <p className="font-medium text-foreground">Rent by order value</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { PhoneField } from "@/components/ui/phone-field";
 import { SelectField } from "@/components/ui/select-field";
@@ -20,12 +20,27 @@ import { formatDayMonthYear, latestBirthDate } from "@/utils/format";
 /** @param countries for the mobile number's country code, and the address: picking one loads its states, then its cities */
 export function ProfileForm({ profile, countries }: { profile: Profile; countries: Country[] }) {
   const [state, action] = useActionState<FormState, FormData>(updateProfileAction, {});
+  const form = useRef<HTMLFormElement>(null);
   const e = state.fieldErrors ?? {};
+
+  // The form is long on a phone and the Save button far below its first fields: after a save, bring the first field
+  // to fix (or else the message) into view, so a problem is never off-screen.
+  useEffect(() => {
+    const element = form.current;
+    if (!element || (!state.error && !state.fieldErrors && !state.success)) return;
+    const invalid = element.querySelector<HTMLElement>("[aria-invalid=true]");
+    if (invalid) {
+      invalid.scrollIntoView({ block: "center" });
+      invalid.focus({ preventScroll: true });
+    } else {
+      element.scrollIntoView({ block: "start" });
+    }
+  }, [state]);
   const v = (name: string, fallback: string | null) => state.values?.[name] ?? fallback ?? "";
   const phone = splitPhone(profile.phone, profile.phoneCountry);
 
   return (
-    <form action={action} className="space-y-6" noValidate>
+    <form ref={form} action={action} className="scroll-mt-24 space-y-6" noValidate>
       <FormFeedback state={state} />
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <legend className="mb-3 text-sm font-medium text-muted">Personal</legend>

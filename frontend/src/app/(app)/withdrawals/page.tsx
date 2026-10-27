@@ -12,6 +12,7 @@ import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals
 import { ReferralModeForm } from "@/features/withdrawals/referral-mode-form";
 import { CURRENCY } from "@/lib/currency";
 import { authFetch } from "@/lib/server/auth/session";
+import { onboardingHref } from "@/lib/server/onboarding";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { PageResponse } from "@/types/api";
 import type { EarningsBalance, EarningsSummary } from "@/types/earning";
@@ -80,7 +81,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
 
       {profile.kycStatus !== "APPROVED" && (
         <Notice tone="warning">
-          Verify your identity to be paid. <Link href="/onboarding" className="underline">Start verification</Link>
+          Verify your identity to be paid. <Link href={await onboardingHref()} className="underline">Start verification</Link>
         </Notice>
       )}
 
