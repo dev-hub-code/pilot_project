@@ -89,6 +89,7 @@ public class BankAccountService {
 
 	@Transactional
 	public BankAccountResponse add(UUID userId, AddBankAccountRequest request, BankProofType proofType, MultipartFile proof) {
+		users.requireEmailVerified(userId);
 		List<BankAccount> active = accounts.lockActiveForUser(userId);
 		BankAccount account = register(userId, request, active);
 		attachProof(userId, account, proofType, proof);

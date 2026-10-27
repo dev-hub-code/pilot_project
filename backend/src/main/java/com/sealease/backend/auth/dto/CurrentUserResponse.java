@@ -13,5 +13,7 @@ public record CurrentUserResponse(
 		String status,
 		Set<String> roles,
 		Set<String> permissions,
-		boolean passwordChangeRequired) {
+		boolean passwordChangeRequired,
+		/** False until the user confirms their email address; they can still sign in meanwhile. */
+		boolean emailVerified) {
 }

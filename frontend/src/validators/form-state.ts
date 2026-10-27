@@ -7,8 +7,6 @@ export interface FormState {
   error?: string;
   success?: string;
   fieldErrors?: FieldErrors;
-  /** The backend error code, when the form reacts to a specific one (e.g. EMAIL_NOT_VERIFIED). */
-  code?: string;
   /** Echoed back so the form keeps non-secret input after a failed submit. */
   values?: Record<string, string>;
 }

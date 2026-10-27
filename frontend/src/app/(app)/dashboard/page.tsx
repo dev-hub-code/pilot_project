@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { ContainerScene } from "@/components/brand/container-scene";
 import { Eyebrow } from "@/components/brand/eyebrow";
 import { ColumnChart, type ColumnSeries } from "@/components/charts/column-chart";
@@ -10,10 +11,12 @@ import { toneFor } from "@/components/ui/status-tones";
 import { LeaseProgress } from "@/features/dashboard/lease-progress";
 import { monthColumns, monthKey } from "@/features/dashboard/months";
 import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
+import { VerifyEmailDialog } from "@/features/auth/verify-email-dialog";
 import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
 import { Permission, hasPermission } from "@/lib/permissions";
-import { authFetch } from "@/lib/server/auth/session";
+import { cookieNames } from "@/lib/server/auth/cookies";
+import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { CurrentUser } from "@/types/auth";
 import type { EarningsSummary, PayoutMonth } from "@/types/earning";
@@ -52,6 +55,8 @@ export default async function DashboardPage() {
     authFetch<Profile>("/api/v1/users/me"),
   ]);
   const needsVerification = profile.kycStatus !== "APPROVED";
+  // The email reminder pops up once per sign-in; onboarding keeps asking after that.
+  const emailPromptShown = (await cookies()).get(cookieNames().emailPrompt)?.value === (await requireSession()).sessionId;
   const investor = hasPermission(me.permissions, Permission.INVESTOR_PORTAL);
   const [portfolio, earnings, payoutMonths, referralMonths] = investor
     ? await Promise.all([
@@ -82,6 +87,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Signing in does not wait for the address to be confirmed. */}
+      {!me.emailVerified && !emailPromptShown && <VerifyEmailDialog email={me.email} />}
       <section className="relative isolate overflow-hidden bg-ink px-6 py-12 text-on-ink sm:px-10 sm:py-16">
         <ContainerScene focus="side" className="absolute inset-0 -z-10 size-full" />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/85 to-ink/10" />

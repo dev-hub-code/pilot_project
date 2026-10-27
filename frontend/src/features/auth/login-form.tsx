@@ -14,20 +14,7 @@ export function LoginForm({ next }: { next?: string }) {
   return (
     <form action={formAction} className="space-y-4" noValidate>
       {state.error && (
-        <Alert>
-          {state.error}
-          {state.code === "EMAIL_NOT_VERIFIED" && (
-            <>
-              {" "}
-              <Link
-                href={`/verify-email?email=${encodeURIComponent(state.values?.email ?? "")}`}
-                className="font-medium underline underline-offset-4"
-              >
-                Verify now
-              </Link>
-            </>
-          )}
-        </Alert>
+        <Alert>{state.error}</Alert>
       )}
       {next && <input type="hidden" name="next" value={next} />}
       <TextField

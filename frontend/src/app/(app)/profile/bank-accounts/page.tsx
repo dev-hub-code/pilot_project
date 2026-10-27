@@ -11,12 +11,14 @@ import { BankAccountForm } from "@/features/profile/bank-account-form";
 import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
+import { requireEmailVerified } from "@/lib/server/onboarding";
 import type { BankAccount, Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Bank accounts" };
 
 export default async function BankAccountsPage({ searchParams }: PageProps<"/profile/bank-accounts">) {
+  await requireEmailVerified();
   const fromIdentity = (await searchParams).step === "identity";
   const session = await requireSession();
   if (!hasPermission(session.permissions, Permission.INVESTOR_PORTAL)) {

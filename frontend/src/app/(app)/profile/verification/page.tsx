@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import { KycDocumentForm } from "@/features/profile/kyc-form";
 import { authFetch } from "@/lib/server/auth/session";
+import { requireEmailVerified } from "@/lib/server/onboarding";
 import type { KycSubmission, Profile } from "@/types/user";
 import { formatAadhaar, kycNumbers, missingPersonalDetails } from "@/features/profile/kyc-labels";
 import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
@@ -14,6 +15,7 @@ import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 export const metadata: Metadata = { title: "Identity verification" };
 
 export default async function VerificationPage({ searchParams }: PageProps<"/profile/verification">) {
+  await requireEmailVerified();
   const fromPersonal = (await searchParams).step === "personal";
   // The backend answers 204 (no body) when nothing has been uploaded yet.
   const [submitted, profile] = await Promise.all([

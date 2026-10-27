@@ -76,7 +76,7 @@ public class UserAccountService {
 	 * Self-registration.
 	 *
 	 * @param phone         the mobile number (validated), unique across accounts; saved on the new profile
-	 * @param emailVerified {@code false} when the user must still confirm their address before signing in
+	 * @param emailVerified {@code false} when the user must still confirm their address
 	 */
 	@Transactional
 	public UserAccount register(String email, String rawPassword, String firstName, String lastName,
@@ -132,9 +132,6 @@ public class UserAccountService {
 		}
 		if (user.temporaryPasswordExpiredAt(now)) {
 			return new CredentialVerification.TemporaryPasswordExpired();
-		}
-		if (!user.isEmailVerified()) {
-			return new CredentialVerification.EmailNotVerified(UserAccount.from(user));
 		}
 		if (passwordEncoder.upgradeEncoding(user.getPasswordHash())) {
 			user.upgradePasswordHash(passwordEncoder.encode(rawPassword));
@@ -234,6 +231,15 @@ public class UserAccountService {
 	public boolean isEmailVerified(UUID userId) {
 		return users.findById(userId).map(User::isEmailVerified)
 			.orElseThrow(() -> new ResourceNotFoundException("User", userId));
+	}
+
+	/** Account setup (identity verification, bank accounts) starts only once the email address is confirmed. */
+	@Transactional(readOnly = true)
+	public void requireEmailVerified(UUID userId) {
+		if (!isEmailVerified(userId)) {
+			throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED,
+					"Confirm your email address first, with the code we emailed you (Profile, Email address)");
+		}
 	}
 
 	/** The one user a search names exactly: by readable ID ("SL03500") or by full email address. */

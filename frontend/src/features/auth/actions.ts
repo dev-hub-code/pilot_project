@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { BackendError, backendFetch } from "@/lib/server/backend-client";
@@ -13,6 +14,7 @@ import { safeRedirectPath } from "@/utils/redirect";
 import { hasStaffAccess } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import { verifyAccessToken } from "@/lib/server/auth/tokens";
+import { getOnboarding } from "@/lib/server/onboarding";
 import {
   changePasswordSchema,
   type FormState,
@@ -32,7 +34,6 @@ const MESSAGES: Record<string, string> = {
   ACCOUNT_DISABLED: "This account is not active. Please contact support.",
   TEMPORARY_PASSWORD_EXPIRED: "Your temporary password has expired. Ask an administrator for a new one.",
   EMAIL_ALREADY_REGISTERED: "An account with this email already exists.",
-  EMAIL_NOT_VERIFIED: "Please confirm your email address first, with the code or link we emailed when you signed up.",
   TOO_MANY_REQUESTS: "Too many attempts. Please wait a moment and try again.",
 };
 
@@ -53,8 +54,7 @@ export async function loginAction(_previous: FormState, formData: FormData): Pro
     const claims = await verifyAccessToken(tokens.accessToken);
     if (claims && hasStaffAccess(claims.permissions)) home = "/admin";
   } catch (error) {
-    const code = error instanceof BackendError ? error.apiError?.code : undefined;
-    return { error: describe(error), values, code };
+    return { error: describe(error), values };
   }
   redirect(safeRedirectPath(formData.get("next"), home));
 }
@@ -128,7 +128,11 @@ export async function resendVerificationAction(_previous: FormState, formData: F
   };
 }
 
-/** Confirms an email address with the 6-digit code from the verification email, then sends the user to sign in. */
+/**
+ * Confirms an email address with the 6-digit code from the verification email, then sends the user to sign in.
+ * From the dashboard's reminder (stay=1) the user is already signed in: the dashboard is re-rendered instead. As the
+ * first step of account setup (then=onboarding) it leads on to the next step.
+ */
 export async function verifyCodeAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   const values = { email };
@@ -146,6 +150,16 @@ export async function verifyCodeAction(_previous: FormState, formData: FormData)
       return { fieldErrors: { code: `${error.apiError.message}.` }, values };
     }
     return { error: describe(error), values };
+  }
+  if (formData.get("stay") === "1") {
+    revalidatePath("/dashboard");
+    return { success: "Your email address is confirmed.", values };
+  }
+  if (formData.get("then") === "onboarding") {
+    // The steps above every profile page drop this one.
+    revalidatePath("/profile", "layout");
+    const next = await getOnboarding().then((o) => o.next, () => null);
+    redirect(next ? `${next.href}?step=email` : "/profile");
   }
   redirect("/login?verified=1");
 }

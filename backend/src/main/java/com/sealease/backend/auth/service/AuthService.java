@@ -87,7 +87,8 @@ public class AuthService {
 
 	/**
 	 * Creates an investor account. When email verification is required the user is emailed a link and
-	 * signed in only after following it ({@link RegistrationResponse}); otherwise they are signed in at once.
+	 * sent to confirm it ({@link RegistrationResponse}); otherwise they are signed in at once. An address
+	 * that is never confirmed does not stop sign-in: {@link #currentUser} reports it so the app can ask.
 	 *
 	 * @return {@link AuthTokensResponse} or {@link RegistrationResponse}
 	 */
@@ -139,8 +140,6 @@ public class AuthService {
 					"Account temporarily locked after repeated failed sign-in attempts; try again later");
 			case CredentialVerification.Inactive ignored ->
 				throw new BusinessException(ErrorCode.ACCOUNT_DISABLED, "This account is not active");
-			case CredentialVerification.EmailNotVerified ignored -> throw new BusinessException(
-					ErrorCode.EMAIL_NOT_VERIFIED, "Confirm your email address first; we sent you a link when you signed up");
 			case CredentialVerification.TemporaryPasswordExpired ignored ->
 				throw new BusinessException(ErrorCode.TEMPORARY_PASSWORD_EXPIRED,
 						"Your temporary password has expired; ask an administrator for a new one");
@@ -209,7 +208,8 @@ public class AuthService {
 		UserAccount account = accounts.getAccount(user.userId());
 		UserAuthorities authorities = userRoles.authoritiesOf(user.userId());
 		return new CurrentUserResponse(account.id(), account.userCode(), account.email(), account.firstName(), account.lastName(),
-				account.status().name(), authorities.roles(), authorities.permissions(), account.mustChangePassword());
+				account.status().name(), authorities.roles(), authorities.permissions(), account.mustChangePassword(),
+				accounts.isEmailVerified(user.userId()));
 	}
 
 	private AuthTokensResponse openSession(UUID userId, ClientInfo client) {

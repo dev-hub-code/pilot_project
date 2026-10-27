@@ -1,18 +1,22 @@
 package com.sealease.backend.auth;
 
+import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.SentMail;
 import com.sealease.backend.support.TestApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.MimeMessagePreparator;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,11 +25,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Sign-up with email verification switched on: no session until the emailed link is followed. */
+/**
+ * Sign-up with email verification switched on: an email with a link and a code goes out. Sign-in does not wait
+ * for it; the current user reports the address unconfirmed until it is.
+ */
 @IntegrationTest
 @TestPropertySource(properties = {
 		"app.auth.email-verification.required=true",
@@ -46,7 +55,7 @@ class EmailVerificationIntegrationTest {
 	private JavaMailSender mail;
 
 	@Test
-	void signUpEmailsALinkAndSignInWaitsForIt() throws Exception {
+	void signUpEmailsALinkAndSignInDoesNotWaitForIt() throws Exception {
 		String email = uniqueEmail();
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerBody(email)))
 			.andExpect(status().isAccepted())
@@ -55,13 +64,34 @@ class EmailVerificationIntegrationTest {
 			.andExpect(jsonPath("$.accessToken").doesNotExist());
 		String token = lastLinkTokenSentTo(email);
 
-		login(email).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+		me(signIn(email)).andExpect(status().isOk()).andExpect(jsonPath("$.emailVerified").value(false));
 
 		verifyEmail(token).andExpect(status().isNoContent());
-		login(email).andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty());
+		me(signIn(email)).andExpect(jsonPath("$.emailVerified").value(true));
 
 		// Opening the link again (a double click, a mail scanner) is not an error.
 		verifyEmail(token).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void identityVerificationWaitsForTheEmailAddress() throws Exception {
+		String email = uniqueEmail();
+		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerBody(email)))
+			.andExpect(status().isAccepted());
+		String accessToken = signIn(email);
+		MockMultipartFile submission = new MockMultipartFile("submission", "", MediaType.APPLICATION_JSON_VALUE,
+				"{}".getBytes(StandardCharsets.UTF_8));
+
+		mvc.perform(multipart("/api/v1/users/me/kyc").file(submission)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+
+		verifyCode(email, lastCodeSentTo(email)).andExpect(status().isNoContent());
+		// Past the email check: now it is the missing documents that stop it.
+		mvc.perform(multipart("/api/v1/users/me/kyc").file(submission)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+			.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
 	}
 
 	@Test
@@ -93,7 +123,7 @@ class EmailVerificationIntegrationTest {
 		verifyEmail(token).andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_VERIFICATION_TOKEN"));
 		verifyEmail("not-a-real-token").andExpect(status().isBadRequest());
-		login(email).andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+		me(signIn(email)).andExpect(jsonPath("$.emailVerified").value(false));
 	}
 
 	@Test
@@ -108,7 +138,7 @@ class EmailVerificationIntegrationTest {
 			.andExpect(jsonPath("$.code").value("INVALID_VERIFICATION_CODE"));
 		verifyCode(email, "12ab").andExpect(status().isBadRequest());
 		verifyCode(email, code).andExpect(status().isNoContent());
-		login(email).andExpect(status().isOk());
+		me(signIn(email)).andExpect(jsonPath("$.emailVerified").value(true));
 		// Already confirmed: entering it again does no harm.
 		verifyCode(email, code).andExpect(status().isNoContent());
 	}
@@ -148,6 +178,15 @@ class EmailVerificationIntegrationTest {
 	private org.springframework.test.web.servlet.ResultActions login(String email) throws Exception {
 		return mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
 			.content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)));
+	}
+
+	private String signIn(String email) throws Exception {
+		String body = login(email).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		return JsonPath.read(body, "$.accessToken");
+	}
+
+	private org.springframework.test.web.servlet.ResultActions me(String accessToken) throws Exception {
+		return mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions verifyEmail(String token) throws Exception {

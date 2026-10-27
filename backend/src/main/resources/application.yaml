@@ -168,7 +168,7 @@ app:
       password-reset-per-address: { requests: 3, window: 1h }
       password-reset-code-per-ip: { requests: 30, window: 15m }
     email-verification:
-      # New accounts confirm their email address (a link is emailed) before they can sign in.
+      # New accounts are emailed a link and code to confirm their address; until then the dashboard keeps asking.
       required: ${APP_EMAIL_VERIFICATION_REQUIRED:true}
       link-ttl: ${APP_EMAIL_VERIFICATION_LINK_TTL:24h}
       # Wrong 6-digit codes allowed per email; then the user asks for a new one.

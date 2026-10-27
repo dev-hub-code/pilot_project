@@ -30,7 +30,7 @@ export interface CookieWriter {
  */
 export function cookieNames() {
   const prefix = serverEnv().COOKIE_SECURE ? "__Host-" : "";
-  return { access: `${prefix}sl_at`, refresh: `${prefix}sl_rt` } as const;
+  return { access: `${prefix}sl_at`, refresh: `${prefix}sl_rt`, emailPrompt: `${prefix}sl_ep` } as const;
 }
 
 function baseOptions(): CookieOptions {
@@ -60,4 +60,13 @@ export function clearSessionCookies(jar: CookieWriter): void {
   const names = cookieNames();
   jar.delete(names.access);
   jar.delete(names.refresh);
+  jar.delete(names.emailPrompt);
+}
+
+/**
+ * Remembers that the "confirm your email" reminder was shown in this session (by its id), so it is shown once per
+ * sign-in: a new sign-in is a new session and shows it again.
+ */
+export function rememberEmailPrompt(jar: CookieWriter, sessionId: string): void {
+  jar.set(cookieNames().emailPrompt, sessionId, baseOptions());
 }

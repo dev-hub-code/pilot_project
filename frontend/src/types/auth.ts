@@ -9,6 +9,8 @@ export interface CurrentUser {
   status: string;
   roles: string[];
   permissions: string[];
+  /** False until the user confirms their email address; they can sign in meanwhile. */
+  emailVerified: boolean;
 }
 
 /** Mirrors backend RoleResponse. */

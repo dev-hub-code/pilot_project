@@ -104,6 +104,7 @@ public class KycService {
 	@Transactional
 	public KycSubmissionResponse submit(UUID userId, KycSubmissionRequest request, KycFiles files) {
 		submissionsPerUser.acquire(userId.toString());
+		accounts.requireEmailVerified(userId);
 		KycStatus current = profiles.kycStatusOf(userId);
 		if (current == KycStatus.PENDING) {
 			throw new BusinessException(ErrorCode.CONFLICT, "A verification is already under review");

@@ -28,7 +28,7 @@ import java.util.Optional;
 /**
  * Confirms that a self-registered user owns their email address. After sign-up (and again on request)
  * one email carries a single-use link and a 6-digit code; following the link or entering the code marks
- * the address verified so the user can sign in.
+ * the address verified. Signing in does not wait for it; the app keeps asking until it is done.
  */
 @Service
 public class EmailVerificationService {

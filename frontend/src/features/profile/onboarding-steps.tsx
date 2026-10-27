@@ -18,7 +18,7 @@ export function OnboardingSteps({ steps }: { steps: OnboardingStep[] }) {
       <p className="text-sm text-muted">
         Set up your account to invest: {doneCount} of {steps.length} steps done.
       </p>
-      <ol className="grid gap-2 sm:grid-cols-3">
+      <ol className={`grid gap-2 ${steps.length > 3 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
         {steps.map((step, index) => {
           const current = pathname === step.href;
           const reachable = step.done || index === nextIndex;
