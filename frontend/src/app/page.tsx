@@ -1,16 +1,14 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { ContainerScene } from "@/components/brand/container-scene";
 import { Eyebrow } from "@/components/brand/eyebrow";
 import { Logo } from "@/components/brand/logo";
+import { PortPhoto, type PortPhotoName } from "@/components/brand/port-photo";
 import { LandingMenu } from "@/components/layout/landing-menu";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
-import { Carousel } from "@/components/ui/carousel";
 import { ReviewCarousel, type Review } from "@/features/landing/review-carousel";
 import { InterestForm } from "@/features/leads/interest-form";
 import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stats";
-import { getPublicPlans } from "@/lib/server/public-plans";
 import { getPhoneCountries } from "@/lib/server/phone-countries";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { getRentTerms, tierFor, type RentTerms } from "@/lib/server/rent-terms";
@@ -171,10 +169,6 @@ function faqs(terms: RentTerms | null, credit: string) {
         : ""}The calculator on each container's page shows your exact rent before you buy.`,
     },
     {
-      question: "Do I get my investment back?",
-      answer: "No. Containers pay rent only: you receive rent for the whole lease, and the price you paid is not paid back. The calculator shows the total rent over the lease before you buy.",
-    },
-    {
       question: "How much do I need to start?",
       answer: terms?.minimumOrder
         ? `The minimum order is ${formatMoney(terms.minimumOrder)}. Each container's price is shown in the marketplace, and you can invest again whenever you like.`
@@ -283,26 +277,41 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
   return Object.values(figures).every(Boolean) ? (figures as Record<keyof typeof figures, string>) : null;
 }
 
-const STEPS = (credit: string) => [
+const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoName; alt: string }[] => [
   {
     title: "Complete onboarding",
+    photo: "miami-port",
+    alt: "Aerial view of a container port on an island, with ships moored at the quay",
     body: "Create your free account, add your personal details, verify your identity with Aadhaar and PAN, and add the bank account your earnings are paid into.",
   },
   {
     title: "Invest in containers",
+    photo: "yard-stacks",
+    alt: "Rows of shipping containers stacked in a port yard beside a harbour crane",
     body: "Pick a container, set how many and the lease in years in the calculator to see your rent, then invest now and pay by bank or in cash at our office.",
   },
   {
     title: "Earn rent",
+    photo: "container-lift",
+    alt: "A shipping container lifted by a ship-to-shore crane onto a truck at the quay",
     body: `Once your payment is confirmed, each container is assigned to you by its number. Accept its lease agreement and rent is credited to your wallet ${credit}, then paid out to your bank account.`,
   },
+];
+
+/** The photo strip: a large lead photo, then four smaller ones. */
+const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
+  { photo: "terminal-above", alt: "Container stacks and gantry cranes in a terminal, seen from directly above", caption: "Container terminal from above" },
+  { photo: "container-wall", alt: "A wall of red, yellow, blue and teal shipping containers stacked five high", caption: "Stacked five high" },
+  { photo: "tacoma-cranes", alt: "Ship-to-shore cranes over long rows of stacked containers at the Port of Tacoma", caption: "Port of Tacoma, USA" },
+  { photo: "singapore-terminal", alt: "Container stacks in a grid of lanes at a terminal in Singapore, from the air", caption: "Singapore" },
+  { photo: "savannah-aerial", alt: "Container ships at the berths of the Port of Savannah, with the stacking yard behind", caption: "Port of Savannah, USA" },
 ];
 
 export default async function Home() {
   // System status must reflect the live backend, never a build-time snapshot.
   await connection();
-  const [backend, stats, plans, phoneCountries, terms, rentCredit] = await Promise.all([getBackendStatus(), getPlatformStats(),
-    getPublicPlans(), getPhoneCountries(), getRentTerms(), getRentCredit()]);
+  const [backend, stats, phoneCountries, terms, rentCredit] = await Promise.all([getBackendStatus(), getPlatformStats(),
+    getPhoneCountries(), getRentTerms(), getRentCredit()]);
   const credit = creditLabel(rentCredit);
   const example = examplePortfolio(terms);
   const production = process.env.NODE_ENV === "production";
@@ -315,40 +324,45 @@ export default async function Home() {
       <div className="mx-auto max-w-[1440px] bg-surface">
         {/* ------------------------------------------------------------------- hero */}
         <section className="relative isolate flex min-h-[640px] flex-col overflow-hidden bg-ink text-on-ink lg:h-[min(88vh,860px)]">
-          <ContainerScene className="absolute inset-0 -z-10 size-full" />
-          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-ink/90 via-ink/45 to-ink/30 lg:hidden" />
+          <PortPhoto name="savannah-cranes" alt="" eager sizes="(min-width: 1440px) 1440px, 100vw"
+            className="absolute inset-0 -z-20 size-full object-cover" />
+          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-ink/95 via-ink/55 to-ink/40" />
+          <div aria-hidden="true" className="absolute inset-0 -z-10 hidden bg-gradient-to-r from-ink/60 to-transparent lg:block" />
 
           <header className="relative flex items-center justify-between gap-6 px-5 py-6 sm:px-10 lg:px-14 lg:py-8">
             <Logo tone="light" />
-            <nav aria-label="Main" className="flex items-center gap-3 sm:gap-4 lg:gap-6 xl:gap-8">
-              <ul className="hidden items-center gap-6 text-sm lg:flex xl:gap-8">
-                {NAV.map((item) => (
+            <nav aria-label="Main" className="flex items-center gap-3 xl:gap-4">
+              {/* In-page sections in a frosted pill; signing in and investing sit apart from it. */}
+              <ul className="hidden items-center gap-0.5 rounded-full border border-on-ink/15 bg-ink/35 p-1.5 text-sm shadow-lg shadow-ink/20 backdrop-blur-md xl:flex">
+                {NAV.filter((item) => item.href.startsWith("#")).map((item) => (
                   <li key={item.href}>
                     {/* In-page sections use plain anchors: <Link> skips the scroll when the URL already has that hash. */}
-                    {item.href.startsWith("#") ? (
-                      <a href={item.href} className="whitespace-nowrap text-on-ink/85 transition-colors hover:text-on-ink">
-                        {item.label}
-                      </a>
-                    ) : (
-                      <Link href={item.href} className="whitespace-nowrap text-on-ink/85 transition-colors hover:text-on-ink">
-                        {item.label}
-                      </Link>
-                    )}
+                    <a href={item.href}
+                      className="block whitespace-nowrap rounded-full px-4 py-2 text-on-ink/80 transition-colors hover:bg-on-ink/10 hover:text-on-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none 2xl:px-5">
+                      {item.label}
+                    </a>
                   </li>
                 ))}
               </ul>
+              <Link href="/login"
+                className="hidden whitespace-nowrap rounded-full border border-on-ink/40 bg-ink/35 px-5 py-2.5 text-sm font-medium text-on-ink shadow-lg shadow-ink/20 backdrop-blur-md transition-colors hover:border-on-ink hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none xl:inline-flex">
+                Sign In
+              </Link>
               <Link
                 href="/register"
-                className="hidden whitespace-nowrap rounded-full border border-on-ink/80 px-4 py-2 text-sm transition-colors hover:bg-on-ink hover:text-ink sm:inline-flex lg:px-5 lg:py-2.5"
+                className="hidden items-center gap-2 whitespace-nowrap rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-on-gold shadow-lg shadow-ink/25 transition-colors hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-on-ink focus-visible:outline-none sm:inline-flex"
               >
                 Start Investing
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
               </Link>
               <LandingMenu links={NAV} />
             </nav>
           </header>
 
           <div className="mt-auto grid gap-10 px-5 pb-10 sm:px-10 lg:grid-cols-2 lg:items-end lg:px-14 lg:pb-16">
-            <h1 className="max-w-xl text-5xl leading-[1.02] font-bold tracking-tight sm:text-6xl lg:text-7xl">
+            <h1 className="max-w-xl text-4xl leading-[1.04] font-bold tracking-tight min-[400px]:text-5xl sm:text-6xl xl:text-7xl">
               Invest In The Containers That Move The World
             </h1>
             <div className="max-w-lg space-y-7 lg:justify-self-end">
@@ -356,15 +370,18 @@ export default async function Home() {
                 Buy Whole Shipping Containers, Each Assigned To You By Its Own Number, And Earn
                 Rent From The First Hour Of The Lease.
               </p>
-              <div className="flex flex-wrap gap-3">
-                <LinkButton href="/register">Start Investing</LinkButton>
-                <Link
-                  href="/login"
-                  className="inline-flex h-11 items-center px-2 text-sm text-on-ink/90 underline-offset-4 hover:underline"
-                >
-                  I already have an account
-                </Link>
-              </div>
+              <dl className="grid gap-3 border-t border-on-ink/20 pt-6 sm:grid-cols-3 sm:gap-6">
+                {[
+                  { term: "Whole containers", detail: "Never shares: each has its own ISO number" },
+                  { term: "Rent " + credit, detail: "Credited to your wallet from the first full hour" },
+                  { term: "Your own lease", detail: "An agreement for every container you own" },
+                ].map((point) => (
+                  <div key={point.term} className="flex items-baseline gap-3 sm:block sm:space-y-1.5">
+                    <dt className="w-36 shrink-0 text-sm font-semibold text-gold first-letter:uppercase sm:w-auto">{point.term}</dt>
+                    <dd className="text-xs leading-relaxed text-on-ink/75">{point.detail}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           </div>
         </section>
@@ -380,7 +397,7 @@ export default async function Home() {
             world. We handle the leasing; you collect the income. You don&apos;t need any shipping experience, and
             you can start with a single order{terms?.minimumOrder ? ` from ${formatMoney(terms.minimumOrder)}` : ""}.
           </p>
-          <ul className="mt-14 grid gap-px bg-border text-left sm:grid-cols-2 lg:grid-cols-4">
+          <ul className="mt-14 grid gap-px bg-border text-left sm:grid-cols-2 xl:grid-cols-4">
             {BENEFITS(credit).map((benefit) => (
               <li key={benefit.title} className="space-y-3 bg-surface p-8">
                 <h3 className="text-lg font-semibold tracking-tight">{benefit.title}</h3>
@@ -414,7 +431,7 @@ export default async function Home() {
                 ].filter((figure) => figure.value).map((figure) => (
                   <div key={figure.label} className="flex flex-col-reverse justify-end gap-1 bg-background px-3 py-5">
                     <dt className="text-xs text-muted">{figure.label}</dt>
-                    <dd className="font-display text-2xl font-semibold">{figure.value}</dd>
+                    <dd className="font-display text-xl font-semibold whitespace-nowrap sm:text-2xl">{figure.value}</dd>
                   </div>
                 ))}
               </dl>
@@ -434,8 +451,39 @@ export default async function Home() {
           )}
         </section>
 
+        {/* ---------------------------------------------------------------- ports */}
+        <section aria-labelledby="ports-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+          <div className="space-y-5">
+            <Eyebrow>At The Ports</Eyebrow>
+            <h2 id="ports-heading" className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              Where Your Containers Work
+            </h2>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted">
+              Containers are stacked, loaded and moved through terminals like these every day, carrying the goods of the
+              businesses that lease them.
+            </p>
+          </div>
+          <ul className="mt-12 grid grid-cols-2 gap-2 md:grid-cols-4 md:grid-rows-2">
+            {PORT_GALLERY.map((item, index) => (
+              <li key={item.photo}
+                className={`group relative overflow-hidden bg-ink ${index === 0
+                  ? "col-span-2 aspect-[4/3] md:row-span-2 md:aspect-auto"
+                  : "aspect-square md:aspect-[4/3]"}`}>
+                <figure className="size-full">
+                  <PortPhoto name={item.photo} alt={item.alt}
+                    sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
+                    className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
+                    {item.caption}
+                  </figcaption>
+                </figure>
+              </li>
+            ))}
+          </ul>
+        </section>
+
         {/* ----------------------------------------------------------- how it works */}
-        <section id="how-it-works" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14">
+        <section id="how-it-works" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="space-y-5">
               <Eyebrow>How It Works</Eyebrow>
@@ -448,6 +496,10 @@ export default async function Home() {
           <ol className="mt-12 grid gap-px bg-border md:grid-cols-3">
             {STEPS(credit).map((step, index) => (
               <li key={step.title} className="space-y-4 bg-surface p-8">
+                <div className="-mx-8 -mt-8 mb-8 aspect-[16/10] overflow-hidden bg-ink">
+                  <PortPhoto name={step.photo} alt={step.alt} sizes="(min-width: 768px) 33vw, 100vw"
+                    className="size-full object-cover" />
+                </div>
                 <span className="font-display text-4xl font-semibold text-gold-text">0{index + 1}</span>
                 <h3 className="text-xl font-semibold tracking-tight">{step.title}</h3>
                 <p className="text-sm leading-relaxed text-muted">{step.body}</p>
@@ -458,7 +510,7 @@ export default async function Home() {
 
         {/* -------------------------------------------------------------- investors */}
         <section id="investors" className="grid scroll-mt-8 md:grid-cols-2">
-          <div className="space-y-5 bg-background px-5 py-16 sm:px-10 lg:px-14">
+          <div className="space-y-5 bg-background px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
             <Eyebrow>Your Own Containers</Eyebrow>
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">A Container With Your Name On It</h3>
             <p className="max-w-md text-sm leading-relaxed text-muted">
@@ -484,7 +536,10 @@ export default async function Home() {
               </ul>
             </div>
           </div>
-          <div className="space-y-5 bg-ink px-5 py-16 text-on-ink sm:px-10 lg:px-14">
+          <div className="relative isolate space-y-5 overflow-hidden bg-ink px-5 py-20 text-on-ink sm:px-10 lg:px-14 lg:py-28">
+            <PortPhoto name="container-wall" alt="" sizes="(min-width: 768px) 50vw, 100vw"
+              className="absolute inset-0 -z-20 size-full object-cover opacity-25" />
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-br from-ink via-ink/85 to-ink/60" />
             <Eyebrow tone="light">Your Rent</Eyebrow>
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent At Your Order&apos;s Rate</h3>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
@@ -526,90 +581,30 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* ---------------------------------------------------------- earnings by container */}
-        {plans.length > 0 && (
-          <section id="earnings-by-container" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14">
-            <div className="flex flex-wrap items-end justify-between gap-6">
-              <div className="space-y-5">
-                <Eyebrow>Investor Earnings</Eyebrow>
-                <h2 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                  What Each Container Pays You
-                </h2>
-                <p className="max-w-2xl text-sm leading-relaxed text-muted">
-                  Containers on sale now and their terms. Every container pays rent each month of the lease, and you
-                  choose the lease length in whole years within its range. Containers pay rent only: the price is not
-                  paid back.
-                </p>
-              </div>
-              <LinkButton href="/register" variant="secondary">Start investing</LinkButton>
-            </div>
-            <div className="mt-12">
-              <Carousel label="Containers on sale and what they pay" itemsName="containers" itemClassName="flex flex-col gap-6 p-8">
-              {plans.map((plan) => {
-                const years = plan.minTenureYears === plan.maxTenureYears
-                  ? `${plan.minTenureYears} ${plan.minTenureYears === 1 ? "year" : "years"}`
-                  : `${plan.minTenureYears}–${plan.maxTenureYears} years`;
-                return (
-                  <div key={plan.code} className="contents">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted">{plan.containerTypeLabel} container</p>
-                      <p className="mt-2 text-lg font-semibold tracking-tight">{plan.title}</p>
-                    </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-5 text-sm">
-                      <div>
-                        <dt className="text-muted">Price per container</dt>
-                        <dd className="mt-1 font-display text-xl font-semibold tabular-nums">{formatMoney(plan.price)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted">Lease</dt>
-                        <dd className="mt-1 font-display text-xl font-semibold">{years}</dd>
-                      </div>
-                    </dl>
-                    <p className="mt-auto border-t border-border pt-4 text-sm text-muted">
-                      {terms
-                        ? <>Rent from {formatPercent(terms.tiers[0]?.monthlyRentPercent ?? 0)} of the price a month, higher for larger orders.</>
-                        : <>Monthly rent is set by your order&apos;s total value: the more you buy in one order, the higher the rate.</>}
-                    </p>
-                  </div>
-                );
-              })}
-              </Carousel>
-            </div>
-            <p className="mt-6 text-xs leading-relaxed text-muted">
-              Figures are the published terms, not a promise of future returns. Rent is credited to your
-              wallet {credit}, from the full hour after you accept your container&apos;s lease agreement.
+        {/* -------------------------------------------------------------------- cta */}
+        <section aria-labelledby="cta-heading" className="relative isolate mt-20 overflow-hidden bg-ink px-5 py-20 text-on-ink sm:px-10 lg:mt-28 lg:px-14 lg:py-28">
+          <PortPhoto name="terminal-above" alt="" sizes="(min-width: 1440px) 1440px, 100vw"
+            className="absolute inset-0 -z-20 size-full object-cover" />
+          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-ink/70" />
+          <div className="mx-auto max-w-2xl space-y-6 text-center">
+            <Eyebrow tone="light">Start Today</Eyebrow>
+            <h2 id="cta-heading" className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+              Own The Containers In The Stacks
+            </h2>
+            <p className="text-base leading-relaxed text-on-ink/85">
+              Pick your containers, choose your lease, and earn rent credited to your wallet {credit}.
             </p>
-            {terms && (
-              <div className="mt-8 max-w-xl border border-border">
-                <p className="border-b border-border px-5 py-3 text-sm font-semibold">Rent by order value</p>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-muted">
-                      <th scope="col" className="px-5 pt-3 pb-1 font-normal">Your order&apos;s total</th>
-                      <th scope="col" className="px-5 pt-3 pb-1 text-right font-normal">Rent a month, on each container</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {terms.tiers.map((t) => (
-                      <tr key={t.fromAmount.amount}>
-                        <td className="px-5 py-2 tabular-nums">
-                          {formatMoney(t.fromAmount)}{t.toAmount ? ` – ${formatMoney(t.toAmount)}` : " and above"}
-                        </td>
-                        <td className="px-5 py-2 text-right font-semibold tabular-nums">{formatPercent(t.monthlyRentPercent)} of its price</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {terms.minimumOrder && (
-                  <p className="border-t border-border px-5 py-3 text-xs text-muted">The minimum order is {formatMoney(terms.minimumOrder)}.</p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
+            <div className="flex flex-wrap justify-center gap-3">
+              <LinkButton href="/register">Start Investing</LinkButton>
+              <a href="#contact" className="inline-flex h-11 items-center px-2 text-sm text-on-ink/90 underline-offset-4 hover:underline">
+                Talk to us first
+              </a>
+            </div>
+          </div>
+        </section>
 
         {/* -------------------------------------------------------------------- faq */}
-        <section id="faq" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14">
+        <section id="faq" className="scroll-mt-8 px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
           <div className="mx-auto max-w-3xl">
             <Eyebrow>FAQ</Eyebrow>
             <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Questions Investors Ask Us</h2>
@@ -628,7 +623,7 @@ export default async function Home() {
         </section>
 
         {/* ---------------------------------------------------------------- contact */}
-        <section id="contact" className="relative grid scroll-mt-8 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14">
+        <section id="contact" className="relative grid scroll-mt-8 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14 lg:py-28">
           <div className="space-y-5">
             <Eyebrow>Talk To Us</Eyebrow>
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>

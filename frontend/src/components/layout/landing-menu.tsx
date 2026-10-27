@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import type { MenuLink } from "./account-menu";
 
-/** The home page's menu below the `lg` breakpoint: a toggle that opens the links as a panel under the header. */
+/** The home page's menu below the `xl` breakpoint: a toggle that opens the links as a panel under the header. */
 export function LandingMenu({ links }: { links: readonly MenuLink[] }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -32,10 +32,10 @@ export function LandingMenu({ links }: { links: readonly MenuLink[] }) {
   }, [open]);
 
   return (
-    <div ref={root} className="lg:hidden">
+    <div ref={root} className="xl:hidden">
       <button ref={button} type="button" onClick={() => setOpen((o) => !o)}
         aria-expanded={open} aria-controls={menuId} aria-label={open ? "Close menu" : "Open menu"}
-        className="flex size-10 items-center justify-center rounded-full border border-on-ink/80 text-on-ink transition-colors hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none">
+        className="flex size-10 items-center justify-center rounded-full border border-on-ink/25 bg-ink/35 text-on-ink backdrop-blur-md transition-colors hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
           {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
         </svg>
