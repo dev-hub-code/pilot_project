@@ -18,22 +18,31 @@ function containerPaths(x: number, y: number) {
 const STACK = [containerPaths(2, 29), containerPaths(5, 20.5), containerPaths(8, 12)];
 
 /**
+ * The mark's shapes in its own coordinates (the containers span x 1–39, y 7.5–38), for drawing it inside another SVG.
+ * @param ink  fill of the lower containers
+ * @param gold fill of the top container; the gold token when omitted
+ */
+export function LogoMarkShapes({ ink = "currentColor", gold }: { ink?: string; gold?: string }) {
+  return STACK.map((c, i) => {
+    const fill = i === STACK.length - 1 ? (gold ? { fill: gold } : { className: "fill-gold" }) : { fill: ink };
+    return (
+      <g key={i} fillRule="evenodd">
+        <path {...fill} fillOpacity="0.55" d={c.top} />
+        <path {...fill} fillOpacity="0.78" d={c.end} />
+        <path {...fill} d={c.side} />
+      </g>
+    );
+  });
+}
+
+/**
  * SeaLease mark: three shipping containers stacked as in a port, the gold one on top the investor's own. The others
  * follow currentColor, with lighter top and end faces, so the mark adapts to light and dark backgrounds.
  */
 export function LogoMark({ className = "h-9 w-11" }: { className?: string }) {
   return (
     <svg viewBox="1 7.5 38 30.5" className={className} aria-hidden="true" focusable="false">
-      {STACK.map((c, i) => {
-        const fill = i === STACK.length - 1 ? { className: "fill-gold" } : { fill: "currentColor" };
-        return (
-          <g key={i} fillRule="evenodd">
-            <path {...fill} fillOpacity="0.55" d={c.top} />
-            <path {...fill} fillOpacity="0.78" d={c.end} />
-            <path {...fill} d={c.side} />
-          </g>
-        );
-      })}
+      <LogoMarkShapes />
     </svg>
   );
 }

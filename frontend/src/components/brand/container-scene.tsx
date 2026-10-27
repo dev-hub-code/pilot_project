@@ -1,3 +1,5 @@
+import { LogoMarkShapes } from "./logo";
+
 /**
  * Hero illustration: a black corrugated shipping container at dusk in a container yard.
  * Pure SVG (no raster assets, no inline styles — compatible with the strict CSP), scaled to cover.
@@ -125,10 +127,10 @@ export function ContainerScene({ className = "", focus = "center" }: { className
 
       {/* Brand on the side, skewed to the side's perspective */}
       <g transform="matrix(1 0.13 0 1 720 330)">
-        <polygon points="0,200 70,30 100,30 30,200" fill="url(#gold)" />
-        <rect x="60" y="95" width="110" height="105" fill="none" stroke="url(#gold)" strokeWidth="10" />
-        <path d="M92 110v80M120 110v80M148 110v80" stroke="url(#gold)" strokeWidth="6" />
-        <text x="195" y="178" fill="#ddd3c2" className="font-wordmark" fontSize="54" fontWeight="300" letterSpacing="11">
+        <g transform="translate(-5 10) scale(5)">
+          <LogoMarkShapes ink="#ddd3c2" gold="url(#gold)" />
+        </g>
+        <text x="205" y="178" fill="#ddd3c2" className="font-wordmark" fontSize="54" fontWeight="600" letterSpacing="11">
           SEALEASE
         </text>
       </g>
