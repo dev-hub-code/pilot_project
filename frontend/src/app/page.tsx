@@ -298,13 +298,60 @@ const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoN
   },
 ];
 
-/** The photo strip: a large lead photo, then four smaller ones. */
-const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
-  { photo: "terminal-above", alt: "Container stacks and gantry cranes in a terminal, seen from directly above", caption: "Container terminal from above" },
-  { photo: "container-wall", alt: "A wall of red, yellow, blue and teal shipping containers stacked five high", caption: "Stacked five high" },
-  { photo: "tacoma-cranes", alt: "Ship-to-shore cranes over long rows of stacked containers at the Port of Tacoma", caption: "Port of Tacoma, USA" },
-  { photo: "singapore-terminal", alt: "Container stacks in a grid of lanes at a terminal in Singapore, from the air", caption: "Singapore" },
-  { photo: "savannah-aerial", alt: "Container ships at the berths of the Port of Savannah, with the stacking yard behind", caption: "Port of Savannah, USA" },
+/**
+ * The photo strip: a large lead photo, then four smaller ones, all at Indian ports. These photos are CC BY / CC BY-SA
+ * (Wikimedia Commons), whose licences require the credit shown on each.
+ */
+/**
+ * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
+ * section's text must not present them as partners. Logos are the public-domain files on Wikimedia Commons, served
+ * from public/images/lines.
+ */
+/** `small`: a solid or very bold logo, drawn a little smaller so it does not outweigh the others. */
+const SHIPPING_LINES: { name: string; logo: string; small?: boolean }[] = [
+  { name: "MSC", logo: "msc.svg" },
+  { name: "Maersk", logo: "maersk.svg" },
+  { name: "CMA CGM", logo: "cma-cgm.svg" },
+  { name: "COSCO Shipping", logo: "cosco.svg" },
+  { name: "Hapag-Lloyd", logo: "hapag-lloyd.svg" },
+  { name: "Ocean Network Express", logo: "one.svg" },
+  { name: "Evergreen Line", logo: "evergreen.svg" },
+  { name: "HMM", logo: "hmm.svg", small: true },
+  { name: "ZIM", logo: "zim.svg" },
+  { name: "PIL", logo: "pil.png", small: true },
+  { name: "SITC", logo: "sitc.svg", small: true },
+  { name: "NYK Line", logo: "nyk.svg" },
+  { name: "Mitsui O.S.K. Lines", logo: "mol.svg" },
+  { name: "K Line", logo: "k-line.png" },
+  { name: "Crowley", logo: "crowley.svg" },
+];
+
+const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string; credit: { author: string; licence: string; url: string } }[] = [
+  {
+    photo: "jnpt-cfs", caption: "Nhava Sheva (JNPT), Navi Mumbai",
+    alt: "Containers stacked high under a gantry crane at a container freight station at JNPT, Navi Mumbai",
+    credit: { author: "Bopaliaq", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+  },
+  {
+    photo: "kochi-cranes", caption: "Vallarpadam terminal, Kochi",
+    alt: "Ship-to-shore cranes at the Vallarpadam container terminal in Kochi against a blue sky",
+    credit: { author: "Bharat S Raj", licence: "CC BY-SA 3.0", url: "https://creativecommons.org/licenses/by-sa/3.0/" },
+  },
+  {
+    photo: "chennai-port", caption: "Chennai Port",
+    alt: "Container cranes of the Chennai Port container terminal seen across the sea",
+    credit: { author: "VtTN", licence: "CC BY 3.0", url: "https://creativecommons.org/licenses/by/3.0/" },
+  },
+  {
+    photo: "kochi-sunset", caption: "Kochi at sunset",
+    alt: "Container terminal cranes in silhouette against the sunset at Vallarpadam, Kochi",
+    credit: { author: "Calvin Joseph", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+  },
+  {
+    photo: "kochi-night", caption: "Kochi Container Terminal",
+    alt: "A container ship lit up under the cranes of the Kochi Container Terminal at night",
+    credit: { author: "Shijan Kaakkara", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+  },
 ];
 
 export default async function Home() {
@@ -405,38 +452,42 @@ export default async function Home() {
               </li>
             ))}
           </ul>
-          <div className="mx-auto mt-14 max-w-3xl space-y-4 border border-border bg-background px-6 py-10 sm:px-10">
-            <p className="font-display text-4xl font-semibold text-gold-text">Since 2022</p>
-            <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">Trusted By Investors Around The World</h3>
-            <p className="text-sm leading-relaxed text-muted">
-              Since 2022, investors from around the world have invested with SeaLease, and we have been leasing
-              their containers and paying them their rent ever since.
-              Every credit is recorded in our ledger, and investors can see each one in their account and are paid
-              out to their own bank.
-            </p>
-            {figures && usesSampleFigures && (
-              <p className="pt-2">
-                <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">
-                  Sample figures, hidden on the live site
-                </span>
-              </p>
-            )}
-            {figures && (
-              <dl className="grid grid-cols-2 gap-px bg-border pt-px sm:grid-cols-4">
-                {[
-                  { label: "Paid to investors", value: figures.paid },
-                  { label: "Payouts made", value: figures.payouts },
-                  { label: "Investors", value: figures.investors },
-                  { label: "Containers owned by investors", value: figures.containers },
-                ].filter((figure) => figure.value).map((figure) => (
-                  <div key={figure.label} className="flex flex-col-reverse justify-end gap-1 bg-background px-3 py-5">
-                    <dt className="text-xs text-muted">{figure.label}</dt>
-                    <dd className="font-display text-xl font-semibold whitespace-nowrap sm:text-2xl">{figure.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            <p className="text-xs leading-relaxed text-muted">
+          {/* Track record: a dark panel over a faint container yard, the story on the left and the figures on the right. */}
+          <div className="relative isolate mx-auto mt-16 max-w-6xl overflow-hidden bg-ink text-left text-on-ink">
+            <PortPhoto name="yard-stacks" alt="" sizes="(min-width: 1440px) 1152px, 100vw"
+              className="absolute inset-0 -z-20 size-full object-cover opacity-25" />
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/90 to-ink/75" />
+            <div className={`grid gap-10 px-6 py-12 sm:px-10 lg:items-center lg:gap-14 lg:px-14 lg:py-16 ${figures ? "lg:grid-cols-[1fr_1.1fr]" : ""}`}>
+              <div className="space-y-5">
+                <p className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-gold">
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-gold" />
+                  Since 2022
+                </p>
+                <h3 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Trusted By Investors Around The World</h3>
+                <p className="max-w-md text-sm leading-relaxed text-on-ink/75">
+                  Since 2022, investors from around the world have invested with SeaLease, and we have been leasing
+                  their containers and paying them their rent ever since.
+                  Every credit is recorded in our ledger, and investors can see each one in their account and are paid
+                  out to their own bank.
+                </p>
+              </div>
+              {figures && (
+                <dl className="grid grid-cols-2 gap-px border border-on-ink/15 bg-on-ink/15">
+                  {[
+                    { label: "Paid to investors", value: figures.paid },
+                    { label: "Payouts made", value: figures.payouts },
+                    { label: "Investors", value: figures.investors },
+                    { label: "Containers owned by investors", value: figures.containers },
+                  ].filter((figure) => figure.value).map((figure) => (
+                    <div key={figure.label} className="flex flex-col-reverse justify-end gap-2 bg-ink/85 px-4 py-6 backdrop-blur-sm min-[400px]:px-5 sm:px-7 sm:py-8">
+                      <dt className="text-xs leading-snug text-on-ink/70 sm:text-sm">{figure.label}</dt>
+                      <dd className="font-display text-2xl font-semibold whitespace-nowrap text-gold min-[400px]:text-3xl sm:text-4xl">{figure.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+            <p className="border-t border-on-ink/15 px-6 py-4 text-xs leading-relaxed text-on-ink/55 sm:px-10 lg:px-14">
               Past payouts are not a guarantee of future returns. Every container&apos;s rent and lease length are shown in
               full before you invest.
             </p>
@@ -459,8 +510,8 @@ export default async function Home() {
               Where Your Containers Work
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-muted">
-              Containers are stacked, loaded and moved through terminals like these every day, carrying the goods of the
-              businesses that lease them.
+              Containers are stacked, loaded and moved through India&apos;s container terminals every day, carrying the
+              goods of the businesses that lease them.
             </p>
           </div>
           <ul className="mt-12 grid grid-cols-2 gap-2 md:grid-cols-4 md:grid-rows-2">
@@ -473,10 +524,43 @@ export default async function Home() {
                   <PortPhoto name={item.photo} alt={item.alt}
                     sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
                     className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
-                    {item.caption}
+                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-on-ink">
+                    <span className="block text-xs sm:text-sm">{item.caption}</span>
+                    <span className="mt-0.5 block text-[10px] leading-tight text-on-ink/60">
+                      Photo: {item.credit.author},{" "}
+                      <a href={item.credit.url} target="_blank" rel="noopener noreferrer license" className="underline-offset-2 hover:underline">
+                        {item.credit.licence}
+                      </a>
+                    </span>
                   </figcaption>
                 </figure>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* --------------------------------------------------------- shipping lines */}
+        <section aria-labelledby="lines-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+          <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-14">
+            <div className="space-y-5">
+              <Eyebrow>The Global Network</Eyebrow>
+              <h2 id="lines-heading" className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
+                The Lines That Move The World&apos;s Cargo
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm leading-relaxed text-muted">
+              Most of the world&apos;s container trade, including the ships calling at Nhava Sheva, Mundra, Chennai and
+              Kochi, is carried by a handful of large lines. The businesses that lease containers ship their goods on
+              services like theirs, which is what keeps containers in demand and earning.
+            </p>
+          </div>
+          <ul className="mt-12 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
+            {SHIPPING_LINES.map((line) => (
+              // Always a white tile: the logos are drawn for a light background, in dark mode too.
+              <li key={line.name} className="group flex h-24 items-center justify-center bg-white px-5 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
+                {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
+                <img src={`/images/lines/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
+                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
               </li>
             ))}
           </ul>
@@ -543,8 +627,12 @@ export default async function Home() {
             <Eyebrow tone="light">Your Rent</Eyebrow>
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rent At Your Order&apos;s Rate</h3>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
-              Each container is leased for the years you choose. The rate is set by your order&apos;s total, and rent is
-              credited to your wallet {credit}. The price you paid is not paid back. Open to every verified investor.
+              Choose how many years each container is leased for, and your order&apos;s total sets its rent rate. Rent is
+              credited to your wallet {credit} for the whole lease, so you know from day one what each container will
+              earn: its monthly rent for every month you chose.
+            </p>
+            <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
+              Open to every verified investor.
             </p>
             <div className="max-w-md border border-on-ink/20">
               <div className="flex items-center justify-between gap-4 border-b border-on-ink/20 px-5 py-3">

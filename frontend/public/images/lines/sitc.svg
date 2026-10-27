@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="66.145828mm"
+   height="12.48006mm"
+   viewBox="0 0 66.145828 12.48006"
+   version="1.1"
+   id="svg1026"
+   inkscape:version="1.1 (c68e22c387, 2021-05-23)"
+   sodipodi:docname="SITC_logo.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1028"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.73406285"
+     inkscape:cx="-14.303952"
+     inkscape:cy="140.9961"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1023" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-109.02413,-111.4212)">
+    <path
+       d="m 126.59822,117.01535 h -5.94109 c -1.03379,0 -1.56695,-0.67054 -1.19096,-1.49739 0.37601,-0.82727 1.5194,-1.10157 2.5536,-1.10157 h 9.97887 l 1.36178,-2.99519 h -11.56299 c -2.24011,0 -4.71668,1.45246 -5.5325,3.2444 -0.81496,1.79191 0.33989,3.64152 2.58001,3.64152 h 5.9411 c 1.0342,0 1.56738,0.6701 1.19094,1.49738 -0.37643,0.82729 -1.5194,1.10157 -2.5536,1.10157 h -13.03703 l -1.36222,2.99519 h 14.62159 c 2.24013,0 4.71711,-1.45246 5.53206,-3.24482 0.8154,-1.79193 -0.33945,-3.64109 -2.57956,-3.64109 z m 31.09892,-5.59415 h -15.60076 l -1.36176,2.99519 h 4.3671 l -4.31472,9.48487 h 6.24048 l 4.31516,-9.48487 h 4.99185 z m 4.08665,4.74222 c 0.43939,-0.96466 1.773,-1.74703 2.97935,-1.74703 h 9.04372 l 1.3631,-2.99519 h -9.66408 c -4.30722,0 -9.07102,2.79355 -10.63884,6.24002 -1.56739,3.44607 0.65337,6.24004 4.96192,6.24004 h 7.79069 l 1.36221,-2.99519 h -7.17782 c -1.20548,0 -1.82715,-0.78237 -1.38775,-1.74746 z m -27.17475,-4.74222 -5.6778,12.48006 h 6.2396 l 5.6778,-12.48006 h -6.2396"
+       style="fill:#0b8ed8;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.440276"
+       id="path844" />
+  </g>
+</svg>
