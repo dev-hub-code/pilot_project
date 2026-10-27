@@ -300,7 +300,7 @@ const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoN
 
 /**
  * The photo strip: a large lead photo, then four smaller ones, all at Indian ports. These photos are CC BY / CC BY-SA
- * (Wikimedia Commons), whose licences require the credit shown on each.
+ * (Wikimedia Commons), credited on the /credits page that the footer links to: their licences require it.
  */
 /**
  * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
@@ -326,31 +326,26 @@ const SHIPPING_LINES: { name: string; logo: string; small?: boolean }[] = [
   { name: "Crowley", logo: "crowley.svg" },
 ];
 
-const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string; credit: { author: string; licence: string; url: string } }[] = [
+const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
   {
     photo: "jnpt-cfs", caption: "Nhava Sheva (JNPT), Navi Mumbai",
     alt: "Containers stacked high under a gantry crane at a container freight station at JNPT, Navi Mumbai",
-    credit: { author: "Bopaliaq", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
   },
   {
     photo: "kochi-cranes", caption: "Vallarpadam terminal, Kochi",
     alt: "Ship-to-shore cranes at the Vallarpadam container terminal in Kochi against a blue sky",
-    credit: { author: "Bharat S Raj", licence: "CC BY-SA 3.0", url: "https://creativecommons.org/licenses/by-sa/3.0/" },
   },
   {
     photo: "chennai-port", caption: "Chennai Port",
     alt: "Container cranes of the Chennai Port container terminal seen across the sea",
-    credit: { author: "VtTN", licence: "CC BY 3.0", url: "https://creativecommons.org/licenses/by/3.0/" },
   },
   {
-    photo: "kochi-sunset", caption: "Kochi at sunset",
-    alt: "Container terminal cranes in silhouette against the sunset at Vallarpadam, Kochi",
-    credit: { author: "Calvin Joseph", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+    photo: "mundra-port", caption: "Mundra Port, Gujarat",
+    alt: "Container cranes along the quay at Mundra Port, seen from a ship carrying stacked containers",
   },
   {
     photo: "kochi-night", caption: "Kochi Container Terminal",
     alt: "A container ship lit up under the cranes of the Kochi Container Terminal at night",
-    credit: { author: "Shijan Kaakkara", licence: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
   },
 ];
 
@@ -524,14 +519,8 @@ export default async function Home() {
                   <PortPhoto name={item.photo} alt={item.alt}
                     sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
                     className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-on-ink">
-                    <span className="block text-xs sm:text-sm">{item.caption}</span>
-                    <span className="mt-0.5 block text-[10px] leading-tight text-on-ink/60">
-                      Photo: {item.credit.author},{" "}
-                      <a href={item.credit.url} target="_blank" rel="noopener noreferrer license" className="underline-offset-2 hover:underline">
-                        {item.credit.licence}
-                      </a>
-                    </span>
+                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
+                    {item.caption}
                   </figcaption>
                 </figure>
               </li>
@@ -726,9 +715,12 @@ export default async function Home() {
         {/* ----------------------------------------------------------------- footer */}
         <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-5 py-8 sm:px-10 lg:px-14">
           <Logo />
-          <p className="flex items-center gap-3 text-sm text-muted">
-            Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>
-          </p>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted">
+            <Link href="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Photo credits</Link>
+            <p className="flex items-center gap-3">
+              Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>
+            </p>
+          </div>
         </footer>
       </div>
     </div>

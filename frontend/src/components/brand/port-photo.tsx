@@ -9,12 +9,8 @@
  *   yard-stacks         File:Shipping containers lie stacked in Mogadishu port in Somalia on September 17, 2015 (27447020401).jpg
  *   container-lift      File:Port of Savannah - 2021.jpg
  *   miami-port          File:Aerial photograph of the Port of Miami Container Port.jpg
- * These are CC BY / CC BY-SA and must be shown with their credit (the landing page's port gallery does):
- *   jnpt-cfs            File:Allcargo CFS, JNPT, Mumbai.jpg (Bopaliaq, CC BY-SA 4.0)
- *   kochi-cranes        File:Vallarpadam Container Terminal.JPG (Bharat S Raj, CC BY-SA 3.0)
- *   chennai-port        File:Chennai Port Container terminal.JPG (VtTN, CC BY 3.0), cropped to the cranes
- *   kochi-sunset        File:Sunset in vallarpadam container terminal kochi.jpg (Calvin joseph, CC BY-SA 4.0)
- *   kochi-night         File:Kochi Container Terminal - കൊച്ചി കണ്ടൈനർ ടെർമിനൽ.jpg (Shijan Kaakkara, CC BY-SA 4.0)
+ * The rest are CC BY / CC BY-SA, listed in PHOTO_CREDITS: their licences require the credit, which the photo
+ * credits page (/credits, linked from the landing page footer) shows. Add any new such photo there.
  */
 
 const WIDTHS = {
@@ -27,11 +23,40 @@ const WIDTHS = {
   "jnpt-cfs": [640, 1280, 1920],
   "kochi-cranes": [640, 1280, 1920],
   "chennai-port": [640, 1280, 1920],
-  "kochi-sunset": [640, 1280, 1920],
+  "mundra-port": [640, 1280, 1920],
   "kochi-night": [640, 1280, 1920],
 } as const;
 
 export type PortPhotoName = keyof typeof WIDTHS;
+
+export type PhotoCredit = { photo: PortPhotoName; title: string; source: string; author: string; licence: string; licenceUrl: string; changes?: string };
+
+const COMMONS = "https://commons.wikimedia.org/wiki/File:";
+
+/** Photos whose licence requires a credit: each one's original on Wikimedia Commons, author and licence. */
+export const PHOTO_CREDITS: PhotoCredit[] = [
+  {
+    photo: "jnpt-cfs", title: "Allcargo CFS, JNPT, Mumbai", source: COMMONS + "Allcargo_CFS,_JNPT,_Mumbai.jpg",
+    author: "Bopaliaq", licence: "CC BY-SA 4.0", licenceUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
+  {
+    photo: "kochi-cranes", title: "Vallarpadam Container Terminal", source: COMMONS + "Vallarpadam_Container_Terminal.JPG",
+    author: "Bharat S Raj", licence: "CC BY-SA 3.0", licenceUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
+  },
+  {
+    photo: "chennai-port", title: "Chennai Port Container terminal", source: COMMONS + "Chennai_Port_Container_terminal.JPG",
+    author: "VtTN", licence: "CC BY 3.0", licenceUrl: "https://creativecommons.org/licenses/by/3.0/", changes: "Cropped",
+  },
+  {
+    photo: "mundra-port", title: "The port of Mundra in Gujarat", source: COMMONS + "The_port_of_Mundra_in_Gujarat.jpg",
+    author: "Felix Dance", licence: "CC BY 2.0", licenceUrl: "https://creativecommons.org/licenses/by/2.0/",
+  },
+  {
+    photo: "kochi-night", title: "Kochi Container Terminal",
+    source: COMMONS + encodeURIComponent("Kochi_Container_Terminal_-_കൊച്ചി_കണ്ടൈനർ_ടെർമിനൽ.jpg"),
+    author: "Shijan Kaakkara", licence: "CC BY-SA 4.0", licenceUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
+];
 
 /**
  * @param alt   empty for a purely decorative background
