@@ -176,8 +176,8 @@ public final class BrandedEmail {
 				<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
 				<tr><td style="padding:0 0 20px;">
 				<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-				<td style="vertical-align:middle;"><img src="cid:%4$s" width="40" height="40" alt="" style="display:block;border:0;"></td>
-				<td style="vertical-align:middle;padding-left:12px;font-family:'Jost',%5$s;font-size:20px;font-weight:300;letter-spacing:6px;color:%6$s;">SEALEASE</td>
+				<td style="vertical-align:middle;"><img src="cid:%4$s" width="50" height="40" alt="" style="display:block;border:0;"></td>
+				<td style="vertical-align:middle;padding-left:12px;font-family:'Jost',%5$s;font-size:20px;font-weight:600;letter-spacing:6px;color:%6$s;">SEALEASE</td>
 				</tr></table>
 				</td></tr>
 				<tr><td style="background:%7$s;border:1px solid %8$s;border-top:4px solid %9$s;">

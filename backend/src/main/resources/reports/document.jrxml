@@ -64,7 +64,10 @@
 		</groupFooter>
 	</group>
 	<title height="78">
-		<element kind="textField" uuid="d1148a39-48be-402d-ade8-d4e66bac28bc" x="0" y="0" width="300" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+		<element kind="image" uuid="5e1a7c2d-8b4f-4d3a-9c6e-2f7b0a1d3e51" x="0" y="0" width="18" height="14" scaleImage="RetainShape" hImageAlign="Left" vImageAlign="Middle">
+			<expression><![CDATA["reports/logo.png"]]></expression>
+		</element>
+		<element kind="textField" uuid="d1148a39-48be-402d-ade8-d4e66bac28bc" x="22" y="1" width="278" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
 			<expression><![CDATA["SEALEASE"]]></expression>
 		</element>
 		<element kind="textField" uuid="91329079-8b3c-4bca-85fe-c96085f18a40" x="300" y="0" width="215" height="12" forecolor="#5B6770" fontSize="7.5" blankWhenNull="true" hTextAlign="Right" style="Base">

@@ -16,7 +16,10 @@
 	<field name="text" class="java.lang.String"/>
 	<field name="heading" class="java.lang.Boolean"/>
 	<title height="80">
-		<element kind="textField" uuid="0f6a2a5e-3b8c-4c1e-9d8b-6e2f4a1c7b01" x="0" y="0" width="495" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
+		<element kind="image" uuid="5e1a7c2d-8b4f-4d3a-9c6e-2f7b0a1d3e52" x="0" y="0" width="18" height="14" scaleImage="RetainShape" hImageAlign="Left" vImageAlign="Middle">
+			<expression><![CDATA["reports/logo.png"]]></expression>
+		</element>
+		<element kind="textField" uuid="0f6a2a5e-3b8c-4c1e-9d8b-6e2f4a1c7b01" x="22" y="1" width="473" height="12" forecolor="#B8862B" fontSize="8.0" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
 			<expression><![CDATA["SEALEASE"]]></expression>
 		</element>
 		<element kind="textField" uuid="7c3e1b9a-5d2f-4a6b-8e1c-9f0a3b5d7e02" x="0" y="16" width="495" height="26" forecolor="#0B1F2A" fontSize="18.0" textAdjust="StretchHeight" bold="true" blankWhenNull="true" hTextAlign="Left" style="Base">
