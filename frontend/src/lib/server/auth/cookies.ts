@@ -56,11 +56,15 @@ export function writeSessionCookies(jar: CookieWriter, tokens: AuthTokens): void
   });
 }
 
+/**
+ * Expires the session cookies with the attributes they were set with: browsers ignore a `__Host-` cookie sent without
+ * Secure, so a plain delete would leave the signed-out session in the browser (and /login <-> /dashboard looping).
+ */
 export function clearSessionCookies(jar: CookieWriter): void {
   const names = cookieNames();
-  jar.delete(names.access);
-  jar.delete(names.refresh);
-  jar.delete(names.emailPrompt);
+  for (const name of [names.access, names.refresh, names.emailPrompt]) {
+    jar.set(name, "", { ...baseOptions(), expires: new Date(0) });
+  }
 }
 
 /**
