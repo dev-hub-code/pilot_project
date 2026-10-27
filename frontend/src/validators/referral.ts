@@ -19,3 +19,13 @@ export const scheduleRatesSchema = z.object({
   path: ["level1"],
   message: "The four levels together cannot exceed 20%",
 });
+
+/** Value of the "new referrer" choice that takes the member out of their downline. */
+export const NO_REFERRER = "none";
+
+/** Moving a downline member to another referrer, or out of the downline (super administrators); the backend checks the hierarchy. */
+export const moveReferralSchema = z.object({
+  memberId: z.uuid(),
+  referrerId: z.union([z.uuid(), z.literal(NO_REFERRER)], "Choose the new referrer"),
+  reason: z.string().trim().min(3, "Give a reason").max(500),
+});

@@ -26,6 +26,36 @@ export interface Downline {
   truncated: boolean;
 }
 
+/** Mirrors backend AdminDownline: an investor's whole downline, every level, for super administrators arranging it. */
+export interface AdminDownlineMember {
+  userId: string;
+  /** The investor whose downline it is, or another member. */
+  referrerId: string;
+  /** 1 for the investor's direct referrals; only levels 1-4 earn commission. */
+  level: number;
+  name: string;
+  email: string;
+  status: string;
+  joinedAt: string;
+}
+
+/** The investor whose downline it is; they can be moved too. */
+export interface AdminDownlineInvestor {
+  userId: string;
+  name: string;
+  email: string;
+  status: string;
+  /** Their own referrer; null when nobody referred them. */
+  referrerId: string | null;
+  referrerName: string | null;
+}
+
+export interface AdminDownline {
+  investor: AdminDownlineInvestor;
+  members: AdminDownlineMember[];
+  truncated: boolean;
+}
+
 export interface ReferralEarning {
   id: string;
   level: number;

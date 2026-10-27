@@ -8,6 +8,7 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.referral.dto.AdminDownline;
 import com.sealease.backend.referral.dto.AdminReferralView;
 import com.sealease.backend.referral.dto.Downline;
 import com.sealease.backend.referral.dto.DownlineMember;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -44,8 +46,9 @@ import java.util.regex.Pattern;
 /**
  * The referral hierarchy: codes, who referred whom, and views of a user's uplines and downline.
  *
- * <p>A referrer is fixed once, at registration, and must be an existing account, so the hierarchy
- * is a forest without cycles. Only four levels earn commissions, so every walk stops at depth four.
+ * <p>A referrer is set at registration and must be an existing account; afterwards only a super administrator can
+ * move a member (with their downline) to another referrer, never below themselves, or take them out of their
+ * downline, so the hierarchy stays a forest without cycles. Only four levels earn commissions, so the walks for investors stop at depth four.
  */
 @Service
 public class ReferralService {
@@ -58,6 +61,10 @@ public class ReferralService {
 	/** No 0/O, 1/I/L: codes are read aloud and typed by hand. */
 	private static final char[] ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ".toCharArray();
 	private static final int CODE_LENGTH = 8;
+	/** Deepest level the administrator's downline view and the move check walk: far beyond any real hierarchy. */
+	private static final int MAX_DEPTH = 100;
+	/** Serialises moves, so two at once cannot together make a cycle. */
+	private static final long MOVE_LOCK = 0x5EA1EA5E_0001L;
 	/** Downline member ids: "m" + position in join order, 1-based. */
 	private static final Pattern MEMBER_ID = Pattern.compile("m([1-9]\\d{0,8})");
 
@@ -182,8 +189,8 @@ public class ReferralService {
 	}
 
 	/**
-	 * One member of the user's downline, by its id in downline views. Ids are positions in join order,
-	 * which are stable: referrals never change and new members always join last.
+	 * One member of the user's downline, by its id in downline views. Ids are positions in join order, which are stable
+	 * while the hierarchy is: new members always join last, though a super administrator moving members renumbers them.
 	 */
 	@Transactional(readOnly = true)
 	public DownlineMember member(UUID userId, String memberId) {
@@ -262,6 +269,113 @@ public class ReferralService {
 		}
 		return new AdminReferralView(existingCode(userId).orElse(null), ancestors, sizes,
 				totals(earnings.totalsBySource(userId)));
+	}
+
+	/** The investor's whole downline, every level: shown to staff with the user, and arranged by super administrators. */
+	@Transactional(readOnly = true)
+	public AdminDownline adminDownline(UUID userId) {
+		UserAccount investor = accounts.getAccount(userId);
+		UUID investorReferrer = referrerOf(userId).orElse(null);
+		String referrerName = investorReferrer == null ? null : fullName(accounts.getAccount(investorReferrer));
+		// By level, so a truncated list keeps whole upper levels and every member's referrer comes before them.
+		List<AdminDownlineRow> rows = jdbc.query("""
+				WITH RECURSIVE down (user_id, referrer_id, depth, created_at) AS (
+				    SELECT user_id, referrer_id, 1, created_at FROM referrals WHERE referrer_id = ?
+				    UNION ALL
+				    SELECT r.user_id, r.referrer_id, down.depth + 1, r.created_at
+				    FROM referrals r JOIN down ON r.referrer_id = down.user_id
+				    WHERE down.depth < ?)
+				SELECT user_id, referrer_id, depth, created_at FROM down ORDER BY depth, created_at, user_id LIMIT ?""",
+				(rs, i) -> new AdminDownlineRow(rs.getObject("user_id", UUID.class), rs.getObject("referrer_id", UUID.class),
+						rs.getInt("depth"), rs.getObject("created_at", OffsetDateTime.class).toInstant()),
+				userId, MAX_DEPTH, DOWNLINE_LIMIT + 1);
+		boolean truncated = rows.size() > DOWNLINE_LIMIT;
+		List<AdminDownlineRow> listed = rows.subList(0, Math.min(rows.size(), DOWNLINE_LIMIT));
+		Map<UUID, UserAccount> people = accounts.getAccounts(listed.stream().map(AdminDownlineRow::userId).toList());
+		List<AdminDownline.Member> members = listed.stream()
+			.map(r -> {
+				UserAccount a = people.get(r.userId());
+				return new AdminDownline.Member(r.userId(), r.referrerId(), r.depth(), fullName(a), a.email(),
+						a.status().name(), r.joinedAt());
+			})
+			.toList();
+		return new AdminDownline(new AdminDownline.Investor(userId, fullName(investor), investor.email(),
+				investor.status().name(), investorReferrer, referrerName), members, truncated);
+	}
+
+	private static String fullName(UserAccount account) {
+		return account.firstName() + " " + account.lastName();
+	}
+
+	private Optional<UUID> referrerOf(UUID userId) {
+		return jdbc.query("SELECT referrer_id FROM referrals WHERE user_id = ?",
+				(rs, i) -> rs.getObject("referrer_id", UUID.class), userId).stream().findFirst();
+	}
+
+	private record AdminDownlineRow(UUID userId, UUID referrerId, int depth, Instant joinedAt) {
+	}
+
+	/**
+	 * Moves a member, with their whole downline, to another referrer; with no referrer, takes them out of the downline
+	 * they are in, so nobody refers them. Someone nobody referred can be placed under a referrer the same way.
+	 * Commission from then on follows the new hierarchy; commission already paid stays with whoever it was paid to.
+	 * The move is kept in referral_moves and the audit log.
+	 */
+	@Transactional
+	public void move(UUID actorId, UUID memberId, UUID referrerId, String reason) {
+		jdbc.execute("SELECT pg_advisory_xact_lock(" + MOVE_LOCK + ")");
+		UserAccount member = accounts.getAccount(memberId);
+		UUID current = jdbc.query("SELECT referrer_id FROM referrals WHERE user_id = ? FOR UPDATE",
+				(rs, i) -> rs.getObject("referrer_id", UUID.class), memberId).stream().findFirst().orElse(null);
+		String why = reason.strip();
+		if (referrerId == null) {
+			if (current == null) {
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+						member.firstName() + " is not in anyone's downline");
+			}
+			jdbc.update("DELETE FROM referrals WHERE user_id = ?", memberId);
+			recordMove(actorId, memberId, current, null, why);
+			return;
+		}
+		UserAccount referrer = accounts.getAccount(referrerId);
+		if (referrerId.equals(memberId)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A member cannot be their own referrer");
+		}
+		if (referrerId.equals(current)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					member.firstName() + " is already referred by " + referrer.firstName());
+		}
+		// Below themselves would make a cycle: the new referrer must not be in the member's downline.
+		Boolean below = jdbc.queryForObject("""
+				WITH RECURSIVE up (user_id, referrer_id, depth) AS (
+				    SELECT user_id, referrer_id, 1 FROM referrals WHERE user_id = ?
+				    UNION ALL
+				    SELECT r.user_id, r.referrer_id, up.depth + 1
+				    FROM referrals r JOIN up ON r.user_id = up.referrer_id
+				    WHERE up.depth < ?)
+				SELECT exists (SELECT 1 FROM up WHERE referrer_id = ?)""", Boolean.class, referrerId, MAX_DEPTH, memberId);
+		if (Boolean.TRUE.equals(below)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					referrer.firstName() + " is in " + member.firstName() + "'s downline; a member cannot move below themselves");
+		}
+		if (current == null) {
+			// Placed for the first time: the row records the new referrer's code, as if entered at sign-up.
+			jdbc.update("INSERT INTO referrals (user_id, referrer_id, code, created_at) VALUES (?, ?, ?, ?)", memberId,
+					referrerId, codeOf(referrerId), now());
+		} else {
+			jdbc.update("UPDATE referrals SET referrer_id = ? WHERE user_id = ?", referrerId, memberId);
+		}
+		recordMove(actorId, memberId, current, referrerId, why);
+	}
+
+	/** One move in referral_moves and the audit log; a {@code null} referrer is nobody. */
+	private void recordMove(UUID actorId, UUID memberId, UUID from, UUID to, String reason) {
+		jdbc.update("""
+				INSERT INTO referral_moves (id, user_id, from_referrer_id, to_referrer_id, moved_by, reason, moved_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)""", UUID.randomUUID(), memberId, from, to, actorId, reason, now());
+		audit.record(AuditRecord.of(actorId, AuditAction.REFERRAL_MOVED, ENTITY, memberId)
+			.withOldValue(Map.of("referrerId", from == null ? "none" : from.toString()))
+			.withNewValue(Map.of("referrerId", to == null ? "none" : to.toString(), "reason", reason)));
 	}
 
 	// ----------------------------------------------------------------------------- internal

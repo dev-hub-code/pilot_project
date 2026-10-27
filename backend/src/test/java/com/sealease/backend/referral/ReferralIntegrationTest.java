@@ -225,6 +225,125 @@ class ReferralIntegrationTest {
 
 	// ------------------------------------------------------------------------------ helpers
 
+	// ------------------------------------------------------------------ arranging downlines
+
+	@Test
+	void aSuperAdminMovesAMemberWithTheirDownlineToAnotherReferrer() throws Exception {
+		Account top = api.register();
+		Account a = api.register(codeOf(top));
+		Account b = api.register(codeOf(a));
+		Account d = api.register(codeOf(b));
+		Account other = api.register();
+
+		downline(top).andExpect(status().isOk())
+			.andExpect(jsonPath("$.members.length()").value(3))
+			.andExpect(jsonPath("$.members[1].userId").value(b.id().toString()))
+			.andExpect(jsonPath("$.members[1].referrerId").value(a.id().toString()))
+			.andExpect(jsonPath("$.members[1].level").value(2))
+			.andExpect(jsonPath("$.members[1].email").value(b.email()));
+
+		move(b, other, "Signed up with the wrong code").andExpect(status().isNoContent());
+		// b's own downline (d) goes with them.
+		downline(top).andExpect(jsonPath("$.members.length()").value(1));
+		downline(other)
+			.andExpect(jsonPath("$.members.length()").value(2))
+			.andExpect(jsonPath("$.members[0].userId").value(b.id().toString()))
+			.andExpect(jsonPath("$.members[1].userId").value(d.id().toString()))
+			.andExpect(jsonPath("$.members[1].level").value(2));
+		overview(d).andExpect(jsonPath("$.referredBy").value("Test I."));
+		overview(other).andExpect(jsonPath("$.levels[0].members").value(1)).andExpect(jsonPath("$.levels[1].members").value(1));
+		assertThat(jdbc.queryForObject("SELECT referrer_id FROM referrals WHERE user_id = ?", UUID.class, b.id()))
+			.isEqualTo(other.id());
+		assertThat(jdbc.queryForMap("SELECT from_referrer_id, to_referrer_id, moved_by, reason FROM referral_moves WHERE user_id = ?",
+				b.id()))
+			.containsEntry("from_referrer_id", a.id()).containsEntry("to_referrer_id", other.id())
+			.containsEntry("moved_by", admin.id()).containsEntry("reason", "Signed up with the wrong code");
+		assertThat(api.auditCount("REFERRAL_MOVED", b.id())).isEqualTo(1);
+	}
+
+	@Test
+	void aSuperAdminRemovesAMemberFromADownlineAndPlacesThemInAnother() throws Exception {
+		Account top = api.register();
+		Account a = api.register(codeOf(top));
+		Account b = api.register(codeOf(a));
+		Account other = api.register();
+
+		move(a, null, "Left the network").andExpect(status().isNoContent());
+		// a keeps their own downline, but nobody refers them any more.
+		downline(top).andExpect(jsonPath("$.members.length()").value(0));
+		downline(a)
+			.andExpect(jsonPath("$.investor.referrerId").doesNotExist())
+			.andExpect(jsonPath("$.members[0].userId").value(b.id().toString()));
+		overview(a).andExpect(jsonPath("$.referredBy").doesNotExist());
+		move(a, null, "Again").andExpect(status().isUnprocessableEntity());
+
+		// Someone nobody referred is placed under a referrer, with their downline.
+		move(a, other, "Joined Other's team").andExpect(status().isNoContent());
+		downline(other)
+			.andExpect(jsonPath("$.investor.name").value("Test Investor"))
+			.andExpect(jsonPath("$.members.length()").value(2));
+		downline(a).andExpect(jsonPath("$.investor.referrerId").value(other.id().toString()));
+		assertThat(jdbc.queryForList("SELECT to_referrer_id FROM referral_moves WHERE user_id = ? ORDER BY moved_at",
+				a.id())).extracting(r -> r.get("to_referrer_id")).containsExactly(null, other.id());
+		assertThat(api.auditCount("REFERRAL_MOVED", a.id())).isEqualTo(2);
+	}
+
+	@Test
+	void movesThatWouldBreakTheHierarchyAreRefused() throws Exception {
+		Account top = api.register();
+		Account a = api.register(codeOf(top));
+		Account b = api.register(codeOf(a));
+
+		// Below themselves (a cycle), under themselves, to the referrer they already have, or a member with no referrer.
+		move(a, b, "x").andExpect(status().isUnprocessableEntity())
+			.andExpect(jsonPath("$.message").value(containsString("cannot move below themselves")));
+		move(a, a, "x").andExpect(status().isUnprocessableEntity());
+		move(b, a, "x").andExpect(status().isUnprocessableEntity());
+		move(top, a, "x").andExpect(status().isUnprocessableEntity());
+		move(b, top, " ").andExpect(status().isBadRequest());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM referral_moves WHERE user_id IN (?, ?, ?)", Integer.class,
+				top.id(), a.id(), b.id())).isZero();
+		// The table itself allows only the referrer to change.
+		assertThat(org.assertj.core.api.Assertions.catchThrowable(
+				() -> jdbc.update("UPDATE referrals SET code = 'ZZZZZZZZ' WHERE user_id = ?", b.id())))
+			.hasMessageContaining("only the referrer may change");
+	}
+
+	@Test
+	void staffWhoSeeUsersSeeDownlinesButOnlyHoldersOfTheTreePermissionArrangeThem() throws Exception {
+		Account top = api.register();
+		Account a = api.register(codeOf(top));
+		Account other = api.register();
+		Account support = api.staff("SUPPORT");
+
+		mvc.perform(get("/api/v1/admin/users/{id}/downline", top.id()).header(HttpHeaders.AUTHORIZATION, support.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.members[0].userId").value(a.id().toString()));
+		mvc.perform(get("/api/v1/admin/users/{id}/downline", top.id()).header(HttpHeaders.AUTHORIZATION, top.bearer()))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/admin/users/{id}/referrer", a.id()).header(HttpHeaders.AUTHORIZATION, support.bearer())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"referrerId\":\"%s\",\"reason\":\"x\"}".formatted(other.id())))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/v1/admin/users/{id}/referrer", a.id()).header(HttpHeaders.AUTHORIZATION, top.bearer())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"referrerId\":\"%s\",\"reason\":\"x\"}".formatted(other.id())))
+			.andExpect(status().isForbidden());
+	}
+
+	private ResultActions downline(Account investor) throws Exception {
+		return mvc.perform(get("/api/v1/admin/users/{id}/downline", investor.id())
+			.header(HttpHeaders.AUTHORIZATION, api.admin().bearer()));
+	}
+
+	private ResultActions move(Account member, Account referrer, String reason) throws Exception {
+		return mvc.perform(post("/api/v1/admin/users/{id}/referrer", member.id())
+			.header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(referrer == null ? "{\"referrerId\":null,\"reason\":\"%s\"}".formatted(reason)
+					: "{\"referrerId\":\"%s\",\"reason\":\"%s\"}".formatted(referrer.id(), reason)));
+	}
+
 	private String codeOf(Account account) throws Exception {
 		return JsonPath.read(overview(account).andReturn().getResponse().getContentAsString(), "$.code");
 	}

@@ -109,6 +109,8 @@ public enum AuditAction {
 	LEDGER_ADJUSTMENT_POSTED,
 
 	REFERRAL_LINKED,
+	/** A super administrator moved a member (and their downline) to another referrer. */
+	REFERRAL_MOVED,
 	REFERRAL_RATES_SCHEDULED,
 	REFERRAL_RATES_CANCELLED,
 	REFERRAL_COMMISSIONS_PAID,

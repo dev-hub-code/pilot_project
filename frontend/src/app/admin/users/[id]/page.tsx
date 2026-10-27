@@ -24,7 +24,8 @@ import type { ReferralPayoutMode } from "@/types/withdrawal";
 import { ResetPasswordForm, RolesForm } from "@/features/admin/staff-forms";
 import type { PageResponse } from "@/types/api";
 import type { Role } from "@/types/auth";
-import type { AdminReferralView } from "@/types/referral";
+import type { AdminDownline, AdminReferralView } from "@/types/referral";
+import { DownlineView } from "@/features/admin/downline-view";
 import type { UserAuthorities } from "@/types/staff";
 import { formatMoney } from "@/utils/money";
 import type { AdminBankAccount, AdminUserDetail, KycSubmission } from "@/types/user";
@@ -52,12 +53,13 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
     if (error instanceof BackendError && error.status === 404) notFound();
     throw error;
   }
-  const [kyc, banks, referral] = await Promise.all([
+  const [kyc, banks, referral, downline] = await Promise.all([
     can(Permission.KYC_REVIEW) ? authFetch<KycSubmission[]>(`/api/v1/admin/users/${id}/kyc`) : null,
     can(Permission.BANK_ACCOUNT_VERIFY) || can(Permission.FINANCE_VIEW)
       ? authFetch<AdminBankAccount[]>(`/api/v1/admin/users/${id}/bank-accounts`)
       : null,
     authFetch<AdminReferralView>(`/api/v1/admin/users/${id}/referrals`),
+    fromBankVerification ? null : authFetch<AdminDownline>(`/api/v1/admin/users/${id}/downline`),
   ]);
   const [authorities, allRoles] = can(Permission.ROLE_VIEW)
     ? await Promise.all([
@@ -201,6 +203,14 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 {referral.totalEarned.length === 0 ? "—" : referral.totalEarned.map((m) => formatMoney(m)).join(" · ")}
               </Item>
             </dl>
+            {downline && (
+              <div className="mt-5 space-y-2 border-t border-border pt-4">
+                <h3 className="text-xs font-medium tracking-[0.08em] text-muted uppercase">
+                  Downline · {downline.members.length} {downline.members.length === 1 ? "member" : "members"}
+                </h3>
+                <DownlineView downline={downline} />
+              </div>
+            )}
           </Card>
           )}
         </div>

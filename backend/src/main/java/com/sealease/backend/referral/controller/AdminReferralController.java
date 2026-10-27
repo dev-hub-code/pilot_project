@@ -1,7 +1,9 @@
 package com.sealease.backend.referral.controller;
 
 import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.referral.dto.AdminDownline;
 import com.sealease.backend.referral.dto.AdminReferralView;
+import com.sealease.backend.referral.dto.MoveReferralRequest;
 import com.sealease.backend.referral.dto.RateVersionResponse;
 import com.sealease.backend.referral.dto.ReferralEarningResponse;
 import com.sealease.backend.referral.dto.ScheduleRatesRequest;
@@ -71,6 +73,21 @@ public class AdminReferralController {
 	@PreAuthorize("hasAuthority('USER_VIEW')")
 	public AdminReferralView user(@PathVariable UUID userId) {
 		return referrals.adminView(userId);
+	}
+
+	/** The investor's whole downline: shown with the user, and arranged by super administrators. */
+	@GetMapping("/api/v1/admin/users/{userId}/downline")
+	@PreAuthorize("hasAnyAuthority('USER_VIEW', 'REFERRAL_TREE_MANAGE')")
+	public AdminDownline downline(@PathVariable UUID userId) {
+		return referrals.adminDownline(userId);
+	}
+
+	/** Moves the member, with everyone below them, to another referrer, or out of their downline (no referrer). */
+	@PostMapping("/api/v1/admin/users/{userId}/referrer")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@PreAuthorize("hasAuthority('REFERRAL_TREE_MANAGE')")
+	public void move(AuthenticatedUser actor, @PathVariable UUID userId, @Valid @RequestBody MoveReferralRequest request) {
+		referrals.move(actor.userId(), userId, request.referrerId(), request.reason());
 	}
 
 }
