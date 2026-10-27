@@ -96,7 +96,9 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
                 {p.deposit ? (
                   <>Investor paid by {DEPOSIT_MODE_LABEL[p.deposit.mode]} · <span className="font-mono">{p.deposit.reference}</span>{" "}
                     into {p.deposit.bankName} {p.deposit.accountNumber}</>
-                ) : p.method === "BANK_TRANSFER" ? "The investor has not sent the transfer details yet." : "To pay at the office."}
+                ) : p.method === "BANK_TRANSFER" ? "The investor has not sent the transfer details yet."
+                  : p.receiptNumber ? <>Investor paid at the office · receipt <span className="font-mono">{p.receiptNumber}</span></>
+                  : "To pay at the office."}
               </p>
               {p.userId === session.userId
                 ? <p className="text-sm text-muted">This is your own order: someone else must confirm it.</p>
@@ -123,7 +125,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
                     <span className="block text-muted">{p.deposit.bankName} {p.deposit.accountNumber}</span>
                   </>
                 ) : <span className="text-muted">{p.method === "BANK_TRANSFER" && p.status === "PENDING" ? "Not submitted yet"
-                  : p.method === "OFFICE_CASH" ? (p.externalReference ? `Receipt ${p.externalReference}` : "To pay at the office") : "—"}</span>}
+                  : p.method === "OFFICE_CASH" ? (p.externalReference ?? p.receiptNumber ? `Receipt ${p.externalReference ?? p.receiptNumber}` : "To pay at the office") : "—"}</span>}
               </Cell>
               <Cell className="tabular-nums">{formatMoney(p.amount)}</Cell>
               <Cell><StatusBadge tone={PAYMENT_TONE[p.status]}>{humanize(p.status)}</StatusBadge></Cell>

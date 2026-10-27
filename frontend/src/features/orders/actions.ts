@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { Order, Payment, PaymentMethod } from "@/types/order";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { cartItemSchema, depositSchema, idempotencyKeySchema } from "@/validators/order";
+import { cartItemSchema, depositSchema, idempotencyKeySchema, receiptSchema } from "@/validators/order";
 
 const id = (value: string) => encodeURIComponent(value);
 
@@ -106,4 +106,18 @@ export async function submitDepositAction(orderId: string, paymentId: string, _p
   }
   revalidatePath(`/orders/${orderId}`);
   return { success: "Thank you. We will confirm your order once the payment is verified.", values: input };
+}
+
+/** The investor gives the receipt number the office handed them for their cash, for finance to confirm. */
+export async function submitReceiptAction(orderId: string, paymentId: string, _p: FormState, formData: FormData): Promise<FormState> {
+  const input = { receiptNumber: String(formData.get("receiptNumber") ?? "") };
+  const parsed = receiptSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
+  try {
+    await authFetch<Payment>(`/api/v1/payments/${id(paymentId)}/receipt`, { method: "POST", json: parsed.data });
+  } catch (error) {
+    return failureState(error, input);
+  }
+  revalidatePath(`/orders/${orderId}`);
+  return { success: "Thank you. We will confirm your order once our finance team records the cash.", values: input };
 }

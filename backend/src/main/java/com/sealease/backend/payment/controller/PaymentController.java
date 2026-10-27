@@ -4,6 +4,7 @@ import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.StartPaymentRequest;
 import com.sealease.backend.payment.dto.SubmitDepositRequest;
+import com.sealease.backend.payment.dto.SubmitReceiptRequest;
 import com.sealease.backend.payment.service.PaymentService;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -47,6 +48,13 @@ public class PaymentController {
 	public PaymentResponse submitDeposit(AuthenticatedUser investor, @PathVariable UUID paymentId,
 			@Valid @RequestBody SubmitDepositRequest request) {
 		return payments.submitDeposit(investor.userId(), paymentId, request);
+	}
+
+	/** The receipt number the office gave the investor for cash paid there. */
+	@PostMapping("/api/v1/payments/{paymentId}/receipt")
+	public PaymentResponse submitReceipt(AuthenticatedUser investor, @PathVariable UUID paymentId,
+			@Valid @RequestBody SubmitReceiptRequest request) {
+		return payments.submitReceipt(investor.userId(), paymentId, request);
 	}
 
 

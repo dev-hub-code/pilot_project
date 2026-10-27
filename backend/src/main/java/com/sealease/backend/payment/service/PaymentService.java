@@ -26,6 +26,7 @@ import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
 import com.sealease.backend.payment.dto.RefundRequest;
 import com.sealease.backend.payment.dto.SubmitDepositRequest;
+import com.sealease.backend.payment.dto.SubmitReceiptRequest;
 import com.sealease.backend.payment.entity.CompanyBankAccount;
 import com.sealease.backend.payment.entity.DepositMode;
 import com.sealease.backend.payment.entity.Payment;
@@ -202,6 +203,37 @@ public class PaymentService {
 		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_DETAILS_SUBMITTED, ENTITY, paymentId)
 			.withNewValue(Map.of("companyBankAccountId", account.getId().toString(), "mode", request.mode(),
 					"reference", reference, "orderExpiresAt", order.expiresAt().toString())));
+		return view(locked, order.orderNumber());
+	}
+
+	/**
+	 * The investor gives the receipt number the office handed them for their cash. The order then waits for finance
+	 * to confirm the cash instead of lapsing. The number may be corrected until the payment is settled.
+	 */
+	@Transactional
+	public PaymentResponse submitReceipt(UUID userId, UUID paymentId, SubmitReceiptRequest request) {
+		Payment payment = load(paymentId);
+		if (!payment.getUserId().equals(userId)) {
+			throw new ResourceNotFoundException("Payment", paymentId);
+		}
+		if (payment.getMethod() != PaymentMethod.OFFICE_CASH) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only cash payments at the office take a receipt number");
+		}
+		PayableOrder order = orders.lockForPayment(payment.getOrderId());
+		Payment locked = lockPayment(paymentId);
+		if (locked.getStatus() != PaymentStatus.PENDING) {
+			throw new BusinessException(ErrorCode.CONFLICT, "This payment is already " + humanize(locked.getStatus()));
+		}
+		Instant now = clock.instant();
+		if (!order.acceptsPaymentAt(now)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This order is no longer awaiting payment");
+		}
+		String receiptNumber = request.receiptNumber().strip().toUpperCase(Locale.ROOT);
+		locked.submitReceipt(receiptNumber, now);
+		payments.flush();
+		order = orders.holdForVerification(order.id(), now.plus(bankTransfer.verificationWindow()));
+		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_DETAILS_SUBMITTED, ENTITY, paymentId)
+			.withNewValue(Map.of("receiptNumber", receiptNumber, "orderExpiresAt", order.expiresAt().toString())));
 		return view(locked, order.orderNumber());
 	}
 

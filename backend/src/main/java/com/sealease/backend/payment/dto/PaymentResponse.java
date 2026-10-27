@@ -13,6 +13,7 @@ import java.util.UUID;
  * @param bankTransfer how to pay, while a bank transfer is pending
  * @param deposit      how the investor says they paid a bank payment, once submitted
  * @param officeCash   how to pay, while a payment in cash at the office is pending
+ * @param receiptNumber the receipt number the investor gave for cash paid at the office, once submitted
  */
 public record PaymentResponse(
 		UUID id,
@@ -34,6 +35,8 @@ public record PaymentResponse(
 		BankTransferInstructions bankTransfer,
 		DepositDetails deposit,
 		OfficeCashInstructions officeCash,
+		String receiptNumber,
+		Instant receiptSubmittedAt,
 		Assignee assignee) {
 
 	public static PaymentResponse from(Payment p, String orderNumber, BankTransferInstructions bankTransfer,
@@ -41,14 +44,14 @@ public record PaymentResponse(
 		return new PaymentResponse(p.getId(), p.getOrderId(), orderNumber, p.getUserId(), p.getMethod(), p.getProvider(),
 				p.getProviderReference(), MoneyResponse.from(p.amount()), p.getStatus(), p.getFailureReason(),
 				p.getExternalReference(), p.getSettledAt(), p.getRefundedAt(), p.getRefundReference(), p.getRefundReason(),
-				p.getCreatedAt(), bankTransfer, deposit, officeCash, null);
+				p.getCreatedAt(), bankTransfer, deposit, officeCash, p.getReceiptNumber(), p.getReceiptSubmittedAt(), null);
 	}
 
 	/** Staff views say which finance member is confirming the payment; investors' views do not. */
 	public PaymentResponse withAssignee(Assignee assignee) {
 		return new PaymentResponse(id, orderId, orderNumber, userId, method, provider, providerReference, amount, status,
 				failureReason, externalReference, settledAt, refundedAt, refundReference, refundReason, createdAt,
-				bankTransfer, deposit, officeCash, assignee);
+				bankTransfer, deposit, officeCash, receiptNumber, receiptSubmittedAt, assignee);
 	}
 
 }

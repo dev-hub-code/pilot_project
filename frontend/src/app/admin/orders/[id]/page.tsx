@@ -160,6 +160,11 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                   <Item label="Started">{formatDateTime(p.createdAt)}</Item>
                   <Item label="Settled">{formatDateTime(p.settledAt)}</Item>
                   <Item label={p.method === "OFFICE_CASH" ? "Cash receipt number" : "Bank / gateway reference"}>{p.externalReference ?? "—"}</Item>
+                  {p.receiptNumber && (
+                    <Item label="Receipt number from investor">
+                      <span className="font-mono">{p.receiptNumber}</span>{` · ${formatDateTime(p.receiptSubmittedAt)}`}
+                    </Item>
+                  )}
                   {p.deposit && (
                     <>
                       <Item label="Investor paid by">{`${DEPOSIT_MODE_LABEL[p.deposit.mode]} · ${formatDateTime(p.deposit.submittedAt)}`}</Item>

@@ -139,6 +139,9 @@ export interface Payment {
   bankTransfer: BankTransferInstructions | null;
   deposit: DepositDetails | null;
   officeCash: OfficeCashInstructions | null;
+  /** The receipt number the investor gave for cash paid at the office, once submitted. */
+  receiptNumber: string | null;
+  receiptSubmittedAt: string | null;
   /** Staff views: the finance member confirming it, who alone may confirm or reject it. */
   assignee?: Assignee | null;
 }

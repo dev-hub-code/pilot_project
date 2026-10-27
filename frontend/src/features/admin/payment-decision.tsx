@@ -10,7 +10,7 @@ export function PaymentDecision({ payment: p, viewerId }: { payment: Payment; vi
       assign={paymentTaskAction.bind(null, p.id, true)} unassign={paymentTaskAction.bind(null, p.id, false)}>
       <div className="grid gap-6 lg:grid-cols-2">
         <ConfirmTransferForm paymentId={p.id} amountDue={p.amount.amount} currency={p.amount.currency}
-          defaultReference={p.deposit?.reference} officeCash={p.method === "OFFICE_CASH"} />
+          defaultReference={p.deposit?.reference ?? p.receiptNumber ?? undefined} officeCash={p.method === "OFFICE_CASH"} />
         {p.status === "PENDING" && <RejectPaymentForm paymentId={p.id} />}
       </div>
     </ReviewAssignment>

@@ -84,6 +84,12 @@ public class Payment extends BaseEntity {
 	@Column(name = "deposit_submitted_at")
 	private Instant depositSubmittedAt;
 
+	@Column(name = "receipt_number", length = 100)
+	private String receiptNumber;
+
+	@Column(name = "receipt_submitted_at")
+	private Instant receiptSubmittedAt;
+
 	/** The finance member who took the task of confirming or rejecting this payment; only they may decide it. */
 	@Column(name = "task_assignee_id")
 	private UUID taskAssigneeId;
@@ -135,6 +141,19 @@ public class Payment extends BaseEntity {
 		this.depositMode = mode;
 		this.depositReference = reference;
 		this.depositSubmittedAt = now;
+	}
+
+	/**
+	 * Records the receipt number the investor was given for cash paid at the office. They may correct it until
+	 * finance has settled the payment.
+	 */
+	public void submitReceipt(String receiptNumber, Instant now) {
+		requireStatus(PaymentStatus.PENDING);
+		if (method != PaymentMethod.OFFICE_CASH) {
+			throw new IllegalStateException("Only office cash payments have a receipt number");
+		}
+		this.receiptNumber = receiptNumber;
+		this.receiptSubmittedAt = now;
 	}
 
 	public boolean hasDepositDetails() {
@@ -262,6 +281,14 @@ public class Payment extends BaseEntity {
 
 	public Instant getDepositSubmittedAt() {
 		return depositSubmittedAt;
+	}
+
+	public String getReceiptNumber() {
+		return receiptNumber;
+	}
+
+	public Instant getReceiptSubmittedAt() {
+		return receiptSubmittedAt;
 	}
 
 

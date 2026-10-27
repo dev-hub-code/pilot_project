@@ -11,6 +11,7 @@ import { ActionButton } from "@/features/orders/action-button";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
 import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { DepositForm } from "@/features/orders/deposit-form";
+import { ReceiptForm } from "@/features/orders/receipt-form";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
@@ -36,7 +37,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
     throw error;
   }
   const pending = payments.find((p) => p.status === "PENDING");
-  const awaitingVerification = pending?.deposit != null;
+  const awaitingVerification = pending?.deposit != null || pending?.receiptNumber != null;
   const rejected = payments.find((p) => p.method === "BANK_TRANSFER" && p.status === "FAILED" && p.deposit);
   const refunds = payments.filter((p) => p.status === "REFUND_REQUIRED" || p.status === "REFUNDED");
   const paid = payments.find((p) => p.status === "SUCCEEDED");
@@ -136,6 +137,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium">{METHOD_LABEL[p.method]}</p>
+                        {p.receiptNumber && (
+                          <p className="text-xs text-muted">Receipt · <span className="font-mono">{p.receiptNumber}</span></p>
+                        )}
                         {p.deposit && (
                           <p className="text-xs text-muted">
                             {DEPOSIT_MODE_LABEL[p.deposit.mode]} · <span className="font-mono">{p.deposit.reference}</span>
@@ -210,9 +214,10 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                       <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Pay by</dt><dd>{formatDateTime(pending.officeCash.payBy)}</dd></div>
                     </dl>
                     <p className="text-xs text-muted">
-                      Bring the amount in cash and quote the reference. You get a receipt, and your order is confirmed once our
-                      finance team records it.
+                      Bring the amount in cash and quote the reference. You get a receipt: enter its number below, and your
+                      order is confirmed once our finance team records it.
                     </p>
+                    <ReceiptForm key={pending.id} orderId={order.id} payment={pending} />
                   </div>
                 )}
                 {/* Once cash at the office is chosen it stays the way to pay (or the order is cancelled). */}

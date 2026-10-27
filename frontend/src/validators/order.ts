@@ -27,6 +27,10 @@ export const depositSchema = z.object({
   reference: reference("Enter the transaction ID or cheque number"),
 });
 
+export const receiptSchema = z.object({
+  receiptNumber: reference("Enter the receipt number"),
+});
+
 export const rejectPaymentSchema = z.object({
   reason: z.string().trim().min(3, "Give a reason the investor will understand").max(500),
 });

@@ -134,6 +134,37 @@ class BankPaymentIntegrationTest {
 	}
 
 	@Test
+	void investorsGiveTheOfficeCashReceiptNumberAndFinanceConfirms() throws Exception {
+		Account investor = approvedInvestor();
+		Account finance = api.staff("ADMIN", "FINANCE");
+		String orderId = placeOrder(investor, offerings.plan());
+		String payment = paymentId(startPayment(investor, orderId, "OFFICE_CASH"));
+
+		submitReceipt(approvedInvestor(), payment, "RC-1042").andExpect(status().isNotFound());
+		submitReceipt(investor, payment, "").andExpect(status().isBadRequest());
+		submitReceipt(investor, payment, "rc-1042").andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("PENDING"))
+			.andExpect(jsonPath("$.receiptNumber").value("RC-1042"))
+			.andExpect(jsonPath("$.receiptSubmittedAt").isNotEmpty());
+		// The order now waits for finance to record the cash instead of lapsing after the office hold window.
+		Instant expiresAt = jdbc.queryForObject("SELECT expires_at FROM orders WHERE id = ?::uuid", OffsetDateTime.class,
+				orderId).toInstant();
+		assertThat(expiresAt).isAfter(Instant.now().plus(Duration.ofDays(6)));
+		submitReceipt(investor, payment, "RC-1043").andExpect(status().isOk())
+			.andExpect(jsonPath("$.receiptNumber").value("RC-1043"));
+		assertThat(api.auditCount("PAYMENT_DETAILS_SUBMITTED", payment)).isEqualTo(2);
+
+		confirm(finance, payment, "RC-1043", "50000").andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("SUCCEEDED"))
+			.andExpect(jsonPath("$.externalReference").value("RC-1043"));
+		submitReceipt(investor, payment, "RC-1044").andExpect(status().isConflict());
+
+		// Bank payments take deposit details, not a receipt number.
+		String other = placeOrder(investor, offerings.plan());
+		submitReceipt(investor, paymentId(startBankPayment(investor, other)), "RC-1045").andExpect(status().isUnprocessableContent());
+	}
+
+	@Test
 	void financeRejectsMoneyThatNeverArrivedAndTheInvestorPaysAgain() throws Exception {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
@@ -194,9 +225,18 @@ class BankPaymentIntegrationTest {
 	}
 
 	private ResultActions startBankPayment(Account investor, String orderId) throws Exception {
+		return startPayment(investor, orderId, "BANK_TRANSFER");
+	}
+
+	private ResultActions startPayment(Account investor, String orderId, String method) throws Exception {
 		return mvc.perform(post("/api/v1/orders/{id}/payments", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
 			.header("Idempotency-Key", UUID.randomUUID().toString())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"BANK_TRANSFER\"}"));
+			.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"" + method + "\"}"));
+	}
+
+	private ResultActions submitReceipt(Account investor, String paymentId, String receiptNumber) throws Exception {
+		return mvc.perform(post("/api/v1/payments/{id}/receipt", paymentId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("{\"receiptNumber\":\"" + receiptNumber + "\"}"));
 	}
 
 	private static String paymentId(ResultActions result) throws Exception {
