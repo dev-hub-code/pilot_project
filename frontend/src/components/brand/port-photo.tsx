@@ -10,7 +10,7 @@
  *   container-lift      File:Port of Savannah - 2021.jpg
  *   miami-port          File:Aerial photograph of the Port of Miami Container Port.jpg
  * The rest are CC BY / CC BY-SA, listed in PHOTO_CREDITS: their licences require the credit, which the photo
- * credits page (/credits, linked from the landing page footer) shows. Add any new such photo there.
+ * credits page (/credits) shows. Add any new such photo there.
  */
 
 const WIDTHS = {

@@ -301,7 +301,7 @@ const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoN
 
 /**
  * The photo strip: a large lead photo, then four smaller ones, all at Indian ports. These photos are CC BY / CC BY-SA
- * (Wikimedia Commons), credited on the /credits page that the footer links to: their licences require it.
+ * (Wikimedia Commons), credited on the /credits page: their licences require it.
  */
 /**
  * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
@@ -722,11 +722,13 @@ export default async function Home() {
           <Logo />
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted">
             <Link href="/terms" className="underline-offset-4 hover:text-foreground hover:underline">Terms & conditions</Link>
-            <Link href="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Photo credits</Link>
             <p className="flex items-center gap-3">
               Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>
             </p>
           </div>
+          <p className="w-full text-xs text-muted">
+            © {new Date().getFullYear()} Leasefleet Solutions Pvt. Ltd. All rights reserved.
+          </p>
         </footer>
       </div>
     </div>
