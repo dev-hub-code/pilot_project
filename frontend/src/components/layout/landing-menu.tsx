@@ -41,7 +41,7 @@ export function LandingMenu({ links }: { links: readonly MenuLink[] }) {
         </svg>
       </button>
       {open && (
-        <div id={menuId} className="absolute inset-x-3 top-[4.75rem] z-50 border border-border bg-surface text-foreground shadow-lg sm:inset-x-10 sm:left-auto sm:w-72">
+        <div id={menuId} className="absolute inset-x-3 top-full z-50 mt-1 border border-border bg-surface text-foreground shadow-lg sm:inset-x-10 sm:left-auto sm:w-72">
           <ul className="py-2 text-sm">
             {links.map((link) => {
               const className = "block px-5 py-3 text-muted transition-colors hover:bg-background hover:text-foreground";

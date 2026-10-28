@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Eyebrow } from "@/components/brand/eyebrow";
 import { Logo } from "@/components/brand/logo";
 import { PortPhoto, type PortPhotoName } from "@/components/brand/port-photo";
+import { LandingHeader } from "@/components/layout/landing-header";
 import { LandingMenu } from "@/components/layout/landing-menu";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
@@ -364,44 +365,45 @@ export default async function Home() {
   return (
     <div className="flex-1 bg-frame p-2 sm:p-5 lg:p-10">
       <div className="mx-auto max-w-[1440px] bg-surface">
+        <LandingHeader>
+          <Logo tone="light" />
+          <nav aria-label="Main" className="flex items-center gap-3 xl:gap-4">
+            {/* In-page sections in a frosted pill; signing in and investing sit apart from it. */}
+            <ul className="hidden items-center gap-0.5 rounded-full border border-on-ink/15 bg-ink/35 p-1.5 text-sm shadow-lg shadow-ink/20 backdrop-blur-md xl:flex">
+              {NAV.filter((item) => item.href.startsWith("#")).map((item) => (
+                <li key={item.href}>
+                  {/* In-page sections use plain anchors: <Link> skips the scroll when the URL already has that hash. */}
+                  <a href={item.href}
+                    className="block whitespace-nowrap rounded-full px-4 py-2 text-on-ink/80 transition-colors hover:bg-on-ink/10 hover:text-on-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none 2xl:px-5">
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <Link href="/login"
+              className="hidden whitespace-nowrap rounded-full border border-on-ink/40 bg-ink/35 px-5 py-2.5 text-sm font-medium text-on-ink shadow-lg shadow-ink/20 backdrop-blur-md transition-colors hover:border-on-ink hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none xl:inline-flex">
+              Sign In
+            </Link>
+            <Link
+              href="/register"
+              className="hidden items-center gap-2 whitespace-nowrap rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-on-gold shadow-lg shadow-ink/25 transition-colors hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-on-ink focus-visible:outline-none sm:inline-flex"
+            >
+              Register
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+            <LandingMenu links={NAV} />
+          </nav>
+        </LandingHeader>
+
         {/* ------------------------------------------------------------------- hero */}
-        <section className="relative isolate flex min-h-[640px] flex-col overflow-hidden bg-ink text-on-ink lg:h-[min(88vh,860px)]">
+        <section className="relative isolate flex min-h-[640px] flex-col overflow-hidden bg-ink pt-24 text-on-ink lg:h-[min(88vh,860px)] lg:pt-28">
           <PortPhoto name="savannah-cranes" alt="" eager sizes="(min-width: 1440px) 1440px, 100vw"
             className="absolute inset-0 -z-20 size-full object-cover" />
           <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-ink/95 via-ink/55 to-ink/40" />
           <div aria-hidden="true" className="absolute inset-0 -z-10 hidden bg-gradient-to-r from-ink/60 to-transparent lg:block" />
 
-          <header className="relative flex items-center justify-between gap-6 px-5 py-6 sm:px-10 lg:px-14 lg:py-8">
-            <Logo tone="light" />
-            <nav aria-label="Main" className="flex items-center gap-3 xl:gap-4">
-              {/* In-page sections in a frosted pill; signing in and investing sit apart from it. */}
-              <ul className="hidden items-center gap-0.5 rounded-full border border-on-ink/15 bg-ink/35 p-1.5 text-sm shadow-lg shadow-ink/20 backdrop-blur-md xl:flex">
-                {NAV.filter((item) => item.href.startsWith("#")).map((item) => (
-                  <li key={item.href}>
-                    {/* In-page sections use plain anchors: <Link> skips the scroll when the URL already has that hash. */}
-                    <a href={item.href}
-                      className="block whitespace-nowrap rounded-full px-4 py-2 text-on-ink/80 transition-colors hover:bg-on-ink/10 hover:text-on-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none 2xl:px-5">
-                      {item.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-              <Link href="/login"
-                className="hidden whitespace-nowrap rounded-full border border-on-ink/40 bg-ink/35 px-5 py-2.5 text-sm font-medium text-on-ink shadow-lg shadow-ink/20 backdrop-blur-md transition-colors hover:border-on-ink hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none xl:inline-flex">
-                Sign In
-              </Link>
-              <Link
-                href="/register"
-                className="hidden items-center gap-2 whitespace-nowrap rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-on-gold shadow-lg shadow-ink/25 transition-colors hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-on-ink focus-visible:outline-none sm:inline-flex"
-              >
-                Register
-                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </Link>
-              <LandingMenu links={NAV} />
-            </nav>
-          </header>
 
           <div className="mt-auto grid gap-10 px-5 pb-10 sm:px-10 lg:grid-cols-2 lg:items-end lg:px-14 lg:pb-16">
             <h1 className="max-w-xl text-4xl leading-[1.04] font-bold tracking-tight min-[400px]:text-5xl sm:text-6xl xl:text-7xl">
@@ -429,7 +431,7 @@ export default async function Home() {
         </section>
 
         {/* ------------------------------------------------------------------ about */}
-        <section id="about" className="scroll-mt-8 px-5 py-20 text-center sm:px-10 lg:py-28">
+        <section id="about" className="scroll-mt-24 px-5 py-20 text-center sm:px-10 lg:py-28">
           <Eyebrow>About SeaLease</Eyebrow>
           <h2 className="mx-auto mt-8 max-w-4xl text-3xl leading-tight font-normal tracking-tight sm:text-4xl lg:text-5xl">
             Own Real Shipping Containers And Earn Rent From Them. The More You Invest, The Higher Your Rate.
@@ -556,7 +558,7 @@ export default async function Home() {
         </section>
 
         {/* ----------------------------------------------------------- how it works */}
-        <section id="how-it-works" className="scroll-mt-8 border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+        <section id="how-it-works" className="scroll-mt-24 border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="space-y-5">
               <Eyebrow>How It Works</Eyebrow>
@@ -582,7 +584,7 @@ export default async function Home() {
         </section>
 
         {/* -------------------------------------------------------------- investors */}
-        <section id="investors" className="grid scroll-mt-8 md:grid-cols-2">
+        <section id="investors" className="grid scroll-mt-24 md:grid-cols-2">
           <div className="space-y-5 bg-background px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
             <Eyebrow>Your Own Containers</Eyebrow>
             <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">A Container With Your Name On It</h3>
@@ -608,6 +610,7 @@ export default async function Home() {
                 ))}
               </ul>
             </div>
+            <LinkButton href="/marketplace" variant="secondary">Browse Marketplace</LinkButton>
           </div>
           <div className="relative isolate space-y-5 overflow-hidden bg-ink px-5 py-20 text-on-ink sm:px-10 lg:px-14 lg:py-28">
             <PortPhoto name="container-wall" alt="" sizes="(min-width: 768px) 50vw, 100vw"
@@ -655,6 +658,8 @@ export default async function Home() {
               Illustration: one {inr(example.total)} order earns {formatPercent(example.percent)} a month on each container.
               Each container&apos;s actual price and your rent are shown in the marketplace before you buy.
             </p>
+            {/* Signed out, the marketplace asks them to sign in first. */}
+            <LinkButton href="/marketplace">Invest Now</LinkButton>
           </div>
         </section>
 
@@ -681,7 +686,7 @@ export default async function Home() {
         </section>
 
         {/* -------------------------------------------------------------------- faq */}
-        <section id="faq" className="scroll-mt-8 px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+        <section id="faq" className="scroll-mt-24 px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
           <div className="mx-auto max-w-3xl">
             <Eyebrow>FAQ</Eyebrow>
             <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Questions Investors Ask Us</h2>
@@ -700,7 +705,7 @@ export default async function Home() {
         </section>
 
         {/* ---------------------------------------------------------------- contact */}
-        <section id="contact" className="relative grid scroll-mt-8 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14 lg:py-28">
+        <section id="contact" className="relative grid scroll-mt-24 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14 lg:py-28">
           <div className="space-y-5">
             <Eyebrow>Talk To Us</Eyebrow>
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>

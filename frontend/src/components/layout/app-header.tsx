@@ -40,7 +40,7 @@ export async function AppHeader({ session }: { session: Session }) {
     ];
 
   return (
-    <header className="border-b border-border bg-surface print:hidden">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface print:hidden">
       <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <Logo href={investor ? "/dashboard" : "/admin"} compact />
         <div className="flex items-center gap-4">
