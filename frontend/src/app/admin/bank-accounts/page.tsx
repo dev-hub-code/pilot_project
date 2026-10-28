@@ -32,12 +32,13 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
         <EmptyState title="No bank accounts awaiting verification" />
       ) : (
         <ul className="space-y-4">
-          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces, assignee, ifsc }) => (
+          {queue.content.map(({ userId, account, otherUsersWithSameAccount, replaces, assignee, ifsc, accountNumber,
+            replacesAccountNumber }) => (
             <li key={account.id} className="space-y-4 border border-border bg-surface p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
                 <div>
                   <p className="font-medium">
-                    {account.bankName} <span className="font-mono">{account.accountNumberMasked}</span>
+                    {account.bankName} <span className="font-mono text-base font-bold tracking-wide">{accountNumber ?? account.accountNumberMasked}</span>
                   </p>
                   <p className="text-muted">
                     {account.accountHolderName} · {account.country} · added {formatDateTime(account.createdAt)}
@@ -49,11 +50,11 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                   <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
                 </div>
               </div>
-              <p className="text-sm"><span className="text-muted">IFSC</span> <span className="font-mono">{ifsc.code}</span></p>
+              <p className="text-sm"><span className="text-muted">IFSC</span> <span className="font-mono text-base font-bold tracking-wide">{ifsc.code}</span></p>
               {replaces && (
                 <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
                   Replaces <span className="font-medium">{replaces.bankName}</span>{" "}
-                  <span className="font-mono">{replaces.accountNumberMasked}</span> ({replaces.accountHolderName},{" "}
+                  <span className="font-mono text-base font-bold tracking-wide">{replacesAccountNumber ?? replaces.accountNumberMasked}</span> ({replaces.accountHolderName},{" "}
                   {humanize(replaces.status).toLowerCase()}{replaces.primary ? ", primary" : ""}). Verifying retires that
                   account and moves payouts to this one; rejecting leaves it in use.
                 </p>
@@ -82,8 +83,8 @@ export default async function BankAccountQueuePage({ searchParams }: PageProps<"
                   <div className="grid gap-4 sm:grid-cols-2">
                     <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
                       confirm={replaces
-                        ? `Verify ${account.bankName} ${account.accountNumberMasked}? It replaces ${replaces.bankName} ${replaces.accountNumberMasked}, which is retired.`
-                        : `Verify ${account.bankName} ${account.accountNumberMasked}?`} />
+                        ? `Verify ${account.bankName} ${accountNumber ?? account.accountNumberMasked}? It replaces ${replaces.bankName} ${replacesAccountNumber ?? replaces.accountNumberMasked}, which is retired.`
+                        : `Verify ${account.bankName} ${accountNumber ?? account.accountNumberMasked}?`} />
                     <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
                       submitLabel="Reject" />
                   </div>

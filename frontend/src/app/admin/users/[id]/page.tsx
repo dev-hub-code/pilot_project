@@ -135,11 +135,11 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                 <p className="text-sm text-muted">No bank accounts.</p>
               ) : (
                 <ul className="space-y-4">
-                  {banks.map(({ account, otherUsersWithSameAccount, assignee, ifsc }) => (
+                  {banks.map(({ account, otherUsersWithSameAccount, assignee, ifsc, accountNumber }) => (
                     <li key={account.id} className="space-y-3 border border-border p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="font-medium">
-                          {account.bankName} <span className="font-mono">{account.accountNumberMasked}</span> ·{" "}
+                          {account.bankName} <span className={accountNumber ? "font-mono text-base font-bold tracking-wide" : "font-mono"}>{accountNumber ?? account.accountNumberMasked}</span> ·{" "}
                           {account.accountHolderName}
                         </span>
                         <span className="flex gap-2">
@@ -159,7 +159,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                           unassign={unassignBankAccountAction.bind(null, account.id)}>
                           <div className="grid gap-4 sm:grid-cols-2">
                             <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
-                              confirm={`Verify ${account.bankName} ${account.accountNumberMasked} for payouts?`} />
+                              confirm={`Verify ${account.bankName} ${accountNumber ?? account.accountNumberMasked} for payouts?`} />
                             <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
                               submitLabel="Reject" />
                           </div>

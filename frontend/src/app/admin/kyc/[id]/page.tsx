@@ -48,11 +48,11 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
         <div className="space-y-6 lg:col-span-2">
           <Card title="Submitted details">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              {s.aadhaarNumber && <Item label="Aadhaar number"><span className="font-mono">{formatAadhaar(s.aadhaarNumber)}</span></Item>}
-              {s.panNumber && <Item label="PAN"><span className="font-mono">{s.panNumber}</span></Item>}
+              {s.aadhaarNumber && <Item label="Aadhaar number"><span className="font-mono text-base font-bold tracking-wide">{formatAadhaar(s.aadhaarNumber)}</span></Item>}
+              {s.panNumber && <Item label="PAN"><span className="font-mono text-base font-bold tracking-wide">{s.panNumber}</span></Item>}
               {s.documentType && (
                 <>
-                  <Item label="Document">{kycNumbers(s)}</Item>
+                  <Item label="Document"><span className="font-mono text-base font-bold tracking-wide">{kycNumbers(s)}</span></Item>
                   <Item label="Issued by">{s.documentIssuingCountry}</Item>
                   <Item label="Expires">{formatDate(s.documentExpiryDate)}</Item>
                 </>

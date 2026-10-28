@@ -735,9 +735,15 @@ class UserManagementIntegrationTest {
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", older).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no bank statement or cancelled cheque")));
+		// While it awaits verification the reviewer sees the full number, to check against the statement; once
+		// verified, only the last four digits.
+		mvc.perform(get("/api/v1/admin/users/{id}/bank-accounts", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(jsonPath("$[?(@.account.id == '%s')].accountNumber".formatted(accountId)).value(org.hamcrest.Matchers.contains("50100012345678")));
 		api.assignReview("bank-accounts", accountId, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(status().isOk());
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.accountNumber").doesNotExist())
+			.andExpect(jsonPath("$.account.accountNumberMasked").value("•••• 5678"));
 	}
 
 	@Test

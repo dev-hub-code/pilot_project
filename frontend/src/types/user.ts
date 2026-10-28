@@ -122,6 +122,10 @@ export interface AdminBankAccount {
   assignee: Assignee | null;
   /** The account's IFSC, for the reviewer to check against the proof. */
   ifsc: { code: string };
+  /** The full account number, while the account awaits verification; absent otherwise. */
+  accountNumber?: string | null;
+  /** The full number of the account it replaces, on the same terms. */
+  replacesAccountNumber?: string | null;
 }
 
 export interface AdminUserSummary {

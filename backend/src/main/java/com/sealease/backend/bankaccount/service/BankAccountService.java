@@ -373,13 +373,22 @@ public class BankAccountService {
 	}
 
 	private AdminBankAccountResponse adminView(BankAccount account) {
-		BankAccountResponse replaces = account.getReplacesAccountId() == null ? null
-				: accounts.findById(account.getReplacesAccountId()).map(BankAccountResponse::from).orElse(null);
+		BankAccount replaced = account.getReplacesAccountId() == null ? null
+				: accounts.findById(account.getReplacesAccountId()).orElse(null);
+		// The full numbers are for checking against the proof: shown only while the account awaits verification.
+		boolean reviewing = account.getStatus() == BankAccountStatus.PENDING_VERIFICATION;
 		return new AdminBankAccountResponse(account.getUserId(), BankAccountResponse.from(account),
 				account.getVerifiedBy(),
-				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()), replaces,
+				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()),
+				replaced == null ? null : BankAccountResponse.from(replaced),
 				assignee(account), new AdminBankAccountResponse.Ifsc(
-						encryptor.decrypt(account.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT)));
+						encryptor.decrypt(account.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT)),
+				reviewing ? accountNumber(account) : null,
+				reviewing && replaced != null ? accountNumber(replaced) : null);
+	}
+
+	private String accountNumber(BankAccount account) {
+		return encryptor.decrypt(account.getAccountNumberEncrypted(), ACCOUNT_NUMBER_CONTEXT);
 	}
 
 	private Assignee assignee(BankAccount account) {

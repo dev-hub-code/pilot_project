@@ -45,7 +45,7 @@ export default async function KycQueuePage({ searchParams }: PageProps<"/admin/k
                   {s.legalFirstName} {s.legalLastName}
                 </Link>
               </Cell>
-              <Cell className="font-mono text-xs">{kycNumbers(s)}</Cell>
+              <Cell className="font-mono text-sm font-bold">{kycNumbers(s)}</Cell>
               <Cell>{s.nationality}</Cell>
               <Cell className="text-muted">{formatDateTime(s.submittedAt)}</Cell>
               <Cell className={s.assignee ? undefined : "text-muted"}>
