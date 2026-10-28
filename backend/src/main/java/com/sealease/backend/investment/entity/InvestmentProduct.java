@@ -107,6 +107,12 @@ public class InvestmentProduct extends BaseEntity {
 		this.closedAt = now;
 	}
 
+	/** Sells containers under the plan again, on the terms it was published with. */
+	public void reopen() {
+		this.status = ProductStatus.OPEN;
+		this.closedAt = null;
+	}
+
 	public void cancel(String reason, Instant now) {
 		this.status = ProductStatus.CANCELLED;
 		this.cancellationReason = reason;

@@ -5,7 +5,8 @@ import { Notice } from "@/components/ui/notice";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  cancelProductAction, closeProductAction, publishProductAction, removePlanPhotoAction, uploadPlanPhotosAction,
+  cancelProductAction, closeProductAction, publishProductAction, removePlanPhotoAction, reopenProductAction,
+  uploadPlanPhotosAction,
 } from "@/features/admin/investment-actions";
 import { PlanPhotoForm } from "@/features/admin/plan-photo-form";
 import { MAX_PLAN_PHOTOS as MAX_PHOTOS } from "@/features/admin/plan-photos";
@@ -131,6 +132,12 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
               <Card title="Close to new investors" description="Containers already sold keep their lease and keep earning rent every hour.">
                 <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close listing"
                   confirm={`Close ${p.code}? Investors can no longer buy containers under it.`} />
+              </Card>
+            )}
+            {p.status === "CLOSED" && (
+              <Card title="Reopen to new investors" description="Investors can buy containers under this listing again, on the same terms.">
+                <ConfirmForm action={reopenProductAction.bind(null, p.id)} submitLabel="Reopen listing"
+                  confirm={`Reopen ${p.code}? Investors can buy containers under it again.`} />
               </Card>
             )}
             {p.status === "DRAFT" && (

@@ -114,6 +114,21 @@ public class ProductService {
 		return view(product);
 	}
 
+	/** Sells containers under a closed plan again, on the terms it was published with. */
+	@Transactional
+	public ProductResponse reopen(UUID actorId, UUID productId) {
+		InvestmentProduct product = lock(productId);
+		if (product.getStatus() != ProductStatus.CLOSED) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only closed listings can be reopened");
+		}
+		product.reopen();
+		products.flush();
+		audit.record(AuditRecord.of(actorId, AuditAction.PRODUCT_REOPENED, ENTITY, productId)
+			.withOldValue(Map.of("status", ProductStatus.CLOSED))
+			.withNewValue(Map.of("status", ProductStatus.OPEN)));
+		return view(product);
+	}
+
 	/** A draft that will never be published. Published plans are closed instead. */
 	@Transactional
 	public ProductResponse cancel(UUID actorId, UUID productId, String reason) {

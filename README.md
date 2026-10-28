@@ -284,7 +284,7 @@ from a secret manager; keep `COOKIE_SECURE` on.
 | `GET /…/containers/{id}/documents/{docId}`                 | `INVESTMENT_VIEW`     | Document content                        |
 | `GET /api/v1/admin/investment-products[/{id}]`             | `INVESTMENT_VIEW`     | Search, detail                          |
 | `POST /api/v1/admin/investment-products`, `PUT /…/{id}`    | `INVESTMENT_CREATE` / `INVESTMENT_UPDATE` | Create / edit draft      |
-| `POST /…/investment-products/{id}/publish` · `/close` · `/cancel` | `INVESTMENT_APPROVE` | Open to investors / stop sales / cancel a draft |
+| `POST /…/investment-products/{id}/publish` · `/close` · `/reopen` · `/cancel` | `INVESTMENT_APPROVE` | Open to investors / stop sales / resume sales / cancel a draft |
 | `GET /api/v1/marketplace`                                  | `INVESTOR_PORTAL` or `INVESTMENT_VIEW` | Plans: container type, risk, status; sort `NEWEST`, `HIGHEST_RETURN`, `LOWEST_PRICE` |
 | `GET /api/v1/marketplace/{id}`                             | 〃                    | Detail, containers in stock, eligibility verdict |
 | `GET /api/v1/marketplace/{id}/projection?containers=`      | 〃                    | Validated payout projection             |

@@ -99,6 +99,17 @@ class MarketplaceIntegrationTest {
 			.andExpect(jsonPath("$.eligibility.eligible").value(false))
 			.andExpect(jsonPath("$.eligibility.reasons", hasItem("This container is not accepting investments")));
 		assertThat(api.auditCount("PRODUCT_CLOSED", productId)).isEqualTo(1);
+
+		mvc.perform(post("/api/v1/admin/investment-products/{id}/reopen", productId).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("OPEN"))
+			.andExpect(jsonPath("$.closedAt").isEmpty());
+		mvc.perform(post("/api/v1/admin/investment-products/{id}/reopen", productId).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(status().isUnprocessableContent());
+		mvc.perform(get("/api/v1/marketplace/{id}", productId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.eligibility.reasons", not(hasItem("This container is not accepting investments"))));
+		assertThat(api.auditCount("PRODUCT_REOPENED", productId)).isEqualTo(1);
 	}
 
 	@Test

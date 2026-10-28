@@ -82,6 +82,13 @@ public class AdminProductController {
 		return products.close(actor.userId(), productId);
 	}
 
+	/** Makes a closed plan available to new investors again. */
+	@PostMapping("/{productId}/reopen")
+	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
+	public ProductResponse reopen(AuthenticatedUser actor, @PathVariable UUID productId) {
+		return products.reopen(actor.userId(), productId);
+	}
+
 	@PostMapping("/{productId}/cancel")
 	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
 	public ProductResponse cancel(AuthenticatedUser actor, @PathVariable UUID productId,

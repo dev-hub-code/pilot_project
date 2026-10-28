@@ -80,6 +80,16 @@ export async function closeProductAction(productId: string): Promise<FormState> 
   return { success: "Listing closed. Containers already sold keep their lease and payouts." };
 }
 
+export async function reopenProductAction(productId: string): Promise<FormState> {
+  try {
+    await authFetch(`/api/v1/admin/investment-products/${id(productId)}/reopen`, { method: "POST" });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath("/admin/products", "layout");
+  return { success: "Listing reopened. Investors can buy these containers again." };
+}
+
 export async function cancelProductAction(productId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const parsed = reasonSchema.safeParse({ reason: formData.get("reason") ?? "" });
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
