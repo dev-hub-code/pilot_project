@@ -42,14 +42,16 @@ public class PlanPhotoService {
 	private final PlanPhotoRepository photos;
 	private final InvestmentProductRepository products;
 	private final DocumentService documents;
+	private final PlanPhotoImages images;
 	private final AuditService audit;
 	private final Clock clock;
 
 	public PlanPhotoService(PlanPhotoRepository photos, InvestmentProductRepository products, DocumentService documents,
-			AuditService audit, Clock clock) {
+			PlanPhotoImages images, AuditService audit, Clock clock) {
 		this.photos = photos;
 		this.products = products;
 		this.documents = documents;
+		this.images = images;
 		this.audit = audit;
 		this.clock = clock;
 	}
@@ -91,10 +93,11 @@ public class PlanPhotoService {
 			.withOldValue(Map.of("photoId", photoId.toString(), "documentId", photo.getDocumentId().toString())));
 	}
 
-	/** One of the plan's photos, by its document id. */
+	/** One of the plan's photos, by its document id, sized for the marketplace (see {@link PlanPhotoImages}). */
 	@Transactional(readOnly = true)
 	public Optional<DocumentContent> photo(UUID productId, UUID documentId) {
-		return photos.findByProductIdAndDocumentId(productId, documentId).map(p -> documents.load(documentId));
+		return photos.findByProductIdAndDocumentId(productId, documentId)
+			.map(p -> images.get(documentId, () -> documents.load(documentId)));
 	}
 
 	/** The plan's photos (document ids), oldest first, at most {@code limit}. */

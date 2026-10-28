@@ -51,8 +51,8 @@ export async function openImage(path: string): Promise<Response> {
       headers: {
         ...OPEN_HEADERS,
         "Content-Type": response.headers.get("Content-Type") ?? "application/octet-stream",
-        // A photo never changes under its id.
-        "Cache-Control": "public, max-age=86400",
+        // A photo never changes under its id, so browsers can keep it.
+        "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
   } catch (error) {
