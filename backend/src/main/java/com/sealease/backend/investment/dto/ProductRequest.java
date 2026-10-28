@@ -29,7 +29,5 @@ public record ProductRequest(
 		@NotBlank @PlatformCurrency String currency,
 		@NotNull @DecimalMin("0.01") @Digits(integer = 15, fraction = 2) BigDecimal price,
 		@NotNull @Min(1) @Max(30) Integer minTenureYears,
-		@NotNull @Min(1) @Max(30) Integer maxTenureYears,
-		@NotBlank @Size(max = 10_000) String riskDisclosure,
-		@NotBlank @Size(max = 50_000) String termsAndConditions) {
+		@NotNull @Min(1) @Max(30) Integer maxTenureYears) {
 }

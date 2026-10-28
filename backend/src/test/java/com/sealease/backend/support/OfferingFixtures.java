@@ -67,8 +67,7 @@ public final class OfferingFixtures {
 				.contentType(MediaType.APPLICATION_JSON).content("""
 						{"containerType":"%s","title":"40ft dry container plan","summary":"Own a container, earn rent",
 						 "description":"Buy a cargo-worthy container and lease it out.","currency":"INR","price":"%s",
-						 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d,
-						 "riskDisclosure":"Payouts depend on the platform.","termsAndConditions":"Standard terms."}
+						 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d}
 						""".formatted(type, price, monthlyRentPercent, minTenureYears, maxTenureYears)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JsonPath.read(product, "$.id"));

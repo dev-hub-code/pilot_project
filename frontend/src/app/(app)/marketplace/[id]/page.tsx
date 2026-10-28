@@ -125,19 +125,6 @@ export default async function OfferingPage({ params, searchParams }: PageProps<"
               <li>Every month of your lease you receive rent in your wallet, at the rate for your order&apos;s total value (see the calculator). You can withdraw it to your bank account.</li>
             </ol>
           </Card>
-
-          <Card title="Risks">
-            <p className="text-sm leading-relaxed whitespace-pre-line wrap-anywhere">{detail.riskDisclosure}</p>
-          </Card>
-
-          <Card title="Terms & conditions">
-            <details>
-              <summary className="cursor-pointer text-sm font-medium">Read the terms</summary>
-              <div className="mt-3 max-h-80 overflow-y-auto text-sm leading-relaxed whitespace-pre-line text-muted wrap-anywhere">
-                {detail.termsAndConditions}
-              </div>
-            </details>
-          </Card>
         </div>
 
         {/* The same containers and lease the calculator starts from, so "Invest now" buys what it shows. */}

@@ -128,14 +128,6 @@ SURVEY_PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</
 
 # ------------------------------------------------------------------------------- data
 
-RISK = ("Payouts depend on the platform leasing out its containers. Containers can be damaged, lost or off-hire, "
-        "and the value of a container at the end of its lease varies with the shipping market.")
-TERMS = ("1. You buy whole containers at the plan's price per container.\n"
-         "2. Each container is assigned to you by number once your payment is confirmed and leased for the plan's tenure.\n"
-         "3. Every month you receive the plan's rent plus 100 / tenure % of the price back, into your SeaLease wallet,\n"
-         "   so the whole price is returned by the end of the lease.\n"
-         "(Demo terms for local development.)")
-
 
 def rupees(amount):
     """Indian digit grouping: 250000 -> 2,50,000."""
@@ -244,8 +236,7 @@ def main():
                            f"for {spec['months']} months. Every month you receive {spec['rent']}% of the price as rent "
                            f"plus {100 / spec['months']:.2f}% of it back, so the whole price is returned by the end.",
             "currency": "INR", "price": spec["price"], "monthlyRentPercent": spec["rent"],
-            "tenureMonths": spec["months"],
-            "riskDisclosure": RISK, "termsAndConditions": TERMS})
+            "tenureMonths": spec["months"]})
         if status != 201:
             sys.exit(f"Plan {spec['title']} failed ({status}): {product}")
         status, published = call("POST", f"/api/v1/admin/investment-products/{product['id']}/publish", token)

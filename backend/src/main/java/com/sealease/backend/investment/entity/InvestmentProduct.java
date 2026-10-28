@@ -52,12 +52,6 @@ public class InvestmentProduct extends BaseEntity {
 	@Column(name = "max_tenure_years", nullable = false)
 	private int maxTenureYears;
 
-	@Column(name = "risk_disclosure", nullable = false, columnDefinition = "text")
-	private String riskDisclosure;
-
-	@Column(name = "terms_and_conditions", nullable = false, columnDefinition = "text")
-	private String termsAndConditions;
-
 	@Enumerated(EnumType.STRING)
 	@Column(name = "status", nullable = false, length = 20)
 	private ProductStatus status;
@@ -99,8 +93,6 @@ public class InvestmentProduct extends BaseEntity {
 		this.monthlyCapitalReturnPercent = t.monthlyCapitalReturnPercent();
 		this.minTenureYears = t.minTenureYears();
 		this.maxTenureYears = t.maxTenureYears();
-		this.riskDisclosure = t.riskDisclosure();
-		this.termsAndConditions = t.termsAndConditions();
 	}
 
 	public void publish(UUID actorId, Instant now) {
@@ -127,7 +119,7 @@ public class InvestmentProduct extends BaseEntity {
 
 	public ProductTerms terms() {
 		return new ProductTerms(containerType, title, summary, description, currencyUnit(), price,
-				monthlyCapitalReturnPercent, minTenureYears, maxTenureYears, riskDisclosure, termsAndConditions);
+				monthlyCapitalReturnPercent, minTenureYears, maxTenureYears);
 	}
 
 	public Currency currencyUnit() {

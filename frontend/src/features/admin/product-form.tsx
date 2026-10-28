@@ -73,9 +73,6 @@ export function ProductForm({ existing }: { existing?: Product }) {
 
       <fieldset className="grid gap-4">
         <legend className="mb-3 text-sm font-medium text-muted">Risk &amp; terms</legend>
-        <TextArea label="Risk disclosure" name="riskDisclosure" rows={4} defaultValue={v("riskDisclosure", existing?.riskDisclosure)} error={e.riskDisclosure} />
-        <TextArea label="Terms & conditions" name="termsAndConditions" rows={6}
-          defaultValue={v("termsAndConditions", existing?.termsAndConditions)} error={e.termsAndConditions} />
       </fieldset>
 
       <SubmitButton>{existing ? "Save draft" : "Create draft"}</SubmitButton>

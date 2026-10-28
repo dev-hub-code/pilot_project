@@ -30,8 +30,6 @@ public record ProductResponse(
 		MoneyResponse price,
 		int minTenureYears,
 		int maxTenureYears,
-		String riskDisclosure,
-		String termsAndConditions,
 		long containersSold,
 		Instant publishedAt,
 		Instant closedAt,
@@ -44,8 +42,7 @@ public record ProductResponse(
 		ProductTerms t = p.terms();
 		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), t.containerType(), t.title(), t.summary(),
 				t.description(), MoneyResponse.from(t.pricePerContainer()), t.minTenureYears(),
-				t.maxTenureYears(),
-				t.riskDisclosure(), t.termsAndConditions(), containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
+				t.maxTenureYears(), containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
 				p.getCancellationReason(), p.getCreatedAt(), p.getVersion());
 	}
 

@@ -15,8 +15,6 @@ export const productSchema = z.object({
     .min(1, "The shortest lease is at least 1 year").max(30, "The shortest lease is at most 30 years"),
   maxTenureYears: z.coerce.number({ message: "Enter the longest lease in years" }).int("Enter whole years")
     .min(1, "The longest lease is at least 1 year").max(30, "The longest lease is at most 30 years"),
-  riskDisclosure: z.string().trim().min(1, "Disclose the risks").max(10_000),
-  termsAndConditions: z.string().trim().min(1, "Enter the terms").max(50_000),
 }).refine((p) => p.maxTenureYears >= p.minTenureYears, {
   path: ["maxTenureYears"],
   message: "The longest lease must be at least the shortest",

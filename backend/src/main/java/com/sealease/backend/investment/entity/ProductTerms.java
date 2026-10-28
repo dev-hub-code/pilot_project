@@ -28,9 +28,7 @@ public record ProductTerms(
 		BigDecimal price,
 		BigDecimal monthlyCapitalReturnPercent,
 		int minTenureYears,
-		int maxTenureYears,
-		String riskDisclosure,
-		String termsAndConditions) {
+		int maxTenureYears) {
 
 	/** The price per container: what the investor pays, and what rent and referral commission are based on. */
 	public Money pricePerContainer() {

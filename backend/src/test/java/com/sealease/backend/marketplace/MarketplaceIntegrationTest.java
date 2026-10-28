@@ -365,8 +365,7 @@ class MarketplaceIntegrationTest {
 		return """
 				{"containerType":"%s","title":"20ft dry container plan","summary":"Own a container, earn monthly",
 				 "description":"Buy a container and lease it out.","currency":"INR","price":"%s",
-				 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d,
-				 "riskDisclosure":"Payouts depend on the platform.","termsAndConditions":"Standard terms."}
+				 "monthlyRentPercent":"%s","minTenureYears":%d,"maxTenureYears":%d}
 				""".formatted(type, price, rentPercent, minYears, maxYears);
 	}
 

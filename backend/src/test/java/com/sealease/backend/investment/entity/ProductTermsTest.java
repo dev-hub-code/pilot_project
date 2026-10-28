@@ -77,7 +77,7 @@ class ProductTermsTest {
 
 	private static ProductTerms terms(String price, int minYears, int maxYears) {
 		return new ProductTerms(ContainerType.DRY_20FT, "Title", "Summary", "Description", INR, new BigDecimal(price),
-				BigDecimal.ZERO, minYears, maxYears, "Risk", "Terms");
+				BigDecimal.ZERO, minYears, maxYears);
 	}
 
 }

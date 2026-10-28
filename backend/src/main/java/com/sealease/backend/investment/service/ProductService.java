@@ -177,8 +177,7 @@ public class ProductService {
 		String title = r.title() == null || r.title().isBlank() ? r.containerType().listingName() : r.title().strip();
 		return new ProductTerms(r.containerType(), title, r.summary().strip(), r.description().strip(),
 				currency, r.price(), BigDecimal.ZERO, r.minTenureYears(),
-				r.maxTenureYears(),
-				r.riskDisclosure().strip(), r.termsAndConditions().strip());
+				r.maxTenureYears());
 	}
 
 	private static Map<String, Object> snapshot(InvestmentProduct p) {

@@ -56,8 +56,6 @@ export interface MarketplaceListing {
 export interface MarketplaceDetail {
   listing: MarketplaceListing;
   description: string;
-  riskDisclosure: string;
-  termsAndConditions: string;
   /** Photos of containers of the plan's type; the container allocated may differ. */
   photoIds: string[];
   eligibility: { eligible: boolean; reasons: string[] };
@@ -94,8 +92,6 @@ export interface Product {
   price: Money;
   minTenureYears: number;
   maxTenureYears: number;
-  riskDisclosure: string;
-  termsAndConditions: string;
   /** Containers of the plan's type in stock now (shared by plans of that type). */
   containersSold: number;
   publishedAt: string | null;
