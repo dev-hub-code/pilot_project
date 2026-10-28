@@ -54,7 +54,17 @@ export async function proxy(request: NextRequest) {
   const session = effectiveAccess ? await verifyAccessToken(effectiveAccess) : null;
 
   let response: NextResponse;
-  if (!session && matches(pathname, PROTECTED_PREFIXES)) {
+  if (!session && matches(pathname, ["/marketplace"])) {
+    // Visitors see the public, read-only marketplace; signing in from there leads back to the full one.
+    const open = new URL("/containers", request.url);
+    if (pathname === "/marketplace") open.search = search;
+    response = NextResponse.redirect(open);
+  } else if (session && pathname === "/containers") {
+    // Signed in, the full marketplace replaces the public one.
+    const full = new URL("/marketplace", request.url);
+    full.search = search;
+    response = NextResponse.redirect(full);
+  } else if (!session && matches(pathname, PROTECTED_PREFIXES)) {
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname + search);
     response = NextResponse.redirect(login);

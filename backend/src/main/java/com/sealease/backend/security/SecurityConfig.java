@@ -80,6 +80,8 @@ public class SecurityConfig {
 				auth.requestMatchers(PUBLIC_AUTH).permitAll();
 				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
 				auth.requestMatchers(HttpMethod.GET, PUBLIC_WEBSITE).permitAll();
+				// The open API: the marketplace, read-only.
+				auth.requestMatchers(HttpMethod.GET, "/api/v1/open/**").permitAll();
 				if (apiDocsEnabled) {
 					auth.requestMatchers(API_DOCS).permitAll();
 				}

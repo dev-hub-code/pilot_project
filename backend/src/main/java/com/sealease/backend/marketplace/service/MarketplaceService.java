@@ -21,6 +21,7 @@ import com.sealease.backend.order.service.MinimumOrderService;
 import com.sealease.backend.marketplace.dto.MarketplaceCriteria;
 import com.sealease.backend.marketplace.dto.MarketplaceDetail;
 import com.sealease.backend.marketplace.dto.MarketplaceListing;
+import com.sealease.backend.marketplace.dto.OpenListing;
 import com.sealease.backend.marketplace.dto.PublicPlan;
 import com.sealease.backend.marketplace.dto.MarketplaceSort;
 import com.sealease.backend.marketplace.dto.ReturnProjection;
@@ -84,6 +85,23 @@ public class MarketplaceService {
 	public List<PublicPlan> publicPlans(int limit) {
 		return search(new MarketplaceCriteria(null, ProductStatus.OPEN, MarketplaceSort.NEWEST), PageRequest.of(0, limit))
 			.map(PublicPlan::from).toList();
+	}
+
+	/** A listed plan (open or closed) by its code, for the open API: its published terms and photos only. */
+	@Transactional(readOnly = true)
+	public OpenListing openListing(String code) {
+		InvestmentProduct product = products.findByCode(code).filter(p -> p.getStatus().isListed())
+			.orElseThrow(() -> new ResourceNotFoundException("Container listing", code));
+		ProductResponse response = plans.detail(product.getId());
+		return OpenListing.from(response, photos.documentIds(product.getId(), PHOTOS));
+	}
+
+	/** A listed plan's photo, by its code, for the open API. */
+	@Transactional(readOnly = true)
+	public DocumentContent openPhoto(String code, UUID documentId) {
+		InvestmentProduct product = products.findByCode(code).filter(p -> p.getStatus().isListed())
+			.orElseThrow(() -> new ResourceNotFoundException("Container listing", code));
+		return photo(product.getId(), documentId);
 	}
 
 	@Transactional(readOnly = true)

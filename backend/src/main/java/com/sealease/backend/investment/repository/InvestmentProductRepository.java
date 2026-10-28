@@ -23,6 +23,8 @@ public interface InvestmentProductRepository
 
 	List<InvestmentProduct> findByStatusOrderByCode(ProductStatus status);
 
+	Optional<InvestmentProduct> findByCode(String code);
+
 	@Query(value = "select nextval('investment_product_code_seq')", nativeQuery = true)
 	long nextCodeNumber();
 

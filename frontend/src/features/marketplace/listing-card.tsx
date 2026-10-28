@@ -5,16 +5,22 @@ import type { MarketplaceListing } from "@/types/marketplace";
 import { formatMoney } from "@/utils/money";
 import { CONTAINER_TYPE_LABEL } from "./labels";
 
-/** The whole card opens the container: its title's link is stretched over it (one link for keyboards and readers). */
-export function ListingCard({ listing }: { listing: MarketplaceListing }) {
-  const href = `/marketplace/${listing.id}`;
+/**
+ * The whole card opens the container: its title's link is stretched over it (one link for keyboards and readers).
+ * The public marketplace passes its own {@code href} and cover photo address.
+ */
+export function ListingCard({ listing, href = `/marketplace/${listing.id}`, photoSrc }: {
+  listing: MarketplaceListing;
+  href?: string;
+  photoSrc?: string;
+}) {
   return (
     <article className="group flex flex-col border border-border bg-surface transition-colors hover:border-foreground/40 has-focus-visible:border-gold">
       <div className="relative block aspect-[16/10] overflow-hidden bg-ink">
         {listing.coverPhotoId ? (
           // eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP
           <img
-            src={`${href}/documents/${listing.coverPhotoId}`}
+            src={photoSrc ?? `${href}/documents/${listing.coverPhotoId}`}
             alt=""
             loading="lazy"
             className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
