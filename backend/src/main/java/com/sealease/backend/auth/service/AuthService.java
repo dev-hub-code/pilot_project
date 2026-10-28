@@ -17,6 +17,7 @@ import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.ratelimit.FixedWindowRateLimiter;
 import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.common.web.ClientInfo;
+import com.sealease.backend.demo.service.DemoAccountService;
 import com.sealease.backend.referral.service.ReferralService;
 import com.sealease.backend.role.dto.UserAuthorities;
 import com.sealease.backend.role.service.UserRoleService;
@@ -48,6 +49,7 @@ public class AuthService {
 	private static final String ENTITY_USER = "USER";
 	private static final String ENTITY_SESSION = "AUTH_SESSION";
 
+	private final DemoAccountService demos;
 	private final UserAccountService accounts;
 	private final EmailVerificationService emailVerification;
 	private final UserRoleService userRoles;
@@ -66,7 +68,8 @@ public class AuthService {
 
 	public AuthService(UserAccountService accounts, EmailVerificationService emailVerification, UserRoleService userRoles,
 			ReferralService referrals, SessionService sessions, AccessTokenService accessTokens, AuditService audit,
-			AuthProperties properties, PlatformTransactionManager transactionManager, Clock clock) {
+			AuthProperties properties, PlatformTransactionManager transactionManager, DemoAccountService demos, Clock clock) {
+		this.demos = demos;
 		this.accounts = accounts;
 		this.emailVerification = emailVerification;
 		this.userRoles = userRoles;
@@ -214,7 +217,7 @@ public class AuthService {
 		UserAuthorities authorities = userRoles.authoritiesOf(user.userId());
 		return new CurrentUserResponse(account.id(), account.userCode(), account.email(), account.firstName(), account.lastName(),
 				account.status().name(), authorities.roles(), authorities.permissions(), account.mustChangePassword(),
-				accounts.isEmailVerified(user.userId()));
+				accounts.isEmailVerified(user.userId()), demos.isDemo(user.userId()));
 	}
 
 	/** @param endedSessions the user's other sessions this sign-in ended, recorded with it */

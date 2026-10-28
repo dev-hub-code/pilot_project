@@ -15,5 +15,7 @@ public record CurrentUserResponse(
 		Set<String> permissions,
 		boolean passwordChangeRequired,
 		/** False until the user confirms their email address; they can still sign in meanwhile. */
-		boolean emailVerified) {
+		boolean emailVerified,
+		/** A demo account: its own pages show dummy figures, and it is never paid out. */
+		boolean demo) {
 }

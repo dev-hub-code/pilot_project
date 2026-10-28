@@ -1,5 +1,6 @@
 package com.sealease.backend.investment.controller;
 
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.investment.dto.PortfolioResponse;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -14,14 +15,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class PortfolioController {
 
 	private final HoldingService holdings;
+	private final DemoViewService demo;
 
-	public PortfolioController(HoldingService holdings) {
+	public PortfolioController(HoldingService holdings, DemoViewService demo) {
 		this.holdings = holdings;
+		this.demo = demo;
 	}
 
 	@GetMapping
 	public PortfolioResponse portfolio(AuthenticatedUser investor) {
-		return holdings.portfolio(investor.userId());
+		return demo.isDemo(investor.userId()) ? demo.portfolio(investor.userId()) : holdings.portfolio(investor.userId());
 	}
 
 }

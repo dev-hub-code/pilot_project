@@ -8,19 +8,20 @@ import com.sealease.backend.bankaccount.service.BankAccountService;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyProperties;
 import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.demo.service.DemoAccountService;
 import com.sealease.backend.kafka.KafkaTopics;
 import com.sealease.backend.ledger.service.AccountType;
 import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.service.LedgerService;
 import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
+import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserStatus;
-import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
-import com.sealease.backend.withdrawal.dto.WithdrawalRunResponse;
 import com.sealease.backend.withdrawal.dto.WithdrawalRunResponse.Skipped;
+import com.sealease.backend.withdrawal.dto.WithdrawalRunResponse;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
 import com.sealease.backend.withdrawal.entity.WithdrawalBatch;
 import com.sealease.backend.withdrawal.entity.WithdrawalKind;
@@ -80,12 +81,14 @@ public class WithdrawalRunService {
 	private final WithdrawalSettingsService settings;
 	private final MoneyProperties money;
 	private final JsonMapper json;
+	private final DemoAccountService demos;
 	private final Clock clock;
 
 	public WithdrawalRunService(JdbcTemplate jdbc, WithdrawalRepository withdrawals, WithdrawalService withdrawalService,
 			PayoutBatchService batches, BankAccountService bankAccounts, UserAccountService accounts,
 			UserProfileService profiles, LedgerService ledger, AuditService audit, ReferralPayoutModeService referralModes,
-			WithdrawalSettingsService settings, MoneyProperties money, JsonMapper json, Clock clock) {
+			WithdrawalSettingsService settings, MoneyProperties money, JsonMapper json, DemoAccountService demos,
+			Clock clock) {
 		this.jdbc = jdbc;
 		this.withdrawals = withdrawals;
 		this.withdrawalService = withdrawalService;
@@ -99,6 +102,7 @@ public class WithdrawalRunService {
 		this.settings = settings;
 		this.money = money;
 		this.json = json;
+		this.demos = demos;
 		this.clock = clock;
 	}
 
@@ -278,6 +282,9 @@ public class WithdrawalRunService {
 			Currency currency) {
 		if (accounts.getAccount(userId).status() != UserStatus.ACTIVE) {
 			return "The account is not active";
+		}
+		if (demos.isDemo(userId)) {
+			return "A demo account is not paid out";
 		}
 		if (profiles.kycStatusOf(userId) != KycStatus.APPROVED) {
 			return "Identity verification is not approved";

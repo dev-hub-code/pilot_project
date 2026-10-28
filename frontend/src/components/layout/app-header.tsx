@@ -4,6 +4,7 @@ import { adminNavLinks } from "@/components/layout/admin-nav";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 import { authFetch, type Session } from "@/lib/server/auth/session";
+import { isDemoAccount } from "@/lib/server/demo";
 import type { Profile } from "@/types/user";
 
 export async function AppHeader({ session }: { session: Session }) {
@@ -15,6 +16,7 @@ export async function AppHeader({ session }: { session: Session }) {
   const name = me ? `${me.firstName} ${me.lastName}`.trim() || me.email : "Account";
   // An account is either an investor or staff; staff only see their profile and the admin area.
   const investor = isInvestor(session.permissions);
+  const demo = investor && await isDemoAccount();
   const sections: MenuSection[] = investor
     ? [{ links: [
       { href: "/dashboard", label: "Dashboard" },
@@ -43,7 +45,7 @@ export async function AppHeader({ session }: { session: Session }) {
         <Logo href={investor ? "/dashboard" : "/admin"} compact />
         <div className="flex items-center gap-4">
           <NotificationBell initial={unread} />
-          <AccountMenu sections={sections} name={name} email={me?.email ?? null} userCode={me?.userCode ?? null} />
+          <AccountMenu sections={sections} name={name} email={me?.email ?? null} userCode={me?.userCode ?? null} demo={demo} />
         </div>
       </div>
     </header>

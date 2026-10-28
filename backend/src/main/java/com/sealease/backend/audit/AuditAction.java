@@ -111,6 +111,8 @@ public enum AuditAction {
 	REFERRAL_LINKED,
 	/** A super administrator moved a member (and their downline) to another referrer. */
 	REFERRAL_MOVED,
+	/** A super administrator marked or unmarked a demo account, or changed its dummy orders or downline. */
+	DEMO_ACCOUNT_CHANGED,
 	REFERRAL_RATES_SCHEDULED,
 	REFERRAL_RATES_CANCELLED,
 	REFERRAL_COMMISSIONS_PAID,

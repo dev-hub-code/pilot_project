@@ -8,7 +8,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
-import { LeaseProgress } from "@/features/dashboard/lease-progress";
 import { monthColumns, monthKey } from "@/features/dashboard/months";
 import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
 import { VerifyEmailDialog } from "@/features/auth/verify-email-dialog";
@@ -44,6 +43,10 @@ const PAYOUT_SERIES: readonly ColumnSeries[] = [
 
 /** Plans pay rent only; capital appears only for containers bought before that, so its series shows only then. */
 const RENT_SERIES = PAYOUT_SERIES.filter((s) => !s.key.startsWith("capital"));
+
+const LEASE_SERIES: readonly ColumnSeries[] = [
+  { key: "rentPaid", label: "Rent", fill: "fill-chart-1", swatch: "bg-chart-1" },
+];
 
 const REFERRAL_SERIES: readonly ColumnSeries[] = [
   { key: "total", label: "Commission", fill: "fill-chart-3", swatch: "bg-chart-3" },
@@ -154,11 +157,15 @@ export default async function DashboardPage() {
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2" aria-label="Leases and referrals">
-            <Card title="Lease progress" description="Rent credited over each container's lease"
+            <Card title="Lease progress" description="Rent credited from your leases, last six months"
               actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
-              {earnings.leases.some((l) => l.status === "RUNNING")
-                ? <LeaseProgress leases={earnings.leases} />
-                : <EmptyState title="No active leases" description="Containers you own appear here with how much of their rent has been credited." />}
+              {payoutMonths && payoutMonths.some((m) => Number(m.rentPaid.amount) > 0) ? (
+                <ColumnChart series={LEASE_SERIES} currency={CURRENCY} label="Rent credited by month"
+                  data={monthColumns(payoutMonths, PAST, 0, CURRENCY, (m) => ({ rentPaid: m.rentPaid }))} />
+              ) : (
+                <EmptyState title="No rent credited yet"
+                  description="Buy a container and the rent its lease credits each month appears here." />
+              )}
             </Card>
             <Card title="Referral commission" description="Earned from your network, last six months"
               actions={<LinkButton href="/referrals" variant="secondary">Referrals</LinkButton>}>

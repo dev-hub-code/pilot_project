@@ -6,6 +6,7 @@ import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyFormat;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.common.time.DisplayTimeZone;
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.earning.dto.DuePayouts;
 import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.investment.dto.ProductResponse;
@@ -65,18 +66,21 @@ public class ReportService {
 	private final ProductService products;
 	private final PayoutService payouts;
 	private final WithdrawalService withdrawals;
+	private final DemoViewService demo;
 	private final UserAccountService accounts;
 	private final DisplayTimeZone display;
 	private final Clock clock;
 
 	public ReportService(LedgerService ledger, HoldingService holdings, ProductService products, PayoutService payouts,
-			WithdrawalService withdrawals, UserAccountService accounts, DisplayTimeZone display, Clock clock) {
+			WithdrawalService withdrawals, DemoViewService demo, UserAccountService accounts, DisplayTimeZone display,
+			Clock clock) {
 		this.display = display;
 		this.ledger = ledger;
 		this.holdings = holdings;
 		this.products = products;
 		this.payouts = payouts;
 		this.withdrawals = withdrawals;
+		this.demo = demo;
 		this.accounts = accounts;
 		this.clock = clock;
 	}
@@ -117,14 +121,17 @@ public class ReportService {
 	@Transactional(readOnly = true)
 	public ReportDocument investorStatement(UUID userId, Period period) {
 		UserAccount investor = accounts.getAccount(userId);
-		List<WithdrawalResponse> made = withdrawals.forStatement(userId, period.start(zone()), period.end(zone()));
+		// A demo account's statement lists its dummy payouts, as its Withdrawals page does.
+		List<WithdrawalResponse> made = demo.isDemo(userId)
+				? demo.withdrawalsBetween(userId, period.start(zone()), period.end(zone()))
+				: withdrawals.forStatement(userId, period.start(zone()), period.end(zone()));
 		List<Row> rows = new ArrayList<>();
 		Map<String, Money> paid = new TreeMap<>();
 		Map<String, Money> inProgress = new TreeMap<>();
 		for (WithdrawalResponse w : made) {
 			Money amount = Money.of(new java.math.BigDecimal(w.amount().amount()), Currency.getInstance(w.amount().currency()));
 			boolean cash = w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH;
-			String paidTo = cash ? "Cash" : w.bankName() + " " + w.bankAccountMasked();
+			String paidTo = cash ? "Cash" : w.bankName() == null ? "Bank transfer" : w.bankName() + " " + w.bankAccountMasked();
 			rows.add(Row.of(Format.date(w.createdAt(), zone()),
 					w.reference() + " · " + (w.balance() == EarningsBalance.REFERRAL ? "Referral" : "Rent"),
 					paidTo + " · " + statementStatus(w, cash), Format.money(amount)));

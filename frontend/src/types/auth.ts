@@ -11,6 +11,8 @@ export interface CurrentUser {
   permissions: string[];
   /** False until the user confirms their email address; they can sign in meanwhile. */
   emailVerified: boolean;
+  /** A demo account: its own pages show dummy figures, and it is never paid out. */
+  demo: boolean;
 }
 
 /** Mirrors backend RoleResponse. */

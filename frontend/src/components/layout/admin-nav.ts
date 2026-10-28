@@ -31,6 +31,7 @@ export function adminNavLinks(permissions: readonly string[]): MenuLink[] {
     { href: "/admin/referrals", label: "Referrals",
       show: can(Permission.FINANCE_VIEW) || can(Permission.REFERRAL_CONFIG_MANAGE) },
     { href: "/admin/downlines", label: "Downlines", show: can(Permission.REFERRAL_TREE_MANAGE) },
+    { href: "/admin/demo-accounts", label: "Demo accounts", show: can(Permission.DEMO_ACCOUNT_MANAGE) },
     { href: "/admin/roles", label: "Roles", show: can(Permission.ROLE_VIEW) },
     { href: "/admin/security", label: "Security", show: can(Permission.AUDIT_VIEW) },
     { href: "/admin/audit", label: "Audit log", show: can(Permission.AUDIT_VIEW) },

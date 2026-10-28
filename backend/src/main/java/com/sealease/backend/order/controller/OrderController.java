@@ -1,7 +1,9 @@
 package com.sealease.backend.order.controller;
 
 import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.web.IdempotencyKey;
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.invoice.dto.InvoiceResponse;
 import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.order.dto.CheckoutRequest;
@@ -32,10 +34,12 @@ public class OrderController {
 
 	private final OrderService orders;
 	private final InvoiceService invoices;
+	private final DemoViewService demo;
 
-	public OrderController(OrderService orders, InvoiceService invoices) {
+	public OrderController(OrderService orders, InvoiceService invoices, DemoViewService demo) {
 		this.orders = orders;
 		this.invoices = invoices;
+		this.demo = demo;
 	}
 
 	/** Checks out the cart. Requires an {@code Idempotency-Key}; a retry returns the same order. */
@@ -49,12 +53,13 @@ public class OrderController {
 	@GetMapping
 	public PageResponse<OrderResponse> list(AuthenticatedUser investor,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(orders.mine(investor.userId(), pageable));
+		return PageResponse.from(demo.isDemo(investor.userId()) ? demo.orders(investor.userId(), pageable)
+				: orders.mine(investor.userId(), pageable));
 	}
 
 	@GetMapping("/{orderId}")
 	public OrderResponse detail(AuthenticatedUser investor, @PathVariable UUID orderId) {
-		return orders.mine(investor.userId(), orderId);
+		return demo.isDemo(investor.userId()) ? demo.order(investor.userId(), orderId) : orders.mine(investor.userId(), orderId);
 	}
 
 	@PostMapping("/{orderId}/cancel")
@@ -64,6 +69,10 @@ public class OrderController {
 
 	@GetMapping("/{orderId}/invoice")
 	public InvoiceResponse invoice(AuthenticatedUser investor, @PathVariable UUID orderId) {
+		// Dummy orders have no invoice.
+		if (demo.isDemo(investor.userId())) {
+			throw new ResourceNotFoundException("Invoice", orderId);
+		}
 		OrderResponse order = orders.mine(investor.userId(), orderId);
 		return invoices.forOrder(orderId, order.orderNumber(), investor.userId());
 	}

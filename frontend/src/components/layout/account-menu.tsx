@@ -17,12 +17,14 @@ export interface MenuSection {
 }
 
 /** The avatar in the header: opens the site menu as a vertical list, with sign-out at the bottom. */
-export function AccountMenu({ sections, name, email, userCode }: {
+export function AccountMenu({ sections, name, email, userCode, demo = false }: {
   sections: readonly MenuSection[];
   name: string;
   email: string | null;
   /** The readable ID ("SL03500"), shown so the user can quote it to us. */
   userCode: string | null;
+  /** A demo account: a dark circle around the avatar marks it. */
+  demo?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -58,7 +60,7 @@ export function AccountMenu({ sections, name, email, userCode }: {
     <div ref={root} className="relative">
       <button ref={button} type="button" onClick={() => setOpen((o) => !o)}
         aria-expanded={open} aria-controls={menuId} aria-label={`Menu for ${name}`}
-        className="flex size-10 items-center justify-center rounded-full border border-border bg-gold text-sm font-semibold text-ink transition-shadow hover:ring-2 hover:ring-gold/40 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none">
+        className={`flex size-10 items-center justify-center rounded-full bg-gold text-sm font-semibold text-ink transition-shadow hover:ring-2 hover:ring-gold/40 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${demo ? "border-[3px] border-ink dark:border-foreground" : "border border-border"}`}>
         {initials(name)}
       </button>
       {open && (

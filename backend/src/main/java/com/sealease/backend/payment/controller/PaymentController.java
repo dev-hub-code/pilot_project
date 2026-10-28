@@ -1,6 +1,7 @@
 package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.common.web.IdempotencyKey;
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.StartPaymentRequest;
 import com.sealease.backend.payment.dto.SubmitDepositRequest;
@@ -26,14 +27,17 @@ import java.util.UUID;
 public class PaymentController {
 
 	private final PaymentService payments;
+	private final DemoViewService demo;
 
-	public PaymentController(PaymentService payments) {
+	public PaymentController(PaymentService payments, DemoViewService demo) {
 		this.payments = payments;
+		this.demo = demo;
 	}
 
 	@GetMapping("/api/v1/orders/{orderId}/payments")
 	public List<PaymentResponse> list(AuthenticatedUser investor, @PathVariable UUID orderId) {
-		return payments.forOrder(orderId, investor.userId());
+		// A demo account's orders are dummies, with no payments.
+		return demo.isDemo(investor.userId()) ? List.of() : payments.forOrder(orderId, investor.userId());
 	}
 
 	@PostMapping("/api/v1/orders/{orderId}/payments")

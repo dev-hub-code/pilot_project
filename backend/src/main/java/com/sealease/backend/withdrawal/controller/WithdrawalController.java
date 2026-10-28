@@ -1,6 +1,7 @@
 package com.sealease.backend.withdrawal.controller;
 
 import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.withdrawal.dto.ReferralPayoutMode;
 import com.sealease.backend.withdrawal.dto.ReferralPayoutModeRequest;
@@ -26,10 +27,13 @@ public class WithdrawalController {
 
 	private final WithdrawalService withdrawals;
 	private final ReferralPayoutModeService referralModes;
+	private final DemoViewService demo;
 
-	public WithdrawalController(WithdrawalService withdrawals, ReferralPayoutModeService referralModes) {
+	public WithdrawalController(WithdrawalService withdrawals, ReferralPayoutModeService referralModes,
+			DemoViewService demo) {
 		this.withdrawals = withdrawals;
 		this.referralModes = referralModes;
+		this.demo = demo;
 	}
 
 	@GetMapping("/policy")
@@ -39,7 +43,8 @@ public class WithdrawalController {
 
 	@GetMapping
 	public PageResponse<WithdrawalResponse> mine(AuthenticatedUser investor, @PageableDefault(size = 20) Pageable pageable) {
-		return PageResponse.from(withdrawals.mine(investor.userId(), pageable));
+		return PageResponse.from(demo.isDemo(investor.userId()) ? demo.withdrawals(investor.userId(), pageable)
+				: withdrawals.mine(investor.userId(), pageable));
 	}
 
 	/** How referral earnings are paid this year. */

@@ -1,10 +1,11 @@
 package com.sealease.backend.earning.controller;
 
 import com.sealease.backend.common.api.PageResponse;
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.earning.dto.EarningsSummary;
-import com.sealease.backend.earning.dto.PayoutMonth;
-import com.sealease.backend.earning.dto.LeaseRentResponse;
 import com.sealease.backend.earning.dto.LeaseRentResponse.LeaseRentStatus;
+import com.sealease.backend.earning.dto.LeaseRentResponse;
+import com.sealease.backend.earning.dto.PayoutMonth;
 import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.security.AuthenticatedUser;
 import org.springframework.data.domain.Pageable;
@@ -27,14 +28,16 @@ import java.util.List;
 public class EarningController {
 
 	private final PayoutService payouts;
+	private final DemoViewService demo;
 
-	public EarningController(PayoutService payouts) {
+	public EarningController(PayoutService payouts, DemoViewService demo) {
 		this.payouts = payouts;
+		this.demo = demo;
 	}
 
 	@GetMapping("/summary")
 	public EarningsSummary summary(AuthenticatedUser investor) {
-		return payouts.summary(investor.userId());
+		return demo.isDemo(investor.userId()) ? demo.summary(investor.userId()) : payouts.summary(investor.userId());
 	}
 
 	/** Rent per calendar month ({@code yyyy-MM}, both ends included): credited, and still to come. */
@@ -42,7 +45,8 @@ public class EarningController {
 	public List<PayoutMonth> monthly(AuthenticatedUser investor,
 			@RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth from,
 			@RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth to) {
-		return payouts.monthly(investor.userId(), from, to);
+		return demo.isDemo(investor.userId()) ? demo.monthly(investor.userId(), from, to)
+				: payouts.monthly(investor.userId(), from, to);
 	}
 
 	/** The rent of each container's lease, latest lease first; {@code status} RUNNING or COMPLETED. */
@@ -50,7 +54,8 @@ public class EarningController {
 	public PageResponse<LeaseRentResponse> leases(AuthenticatedUser investor,
 			@RequestParam(required = false) LeaseRentStatus status,
 			@PageableDefault(size = 20, sort = "startsAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(payouts.mine(investor.userId(), status, pageable));
+		return PageResponse.from(demo.isDemo(investor.userId()) ? demo.leases(investor.userId(), status, pageable)
+				: payouts.mine(investor.userId(), status, pageable));
 	}
 
 }

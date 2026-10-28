@@ -1,5 +1,6 @@
 package com.sealease.backend.referral.controller;
 
+import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.referral.dto.Downline;
 import com.sealease.backend.referral.dto.DownlineMember;
 import com.sealease.backend.referral.dto.ReferralMonth;
@@ -22,33 +23,37 @@ public class ReferralController {
 
 	private final ReferralService referrals;
 	private final ReferralEarningService earnings;
+	private final DemoViewService demo;
 
-	public ReferralController(ReferralService referrals, ReferralEarningService earnings) {
+	public ReferralController(ReferralService referrals, ReferralEarningService earnings, DemoViewService demo) {
 		this.referrals = referrals;
 		this.earnings = earnings;
+		this.demo = demo;
 	}
 
 	/** Code (created on first visit), rates, downline size per level and commission earned. */
 	@GetMapping("/me")
 	public ReferralOverview overview(AuthenticatedUser investor) {
-		return referrals.overview(investor.userId());
+		ReferralOverview overview = referrals.overview(investor.userId());
+		return demo.isDemo(investor.userId()) ? demo.referralOverview(investor.userId(), overview) : overview;
 	}
 
 	@GetMapping("/downline")
 	public Downline downline(AuthenticatedUser investor) {
-		return referrals.downline(investor.userId());
+		return demo.isDemo(investor.userId()) ? demo.downline(investor.userId()) : referrals.downline(investor.userId());
 	}
 
 	/** One member of the downline, by its id in the downline view. */
 	@GetMapping("/members/{memberId}")
 	public DownlineMember member(AuthenticatedUser investor, @PathVariable String memberId) {
-		return referrals.member(investor.userId(), memberId);
+		return demo.isDemo(investor.userId()) ? demo.member(investor.userId(), memberId)
+				: referrals.member(investor.userId(), memberId);
 	}
 
 	/** Commission per calendar month (UTC) and level, latest month first. */
 	@GetMapping("/monthly")
 	public List<ReferralMonth> monthly(AuthenticatedUser investor) {
-		return earnings.monthly(investor.userId());
+		return demo.isDemo(investor.userId()) ? demo.referralMonthly(investor.userId()) : earnings.monthly(investor.userId());
 	}
 
 }

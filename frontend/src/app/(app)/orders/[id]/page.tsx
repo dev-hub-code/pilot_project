@@ -15,6 +15,7 @@ import { ReceiptForm } from "@/features/orders/receipt-form";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
+import { isDemoAccount } from "@/lib/server/demo";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { Order, Payment } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
@@ -27,10 +28,12 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   if (!isUuid(id)) notFound();
   let order: Order;
   let payments: Payment[];
+  let demo: boolean;
   try {
-    [order, payments] = await Promise.all([
+    [order, payments, demo] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
+      isDemoAccount(),
     ]);
   } catch (error) {
     if (error instanceof BackendError && error.status === 404) notFound();
@@ -56,7 +59,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge tone={ORDER_TONE[order.status]}>{ORDER_STATUS_LABEL[order.status]}</StatusBadge>
-          {order.status === "CONFIRMED" && <LinkButton href={`/orders/${order.id}/invoice`} variant="secondary">View invoice</LinkButton>}
+          {/* A demo account's orders are dummies, with no invoice. */}
+          {order.status === "CONFIRMED" && !demo && <LinkButton href={`/orders/${order.id}/invoice`} variant="secondary">View invoice</LinkButton>}
         </div>
       </div>
 

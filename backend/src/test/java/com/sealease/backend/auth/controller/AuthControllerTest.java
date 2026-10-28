@@ -145,7 +145,7 @@ class AuthControllerTest {
 	void meResolvesCallerFromToken() throws Exception {
 		UUID userId = UUID.randomUUID();
 		when(authService.currentUser(any())).thenReturn(new CurrentUserResponse(userId, "SL03500", "alice@example.com", "Alice",
-				"Lee", "ACTIVE", Set.of("INVESTOR"), Set.of("INVESTOR_PORTAL"), false, true));
+				"Lee", "ACTIVE", Set.of("INVESTOR"), Set.of("INVESTOR_PORTAL"), false, true, false));
 
 		mvc.perform(get("/api/v1/auth/me").with(TestJwts.userWith(userId, "INVESTOR_PORTAL")))
 			.andExpect(status().isOk())
