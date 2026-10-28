@@ -18,6 +18,7 @@ import com.sealease.backend.common.ratelimit.FixedWindowRateLimiter;
 import com.sealease.backend.common.validation.PhoneNumbers;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.demo.service.DemoAccountService;
+import com.sealease.backend.terms.service.TermsService;
 import com.sealease.backend.referral.service.ReferralService;
 import com.sealease.backend.role.dto.UserAuthorities;
 import com.sealease.backend.role.service.UserRoleService;
@@ -50,6 +51,7 @@ public class AuthService {
 	private static final String ENTITY_SESSION = "AUTH_SESSION";
 
 	private final DemoAccountService demos;
+	private final TermsService terms;
 	private final UserAccountService accounts;
 	private final EmailVerificationService emailVerification;
 	private final UserRoleService userRoles;
@@ -68,8 +70,10 @@ public class AuthService {
 
 	public AuthService(UserAccountService accounts, EmailVerificationService emailVerification, UserRoleService userRoles,
 			ReferralService referrals, SessionService sessions, AccessTokenService accessTokens, AuditService audit,
-			AuthProperties properties, PlatformTransactionManager transactionManager, DemoAccountService demos, Clock clock) {
+			AuthProperties properties, PlatformTransactionManager transactionManager, DemoAccountService demos, TermsService terms,
+			Clock clock) {
 		this.demos = demos;
+		this.terms = terms;
 		this.accounts = accounts;
 		this.emailVerification = emailVerification;
 		this.userRoles = userRoles;
@@ -102,6 +106,7 @@ public class AuthService {
 			UserAccount account = accounts.register(request.email(), request.password(), request.firstName(),
 					request.lastName(), PhoneNumbers.require(request.phone(), request.phoneCountry()), !verify);
 			userRoles.grantSystemRole(account.id(), properties.defaultRole());
+			terms.accept(account.id());
 			if (request.referralCode() != null && !request.referralCode().isBlank()) {
 				referrals.link(account.id(), request.referralCode());
 			}

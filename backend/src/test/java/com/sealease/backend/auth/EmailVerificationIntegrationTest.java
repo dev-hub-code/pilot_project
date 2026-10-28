@@ -223,7 +223,7 @@ class EmailVerificationIntegrationTest {
 
 	private static String registerBody(String email) {
 		return """
-				{"email":"%s","password":"%s","firstName":"Vera","lastName":"Fied","phone":"%s"}""".formatted(email, PASSWORD,
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Vera","lastName":"Fied","phone":"%s"}""".formatted(email, PASSWORD,
 				TestApi.mobile());
 	}
 

@@ -54,7 +54,7 @@ class AuthControllerTest {
 		when(authService.register(any(), any())).thenReturn(tokens());
 
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"alice@example.com","password":"Correct-Horse-9","firstName":"Alice","lastName":"Lee","phone":"98765 43210"}
+				{"acceptTerms":true,"email":"alice@example.com","password":"Correct-Horse-9","firstName":"Alice","lastName":"Lee","phone":"98765 43210"}
 				"""))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.tokenType").value("Bearer"))
@@ -65,7 +65,7 @@ class AuthControllerTest {
 	@Test
 	void registrationValidatesBeforeReachingService() throws Exception {
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"not-an-email","password":"short","firstName":"","lastName":"Lee"}
+				{"acceptTerms":true,"email":"not-an-email","password":"short","firstName":"","lastName":"Lee"}
 				"""))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))

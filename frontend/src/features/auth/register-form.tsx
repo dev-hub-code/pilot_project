@@ -91,6 +91,21 @@ export function RegisterForm({ referralCode, countries }: { referralCode?: strin
         defaultValue={state.values?.referralCode ?? referralCode}
         error={errors.referralCode}
       />
+      <div className="space-y-1">
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" name="acceptTerms" className="mt-1 size-4 accent-gold"
+            defaultChecked={state.values?.acceptTerms === "on"}
+            aria-invalid={errors.acceptTerms ? true : undefined}
+            aria-describedby={errors.acceptTerms ? "accept-terms-error" : undefined} />
+          <span>
+            I have read and accept the{" "}
+            <Link href="/terms" target="_blank" className="font-medium underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-text">
+              Terms & conditions
+            </Link>
+          </span>
+        </label>
+        {errors.acceptTerms && <p id="accept-terms-error" className="text-xs text-rose-600 dark:text-rose-400">{errors.acceptTerms}</p>}
+      </div>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Creating account…" : "Create account"}
       </Button>

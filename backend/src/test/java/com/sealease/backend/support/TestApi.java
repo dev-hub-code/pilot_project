@@ -51,7 +51,7 @@ public final class TestApi {
 
 	public MvcResult registerResult(String email, String referralCode) throws Exception {
 		return mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
+				.content("{\"acceptTerms\":true,\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
 						+ "\",\"firstName\":\"Test\",\"lastName\":\"Investor\",\"phone\":\"" + mobile() + "\""
 						+ (referralCode == null ? "" : ",\"referralCode\":\"" + referralCode + "\"") + "}"))
 			.andReturn();

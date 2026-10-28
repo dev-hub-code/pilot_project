@@ -394,7 +394,7 @@ export default async function Home() {
                 href="/register"
                 className="hidden items-center gap-2 whitespace-nowrap rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-on-gold shadow-lg shadow-ink/25 transition-colors hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-on-ink focus-visible:outline-none sm:inline-flex"
               >
-                Start Investing
+                Register
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
@@ -672,7 +672,7 @@ export default async function Home() {
               Pick your containers, choose your lease, and earn rent credited to your wallet {credit}.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <LinkButton href="/register">Start Investing</LinkButton>
+              <LinkButton href="/register">Register</LinkButton>
               <a href="#contact" className="inline-flex h-11 items-center px-2 text-sm text-on-ink/90 underline-offset-4 hover:underline">
                 Talk to us first
               </a>
@@ -716,6 +716,7 @@ export default async function Home() {
         <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-5 py-8 sm:px-10 lg:px-14">
           <Logo />
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted">
+            <Link href="/terms" className="underline-offset-4 hover:text-foreground hover:underline">Terms & conditions</Link>
             <Link href="/credits" className="underline-offset-4 hover:text-foreground hover:underline">Photo credits</Link>
             <p className="flex items-center gap-3">
               Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>

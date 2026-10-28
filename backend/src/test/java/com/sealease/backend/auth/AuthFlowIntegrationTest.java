@@ -93,7 +93,7 @@ class AuthFlowIntegrationTest {
 		for (String body : List.of("\"phone\":\"98765\"", "\"phone\":\"011 2345 6789\"",
 				"\"phone\":\"020 7946 0000\",\"phoneCountry\":\"GB\"", "\"phone\":\"9876543210\",\"phoneCountry\":\"XX\"")) {
 			mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-					{"email":"%s","password":"%s","firstName":"Test","lastName":"User",%s}""".formatted(email, PASSWORD, body)))
+					{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User",%s}""".formatted(email, PASSWORD, body)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.anyOf(
 						org.hamcrest.Matchers.hasItem("phone"), org.hamcrest.Matchers.hasItem("phoneCountry"))));
@@ -103,7 +103,7 @@ class AuthFlowIntegrationTest {
 		// A UAE mobile, typed nationally with its country chosen.
 		String uae = "50" + String.format("%07d", java.util.concurrent.ThreadLocalRandom.current().nextInt(10_000_000));
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"0%s","phoneCountry":"AE"}"""
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"0%s","phoneCountry":"AE"}"""
 				.formatted(email, PASSWORD, uae)))
 			.andExpect(status().isCreated());
 		assertThat(jdbc.queryForMap("""
@@ -117,16 +117,16 @@ class AuthFlowIntegrationTest {
 		String number = TestApi.mobile();
 		String email = uniqueEmail();
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"%s","password":"%s","firstName":"Test","lastName":"User"}""".formatted(email, PASSWORD)))
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User"}""".formatted(email, PASSWORD)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.hasItem("phone")));
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"call me"}""".formatted(email, PASSWORD)))
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"call me"}""".formatted(email, PASSWORD)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.hasItem("phone")));
 
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"%s"}""".formatted(email, PASSWORD,
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"%s"}""".formatted(email, PASSWORD,
 				number.substring(0, 5) + " " + number.substring(5))))
 			.andExpect(status().isCreated());
 		// Stored in international form with its country (India unless another is chosen).
@@ -140,7 +140,7 @@ class AuthFlowIntegrationTest {
 		// The same number, however it is written, cannot open a second account; nothing of that attempt is kept.
 		String other = uniqueEmail();
 		mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content("""
-				{"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"+91 %s"}""".formatted(other, PASSWORD,
+				{"acceptTerms":true,"email":"%s","password":"%s","firstName":"Test","lastName":"User","phone":"+91 %s"}""".formatted(other, PASSWORD,
 				number)))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("mobile number is already registered")));
@@ -443,7 +443,7 @@ class AuthFlowIntegrationTest {
 	}
 
 	private static String registerBody(String email) {
-		return "{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\",\"firstName\":\"Test\",\"lastName\":\"User\","
+		return "{\"acceptTerms\":true,\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\",\"firstName\":\"Test\",\"lastName\":\"User\","
 				+ "\"phone\":\"" + TestApi.mobile() + "\"}";
 	}
 

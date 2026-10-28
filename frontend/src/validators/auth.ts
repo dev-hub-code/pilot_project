@@ -56,6 +56,7 @@ export const registerSchema = z
     referralCode: z.string().trim()
       .regex(/^[^a-z]*$/, "Referral codes are in capital letters")
       .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 capital letters and digits"),
+    acceptTerms: z.literal("on", { message: "Accept the terms and conditions to create an account" }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],

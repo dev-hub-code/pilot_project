@@ -60,7 +60,7 @@ export function LandingMenu({ links }: { links: readonly MenuLink[] }) {
           <div className="border-t border-border p-4 sm:hidden">
             <Link href="/register" onClick={() => setOpen(false)}
               className="flex h-11 items-center justify-center rounded-full bg-ink text-sm text-on-ink">
-              Start Investing
+              Register
             </Link>
           </div>
         </div>

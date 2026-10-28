@@ -66,6 +66,8 @@ public enum AuditAction {
 	HOLDING_MATURED,
 	HOLDING_CONTAINER_ASSIGNED,
 	AGREEMENT_TEMPLATE_UPDATED,
+	/** A super administrator saved a new version of the terms and conditions. */
+	TERMS_UPDATED,
 	LEASE_AGREEMENT_ISSUED,
 	LEASE_AGREEMENT_ACCEPTED,
 	AGREEMENT_REVIEW_ASSIGNED,
