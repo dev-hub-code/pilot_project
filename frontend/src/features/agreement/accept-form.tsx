@@ -17,12 +17,12 @@ export function AcceptAgreementForm({ holdingId, agreementNumber }: { holdingId:
         <input type="checkbox" name="agree" className="mt-1 size-4 accent-gold"
           aria-invalid={error ? true : undefined} aria-describedby={error ? "agree-error" : undefined} />
         <span>
-          I have read lease agreement <span className="font-mono">{agreementNumber}</span> and accept it. I understand my
-          lease and rent start at the next full hour after I accept.
+          I have read investment agreement <span className="font-mono">{agreementNumber}</span> and accept it. I understand my
+          term and returns start at the next full hour after I accept.
         </span>
       </label>
       {error && <p id="agree-error" className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
-      <SubmitButton pendingLabel="Accepting…">Accept and start my lease</SubmitButton>
+      <SubmitButton pendingLabel="Accepting…">Accept and start my term</SubmitButton>
     </form>
   );
 }

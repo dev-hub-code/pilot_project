@@ -1,7 +1,6 @@
 package com.sealease.backend.investment.entity;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.container.entity.ContainerType;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -9,63 +8,59 @@ import java.util.Currency;
 import java.util.List;
 
 /**
- * The commercial terms of a plan, as investors see and accept them. Each container bought costs
- * {@code price}; the investor chooses a lease of whole years between {@code minTenureYears} and
- * {@code maxTenureYears}, and for every month of it is paid, per container, a percentage of the price as
- * rent. That percentage is not part of the plan: it follows from the order's total (see the rent rate tiers) and is
- * fixed on the order. The price is not paid back: plans carry a {@code monthlyCapitalReturnPercent} of zero.
+ * The commercial terms of a plan, as investors see and accept them. A plan is one tenure for one investor type: the
+ * investor buys whole units at {@code unitPrice}, at least {@code minUnits}, and earns {@code annualReturnPercent} of what they
+ * invested a year, paid monthly for the tenure. The rate and price are fixed on the order. The investment is not
+ * paid back: plans carry a {@code monthlyCapitalReturnPercent} of zero.
  *
- * <p>Plans sold before that returned the whole price over the tenure as well (price ÷ tenure a month,
- * {@code monthlyCapitalReturnPercent} = 100 ÷ tenure). Holdings bought under those terms keep them, so the
- * percentage recorded with a purchase decides whether it returns capital ({@link #returnsCapital}).
+ * <p>Plans sold earlier returned the whole amount over the tenure as well. Holdings bought under those terms keep them,
+ * so the percentage recorded with a purchase decides whether it returns capital ({@link #returnsCapital}).
  */
 public record ProductTerms(
-		ContainerType containerType,
 		String title,
 		String summary,
-		String description,
 		Currency currency,
-		BigDecimal price,
 		BigDecimal monthlyCapitalReturnPercent,
-		int minTenureYears,
-		int maxTenureYears) {
+		int tenureYears,
+		BigDecimal annualReturnPercent,
+		BigDecimal unitPrice,
+		int minUnits) {
 
-	/** The price per container: what the investor pays, and what rent and referral commission are based on. */
-	public Money pricePerContainer() {
-		return Money.of(price, currency);
+	/** The share of an annual rate paid each month, as orders and holdings keep it. */
+	public static BigDecimal monthlyPercentOf(BigDecimal annualPercent) {
+		return annualPercent.divide(BigDecimal.valueOf(12), 8, RoundingMode.HALF_UP);
 	}
 
-	/** Rent per container per month at {@code rentPercent}, rounded to the currency's minor unit. */
-	public Money monthlyRent(BigDecimal rentPercent) {
-		return percentOf(pricePerContainer(), rentPercent);
+	/** The rate paid each month. */
+	public BigDecimal monthlyReturnPercent() {
+		return monthlyPercentOf(annualReturnPercent);
 	}
 
-	/** Everything paid per container over a lease of {@code tenureYears}: the rent for every month of it. */
-	public Money totalPayout(int tenureYears, BigDecimal rentPercent) {
-		return monthlyRent(rentPercent).times(BigDecimal.valueOf(monthsOf(tenureYears)));
+	/** What {@code units} units cost. */
+	public Money amountFor(int units) {
+		return Money.of(unitPrice.multiply(BigDecimal.valueOf(units)), currency);
 	}
 
-	/** The shortest lease, in months. */
-	public int minTenureMonths() {
-		return monthsOf(minTenureYears);
-	}
-
-	/** Why a lease of {@code tenureYears} cannot be chosen under this plan (empty when it can). */
-	public List<String> tenureProblems(int tenureYears) {
-		if (tenureYears < minTenureYears || tenureYears > maxTenureYears) {
-			return List.of(minTenureYears == maxTenureYears
-					? "The lease for this container is " + years(minTenureYears)
-					: "Choose a lease of " + minTenureYears + " to " + maxTenureYears + " years");
+	/** Why {@code units} units cannot be bought under this plan (empty when they can). */
+	public List<String> unitProblems(int units) {
+		if (units < minUnits) {
+			return List.of("Buy at least " + minUnits + (minUnits == 1 ? " unit" : " units") + " of this plan");
 		}
 		return List.of();
 	}
 
-	public static int monthsOf(int years) {
-		return years * 12;
+	/** Returns a month on {@code amount} at {@code rentPercent}, rounded to the currency's minor unit. */
+	public static Money monthlyRent(Money amount, BigDecimal rentPercent) {
+		return percentOf(amount, rentPercent);
 	}
 
-	private static String years(int n) {
-		return n == 1 ? "1 year" : n + " years";
+	/** Everything paid on {@code amount} over a term of {@code tenureYears}: the returns for every month of it. */
+	public static Money totalPayout(Money amount, int tenureYears, BigDecimal rentPercent) {
+		return monthlyRent(amount, rentPercent).times(BigDecimal.valueOf(monthsOf(tenureYears)));
+	}
+
+	public static int monthsOf(int years) {
+		return years * 12;
 	}
 
 	/**

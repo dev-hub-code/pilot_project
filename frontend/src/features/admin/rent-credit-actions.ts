@@ -9,7 +9,7 @@ import type { FormState } from "@/validators/form-state";
 export async function setRentCreditIntervalAction(_p: FormState, formData: FormData): Promise<FormState> {
   const intervalMinutes = Number.parseInt(String(formData.get("intervalMinutes") ?? ""), 10);
   if (!Number.isInteger(intervalMinutes) || intervalMinutes <= 0) {
-    return { fieldErrors: { intervalMinutes: "Choose how often rent is credited" } };
+    return { fieldErrors: { intervalMinutes: "Choose how often returns are credited" } };
   }
   try {
     await authFetch("/api/v1/admin/settings/rent-credit", { method: "PUT", json: { intervalMinutes } });
@@ -17,5 +17,5 @@ export async function setRentCreditIntervalAction(_p: FormState, formData: FormD
     return failureState(error);
   }
   revalidatePath("/", "layout");
-  return { success: "Saved. Rent is credited at the new interval from the next run." };
+  return { success: "Saved. Returns are credited at the new interval from the next run." };
 }

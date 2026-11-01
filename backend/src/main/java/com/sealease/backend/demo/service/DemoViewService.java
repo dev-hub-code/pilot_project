@@ -22,9 +22,6 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.common.time.DisplayTimeZone;
-import com.sealease.backend.container.dto.ContainerSummary;
-import com.sealease.backend.container.entity.ContainerCondition;
-import com.sealease.backend.container.entity.ContainerStatus;
 import com.sealease.backend.demo.service.DemoBook.Kind;
 import com.sealease.backend.earning.dto.EarningsSummary;
 import com.sealease.backend.earning.dto.LeaseRentResponse;
@@ -41,6 +38,7 @@ import com.sealease.backend.referral.dto.Downline;
 import com.sealease.backend.referral.dto.DownlineMember;
 import com.sealease.backend.referral.dto.ReferralMonth;
 import com.sealease.backend.referral.dto.ReferralOverview;
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
 import com.sealease.backend.withdrawal.entity.WithdrawalOrigin;
 import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
@@ -87,7 +85,7 @@ public class DemoViewService {
 			}
 			for (int n = 0; n < o.containers(); n++) {
 				holdings.add(new HoldingResponse(id(o, "holding", n), o.productId(), o.planCode(), o.planTitle(),
-						container(o, n), o.id(),
+						o.id(),
 						MoneyResponse.from(o.pricePerContainer()), o.rentPercent(), BigDecimal.ZERO, MoneyResponse.from(rent),
 						MoneyResponse.from(zero), MoneyResponse.from(rent), o.tenureMonths(),
 						MoneyResponse.from(rent.times(BigDecimal.valueOf(o.tenureMonths()))), o.startsOn(), o.endsOn(),
@@ -186,7 +184,8 @@ public class DemoViewService {
 			BigDecimal rate = level <= book.rates().size() ? book.rates().get(level - 1) : BigDecimal.ZERO;
 			levels.add(new ReferralOverview.Level(level, rate, book.membersAt(level)));
 		}
-		return new ReferralOverview(real.code(), real.referredBy(), true, null, levels,
+		// Demo figures are monthly commissions on four levels: the network scheme, whatever the account really is on.
+		return new ReferralOverview(real.code(), real.referredBy(), ReferralScheme.NETWORK, real.oneTimePercent(), true, null, levels,
 				List.of(MoneyResponse.from(book.commissionPaid())), real.ratesEffectiveFrom());
 	}
 
@@ -227,7 +226,7 @@ public class DemoViewService {
 			LocalDate creditedUntil = book.creditedUntil().isBefore(o.endsOn()) ? book.creditedUntil() : o.endsOn();
 			for (int n = 0; n < o.containers(); n++) {
 				leases.add(new LeaseRentResponse(id(o, "holding", n), null, o.productId(), o.planCode(), o.planTitle(),
-						containerNumber(o, n), o.tenureMonths(), at(o.startsOn()), at(o.endsOn()),
+						o.tenureMonths(), at(o.startsOn()), at(o.endsOn()),
 						creditedUntil.isAfter(o.startsOn()) ? at(creditedUntil) : at(o.startsOn()),
 						MoneyResponse.from(monthly), MoneyResponse.from(monthly.times(BigDecimal.valueOf(o.tenureMonths()))),
 						MoneyResponse.from(credited), MoneyResponse.from(zero), MoneyResponse.from(zero),
@@ -242,8 +241,7 @@ public class DemoViewService {
 		Money monthly = o.monthlyRentPerContainer();
 		for (int n = 0; n < o.containers(); n++) {
 			items.add(new OrderItemResponse(id(o, "item", n), o.productId(), o.planCode(), o.planTitle(),
-					o.containerType(),
-					containerNumber(o, n), MoneyResponse.from(o.pricePerContainer()), o.rentPercent(), BigDecimal.ZERO,
+					MoneyResponse.from(o.pricePerContainer()), null, null, o.rentPercent(), BigDecimal.ZERO,
 					MoneyResponse.from(monthly), o.tenureMonths()));
 		}
 		Instant placed = at(o.startsOn());
@@ -256,16 +254,6 @@ public class DemoViewService {
 				m.name(), at(m.joinedOn()), List.of(MoneyResponse.from(book.commissionFrom(m.id()))));
 	}
 
-	private ContainerSummary container(DemoBook.Order o, int n) {
-		return new ContainerSummary(id(o, "container", n), containerNumber(o, n), o.containerType(),
-				ContainerCondition.CARGO_WORTHY, ContainerStatus.ON_LEASE, null, null, null, null, null, null, null);
-	}
-
-	/** "DEMU" and seven digits, the shape of a real container number. */
-	private static String containerNumber(DemoBook.Order o, int n) {
-		long digits = Math.floorMod(o.id().getLeastSignificantBits(), 1_000_000L) * 10 + n % 10;
-		return "DEMU" + String.format("%07d", digits % 10_000_000L);
-	}
 
 	private static UUID id(DemoBook.Order o, String what, int n) {
 		return uuid(o.id() + "|" + what + "|" + n);

@@ -22,14 +22,12 @@ import { containersOwned, holdingBreakdown } from "@/features/orders/holding-sum
 export const metadata: Metadata = { title: "Portfolio" };
 
 const HOLDING_LABEL: Record<HoldingStatus, string> = {
-  AWAITING_CONTAINER: "Awaiting container",
   AWAITING_ACCEPTANCE: "Accept agreement",
-  ACTIVE: "On lease",
-  MATURED: "Lease completed",
+  ACTIVE: "Running",
+  MATURED: "Term completed",
 };
 
 const HOLDING_TONE: Record<HoldingStatus, StatusTone> = {
-  AWAITING_CONTAINER: "warning",
   AWAITING_ACCEPTANCE: "warning",
   ACTIVE: "success",
   MATURED: "neutral",
@@ -53,17 +51,17 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Portfolio" description="The containers you own, their leases and the rent they earn." />
+      <PageHeader title="Portfolio" description="Your investments, their terms and the returns they earn." />
       {typeof accepted === "string" && agreements.get(accepted)?.acceptedAt && (
         <Notice tone="success">
-          Agreement {agreements.get(accepted)?.agreementNumber} accepted. Your lease starts at the next full hour, and rent
+          Agreement {agreements.get(accepted)?.agreementNumber} accepted. Your term starts at the next full hour, and returns
           is credited to your wallet {credit} from then on. You can download the agreement from the container below.
         </Notice>
       )}
       {firstToAccept && (
         <Notice tone="warning">
-          <strong>{toAccept.length === 1 ? "A lease agreement is" : `${toAccept.length} lease agreements are`} waiting for you.</strong>{" "}
-          Your container{toAccept.length === 1 ? " has" : "s have"} been assigned. Rent starts once you accept the lease
+          <strong>{toAccept.length === 1 ? "An investment agreement is" : `${toAccept.length} investment agreements are`} waiting for you.</strong>{" "}
+          Your returns start once you accept the
           agreement: <Link href={`/portfolio/${firstToAccept.id}/agreement`} className="font-medium underline">review and accept</Link>.
         </Notice>
       )}
@@ -75,12 +73,12 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
           </p>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Containers</p>
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Investments</p>
           <p className="font-display text-4xl font-semibold tabular-nums">{containersOwned(portfolio.holdings)}</p>
           <p className="text-xs text-muted">{holdingBreakdown(portfolio.holdings) || "None yet"}</p>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Rent wallet</p>
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Returns wallet</p>
           <p className="font-display text-4xl font-semibold tabular-nums">{rentWallet}</p>
           <p className="text-xs text-muted">{nextCreditNote(earnings.nextCreditAt, credit)}</p>
         </div>
@@ -88,43 +86,35 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
 
       {portfolio.holdings.length === 0 ? (
         <div className="space-y-4">
-          <EmptyState title="No containers yet" description="Your investments appear here once your payment is confirmed. Our team then assigns each its container." />
-          <LinkButton href="/marketplace">Browse the marketplace</LinkButton>
+          <EmptyState title="No investments yet" description="Your investments appear here once your payment is confirmed." />
+          <LinkButton href="/invest">See the plans</LinkButton>
         </div>
       ) : (
         // Six columns that fit the page: secondary details sit under each value and wrap, instead of more columns.
-        <DataTable columns={["Container", "Invested", "Paid monthly", "Lease", "Rent credited", "Status"]}>
+        <DataTable columns={["Plan", "Invested", "Paid monthly", "Term", "Returns credited", "Status"]}>
           {portfolio.holdings.map((h) => {
             const lease = leases.get(h.id);
             const agreement = agreements.get(h.id);
             return (
               <tr key={h.id} className="hover:bg-background">
                 <Cell wrap className="min-w-[12rem]">
-                  {h.container ? (
-                    <span className="font-mono font-medium whitespace-nowrap">{h.container.containerNumber}</span>
-                  ) : (
-                    <span className="text-muted">Being assigned</span>
-                  )}
-                  <span className="block text-xs text-muted">
-                    <Link href={`/marketplace/${h.productId}`} className="text-gold-text hover:underline">{h.productTitle}</Link>
-                    {h.container?.currentLocation ? ` · ${h.container.currentLocation}` : ""}
-                  </span>
+                  <Link href={`/invest/${h.productId}`} className="font-medium text-gold-text hover:underline">{h.productTitle}</Link>
                 </Cell>
                 <Cell className="tabular-nums">
                   {formatMoney(h.amount)}
-                  <span className="block text-xs text-muted">{formatPercent(h.monthlyRentPercent)} a month</span>
+                  <span className="block text-xs text-muted">{formatPercent(h.monthlyRentPercent * 12)} a year</span>
                 </Cell>
                 <Cell wrap className="tabular-nums">
                   <span className="whitespace-nowrap">{formatMoney(h.monthlyPayout)}</span>
                   {Number(h.monthlyCapitalReturn.amount) > 0 && (
-                    <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} rent + {formatMoney(h.monthlyCapitalReturn)} capital</span>
+                    <span className="block text-xs text-muted">{formatMoney(h.monthlyRent)} returns + {formatMoney(h.monthlyCapitalReturn)} capital</span>
                   )}
                 </Cell>
                 <Cell wrap className="min-w-[9rem]">
                   <span className="whitespace-nowrap">{h.tenureMonths % 12 === 0 ? yearsLabel(h.tenureMonths / 12) : `${h.tenureMonths} months`}</span>
                   <span className="block text-xs text-muted">
                     {h.leaseStartsOn && h.leaseEndsOn ? formatPeriod(h.leaseStartsOn, h.leaseEndsOn)
-                      : h.status === "AWAITING_ACCEPTANCE" ? "Starts when you accept the agreement" : "Starts when your container is assigned"}
+                      : "Starts when you accept the agreement"}
                   </span>
                 </Cell>
                 <Cell className="tabular-nums">
@@ -139,7 +129,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
                     ) : agreement && (
                       <a href={`/portfolio/agreements/${h.id}`} download
                         className={`${buttonBase} ${buttonVariants.quiet} w-full lg:w-auto`}
-                        title={`Lease agreement ${agreement.agreementNumber}`}>
+                        title={`Investment agreement ${agreement.agreementNumber}`}>
                         Download PDF
                       </a>
                     )}
@@ -151,8 +141,8 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
         </DataTable>
       )}
       <p className="text-xs text-muted">
-        Once your payment is confirmed, our team assigns each investment its container and issues its lease agreement. When you accept the agreement, the lease starts at the next full hour and rent is credited to your wallet {credit} from then on. See{" "}
-        <Link href="/earnings" className="underline">Earnings</Link> for each lease&apos;s rent.
+        Once your payment is confirmed, your investment agreement is issued. When you accept the agreement, the term starts at the next full hour and returns are credited to your wallet {credit} from then on. See{" "}
+        <Link href="/earnings" className="underline">Earnings</Link> for each term&apos;s returns.
       </p>
     </div>
   );

@@ -5,6 +5,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { companyBankAccountSchema, confirmTransferSchema, refundSchema, rejectPaymentSchema } from "@/validators/order";
+import type { IfscLookup } from "@/types/user";
 
 const id = (value: string) => encodeURIComponent(value);
 
@@ -73,6 +74,17 @@ export async function recordRefundAction(paymentId: string, _p: FormState, formD
 // ---------------------------------------------------------------- company bank accounts
 
 /** Creates an account, or updates {@code accountId} when given. */
+/** The bank an IFSC code belongs to, for the company account form to fill in as the code is typed. */
+export async function lookupCompanyIfscAction(typed: string): Promise<IfscLookup> {
+  const code = typed.trim().toUpperCase();
+  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) return { status: "NOT_FOUND", bank: null };
+  try {
+    return await authFetch<IfscLookup>(`/api/v1/admin/company-bank-accounts/ifsc/${id(code)}`);
+  } catch {
+    return { status: "UNAVAILABLE", bank: null };
+  }
+}
+
 export async function saveCompanyBankAccountAction(accountId: string | null, _p: FormState, formData: FormData): Promise<FormState> {
   const input = values(formData);
   const parsed = companyBankAccountSchema.safeParse(input);
@@ -83,7 +95,7 @@ export async function saveCompanyBankAccountAction(accountId: string | null, _p:
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/company-bank-accounts");
+  revalidatePath("/admin/platform-config/company-accounts");
   return accountId ? { success: "Account updated.", values: input } : { success: "Account added. Investors can now pay into it." };
 }
 
@@ -93,6 +105,6 @@ export async function setCompanyBankAccountActiveAction(accountId: string, activ
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/company-bank-accounts");
+  revalidatePath("/admin/platform-config/company-accounts");
   return { success: active ? "Account activated." : "Account deactivated." };
 }

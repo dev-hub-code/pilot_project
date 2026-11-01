@@ -1,25 +1,17 @@
 package com.sealease.backend.investment.service;
 
-import java.util.List;
+import java.math.BigDecimal;
 
-/** How many containers one purchase may cover. */
+/** What holds for every investment. */
 public final class PlanRules {
 
-	/** Containers per plan in one cart line (and so one order). */
-	public static final int MAX_CONTAINERS_PER_LINE = 50;
+	/** The price of one unit of any plan, in the platform's currency. */
+	public static final BigDecimal UNIT_PRICE = new BigDecimal("500");
+
+	/** The largest amount in one order, in the platform's currency. */
+	public static final BigDecimal MAX_INVESTMENT = new BigDecimal("1000000000");
 
 	private PlanRules() {
-	}
-
-	/** Sales are not limited by stock: finance assigns containers after payment. */
-	public static List<String> quantityProblems(int quantity) {
-		if (quantity < 1) {
-			return List.of("Buy at least one container");
-		}
-		if (quantity > MAX_CONTAINERS_PER_LINE) {
-			return List.of("At most " + MAX_CONTAINERS_PER_LINE + " containers of one listing in one order");
-		}
-		return List.of();
 	}
 
 }

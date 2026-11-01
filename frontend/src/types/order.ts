@@ -1,53 +1,20 @@
 import type { Assignee } from "@/types/user";
-/** Mirrors of the backend's cart, order, payment, invoice and portfolio DTOs. */
-import type { ContainerSummary, ContainerType, Money, ProductStatus } from "./marketplace";
-
-/** Containers of one plan in the cart. Payout figures cover all {@link quantity} containers. */
-export interface CartLine {
-  productId: string;
-  productCode: string | null;
-  productTitle: string;
-  containerType: ContainerType | null;
-  productStatus: ProductStatus | null;
-  quantity: number;
-  pricePerContainer: Money | null;
-  /** The price of the containers: what the investor pays for the line. */
-  amount: Money | null;
-  monthlyRentPercent: number;
-  monthlyCapitalReturnPercent: number;
-  monthlyPayout: Money | null;
-  /** The lease the investor chose for these containers, within the plan's limits. */
-  tenureYears: number;
-  minTenureYears: number;
-  maxTenureYears: number;
-  /** The rent over the chosen lease. */
-  totalPayout: Money | null;
-  problems: string[];
-}
-
-export interface Cart {
-  items: CartLine[];
-  /** What the investor pays: the price of everything. */
-  total: Money | null;
-  /** The smallest total an order may have; zero when there is none. */
-  minimumOrder: Money;
-  /** Why the cart as a whole cannot be checked out (e.g. below the minimum order). */
-  problems: string[];
-  checkoutReady: boolean;
-}
+/** Mirrors of the backend's order, payment, invoice and portfolio DTOs. */
+import type { Money } from "./plan";
 
 export type OrderStatus = "PENDING_PAYMENT" | "CONFIRMED" | "EXPIRED" | "CANCELLED";
 
-/** One container of an order. Its number is shown once the order is paid. */
+/** One plan of an order. */
 export interface OrderItem {
   id: string;
   productId: string;
   productCode: string;
   productTitle: string;
-  containerType: ContainerType;
-  containerNumber: string | null;
-  /** The container's price: what the investor paid for it (rent is based on it). */
+  /** What the investor invested (returns are based on it). */
   amount: Money;
+  /** The units bought; null on orders placed before units. */
+  units: number | null;
+  unitPrice: Money | null;
   monthlyRentPercent: number;
   monthlyCapitalReturnPercent: number;
   monthlyPayout: Money;
@@ -172,17 +139,15 @@ export interface InvoiceLine {
   amount: Money;
 }
 
-/** AWAITING_CONTAINER: paid; finance has not assigned a container yet, so no lease or payouts. */
-export type HoldingStatus = "AWAITING_CONTAINER" | "AWAITING_ACCEPTANCE" | "ACTIVE" | "MATURED";
+/** AWAITING_ACCEPTANCE: paid; the term and payouts start when the investor accepts the agreement. */
+export type HoldingStatus = "AWAITING_ACCEPTANCE" | "ACTIVE" | "MATURED";
 
-/** One container the investor owns under a plan, with its lease. */
+/** One investment under a plan, with its term. */
 export interface Holding {
   id: string;
   productId: string;
   productCode: string;
   productTitle: string;
-  /** Null until finance assigns a container. */
-  container: ContainerSummary | null;
   orderId: string;
   amount: Money;
   monthlyRentPercent: number;

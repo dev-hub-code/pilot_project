@@ -39,7 +39,7 @@ export async function disableUserAction(userId: string, _p: FormState, formData:
 
 export async function enableUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
   return withReason(`/api/v1/admin/users/${id(userId)}/enable`, formData, [`/admin/users/${userId}`],
-    "Account enabled. Rent held back while it was disabled is credited at the next run.");
+    "Account enabled. Returns held back while it was disabled is credited at the next run.");
 }
 
 /** Takes a KYC review or bank-account verification, or gives it back: only the assignee may decide it. */
@@ -69,6 +69,31 @@ export async function unassignBankAccountAction(accountId: string): Promise<Form
   return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/unassign`, "Returned to the queue.", "/admin");
 }
 
+/** Takes or gives back a KYC review and bank accounts together, in one step; anything already done stays done. */
+async function assignAll(paths: string[], success: string): Promise<FormState> {
+  try {
+    for (const path of paths) await authFetch(path, { method: "POST" });
+  } catch (error) {
+    revalidatePath("/admin", "layout");
+    return failureState(error);
+  }
+  revalidatePath("/admin", "layout");
+  return { success };
+}
+
+const verificationPaths = (kycId: string | null, bankIds: string[], step: "assign" | "unassign") => [
+  ...(kycId ? [`/api/v1/admin/kyc/${id(kycId)}/${step}`] : []),
+  ...bankIds.map((bankId) => `/api/v1/admin/bank-accounts/${id(bankId)}/${step}`),
+];
+
+export async function assignVerificationAction(kycId: string | null, bankIds: string[]): Promise<FormState> {
+  return assignAll(verificationPaths(kycId, bankIds, "assign"), "Assigned to you.");
+}
+
+export async function unassignVerificationAction(kycId: string | null, bankIds: string[]): Promise<FormState> {
+  return assignAll(verificationPaths(kycId, bankIds, "unassign"), "Returned to the queue.");
+}
+
 export async function approveKycAction(submissionId: string): Promise<FormState> {
   try {
     await authFetch(`/api/v1/admin/kyc/${id(submissionId)}/approve`, { method: "POST" });
@@ -76,12 +101,14 @@ export async function approveKycAction(submissionId: string): Promise<FormState>
     return failureState(error);
   }
   revalidatePath("/admin/kyc", "layout");
+  revalidatePath("/admin/verification");
   return { success: "Verification approved." };
 }
 
 export async function rejectKycAction(submissionId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const result = await withReason(`/api/v1/admin/kyc/${id(submissionId)}/reject`, formData, [], "Verification rejected.");
   revalidatePath("/admin/kyc", "layout");
+  revalidatePath("/admin/verification");
   return result;
 }
 
@@ -102,47 +129,3 @@ export async function rejectBankAccountAction(accountId: string, _p: FormState, 
   return result;
 }
 
-export async function takeContainerTaskAction(holdingId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/container-assignments/${id(holdingId)}/take`, "Assigned to you.",
-    "/admin/container-assignments");
-}
-
-export async function releaseContainerTaskAction(holdingId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/container-assignments/${id(holdingId)}/release`, "Returned to the queue.",
-    "/admin/container-assignments");
-}
-
-/** A new container number (ISO 6346, with its check digit) for finance to assign instead of typing one in. */
-export async function generateContainerNumberAction(): Promise<{ containerNumber?: string; error?: string }> {
-  try {
-    const { containerNumber } = await authFetch<{ containerNumber: string }>(
-      "/api/v1/admin/container-assignments/container-numbers", { method: "POST" });
-    return { containerNumber };
-  } catch (error) {
-    return { error: failureState(error).error ?? "Could not generate a container number" };
-  }
-}
-
-/** Assigns the container finance typed in to a paid investment, which starts its lease and payouts today. */
-export async function assignContainerAction(holdingId: string, _state: FormState, formData: FormData): Promise<FormState> {
-  const values = {
-    containerNumber: String(formData.get("containerNumber") ?? "").replace(/[\s-]+/g, "").toUpperCase(),
-    currentLocation: String(formData.get("currentLocation") ?? "").trim(),
-  };
-  if (!values.containerNumber) return { fieldErrors: { containerNumber: "Enter the container number" }, values };
-  if (values.containerNumber.length > 20) {
-    return { fieldErrors: { containerNumber: "Use at most 20 characters" }, values };
-  }
-  if (values.currentLocation.length > 120) {
-    return { fieldErrors: { currentLocation: "Use at most 120 characters" }, values };
-  }
-  try {
-    await authFetch(`/api/v1/admin/container-assignments/${id(holdingId)}`, {
-      method: "POST", json: { containerNumber: values.containerNumber, currentLocation: values.currentLocation || null },
-    });
-  } catch (error) {
-    return failureState(error, values);
-  }
-  revalidatePath("/admin", "layout");
-  return { success: `Container ${values.containerNumber} assigned. The investor's lease and payouts start today.` };
-}

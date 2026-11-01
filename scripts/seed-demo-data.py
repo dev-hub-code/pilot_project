@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Seeds LOCAL development data through the public admin API: company bank accounts, container
-stock with generated photos and survey reports, and published investment plans for the marketplace.
+stock with generated photos and survey reports, and published investment plans.
 
 All names are fictional. Uses only the Python standard library.
 
@@ -230,13 +230,8 @@ def main():
             print(f"skip  plan '{spec['title']}' (already exists)")
             continue
         status, product = call("POST", "/api/v1/admin/investment-products", token, {
-            "containerType": spec["type"], "title": spec["title"], "summary": spec["summary"],
-            "description": f"{spec['summary']}\n\nBuy one or more containers at {rupees(spec['price'])} each. Each container "
-                           f"is assigned to you by its container number once your payment is confirmed and leased "
-                           f"for {spec['months']} months. Every month you receive {spec['rent']}% of the price as rent "
-                           f"plus {100 / spec['months']:.2f}% of it back, so the whole price is returned by the end.",
-            "currency": "INR", "price": spec["price"], "monthlyRentPercent": spec["rent"],
-            "tenureMonths": spec["months"]})
+            "audience": "ONLINE", "title": spec["title"], "summary": spec["summary"], "currency": "INR",
+            "tenureYears": max(1, spec["months"] // 12), "annualReturnPercent": str(float(spec["rent"]) * 12), "minUnits": 1})
         if status != 201:
             sys.exit(f"Plan {spec['title']} failed ({status}): {product}")
         status, published = call("POST", f"/api/v1/admin/investment-products/{product['id']}/publish", token)
@@ -245,7 +240,7 @@ def main():
         created += 1
         print(f"ok    {product['code']}  {spec['type']:<15} {spec['title']}")
 
-    print(f"\nSeeded {created} plan(s). Open http://localhost:3000/marketplace")
+    print(f"\nSeeded {created} plan(s). Open http://localhost:3000/invest")
 
 
 if __name__ == "__main__":

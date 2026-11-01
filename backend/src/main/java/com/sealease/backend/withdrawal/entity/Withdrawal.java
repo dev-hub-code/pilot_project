@@ -178,6 +178,25 @@ public class Withdrawal extends BaseEntity {
 		return w;
 	}
 
+	/** An investor's own request for a bank payment: goes straight to finance to pay, in a batch of its own. */
+	public static Withdrawal requested(String reference, UUID userId, Money amount, String idempotencyKey,
+			EarningsBalance balance, UUID bankAccountId, String bankHolderName, String bankName, String bankAccountLast4) {
+		Withdrawal w = new Withdrawal(reference, userId, amount, idempotencyKey, balance, bankAccountId,
+				bankHolderName, bankName, bankAccountLast4, 1);
+		w.origin = WithdrawalOrigin.REQUESTED;
+		w.status = WithdrawalStatus.APPROVED;
+		return w;
+	}
+
+	/** An investor's own request to collect cash at the office: goes straight to finance, in a batch of its own. */
+	public static Withdrawal requestedCash(String reference, UUID userId, Money amount, String idempotencyKey,
+			EarningsBalance balance) {
+		Withdrawal w = officeCash(reference, userId, amount, idempotencyKey, balance, 1);
+		w.origin = WithdrawalOrigin.REQUESTED;
+		w.status = WithdrawalStatus.APPROVED;
+		return w;
+	}
+
 	/** A withdrawal in cash at the office made by a withdrawal run: goes straight to the run's cash batch. */
 	public static Withdrawal scheduledCash(String reference, UUID userId, Money amount, String idempotencyKey,
 			EarningsBalance balance) {

@@ -1,4 +1,4 @@
-import type { ContainerType, Money, RentTier } from "@/types/marketplace";
+import type { Money } from "@/types/plan";
 
 /** Mirrors backend DemoAccountSummary. */
 export interface DemoAccountSummary {
@@ -32,7 +32,6 @@ export interface DemoAccount {
   /** The plans an order can be of: open or closed. */
   plans: DemoPlan[];
   /** Monthly rent by order total, lowest first: an order earns its band's rate. */
-  rentBands: RentTier[];
   totals: {
     rentPaid: Money;
     commissionPaid: Money;
@@ -52,9 +51,6 @@ export interface DemoOrder {
   productId: string;
   planCode: string;
   planTitle: string;
-  containerType: ContainerType;
-  containers: number;
-  pricePerContainer: Money;
   amount: Money;
   rentPercent: number;
   monthlyRent: Money;
@@ -69,10 +65,9 @@ export interface DemoPlan {
   id: string;
   code: string;
   title: string;
-  containerType: ContainerType;
-  price: Money;
-  minTenureYears: number;
-  maxTenureYears: number;
+  currency: string;
+  tenureYears: number;
+  annualReturnPercent: number;
   status: string;
 }
 

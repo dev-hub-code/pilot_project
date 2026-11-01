@@ -3,26 +3,23 @@ package com.sealease.backend.order.service;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
-import com.sealease.backend.cart.service.CartLine;
-import com.sealease.backend.cart.service.CartService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.web.IdempotencyKey;
-import com.sealease.backend.container.dto.ContainerSummary;
-import com.sealease.backend.container.service.ContainerAllocationService;
-import com.sealease.backend.container.service.ContainerService;
 import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.investment.dto.PayoutTerms;
 import com.sealease.backend.investment.entity.ProductTerms;
 import com.sealease.backend.investment.dto.OfferingTerms;
 import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.investment.service.OfferingQuery;
-import com.sealease.backend.investment.service.RentRateService;
 import com.sealease.backend.invoice.service.InvoiceRequest;
 import com.sealease.backend.invoice.service.InvoiceService;
 import com.sealease.backend.kafka.KafkaTopics;
+import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
+import com.sealease.backend.earning.service.RentCreditSettingsService;
+import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.order.dto.CheckoutRequest;
 import com.sealease.backend.order.dto.OrderResponse;
 import com.sealease.backend.order.dto.OrderSearchCriteria;
@@ -37,6 +34,7 @@ import com.sealease.backend.order.repository.OrderRepository;
 import com.sealease.backend.outbox.DomainEvent;
 import com.sealease.backend.outbox.OutboxPublisher;
 import jakarta.persistence.criteria.Predicate;
+import com.sealease.backend.referral.dto.ReferralScheme;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -68,10 +66,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Orders: checkout of the cart, cancellation, expiry and confirmation once paid.
+ * Orders: buying units of a plan, cancellation, expiry and confirmation once paid.
  *
  * <p>One order line per container. Checkout reserves no stock: when the order is paid, each line becomes a
- * holding awaiting its container, and finance assigns one later (see {@link ContainerAssignmentService}),
+ * holding with its investment agreement,
  * which starts the lease and payouts. Orders placed before that reserved their containers at checkout; those
  * are leased on payment, or returned to inventory when the order expires or is cancelled. Every transition
  * locks the order row, so payment settlement, cancellation and the expiry sweep can never act on the same
@@ -84,16 +82,13 @@ public class OrderService {
 
 	private final OrderRepository orders;
 	private final OrderItemRepository items;
-	private final CartService cart;
 	private final OfferingQuery offerings;
-	private final RentRateService rentRates;
-	private final MinimumOrderService minimumOrder;
-	private final ContainerAllocationService inventory;
-	private final ContainerService containers;
 	private final HoldingService holdings;
 	private final PayoutService payouts;
 	private final InvoiceService invoices;
 	private final LeaseAgreementIssuer agreements;
+	private final NotificationService notifications;
+	private final RentCreditSettingsService credits;
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
@@ -101,23 +96,21 @@ public class OrderService {
 	private final OrderProperties properties;
 	private final Clock clock;
 
-	public OrderService(OrderRepository orders, OrderItemRepository items, CartService cart, OfferingQuery offerings,
-			RentRateService rentRates, MinimumOrderService minimumOrder, ContainerAllocationService inventory, ContainerService containers, HoldingService holdings,
-			PayoutService payouts, InvoiceService invoices, LeaseAgreementIssuer agreements, OutboxPublisher outbox,
+	public OrderService(OrderRepository orders, OrderItemRepository items, OfferingQuery offerings,
+			HoldingService holdings,
+			PayoutService payouts, InvoiceService invoices, LeaseAgreementIssuer agreements, NotificationService notifications,
+			RentCreditSettingsService credits, OutboxPublisher outbox,
 			AuditService audit, ApplicationEventPublisher events, TransactionTemplate transactions,
 			OrderProperties properties, Clock clock) {
 		this.orders = orders;
 		this.items = items;
-		this.cart = cart;
 		this.offerings = offerings;
-		this.rentRates = rentRates;
-		this.minimumOrder = minimumOrder;
-		this.inventory = inventory;
-		this.containers = containers;
 		this.holdings = holdings;
 		this.payouts = payouts;
 		this.invoices = invoices;
 		this.agreements = agreements;
+		this.notifications = notifications;
+		this.credits = credits;
 		this.outbox = outbox;
 		this.audit = audit;
 		this.events = events;
@@ -129,87 +122,49 @@ public class OrderService {
 	// ----------------------------------------------------------------------------- checkout
 
 	/**
-	 * Turns the cart into an order, one line per container; containers are assigned by finance once it is paid.
-	 * Retrying with the same idempotency key returns the original order instead of placing a second one.
+	 * Places an order for units of a plan. Retrying with the same idempotency key returns the original order instead of
+	 * placing a second one, even when the two arrive together.
 	 */
 	@Transactional
 	public OrderResponse checkout(UUID userId, String idempotencyKey, CheckoutRequest request) {
 		String key = IdempotencyKey.require(idempotencyKey);
 		String hash = requestHash(request);
+		orders.lockIdempotencyKey(userId + ":" + key);
 		Optional<InvestmentOrder> replay = orders.findByIdempotencyKey(userId, key);
 		if (replay.isPresent()) {
 			if (!replay.get().getRequestHash().equals(hash)) {
 				throw new BusinessException(ErrorCode.CONFLICT,
 						IdempotencyKey.HEADER + " was already used for a different checkout");
 			}
-			return view(replay.get(), false);
+			return view(replay.get());
 		}
 
-		List<CartLine> lines = cart.lockForCheckout(userId);
-		if (lines.isEmpty()) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Your cart is empty");
+		OfferingTerms plan = offerings.terms(request.productId());
+		int units = request.units();
+		List<String> problems = offerings.problems(userId, plan.id(), units);
+		if (!problems.isEmpty()) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, String.join("; ", problems));
 		}
-		Set<UUID> accepted = acceptedTerms(request);
-		Set<UUID> productIds = lines.stream().map(CartLine::productId).collect(Collectors.toSet());
-		if (!accepted.equals(productIds)) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Accept the terms of every container listing in your cart, and only those");
-		}
-		Map<UUID, OfferingTerms> terms = offerings.terms(productIds);
-		for (UUID productId : productIds) {
-			if (!terms.containsKey(productId)) {
-				throw new ResourceNotFoundException("Container listing", productId);
-			}
-		}
-
-		for (CartLine line : lines) {
-			List<String> problems = offerings.problems(userId, line.productId(), line.quantity(), line.tenureYears());
-			if (!problems.isEmpty()) {
-				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						terms.get(line.productId()).code() + ": " + String.join("; ", problems));
-			}
-		}
-		// What the investor pays: the price of every container.
-		Money total = lines.stream()
-			.map(l -> terms.get(l.productId()).terms().pricePerContainer().times(BigDecimal.valueOf(l.quantity())))
-			.reduce(Money::plus)
-			.orElseThrow();
-		List<String> belowMinimum = new ArrayList<>(minimumOrder.problems(total));
-		belowMinimum.addAll(rentRates.problems(total));
-		if (!belowMinimum.isEmpty()) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, belowMinimum.getFirst());
-		}
-		// The rent rate is fixed on the order: the rate for its total, on every container in it.
-		BigDecimal rentPercent = rentRates.percentFor(total);
+		ProductTerms t = plan.terms();
+		Money total = t.amountFor(units);
 		Instant now = clock.instant();
 		InvestmentOrder order = orders.saveAndFlush(new InvestmentOrder("ORD-" + orders.nextNumber(), userId, total,
 				key, hash, now.plus(properties.paymentWindow())));
-
-		List<Map<String, Object>> itemEvents = new ArrayList<>();
-		for (CartLine line : lines.stream().sorted(Comparator.comparing(CartLine::productId)).toList()) {
-			OfferingTerms plan = terms.get(line.productId());
-			ProductTerms t = plan.terms();
-			for (int n = 0; n < line.quantity(); n++) {
-				items.save(new OrderItem(order.getId(), line.productId(), plan.code(), t.title(), t.containerType(),
-						null, t.pricePerContainer(), rentPercent,
-						t.monthlyCapitalReturnPercent(),
-						ProductTerms.monthsOf(line.tenureYears()), now));
-			}
-			itemEvents.add(Map.of("productId", line.productId().toString(), "containers", line.quantity(),
-					"tenureYears", line.tenureYears()));
-		}
-		items.flush();
-		cart.clear(userId);
+		// The terms are fixed on the order: a plan changing or closing later leaves them as they were.
+		items.saveAndFlush(new OrderItem(order.getId(), plan.id(), plan.code(), t.title(), total, units, t.unitPrice(),
+				t.monthlyReturnPercent(), t.monthlyCapitalReturnPercent(), ProductTerms.monthsOf(t.tenureYears()), now));
+		List<Map<String, Object>> itemEvents = List.of(Map.of("productId", plan.id().toString(),
+				"amount", total.amount().toPlainString(), "units", units, "tenureYears", t.tenureYears()));
 
 		audit.record(AuditRecord.of(userId, AuditAction.ORDER_PLACED, ENTITY, order.getId())
 			.withNewValue(Map.of("orderNumber", order.getOrderNumber(), "total", total.toString(),
-					"containers", lines.stream().mapToInt(CartLine::quantity).sum())));
+					"plan", plan.code(), "units", units)));
 		outbox.publish(DomainEvent.of(KafkaTopics.INVESTMENT_CREATED, "InvestmentOrderPlaced", ENTITY, order.getId(),
 				Map.of("orderId", order.getId().toString(), "orderNumber", order.getOrderNumber(),
 						"userId", userId.toString(), "total", total.amount().toPlainString(),
 						"currency", total.currency().getCurrencyCode(), "expiresAt", order.getExpiresAt().toString(),
 						"items", itemEvents)));
-		return view(order, false);
+		return view(order);
 	}
 
 	// ------------------------------------------------------------------------ cancel / expire
@@ -225,11 +180,11 @@ public class OrderService {
 					"Only orders awaiting payment can be cancelled");
 		}
 		close(order, OrderStatus.CANCELLED, "Cancelled by the investor", userId, AuditAction.ORDER_CANCELLED);
-		return view(order, false);
+		return view(order);
 	}
 
 	/**
-	 * Expires orders whose payment window has passed, returning their containers to inventory. Each order is handled
+	 * Expires orders whose payment window has passed, Each order is handled
 	 * in its own transaction, so one failure does not hold back the rest.
 	 *
 	 * @return the number of orders expired
@@ -256,7 +211,6 @@ public class OrderService {
 	}
 
 	private void close(InvestmentOrder order, OrderStatus outcome, String reason, UUID actorId, AuditAction action) {
-		inventory.release(order.getId());
 		order.close(outcome, reason, clock.instant());
 		orders.flush();
 		events.publishEvent(new OrderClosedEvent(order.getId(), outcome));
@@ -286,12 +240,10 @@ public class OrderService {
 	}
 
 	/**
-	 * Called by the payment module, in the transaction that records a successful payment: each line becomes a
-	 * holding awaiting its container (finance assigns it, which starts the lease and payouts), and the invoice is
-	 * issued. A line that reserved a container at checkout (orders placed before manual assignment) is leased
-	 * at once, with its payout schedule from today.
+	 * Called by the payment module, in the transaction that records a successful payment: each line becomes a holding
+	 * with its investment agreement to accept (accepting starts the returns), and the invoice is issued.
 	 *
-	 * @param paidAtOffice       the order was paid in cash at the office: its containers' rent is collected in cash there
+	 * @param paidAtOffice the order was paid in cash at the office
 	 * @return {@code false} when the order is no longer awaiting payment (the money must be refunded)
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
@@ -304,31 +256,19 @@ public class OrderService {
 		List<OrderItem> lines = items.findByOrderIdOrderByProductIdAscIdAsc(orderId);
 		List<Map<String, Object>> confirmed = new ArrayList<>();
 		List<InvoiceRequest.Line> invoiceLines = new ArrayList<>();
-		Instant leaseStartsAt = payouts.leaseStartAfter(now);
 		for (OrderItem item : lines) {
-			BigDecimal rentPercent = item.getMonthlyRentPercent();
-			if (item.getContainerId() == null) {
-				UUID holdingId = holdings.recordAwaitingContainer(order.getUserId(), item.getProductId(), orderId,
-						item.getId(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
-						item.getTenureMonths(), now, paidAtOffice);
-				confirmed.add(Map.of("holdingId", holdingId.toString(), "productId", item.getProductId().toString(),
-						"amount", item.amount().amount().toPlainString()));
-				invoiceLines.add(new InvoiceRequest.Line("%s %s - one %s container, %d-month lease".formatted(
-						item.getProductCode(), item.getProductTitle(), item.getContainerType().label(),
-						item.getTenureMonths()), item.amount()));
-				continue;
-			}
-			ContainerSummary container = inventory.lease(item.getContainerId(), orderId);
-			PayoutTerms holding = holdings.record(order.getUserId(), item.getProductId(), orderId, item.getId(),
-					container.id(), item.amount(), rentPercent, item.getMonthlyCapitalReturnPercent(),
-					item.getTenureMonths(), leaseStartsAt, now, paidAtOffice);
-			payouts.schedule(holding);
-			agreements.issue(null, holding.holdingId(), order.getUserId(), order.getOrderNumber());
-			confirmed.add(Map.of("holdingId", holding.holdingId().toString(), "productId", item.getProductId().toString(),
-					"containerNumber", container.containerNumber(), "amount", item.amount().amount().toPlainString()));
-			invoiceLines.add(new InvoiceRequest.Line("%s %s - container %s (%s), %d-month lease".formatted(
-					item.getProductCode(), item.getProductTitle(), container.containerNumber(),
-					container.containerType().label(), item.getTenureMonths()), item.amount()));
+			UUID holdingId = holdings.recordAwaitingAcceptance(order.getUserId(), item.getProductId(), orderId, item.getId(),
+					item.amount(), item.getMonthlyRentPercent(), item.getMonthlyCapitalReturnPercent(),
+					item.getTenureMonths(), now, paidAtOffice);
+			LeaseAgreementResponse agreement = agreements.issue(null, holdingId, order.getUserId(), order.getOrderNumber());
+			notifications.notify(order.getUserId(), "AGREEMENT_ISSUED", "Your investment is confirmed",
+					item.getProductCode() + ": accept your investment agreement " + agreement.agreementNumber()
+							+ " to start your returns. They are credited to your wallet " + credits.current().label()
+							+ " from then on.", "/portfolio/" + holdingId + "/agreement");
+			confirmed.add(Map.of("holdingId", holdingId.toString(), "productId", item.getProductId().toString(),
+					"amount", item.amount().amount().toPlainString()));
+			invoiceLines.add(new InvoiceRequest.Line("%s %s - %d-month investment".formatted(item.getProductCode(),
+					item.getProductTitle(), item.getTenureMonths()), item.amount()));
 		}
 		order.confirm(now);
 		orders.flush();
@@ -351,14 +291,14 @@ public class OrderService {
 
 	@Transactional(readOnly = true)
 	public Page<OrderResponse> mine(UUID userId, Pageable pageable) {
-		return withItems(orders.findByUserId(userId, pageable), false);
+		return withItems(orders.findByUserId(userId, pageable));
 	}
 
 	@Transactional(readOnly = true)
 	public OrderResponse mine(UUID userId, UUID orderId) {
 		return orders.findById(orderId)
 			.filter(o -> o.getUserId().equals(userId))
-			.map(o -> view(o, false))
+			.map(o -> view(o))
 			.orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 	}
 
@@ -370,12 +310,12 @@ public class OrderService {
 
 	@Transactional(readOnly = true)
 	public Page<OrderResponse> search(OrderSearchCriteria criteria, Pageable pageable) {
-		return withItems(orders.findAll(matching(criteria), pageable), true);
+		return withItems(orders.findAll(matching(criteria), pageable));
 	}
 
 	@Transactional(readOnly = true)
 	public OrderResponse detail(UUID orderId) {
-		return view(load(orderId), true);
+		return view(load(orderId));
 	}
 
 	@Transactional(readOnly = true)
@@ -399,35 +339,16 @@ public class OrderService {
 			.collect(Collectors.toMap(InvestmentOrder::getId, InvestmentOrder::getOrderNumber));
 	}
 
-	/** @param staff staff also see containers reserved by unpaid orders; investors see theirs once the order is paid */
-	private Page<OrderResponse> withItems(Page<InvestmentOrder> page, boolean staff) {
+	private Page<OrderResponse> withItems(Page<InvestmentOrder> page) {
 		List<OrderItem> all = items.findByOrderIdIn(page.map(InvestmentOrder::getId).toList());
 		Map<UUID, List<OrderItem>> byOrder = all.stream()
 			.sorted(Comparator.comparing(OrderItem::getProductId).thenComparing(OrderItem::getId))
 			.collect(Collectors.groupingBy(OrderItem::getOrderId));
-		Map<UUID, String> numbers = containerNumbers(all);
-		return page.map(o -> OrderResponse.from(o, byOrder.getOrDefault(o.getId(), List.of()),
-				staff || o.getStatus() == OrderStatus.CONFIRMED ? numbers : Map.of()));
+		return page.map(o -> OrderResponse.from(o, byOrder.getOrDefault(o.getId(), List.of())));
 	}
 
-	private OrderResponse view(InvestmentOrder order, boolean staff) {
-		List<OrderItem> lines = items.findByOrderIdOrderByProductIdAscIdAsc(order.getId());
-		return OrderResponse.from(order, lines,
-				staff || order.getStatus() == OrderStatus.CONFIRMED ? containerNumbers(lines) : Map.of());
-	}
-
-	/** Container number per order line: the one assigned to its holding, or the one reserved at checkout. */
-	private Map<UUID, String> containerNumbers(List<OrderItem> lines) {
-		Map<UUID, String> numbers = new HashMap<>(
-				holdings.containerNumbersByOrderItem(lines.stream().map(OrderItem::getId).toList()));
-		Map<UUID, ContainerSummary> reserved = containers.summaries(lines.stream().map(OrderItem::getContainerId).toList());
-		for (OrderItem line : lines) {
-			ContainerSummary box = line.getContainerId() == null ? null : reserved.get(line.getContainerId());
-			if (box != null) {
-				numbers.putIfAbsent(line.getId(), box.containerNumber());
-			}
-		}
-		return numbers;
+	private OrderResponse view(InvestmentOrder order) {
+		return OrderResponse.from(order, items.findByOrderIdOrderByProductIdAscIdAsc(order.getId()));
 	}
 
 	private InvestmentOrder load(UUID orderId) {
@@ -438,22 +359,9 @@ public class OrderService {
 		return orders.findByIdForUpdate(orderId).orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 	}
 
-	private static Set<UUID> acceptedTerms(CheckoutRequest request) {
-		Set<UUID> accepted = new HashSet<>();
-		for (UUID productId : request.acceptedTerms()) {
-			if (!accepted.add(productId)) {
-				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Container listing " + productId + " is listed twice");
-			}
-		}
-		return accepted;
-	}
-
 	/** Fingerprint of a checkout request, to tell a genuine retry from a reused idempotency key. */
 	private static String requestHash(CheckoutRequest request) {
-		String canonical = request.acceptedTerms().stream()
-			.sorted()
-			.map(UUID::toString)
-			.collect(Collectors.joining(";"));
+		String canonical = request.productId() + ";" + request.units();
 		try {
 			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
 				.digest(canonical.getBytes(StandardCharsets.UTF_8)));

@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Commission rates for referral levels 1-4, in force from {@code effectiveFrom} until the next
- * version starts. Rates never change once created; a version that has not started may be cancelled.
+ * Commission rates, in force from {@code effectiveFrom} until the next
+ * version starts: levels 1-4 of the network scheme, paid monthly, and the online scheme's one-time rate. Rates never change once created; a version that has not started may be cancelled.
  */
 @Entity
 @Table(name = "referral_rate_versions")
@@ -42,6 +42,9 @@ public class ReferralRateVersion {
 	@Column(name = "level4_percent", nullable = false, updatable = false, precision = 5, scale = 3)
 	private BigDecimal level4Percent;
 
+	@Column(name = "one_time_percent", nullable = false, updatable = false, precision = 5, scale = 3)
+	private BigDecimal oneTimePercent;
+
 	@Column(name = "reason", nullable = false, updatable = false, length = 500)
 	private String reason;
 
@@ -60,8 +63,8 @@ public class ReferralRateVersion {
 	protected ReferralRateVersion() {
 	}
 
-	public ReferralRateVersion(Instant effectiveFrom, List<BigDecimal> percents, String reason, UUID createdBy,
-			Instant createdAt) {
+	public ReferralRateVersion(Instant effectiveFrom, List<BigDecimal> percents, BigDecimal oneTimePercent, String reason,
+			UUID createdBy, Instant createdAt) {
 		if (percents.size() != LEVELS) {
 			throw new IllegalArgumentException("Exactly " + LEVELS + " referral rates are required");
 		}
@@ -70,6 +73,7 @@ public class ReferralRateVersion {
 		this.level2Percent = percents.get(1);
 		this.level3Percent = percents.get(2);
 		this.level4Percent = percents.get(3);
+		this.oneTimePercent = oneTimePercent;
 		this.reason = reason;
 		this.createdBy = createdBy;
 		this.createdAt = createdAt;
@@ -103,6 +107,17 @@ public class ReferralRateVersion {
 		int digits = Math.max(base.currency().getDefaultFractionDigits(), 0);
 		return Money.of(base.amount().multiply(percentFor(level)).movePointLeft(2).setScale(digits, RoundingMode.DOWN),
 				base.currency());
+	}
+
+	/** The online scheme's commission on a referred investor's first order, rounded down like {@link #commission}. */
+	public Money oneTimeCommission(Money base) {
+		int digits = Math.max(base.currency().getDefaultFractionDigits(), 0);
+		return Money.of(base.amount().multiply(oneTimePercent).movePointLeft(2).setScale(digits, RoundingMode.DOWN),
+				base.currency());
+	}
+
+	public BigDecimal getOneTimePercent() {
+		return oneTimePercent;
 	}
 
 	public UUID getId() {

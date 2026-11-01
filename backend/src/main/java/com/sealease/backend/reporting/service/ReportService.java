@@ -133,7 +133,7 @@ public class ReportService {
 			boolean cash = w.payoutMethod() == WithdrawalPayoutMethod.OFFICE_CASH;
 			String paidTo = cash ? "Cash" : w.bankName() == null ? "Bank transfer" : w.bankName() + " " + w.bankAccountMasked();
 			rows.add(Row.of(Format.date(w.createdAt(), zone()),
-					w.reference() + " · " + (w.balance() == EarningsBalance.REFERRAL ? "Referral" : "Rent"),
+					w.reference() + " · " + (w.balance() == EarningsBalance.REFERRAL ? "Referral" : "Returns"),
 					paidTo + " · " + statementStatus(w, cash), Format.money(amount)));
 			if (w.status() == WithdrawalStatus.PAID) {
 				paid.merge(amount.currency().getCurrencyCode(), amount, Money::plus);
@@ -181,7 +181,7 @@ public class ReportService {
 			List<PeriodTotal> t = totals.getOrDefault(code, List.of());
 			Money zero = Money.zero(currency);
 			sections.add(new Section("Totals (" + MoneyFormat.symbol(currency) + ")", List.of("Item", "Basis", "", "Amount"), List.of(
-					Row.of("Rent paid to investors", "Monthly rent on their containers", "",
+					Row.of("Returns paid to investors", "Monthly returns on their investments", "",
 							Format.money(total(t, zero, TransactionType.INVESTOR_PAYOUT, AccountType.PLATFORM_RENT_EXPENSE, Direction.DEBIT))),
 					Row.of("Capital returned to investors", "Monthly part of the price", "",
 							Format.money(total(t, zero, TransactionType.INVESTOR_PAYOUT, AccountType.PLATFORM_CAPITAL_RETURNS, Direction.DEBIT))),
@@ -214,18 +214,18 @@ public class ReportService {
 
 		List<Row> plans = all.stream()
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
-					p.containersSold() + " sold · "
+					p.containersSold() + " investment(s) · "
 							+ investors.getOrDefault(p.id(), 0L) + " investor(s)",
-					Format.money(p.price()) + " · rent by order value"))
+					p.audience() == com.sealease.backend.referral.dto.ReferralScheme.NETWORK ? "Network investors" : "Online investors"))
 			.toList();
 		List<DuePayouts> due = payouts.due();
 		List<Row> unpaid = due.stream()
 			.map(d -> Row.of("Due and unpaid", d.count() + " payout(s)", "", Format.money(d.total())))
 			.toList();
-		return new ReportDocument("Containers & payouts", "As of " + Format.date(today), "containers-" + today, clock.instant(),
-				List.of(new Section("Container listings", List.of("Listing", "Name", "Containers", "Terms"), plans),
+		return new ReportDocument("Plans & payouts", "As of " + Format.date(today), "plans-" + today, clock.instant(),
+				List.of(new Section("Plans", List.of("Plan", "Name", "Investments", "Offered to"), plans),
 						new Section("Payouts due and not yet paid", List.of("", "Payouts", "", "Amount"), unpaid)),
-				"Containers sold count confirmed purchases. Payouts are credited automatically as they fall due.");
+				"Investments count confirmed orders. Payouts are credited automatically as they fall due.");
 	}
 
 	// ------------------------------------------------------------------------------ invoice

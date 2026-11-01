@@ -71,7 +71,6 @@ class EarningsIntegrationTest {
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
-		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
 
 		// One rent accrual for the whole lease, starting at the next full hour: nothing is credited until an hour passes.
 		Map<String, Object> lease = jdbc.queryForMap(
@@ -111,7 +110,6 @@ class EarningsIntegrationTest {
 		mvc.perform(get("/api/v1/earnings").param("status", "RUNNING").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.totalElements").value(1))
 			.andExpect(jsonPath("$.content[0].capitalTotal.amount").value("0.00"))
-			.andExpect(jsonPath("$.content[0].containerNumber").isNotEmpty())
 			.andExpect(jsonPath("$.content[0].userId").doesNotExist());
 
 		// Each credit is one balanced ledger transaction: the rent is a platform expense (no capital posting).
@@ -131,8 +129,6 @@ class EarningsIntegrationTest {
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
-		UUID container = jdbc.queryForObject("SELECT container_id FROM holdings WHERE id = ?", UUID.class, holding);
-		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("ON_LEASE");
 
 		// The whole year has passed: its rent is credited at once and the lease ends.
 		backdate(holding, 12);
@@ -140,7 +136,6 @@ class EarningsIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT completed_at IS NOT NULL FROM rent_accruals WHERE holding_id = ?",
 				Boolean.class, holding)).isTrue();
 		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?", String.class, holding)).isEqualTo("MATURED");
-		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE id = ?", String.class, container)).isEqualTo("AVAILABLE");
 		assertThat(api.auditCount("HOLDING_MATURED", holding)).isEqualTo(1);
 		assertThat(payouts.creditDue()).as("nothing more to credit").isZero();
 		// The whole lease: 12 × ₹1,000, 24% of the price in rent, and nothing more.
@@ -158,6 +153,8 @@ class EarningsIntegrationTest {
 	@Test
 	void commissionIsCreditedWithEachHourOfRent() throws Exception {
 		Account referrer = investors.approvedInvestor();
+		jdbc.update("INSERT INTO network_investors (user_id, signups_join_network, created_at) VALUES (?, false, now())",
+				referrer.id());
 		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
 			.andReturn().getResponse().getContentAsString(), "$.code");
 		Account investor = investors.approve(api.register(code));
@@ -185,6 +182,8 @@ class EarningsIntegrationTest {
 	@Test
 	void rentAndItsCommissionAreHeldBackWhileTheAccountIsBlockedAndPaidOnceEnabled() throws Exception {
 		Account referrer = investors.approvedInvestor();
+		jdbc.update("INSERT INTO network_investors (user_id, signups_join_network, created_at) VALUES (?, false, now())",
+				referrer.id());
 		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
 			.andReturn().getResponse().getContentAsString(), "$.code");
 		Account investor = investors.approve(api.register(code));

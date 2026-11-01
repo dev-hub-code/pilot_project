@@ -1,14 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState, type ChangeEvent } from "react";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import type { CompanyBankAccount } from "@/types/order";
+import type { IfscLookup } from "@/types/user";
 import type { FormState } from "@/validators/form-state";
 import { currencyLabel, formatMoney } from "@/utils/money";
 import { upperCase } from "@/utils/input";
-import { confirmTransferAction, recordRefundAction, rejectPaymentAction, saveCompanyBankAccountAction } from "./payment-actions";
+import { confirmTransferAction, lookupCompanyIfscAction, recordRefundAction, rejectPaymentAction, saveCompanyBankAccountAction } from "./payment-actions";
 
 /** @param defaultReference the investor's transaction id, cheque or receipt number, when they gave one */
 /** Records a bank payment that arrived, or (with {@code officeCash}) cash received at the office with its receipt number. */
@@ -57,24 +58,78 @@ export function RejectPaymentForm({ paymentId }: { paymentId: string }) {
   );
 }
 
+const IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const IFSC_SHAPE = "Check this code: 4 letters, then the number 0 (not the letter O), then 6 letters or digits";
+
 /** Adds a company bank account, or edits {@code account} when given. */
 export function CompanyBankAccountForm({ account }: { account?: CompanyBankAccount }) {
-  const [state, action] = useActionState<FormState, FormData>(
-    saveCompanyBankAccountAction.bind(null, account?.id ?? null), {});
+  const [bank, setBank] = useState(account?.bankName ?? "");
+  // What the directory said about the code as typed; null until a whole code is typed.
+  const [ifsc, setIfsc] = useState<IfscLookup | "checking" | null>(null);
+  const latestCode = useRef("");
+  // The name the directory filled in: it goes when the code changes, unlike a name typed by hand.
+  const filledIn = useRef("");
+  // What is wrong with the code as typed; null shows the last submit's error, until the code is edited.
+  const [typedError, setTypedError] = useState<string | null>(null);
+  const [state, action] = useActionState<FormState, FormData>(async (previous, formData) => {
+    const result = await saveCompanyBankAccountAction(account?.id ?? null, previous, formData);
+    if (result.success && !account) { // The form clears after adding.
+      setBank("");
+      setIfsc(null);
+    }
+    setTypedError(null);
+    return result;
+  }, {});
   const e = state.fieldErrors ?? {};
   const v = (name: keyof CompanyBankAccount) => state.values?.[name] ?? (account?.[name] as string | null | undefined) ?? undefined;
   const key = account?.id ?? "new";
+
+  async function findBank(event: ChangeEvent<HTMLInputElement>) {
+    upperCase(event);
+    const code = event.currentTarget.value;
+    latestCode.current = code;
+    const stale = filledIn.current;
+    filledIn.current = "";
+    if (stale) setBank((current) => (current === stale ? "" : current));
+    setTypedError(code.length === 11 && !IFSC.test(code) ? IFSC_SHAPE : "");
+    if (!IFSC.test(code)) {
+      setIfsc(null);
+      return;
+    }
+    setIfsc("checking");
+    const result = await lookupCompanyIfscAction(code);
+    // Ignore an answer for a code that has since been changed.
+    if (latestCode.current !== code) return;
+    setIfsc(result);
+    if (result.bank) {
+      filledIn.current = result.bank;
+      setBank(result.bank);
+    }
+  }
+
+  const missed = ifsc !== null && ifsc !== "checking" && ifsc.status !== "FOUND" ? ifsc.status : null;
   return (
     <form action={action} className="space-y-4" noValidate>
       <FormFeedback state={state} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField id={`${key}-name`} label="Account holder name" name="accountName" defaultValue={v("accountName")} error={e.accountName} />
-        <TextField id={`${key}-bank`} label="Bank" name="bankName" placeholder="e.g. HDFC Bank" defaultValue={v("bankName")} error={e.bankName} />
+        <TextField id={`${key}-ifsc`} label="IFSC" name="ifscCode" placeholder="HDFC0001234" autoComplete="off"
+          autoCapitalize="characters" spellCheck={false} onChange={findBank} maxLength={11}
+          defaultValue={v("ifscCode")} error={typedError || (typedError === null ? e.ifscCode : undefined)} />
+        <div className="space-y-1">
+          {/* Filled in from the code, but still editable: the directory can be down or not know a new branch. */}
+          <TextField id={`${key}-bank`} label="Bank name" name="bankName" value={bank} error={e.bankName}
+            placeholder={ifsc === "checking" ? "Checking the IFSC code…" : "Filled in from the IFSC code"}
+            onChange={(event) => setBank(event.target.value)} />
+          {missed && (
+            <p className="text-xs text-muted">
+              {missed === "NOT_FOUND" ? "We couldn't find this IFSC code. Check it, or enter the bank yourself."
+                : "We couldn't look up this code just now. Enter the bank yourself."}
+            </p>
+          )}
+        </div>
         <TextField id={`${key}-number`} label="Account number" name="accountNumber" inputMode="numeric" autoComplete="off"
           defaultValue={v("accountNumber")} error={e.accountNumber} />
-        <TextField id={`${key}-ifsc`} label="IFSC" name="ifscCode" placeholder="HDFC0001234" autoComplete="off"
-          autoCapitalize="characters" spellCheck={false} onChange={upperCase} maxLength={11}
-          defaultValue={v("ifscCode")} error={e.ifscCode} />
+        <TextField id={`${key}-name`} label="Account holder name" name="accountName" defaultValue={v("accountName")} error={e.accountName} />
         <TextField id={`${key}-branch`} label="Branch (optional)" name="branch" defaultValue={v("branch")} error={e.branch} />
         <TextField id={`${key}-upi`} label="UPI ID (optional)" name="upiId" placeholder="name@bank" autoComplete="off"
           defaultValue={v("upiId")} error={e.upiId} />

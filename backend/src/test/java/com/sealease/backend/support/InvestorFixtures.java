@@ -53,7 +53,7 @@ public final class InvestorFixtures {
 		}
 		String number = String.valueOf(ThreadLocalRandom.current().nextLong(100_000_000_000L, 999_999_999_999L));
 		String accountId = JsonPath.read(mvc.perform(BankAccountUploads.addAccount("""
-						{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"IN","currency":"INR",
+						{"accountHolderName":"Test Investor","country":"IN","currency":"INR",
 						 "accountNumber":"%s","routingCode":"HDFC0001234"}""".formatted(number))
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
@@ -62,17 +62,14 @@ public final class InvestorFixtures {
 			.andExpect(status().isOk());
 	}
 
-	/** Puts {@code containers} containers of the plan in the cart and checks out; returns the order id (awaiting payment). */
-	public String placeOrder(Account investor, UUID product, int containers) throws Exception {
+	/** Buys {@code lots} lots (₹50,000 each) of the plan; returns the order id (awaiting payment). */
+	public String placeOrder(Account investor, UUID product, int lots) throws Exception {
 		ensureVerifiedBankAccount(investor);
-		mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":" + containers + "}"))
-			.andExpect(status().isOk());
 		return JsonPath.read(mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"acceptedTerms":["%s"]}"""
-					.formatted(product)))
+						{"productId":"%s","units":%d,"acceptTerms":true}"""
+					.formatted(product, lots * OfferingFixtures.LOT)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 
@@ -116,39 +113,29 @@ public final class InvestorFixtures {
 		return orderId;
 	}
 
-	/**
-	 * Finance assigns a new container, by number, to each of the order's paid investments, and the investor accepts
-	 * each lease agreement, which starts the leases. The investor is the order's, already signed in: signing in again
-	 * would end the session their test is holding.
-	 */
+	/** The investor accepts the agreement of each of the order's paid investments, which starts them. */
 	public void assignContainers(Account investor, String orderId) throws Exception {
-		List<UUID> holdings = assignContainersOnly(orderId);
-		for (UUID holding : holdings) {
+		for (UUID holding : awaitingAcceptance(orderId)) {
 			acceptAgreement(investor, holding);
 		}
 	}
 
-	/** The investor accepts the lease agreement of a container assigned to them. */
+	/** Makes the investor a network investor. */
+	public void enrolInNetwork(Account investor) {
+		jdbc.update("INSERT INTO network_investors (user_id, signups_join_network, created_at) VALUES (?, false, now())",
+				investor.id());
+	}
+
+	/** The investor accepts the investment agreement, which starts the term and returns. */
 	public void acceptAgreement(Account investor, UUID holdingId) throws Exception {
 		mvc.perform(post("/api/v1/agreements/{id}/accept", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk());
 	}
 
-	/** Finance assigns containers; the holdings then await the investor's acceptance. Returns the holdings assigned. */
-	public List<UUID> assignContainersOnly(String orderId) throws Exception {
-		List<UUID> awaiting = jdbc.queryForList(
-				"SELECT id FROM holdings WHERE order_id = ?::uuid AND status = 'AWAITING_CONTAINER' ORDER BY created_at",
+	/** The order's paid investments awaiting the investor's acceptance. */
+	public List<UUID> awaitingAcceptance(String orderId) {
+		return jdbc.queryForList("SELECT id FROM holdings WHERE order_id = ?::uuid AND status = 'AWAITING_ACCEPTANCE' ORDER BY created_at",
 				UUID.class, orderId);
-		Account admin = api.admin();
-		for (UUID holding : awaiting) {
-			api.takeContainerTask(holding, admin);
-			mvc.perform(post("/api/v1/admin/container-assignments/{id}", holding)
-					.header(HttpHeaders.AUTHORIZATION, admin.bearer())
-					.contentType(MediaType.APPLICATION_JSON)
-					.content("{\"containerNumber\":\"" + OfferingFixtures.containerNumber() + "\"}"))
-				.andExpect(status().isNoContent());
-		}
-		return awaiting;
 	}
 
 }

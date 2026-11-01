@@ -13,7 +13,6 @@ import com.sealease.backend.investment.service.HoldingService;
 import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.permission.PermissionCode;
-import com.sealease.backend.reporting.dto.Workload;
 import com.sealease.backend.role.service.UserRoleService;
 import com.sealease.backend.helpdesk.dto.Agent;
 import com.sealease.backend.helpdesk.dto.OpenTicketRequest;
@@ -53,7 +52,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -495,34 +493,6 @@ public class SupportService {
 					? "Assign this ticket to yourself before working on it"
 					: "Another finance member is working on this ticket");
 		}
-	}
-
-	/** A team's tickets pending, the viewer's among them, and done in each period ({@code [from, to)}) by anyone and by the viewer. */
-	@Transactional(readOnly = true)
-	public Workload.Counts workload(SupportTeam team, UUID viewerId, Instant today, Instant month, Instant to) {
-		return new Workload.Counts(tickets.countPendingForTeam(team, null), tickets.countOverdueForTeam(team, clock.instant()),
-				tickets.countPendingForTeam(team, viewerId),
-				tickets.countDoneForTeam(team, null, today, to), tickets.countDoneForTeam(team, viewerId, today, to),
-				tickets.countDoneForTeam(team, null, month, to), tickets.countDoneForTeam(team, viewerId, month, to));
-	}
-
-	/** A team's pending tickets for each priority, most urgent first; every priority has a row. */
-	@Transactional(readOnly = true)
-	public List<Workload.PriorityRow> pendingByPriority(SupportTeam team, UUID viewerId) {
-		Map<TicketPriority, Object[]> rows = new EnumMap<>(TicketPriority.class);
-		tickets.pendingByPriority(team, viewerId, clock.instant()).forEach(row -> rows.put((TicketPriority) row[0], row));
-		List<Workload.PriorityRow> out = new ArrayList<>();
-		for (int i = TicketPriority.values().length - 1; i >= 0; i--) {
-			TicketPriority priority = TicketPriority.values()[i];
-			Object[] row = rows.get(priority);
-			out.add(row == null ? new Workload.PriorityRow(priority, 0, 0, 0, 0)
-					: new Workload.PriorityRow(priority, count(row[1]), count(row[2]), count(row[3]), count(row[4])));
-		}
-		return out;
-	}
-
-	private static long count(Object value) {
-		return value == null ? 0 : ((Number) value).longValue();
 	}
 
 	@Transactional(readOnly = true)

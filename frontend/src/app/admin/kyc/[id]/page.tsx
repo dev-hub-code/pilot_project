@@ -5,12 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
-import { approveKycAction, assignKycAction, rejectKycAction, unassignKycAction } from "@/features/admin/actions";
+import { approveKycAction, assignVerificationAction, rejectKycAction, unassignVerificationAction } from "@/features/admin/actions";
+import { BankAccountReview } from "@/features/admin/bank-account-review";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
 import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
-import type { KycReviewDetail } from "@/types/user";
+import { Permission, hasPermission } from "@/lib/permissions";
+import type { AdminBankAccount, Assignee, KycReviewDetail } from "@/types/user";
 import { formatAadhaar, KYC_DOCUMENT_LABEL, kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDate, formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 import { EmailText } from "@/components/ui/email-text";
@@ -36,6 +38,20 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
     s.legalFirstName.toLowerCase() !== account.firstName.toLowerCase() ||
     s.legalLastName.toLowerCase() !== account.lastName.toLowerCase();
   const ownSubmission = s.userId === session.userId;
+  const canVerifyBanks = hasPermission(session.permissions, Permission.BANK_ACCOUNT_VERIFY);
+  const banks = canVerifyBanks ? await authFetch<AdminBankAccount[]>(`/api/v1/admin/users/${s.userId}/bank-accounts`) : [];
+  const identityApproved = s.status === "APPROVED";
+
+  // One Assign to me covers the review and the investor's bank accounts waiting: whatever nobody else holds.
+  const openBanks = ownSubmission ? [] : banks.filter((b) => b.account.status === "PENDING_VERIFICATION");
+  const openKyc = s.status === "PENDING" && !ownSubmission;
+  const assignees = [...(openKyc ? [s.assignee] : []), ...openBanks.map((b) => b.assignee)];
+  const someoneFree = assignees.some((a) => !a);
+  const held = (assignee: Assignee | null) => assignee?.id === session.userId;
+  const assignable = (assignee: Assignee | null) => !assignee || held(assignee);
+  const shownAssignee = someoneFree ? null : assignees.find(held) ?? assignees[0] ?? null;
+  const kycIf = (want: (a: Assignee | null) => boolean) => (openKyc && want(s.assignee) ? s.id : null);
+  const banksIf = (want: (a: Assignee | null) => boolean) => openBanks.filter((b) => want(b.assignee)).map((b) => b.account.id);
 
   return (
     <div className="space-y-6">
@@ -92,21 +108,43 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
               })}
             </div>
           </Card>
+
+          {canVerifyBanks && (
+            <Card title="Bank verification" description="Compare the holder name with the verified identity before approving payouts.">
+              {banks.length === 0 ? (
+                <p className="text-sm text-muted">This investor has not added a bank account yet.</p>
+              ) : (
+                <div className="space-y-6">
+                  {!identityApproved && banks.some((b) => b.account.status === "PENDING_VERIFICATION") && (
+                    <Notice tone="warning">Approve the identity first: a bank account can only be verified after that.</Notice>
+                  )}
+                  {banks.map((bank) => (
+                    <BankAccountReview key={bank.account.id} item={bank} viewerId={session.userId} canVerify={identityApproved} sharedAssignment />
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
 
-        {s.status === "PENDING" && (
+        {ownSubmission && s.status === "PENDING" ? (
           <Card title="Decision">
-            {ownSubmission ? (
-              <Notice tone="warning">You cannot review your own verification.</Notice>
-            ) : (
-              <ReviewAssignment assignee={s.assignee} viewerId={session.userId}
-                assign={assignKycAction.bind(null, s.id)} unassign={unassignKycAction.bind(null, s.id)}>
-                <ConfirmForm action={approveKycAction.bind(null, s.id)} submitLabel="Approve identity"
-                  confirm="Approve this identity verification?" />
-                <ReasonForm action={rejectKycAction.bind(null, s.id)} label="Rejection reason (shown to the investor)"
-                  submitLabel="Reject" />
-              </ReviewAssignment>
-            )}
+            <Notice tone="warning">You cannot review your own verification.</Notice>
+          </Card>
+        ) : assignees.length > 0 && (
+          <Card title="Decision">
+            <ReviewAssignment assignee={shownAssignee} viewerId={session.userId}
+              assign={assignVerificationAction.bind(null, kycIf(assignable), banksIf(assignable))}
+              unassign={unassignVerificationAction.bind(null, kycIf(held), banksIf(held))}>
+              {openKyc && held(s.assignee) ? (
+                <>
+                  <ConfirmForm action={approveKycAction.bind(null, s.id)} submitLabel="Approve identity"
+                    confirm="Approve this identity verification?" />
+                  <ReasonForm action={rejectKycAction.bind(null, s.id)} label="Rejection reason (shown to the investor)"
+                    submitLabel="Reject" />
+                </>
+              ) : null}
+            </ReviewAssignment>
           </Card>
         )}
       </div>

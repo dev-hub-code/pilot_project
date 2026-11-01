@@ -1,15 +1,10 @@
 package com.sealease.backend.investment.entity;
 
 public enum HoldingStatus {
-	/** Paid for; finance has not assigned a container yet. No lease and no payouts until it does. */
-	AWAITING_CONTAINER,
-	/**
-	 * Finance assigned the container (it is the investor's) and issued the lease agreement; the lease and rent start
-	 * when the investor accepts it.
-	 */
+	/** Paid for; the term and returns start when the investor accepts the investment agreement. */
 	AWAITING_ACCEPTANCE,
-	/** The container is on lease and payouts are running. */
+	/** The term is running and returns are being credited. */
 	ACTIVE,
-	/** Every payout of the tenure has been paid; the container went back to inventory. */
+	/** Every payout of the term has been paid. */
 	MATURED
 }

@@ -1,5 +1,5 @@
 import type { ColumnDatum } from "@/components/charts/column-chart";
-import type { Money } from "@/types/marketplace";
+import type { Money } from "@/types/plan";
 
 const short = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
 const long = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });

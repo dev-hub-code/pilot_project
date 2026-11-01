@@ -3,12 +3,12 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductForm } from "@/features/admin/product-form";
 
-export const metadata: Metadata = { title: "New container listing" };
+export const metadata: Metadata = { title: "New plan" };
 
 export default function NewProductPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="New container listing" description="Created as a draft. Terms become binding once published." />
+      <PageHeader title="New plan" description="Created as a draft. Terms become binding once published." />
       <Card><ProductForm /></Card>
     </div>
   );

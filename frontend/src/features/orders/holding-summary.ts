@@ -1,16 +1,15 @@
 import type { Holding } from "@/types/order";
 
 /**
- * Where an investor's containers stand, e.g. "1 on lease · 2 awaiting your acceptance"; "" when they own none.
- * Leases start only once a container is assigned and its agreement accepted, so "on lease" alone can read 0.
+ * Where an investor's investments stand, e.g. "1 running · 2 awaiting your acceptance"; "" when they have none.
+ * A term starts only once its agreement is accepted, so "running" alone can read 0.
  */
 export function holdingBreakdown(holdings: readonly Pick<Holding, "status">[]): string {
   const count = (status: Holding["status"]) => holdings.filter((h) => h.status === status).length;
   return [
-    [count("ACTIVE"), "on lease"],
+    [count("ACTIVE"), "running"],
     [count("AWAITING_ACCEPTANCE"), "awaiting your acceptance"],
-    [count("AWAITING_CONTAINER"), "awaiting a container number"],
-    [count("MATURED"), "lease completed"],
+    [count("MATURED"), "completed"],
   ].filter(([n]) => Number(n) > 0).map(([n, label]) => `${n} ${label}`).join(" · ");
 }
 

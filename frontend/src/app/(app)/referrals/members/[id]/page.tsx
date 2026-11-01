@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
-import type { DownlineMember } from "@/types/referral";
+import type { DownlineMember, ReferralOverview } from "@/types/referral";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
@@ -14,6 +14,9 @@ export const metadata: Metadata = { title: "Referral member" };
 export default async function ReferralMemberPage({ params }: PageProps<"/referrals/members/[id]">) {
   const { id } = await params;
   if (!/^m[1-9]\d{0,8}$/.test(id)) notFound();
+  // Online investors have no member pages: their page lists the people they invited, with what each earned them.
+  const overview = await authFetch<ReferralOverview>("/api/v1/referrals/me");
+  if (overview.scheme === "ONLINE") redirect("/referrals");
   let member: DownlineMember;
   try {
     member = await authFetch<DownlineMember>(`/api/v1/referrals/members/${id}`);
@@ -32,7 +35,7 @@ export default async function ReferralMemberPage({ params }: PageProps<"/referra
         <div className="space-y-2 bg-surface p-6">
           <p className="text-xs uppercase tracking-[0.1em] text-muted">You earned from {member.displayName}</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
-          <p className="text-xs text-muted">Commission is credited {credit}, alongside the rent on this member&apos;s containers.</p>
+          <p className="text-xs text-muted">Commission is credited {credit}, alongside this member&apos;s returns.</p>
         </div>
       </section>
     </div>

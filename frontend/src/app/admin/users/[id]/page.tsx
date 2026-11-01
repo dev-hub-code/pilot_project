@@ -68,7 +68,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
     ])
     : [null, null];
   const isStaffAccount = authorities?.permissions.some((p) => p !== Permission.INVESTOR_PORTAL) ?? false;
-  // Withdrawals: how referral earnings are paid this year.
+  // Withdrawals: how returns and referral earnings are paid.
   const showWithdrawals = !fromBankVerification && !isStaffAccount && can(Permission.WITHDRAWAL_VIEW) && session.userId !== id;
   const referralMode = showWithdrawals ? await authFetch<ReferralPayoutMode>(`/api/v1/admin/users/${id}/referral-mode`) : null;
   const { summary, profile } = user;
@@ -159,7 +159,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                           unassign={unassignBankAccountAction.bind(null, account.id)}>
                           <div className="grid gap-4 sm:grid-cols-2">
                             <ConfirmForm action={verifyBankAccountAction.bind(null, account.id)} submitLabel="Verify"
-                              confirm={`Verify ${account.bankName} ${accountNumber ?? account.accountNumberMasked} for payouts?`} />
+                              confirm={`Verify ${account.bankName ?? "Account"} ${accountNumber ?? account.accountNumberMasked} for payouts?`} />
                             <ReasonForm action={rejectBankAccountAction.bind(null, account.id)} label="Rejection reason"
                               submitLabel="Reject" />
                           </div>
@@ -185,6 +185,11 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           {!fromBankVerification && (
           <Card title="Referrals" description={referral.code ? `Referral code ${referral.code}` : "Has not opened their referral page yet."}>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <Item label="Referral scheme">
+                {referral.scheme === "NETWORK"
+                  ? `Network: monthly on four levels${referral.signupsJoinNetwork ? "; their signups join the network" : ""}`
+                  : "Online: once on level 1"}
+              </Item>
               <Item label="Referred by">
                 {referral.uplines.length === 0 ? "—" : (
                   <ol className="space-y-1">
@@ -217,15 +222,15 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
 
         <div className="space-y-6">
           {referralMode && (
-            <Card title="Withdrawals" description="Rent on containers paid at the office is handed over in cash at the office (marked collected by hand); referral earnings are paid by bank sheet or in cash, as chosen for the year.">
+            <Card title="Withdrawals" description="Online investors are always paid by bank. Network investors are paid by bank sheet or in cash at the office, as they choose; cash is marked collected by hand.">
               <div className="space-y-5 text-sm">
                 <div className="space-y-2">
                   <p>
-                    Referral earnings in {referralMode.year}:{" "}
+                    Returns and referral earnings:{" "}
                     <span className="font-medium">{referralMode.mode === "OFFICE_CASH" ? "cash" : "into the bank account"}</span>
-                    <span className="text-muted">{referralMode.chosen ? " (chosen by the investor)" : " (default; not chosen yet)"}</span>
+                    <span className="text-muted">{!referralMode.changeable ? " (online investors are always paid by bank)" : referralMode.chosen ? " (chosen by the investor)" : " (default; not chosen yet)"}</span>
                   </p>
-                  {can(Permission.WITHDRAWAL_PROCESS) && <ReferralModeAdminForm userId={id} mode={referralMode.mode} />}
+                  {referralMode.changeable && can(Permission.WITHDRAWAL_PROCESS) && <ReferralModeAdminForm userId={id} mode={referralMode.mode} />}
                 </div>
               </div>
             </Card>
@@ -238,8 +243,8 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           {can(Permission.USER_SUSPEND) && !isSelf && summary.status !== "DISABLED" && !fromBankVerification && (
             <Card title={summary.status === "ACTIVE" ? "Suspend account" : "Reactivate account"}
               description={summary.status === "ACTIVE"
-                ? "Signs the user out everywhere immediately. While suspended, their rent is held back (paid on reactivation) and they earn no referral commission."
-                : "Rent held back while suspended is credited at the next run."}>
+                ? "Signs the user out everywhere immediately. While suspended, their returns are held back (paid on reactivation) and they earn no referral commission."
+                : "Returns held back while suspended is credited at the next run."}>
               {summary.status === "ACTIVE" ? (
                 <ReasonForm action={suspendUserAction.bind(null, id)} label="Reason" submitLabel="Suspend"
                   confirm={`Suspend ${summary.email}? They will be signed out immediately.`} />
@@ -252,8 +257,8 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
           {can(Permission.USER_DISABLE) && !isSelf && !fromBankVerification && (
             <Card title={summary.status === "DISABLED" ? "Enable account" : "Disable account"}
               description={summary.status === "DISABLED"
-                ? "Lets the user sign in again. Rent held back while disabled is credited at the next run."
-                : "Super administrators only. Signs the user out, holds back their rent and stops their referral commission until enabled again."}>
+                ? "Lets the user sign in again. Returns held back while disabled is credited at the next run."
+                : "Super administrators only. Signs the user out, holds back their returns and stops their referral commission until enabled again."}>
               {summary.status === "DISABLED" ? (
                 <ReasonForm action={enableUserAction.bind(null, id)} label="Reason" submitLabel="Enable" variant="primary" />
               ) : (

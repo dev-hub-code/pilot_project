@@ -68,39 +68,6 @@ class FinanceScopeIntegrationTest {
 				"/api/v1/admin/investment-products", "/api/v1/admin/reports/offerings", "/api/v1/admin/referral-earnings" }) {
 			fetch(finance, path).andExpect(status().isForbidden());
 		}
-		// The overview shows no investment figures or charts.
-		fetch(finance, "/api/v1/admin/dashboard")
-			.andExpect(jsonPath("$[*].id", not(hasItem("capital"))))
-			.andExpect(jsonPath("$[*].id", not(hasItem("payouts"))))
-			.andExpect(jsonPath("$[*].id", not(hasItem("withdrawals"))));
-		fetch(finance, "/api/v1/admin/dashboard/charts")
-			.andExpect(jsonPath("$.invested").doesNotExist())
-			.andExpect(jsonPath("$.payouts").doesNotExist());
-	}
-
-	@Test
-	void aContainerIsAssignedOnlyByTheFinanceMemberWhoTookTheTask() throws Exception {
-		Account investor = new InvestorFixtures(mvc, jdbc, api).approvedInvestor();
-		UUID product = new OfferingFixtures(mvc, api.admin()).plan();
-		String orderId = new InvestorFixtures(mvc, jdbc, api).paidOrder(investor, product, 1);
-		String holding = jdbc.queryForObject("SELECT id::text FROM holdings WHERE order_id = ?::uuid", String.class, orderId);
-
-		assignContainer(finance, holding).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("Assign this task to yourself")));
-		task(finance, holding, "take").andExpect(status().isOk())
-			.andExpect(jsonPath("$.assignee.id").value(finance.id().toString()));
-		task(colleague, holding, "take").andExpect(status().isConflict());
-		assignContainer(colleague, holding).andExpect(status().isUnprocessableContent());
-		task(colleague, holding, "release").andExpect(status().isUnprocessableContent());
-
-		// Given back, the colleague takes it and assigns the container.
-		task(finance, holding, "release").andExpect(status().isOk()).andExpect(jsonPath("$.assignee").doesNotExist());
-		task(colleague, holding, "take").andExpect(status().isOk());
-		assignContainer(colleague, holding).andExpect(status().isNoContent());
-		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?::uuid", String.class, holding))
-			.isEqualTo("AWAITING_ACCEPTANCE");
-		assertThat(api.auditCount("CONTAINER_TASK_ASSIGNED", holding)).isEqualTo(2);
-		assertThat(api.auditCount("CONTAINER_TASK_UNASSIGNED", holding)).isEqualTo(1);
 	}
 
 	@Test
@@ -178,6 +145,7 @@ class FinanceScopeIntegrationTest {
 		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
 		Account investor = investors.approvedInvestor();
 		investors.ensureVerifiedBankAccount(investor);
+		investors.enrolInNetwork(investor);
 		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
 						{"userId":"%s","currency":"INR","direction":"CREDIT","amount":"700","reason":"Test funding","balance":"RENT_BANK"}
@@ -201,58 +169,6 @@ class FinanceScopeIntegrationTest {
 		markPaid(finance, task).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAID"));
 		financeTask(finance, task, "release").andExpect(status().isConflict());
 		assertThat(api.auditCount("FINANCE_TASK_ASSIGNED", task)).isEqualTo(1);
-	}
-
-	@Test
-	void theFinanceDashboardCountsPendingAssignedAndCompletedTasksAndTickets() throws Exception {
-		Map<String, Integer> tasksBefore = workload("financeTasks");
-		Map<String, Integer> ticketsBefore = workload("financeTickets");
-		assertThat(tasksBefore).containsEntry("assignedToMe", 0).containsEntry("doneTodayByMe", 0);
-
-		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
-		Account investor = investors.approvedInvestor();
-		investors.ensureVerifiedBankAccount(investor);
-		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
-				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
-						{"userId":"%s","currency":"INR","direction":"CREDIT","amount":"700","reason":"Test funding","balance":"RENT_BANK"}
-						""".formatted(investor.id())))
-			.andExpect(status().isCreated());
-		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
-			.andExpect(status().isCreated());
-		String task = jdbc.queryForObject("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid", String.class, investor.id());
-		String ticket = openTicket(investor, "Where is my withdrawal?");
-		team(api.staff("SUPPORT"), ticket, "FINANCE").andExpect(status().isOk());
-
-		financeTask(finance, task, "take").andExpect(status().isOk());
-		assign(finance, ticket, finance.id()).andExpect(status().isOk());
-		Map<String, Integer> tasks = workload("financeTasks");
-		Map<String, Integer> tickets = workload("financeTickets");
-		assertThat(tasks.get("pending")).isGreaterThanOrEqualTo(1);
-		assertThat(tasks).containsEntry("assignedToMe", 1);
-		assertThat(tickets.get("pending")).isEqualTo(ticketsBefore.get("pending") + 1);
-		assertThat(tickets).containsEntry("assignedToMe", 1);
-
-		markPaid(finance, task).andExpect(status().isOk());
-		mvc.perform(post("/api/v1/admin/support/tickets/{id}/status", ticket).header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
-			.andExpect(status().isOk());
-		for (Map<String, Integer> done : List.of(workload("financeTasks"), workload("financeTickets"))) {
-			assertThat(done).containsEntry("assignedToMe", 0).containsEntry("doneTodayByMe", 1).containsEntry("doneThisMonthByMe", 1);
-			assertThat(done.get("doneToday")).isGreaterThanOrEqualTo(1);
-		}
-		assertThat(workload("financeTickets").get("pending")).isEqualTo(ticketsBefore.get("pending"));
-		assertThat(workload("financeTickets").get("doneToday")).isEqualTo(ticketsBefore.get("doneToday") + 1);
-
-		// Support has no finance workload; Admin only the tasks.
-		fetch(api.staff("SUPPORT"), "/api/v1/admin/dashboard/workload")
-			.andExpect(jsonPath("$.financeTasks").doesNotExist()).andExpect(jsonPath("$.financeTickets").doesNotExist());
-		fetch(api.staff("ADMIN"), "/api/v1/admin/dashboard/workload")
-			.andExpect(jsonPath("$.financeTasks.pending").exists()).andExpect(jsonPath("$.financeTickets").doesNotExist());
-	}
-
-	private Map<String, Integer> workload(String part) throws Exception {
-		return JsonPath.read(fetch(finance, "/api/v1/admin/dashboard/workload").andExpect(status().isOk())
-			.andReturn().getResponse().getContentAsString(), "$." + part);
 	}
 
 	private ResultActions financeTask(Account who, String withdrawalId, String action) throws Exception {
@@ -279,16 +195,6 @@ class FinanceScopeIntegrationTest {
 
 	private ResultActions fetch(Account who, String path) throws Exception {
 		return mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, who.bearer()));
-	}
-
-	private ResultActions task(Account who, String holdingId, String action) throws Exception {
-		return mvc.perform(post("/api/v1/admin/container-assignments/{id}/" + action, holdingId)
-			.header(HttpHeaders.AUTHORIZATION, who.bearer()));
-	}
-
-	private ResultActions assignContainer(Account who, String holdingId) throws Exception {
-		return mvc.perform(post("/api/v1/admin/container-assignments/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, who.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"containerNumber\":\"" + OfferingFixtures.containerNumber() + "\"}"));
 	}
 
 	private String openTicket(Account investor, String subject) throws Exception {

@@ -47,5 +47,5 @@ export async function runPayoutsAction(): Promise<FormState> {
   }
   revalidatePath("/admin/payouts");
   revalidatePath("/admin/ledger", "layout");
-  return { success: result.credited === 0 ? "Nothing was due." : `Credited ${result.credited} day(s) of rent to investors' wallets.` };
+  return { success: result.credited === 0 ? "Nothing was due." : `Credited ${result.credited} day(s) of returns to investors' wallets.` };
 }

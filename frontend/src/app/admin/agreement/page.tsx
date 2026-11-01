@@ -8,7 +8,7 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { AgreementTemplateView } from "@/types/agreement";
 import { formatDateTime } from "@/utils/format";
 
-export const metadata: Metadata = { title: "Lease agreement" };
+export const metadata: Metadata = { title: "Investment agreement" };
 
 export default async function AdminAgreementPage() {
   await requireStaff();
@@ -17,17 +17,17 @@ export default async function AdminAgreementPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Lease agreement"
-        description="The agreement each investor receives when finance assigns their container. It is filled in with the investment's details and kept as issued: changing the wording here affects only agreements issued afterwards." />
+      <PageHeader title="Investment agreement"
+        description="The agreement each investor receives when their payment is confirmed. It is filled in with the investment's details and kept as issued: changing the wording here affects only agreements issued afterwards." />
 
       <Card title={current ? `Wording in force · version ${current.version}` : "No wording yet"}
         description={current
           ? `Saved ${formatDateTime(current.createdAt)}${current.createdByName ? ` by ${current.createdByName}` : " (as shipped)"}`
-          : "Containers cannot be assigned until the agreement has wording."}
+          : "Investors cannot be issued an agreement until it has wording."}
         actions={current && (
           <a href="/admin/agreement/sample" className={`${buttonBase} ${buttonVariants.secondary}`}>Sample PDF</a>
         )}>
-        <AgreementTemplateForm title={current?.title ?? "Container Lease Agreement"} body={current?.body ?? ""}
+        <AgreementTemplateForm title={current?.title ?? "Investment Agreement"} body={current?.body ?? ""}
           placeholders={view.placeholders} />
       </Card>
 

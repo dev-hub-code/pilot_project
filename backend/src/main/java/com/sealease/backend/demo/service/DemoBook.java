@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.investment.entity.ProductTerms;
 
 /**
@@ -48,7 +47,6 @@ public final class DemoBook {
 	 * @param memberId {@code null} for the demo investor's own order
 	 */
 	public record Order(UUID id, UUID memberId, String number, UUID productId, String planCode, String planTitle,
-			ContainerType containerType,
 			int containers, Money pricePerContainer, BigDecimal rentPercent, int tenureMonths, LocalDate startsOn) {
 
 		public Money amount() {

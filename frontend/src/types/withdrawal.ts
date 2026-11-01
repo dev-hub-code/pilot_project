@@ -1,7 +1,7 @@
 import type { Assignee } from "@/types/user";
 /** Mirrors of the backend's Phase 8 DTOs (withdrawals and payout batches). */
 import type { EarningsBalance } from "./earning";
-import type { Money } from "./marketplace";
+import type { Money } from "./plan";
 
 export type WithdrawalStatus =
   | "PENDING_APPROVAL"
@@ -20,8 +20,8 @@ export interface Withdrawal {
   reference: string;
   userId: string;
   amount: Money;
-  /** SCHEDULED by a monthly run, OFFICE when finance made it at the office; INVESTOR for earlier requests. */
-  origin: "INVESTOR" | "SCHEDULED" | "OFFICE";
+  /** SCHEDULED by a run, OFFICE when finance made it at the office; REQUESTED by an online investor; INVESTOR for earlier requests. */
+  origin: "INVESTOR" | "SCHEDULED" | "OFFICE" | "REQUESTED";
   status: WithdrawalStatus;
   /** BANK_TRANSFER into the account shown, or OFFICE_CASH collected at the office (no bank details). */
   payoutMethod: WithdrawalPayoutMethod;
@@ -77,6 +77,8 @@ export interface ReferralPayoutMode {
   mode: WithdrawalPayoutMethod;
   chosen: boolean;
   chosenAt: string | null;
+  /** Network investors may change it at any time; online investors are always paid by bank. */
+  changeable: boolean;
 }
 
 export type BatchStatus = "CREATED" | "SENT" | "CLOSED" | "CANCELLED";

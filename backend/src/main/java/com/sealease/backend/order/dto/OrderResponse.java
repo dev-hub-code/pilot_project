@@ -27,11 +27,10 @@ public record OrderResponse(
 		Instant createdAt,
 		List<OrderItemResponse> items) {
 
-	/** @param containerNumbers by order item id; only the containers that may be shown */
-	public static OrderResponse from(InvestmentOrder o, List<OrderItem> items, Map<UUID, String> containerNumbers) {
+	public static OrderResponse from(InvestmentOrder o, List<OrderItem> items) {
 		return new OrderResponse(o.getId(), o.getOrderNumber(), o.getUserId(), o.getStatus(),
 				MoneyResponse.from(o.total()), o.getExpiresAt(), o.getConfirmedAt(), o.getClosedAt(), o.getCloseReason(),
-				o.getCreatedAt(), items.stream().map(i -> OrderItemResponse.from(i, containerNumbers.get(i.getId())))
+				o.getCreatedAt(), items.stream().map(i -> OrderItemResponse.from(i))
 					.toList());
 	}
 

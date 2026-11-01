@@ -5,9 +5,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ProductForm } from "@/features/admin/product-form";
 import { authFetch } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Product } from "@/types/marketplace";
+import type { Product } from "@/types/plan";
 
-export const metadata: Metadata = { title: "Edit container listing" };
+export const metadata: Metadata = { title: "Edit plan" };
 
 export default async function EditProductPage({ params }: PageProps<"/admin/products/[id]/edit">) {
   const { id } = await params;

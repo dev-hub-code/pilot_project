@@ -44,7 +44,7 @@ public class Holding extends BaseEntity {
 	@Column(name = "currency", nullable = false, updatable = false, length = 3)
 	private String currency;
 
-	@Column(name = "monthly_rent_percent", nullable = false, updatable = false, precision = 5, scale = 2)
+	@Column(name = "monthly_rent_percent", nullable = false, updatable = false, precision = 12, scale = 8)
 	private BigDecimal monthlyRentPercent;
 
 	@Column(name = "monthly_capital_return_percent", nullable = false, updatable = false, precision = 9, scale = 4)
@@ -90,40 +90,20 @@ public class Holding extends BaseEntity {
 	protected Holding() {
 	}
 
-	public Holding(UUID userId, UUID productId, UUID orderId, UUID orderItemId, UUID containerId, Money amount,
-			BigDecimal monthlyRentPercent, BigDecimal monthlyCapitalReturnPercent, int tenureMonths,
-			LocalDate leaseStartsOn, Instant confirmedAt, boolean paidAtOffice) {
+	public Holding(UUID userId, UUID productId, UUID orderId, UUID orderItemId, Money amount,
+			BigDecimal monthlyRentPercent, BigDecimal monthlyCapitalReturnPercent, int tenureMonths, Instant confirmedAt, boolean paidAtOffice) {
 		this.userId = userId;
 		this.paidAtOffice = paidAtOffice;
 		this.productId = productId;
 		this.orderId = orderId;
 		this.orderItemId = orderItemId;
-		this.containerId = containerId;
 		this.amount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
 		this.monthlyRentPercent = monthlyRentPercent;
 		this.monthlyCapitalReturnPercent = monthlyCapitalReturnPercent;
 		this.tenureMonths = tenureMonths;
 		this.confirmedAt = confirmedAt;
-		if (containerId == null) {
-			this.status = HoldingStatus.AWAITING_CONTAINER;
-		}
-		else {
-			this.leaseStartsOn = leaseStartsOn;
-			this.leaseEndsOn = leaseStartsOn.plusMonths(tenureMonths);
-			this.status = HoldingStatus.ACTIVE;
-		}
-	}
-
-	/** Finance assigned the container; the lease starts once the investor accepts the lease agreement. */
-	public void assignContainer(UUID containerId, UUID assignedBy, Instant now) {
-		if (status != HoldingStatus.AWAITING_CONTAINER) {
-			throw new IllegalStateException("Holding " + getId() + " is " + status + ", not awaiting a container");
-		}
-		this.containerId = containerId;
 		this.status = HoldingStatus.AWAITING_ACCEPTANCE;
-		this.assignedBy = assignedBy;
-		this.assignedAt = now;
 	}
 
 	/** The investor accepted the lease agreement: the lease runs from {@code leaseStartsOn} for the tenure. */

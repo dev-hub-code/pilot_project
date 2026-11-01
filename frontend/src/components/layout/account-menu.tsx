@@ -16,7 +16,10 @@ export interface MenuSection {
   links: readonly MenuLink[];
 }
 
-/** The avatar in the header: opens the site menu as a vertical list, with sign-out at the bottom. */
+/**
+ * The avatar in the header: who is signed in and sign-out. On narrower screens, where there is no side panel, it also
+ * opens the site menu as a vertical list.
+ */
 export function AccountMenu({ sections, name, email, userCode, demo = false }: {
   sections: readonly MenuSection[];
   name: string;
@@ -70,7 +73,7 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
             {email && <p className="truncate text-xs text-muted"><EmailText>{email}</EmailText></p>}
             {userCode && <p className="mt-1 font-mono text-xs text-muted">ID {userCode}</p>}
           </div>
-          <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm">
+          <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm lg:hidden">
             {sections.map((section, index) => (
               <div key={section.label ?? index} className={index > 0 ? "mt-1 border-t border-border pt-1" : ""}>
                 {sections.length > 1 && section.label && (
@@ -97,7 +100,7 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
             ))}
           </nav>
           {/* A full page request (see app/logout/route.ts), so no signed-in page stays in the browser. */}
-          <form action="/logout" method="post" className="border-t border-border">
+          <form action="/logout" method="post" className="border-t border-border lg:border-t-0">
             <button type="submit" className="block w-full px-4 py-3 text-left text-sm text-muted hover:bg-background hover:text-foreground">
               Sign out
             </button>

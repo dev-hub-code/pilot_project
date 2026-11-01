@@ -14,9 +14,8 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * The investor accepts the lease agreement of a container assigned to them. Accepting starts the lease at the next
- * full hour and, with it, the rent; nothing is earned before. The holding row is locked first, so a double
- * submission starts one lease.
+ * The investor accepts the agreement of a paid investment. Accepting starts the term at the next full hour and, with
+ * it, the returns; nothing is earned before. The holding row is locked first, so a double submission starts one term.
  */
 @Service
 public class AgreementAcceptanceService {
@@ -42,9 +41,9 @@ public class AgreementAcceptanceService {
 		payouts.schedule(terms);
 		HoldingResponse leased = holdings.get(holdingId);
 		LeaseAgreementResponse accepted = agreements.accept(userId, holdingId, leased.leaseStartsOn(), leased.leaseEndsOn());
-		notifications.notify(userId, "LEASE_STARTED", "Your lease of " + terms.containerNumber() + " has started",
+		notifications.notify(userId, "LEASE_STARTED", "Your investment has started",
 				terms.productCode() + ": you accepted agreement " + accepted.agreementNumber()
-						+ ". Your lease starts at the next full hour; rent is credited to your wallet "
+						+ ". Your term starts at the next full hour; returns are credited to your wallet "
 						+ payouts.creditInterval().label() + " from then on.", "/portfolio");
 		return accepted;
 	}

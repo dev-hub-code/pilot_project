@@ -10,6 +10,7 @@ export const scheduleRatesSchema = z.object({
   level2: percent,
   level3: percent,
   level4: percent,
+  oneTime: percent,
   /** datetime-local input, read in the display time zone; empty means "now". */
   effectiveFrom: z.string().trim().optional()
     .transform((v) => (v ? zonedInputToIso(v) : undefined))

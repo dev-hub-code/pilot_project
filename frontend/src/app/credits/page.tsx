@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: "The photographers and licences of the photos on the SeaLease website.",
 };
 
-/** The credits the CC BY / CC BY-SA photos on the site require, linked from the landing page footer. */
+/** The credits the CC BY / CC BY-SA photos on the site require. */
 export default function CreditsPage() {
   return (
     <div className="flex flex-1 bg-frame p-2 sm:p-5 lg:p-10">

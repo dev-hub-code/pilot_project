@@ -22,6 +22,10 @@ public interface OrderRepository extends JpaRepository<InvestmentOrder, UUID>, J
 	@Query("select o from InvestmentOrder o where o.id = :id")
 	Optional<InvestmentOrder> findByIdForUpdate(@Param("id") UUID id);
 
+	/** Holds off a concurrent order with the same idempotency key until this transaction ends. */
+	@Query(value = "SELECT CAST(pg_advisory_xact_lock(hashtextextended(:key, 0)) AS text)", nativeQuery = true)
+	String lockIdempotencyKey(@Param("key") String key);
+
 	@Query("select o from InvestmentOrder o where o.userId = :userId and o.idempotencyKey = :key")
 	Optional<InvestmentOrder> findByIdempotencyKey(@Param("userId") UUID userId, @Param("key") String key);
 

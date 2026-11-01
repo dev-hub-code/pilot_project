@@ -4,6 +4,8 @@ import { z } from "zod";
 
 export const referralModeSchema = z.object({ mode: z.enum(["BANK_TRANSFER", "OFFICE_CASH"]) });
 
+export const withdrawalRequestSchema = z.object({ balance: z.enum(["RENT_BANK", "RENT_CASH", "REFERRAL"]) });
+
 export const financeTaskSchema = z.object({
   outcome: z.enum(["PAID", "FAILED"]),
   reference: z.string().trim().max(100).optional().transform((v) => v || undefined),

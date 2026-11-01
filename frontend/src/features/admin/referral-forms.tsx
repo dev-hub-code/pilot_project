@@ -8,7 +8,7 @@ import { TIME_ZONE_LABEL } from "@/lib/time-zone";
 import type { FormState } from "@/validators/form-state";
 import { scheduleRatesAction } from "./referral-actions";
 
-export function ScheduleRatesForm({ current }: { current: number[] }) {
+export function ScheduleRatesForm({ current, currentOneTime }: { current: number[]; currentOneTime?: number }) {
   const [state, action] = useActionState<FormState, FormData>(scheduleRatesAction, {});
   const e = state.fieldErrors ?? {};
   const v = (name: string, fallback?: string) => state.values?.[name] ?? fallback;
@@ -20,6 +20,10 @@ export function ScheduleRatesForm({ current }: { current: number[] }) {
           <TextField key={level} label={`Level ${level} (%)`} name={`level${level}`} inputMode="decimal"
             defaultValue={v(`level${level}`, String(current[level - 1] ?? ""))} error={e[`level${level}`]} />
         ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-4">
+        <TextField label="Online scheme, once (%)" name="oneTime" inputMode="decimal"
+          defaultValue={v("oneTime", currentOneTime === undefined ? "" : String(currentOneTime))} error={e.oneTime} />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField label={`Takes effect (${TIME_ZONE_LABEL}, empty = now)`} name="effectiveFrom" type="datetime-local"

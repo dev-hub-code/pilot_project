@@ -13,8 +13,8 @@ export async function RentCreditCard({ permissions }: { permissions: readonly st
   const canEdit = hasPermission(permissions, Permission.SYSTEM_SETTINGS_MANAGE)
     || hasPermission(permissions, Permission.PAYOUT_PROCESS);
   return (
-    <Card title="How often rent is credited"
-      description="Rent accrues continuously; it reaches investors' wallets once each interval ends (intervals are counted in UTC, so a daily credit lands at midnight UTC). Changing it loses or repeats nothing: everything accrued since the last credit goes at the next boundary of the new interval. Leases still start at the full hour after acceptance.">
+    <Card title="How often returns are credited"
+      description="Returns accrues continuously; it reaches investors' wallets once each interval ends (intervals are counted in UTC, so a daily credit lands at midnight UTC). Changing it loses or repeats nothing: everything accrued since the last credit goes at the next boundary of the new interval. Terms still start at the full hour after acceptance.">
       {canEdit ? (
         <RentCreditIntervalForm intervalMinutes={settings.intervalMinutes} options={settings.options} />
       ) : (

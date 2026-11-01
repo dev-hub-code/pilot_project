@@ -39,7 +39,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
                 <dl className="grid grid-cols-2 gap-3">
                   <CardField label="Total"><span className="font-medium tabular-nums">{formatMoney(o.total)}</span></CardField>
                   <CardField label="Placed"><span className="text-muted">{formatDateTime(o.createdAt)}</span></CardField>
-                  <CardField label="Containers" className="col-span-2">{containersSummary(o.items)}</CardField>
+                  <CardField label="Plans" className="col-span-2">{containersSummary(o.items)}</CardField>
                 </dl>
                 <div className="flex items-center justify-between gap-3">
                   <Link href={`/orders/${o.id}`} className="text-gold-text hover:underline">View order →</Link>
@@ -51,7 +51,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
               </CardListItem>
             ))}
           </CardList>
-          <DataTable columns={["Order", "Placed", "Containers", "Total", "Status", ""]} className="hidden sm:block">
+          <DataTable columns={["Order", "Placed", "Plans", "Total", "Status", ""]} className="hidden sm:block">
             {orders.content.map((o) => (
               <tr key={o.id} className="hover:bg-background">
                 <Cell><Link href={`/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>

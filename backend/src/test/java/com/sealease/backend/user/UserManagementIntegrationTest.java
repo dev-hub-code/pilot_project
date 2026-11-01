@@ -706,7 +706,7 @@ class UserManagementIntegrationTest {
 		// No proof, or no proof type: refused.
 		var withoutProof = multipart("/api/v1/users/me/bank-accounts").file(new MockMultipartFile("account", "",
 				MediaType.APPLICATION_JSON_VALUE, """
-						{"accountHolderName":"Test Investor","bankName":"Test Bank","country":"IN","currency":"INR",
+						{"accountHolderName":"Test Investor","country":"IN","currency":"INR",
 						 "accountNumber":"50100012345678","routingCode":"HDFC0001234"}""".getBytes(StandardCharsets.UTF_8)));
 		mvc.perform(withoutProof.param("proofType", "CANCELLED_CHEQUE").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isBadRequest())
@@ -998,7 +998,7 @@ class UserManagementIntegrationTest {
 
 	private ResultActions addBank(Account owner, String accountNumber, String routingCode) throws Exception {
 		return mvc.perform(BankAccountUploads.addAccount("""
-					{"accountHolderName":"Someone Else","bankName":"Test Bank","country":"GB","currency":"INR",
+					{"accountHolderName":"Someone Else","country":"GB","currency":"INR",
 					 "accountNumber":"%s","routingCode":"%s"}
 					""".formatted(accountNumber, routingCode)).header(HttpHeaders.AUTHORIZATION, owner.bearer()));
 	}

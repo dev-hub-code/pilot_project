@@ -13,8 +13,7 @@ export const demoAccountSchema = z.object({ userId: uuid }).and(demoFrameSchema)
 export const demoOrderSchema = z.object({
   memberId: optionalId,
   productId: z.string().uuid("Choose a plan"),
-  containers: z.coerce.number({ message: "Enter a number" }).int("Whole containers only").min(1, "At least 1").max(1000),
-  tenureYears: z.coerce.number({ message: "Choose the tenure" }).int().min(1, "Choose the tenure").max(50),
+  amount: z.string().trim().regex(/^\d{1,10}(\.\d{1,2})?$/, "Enter an amount with up to 2 decimals"),
   startsOn: day,
 });
 

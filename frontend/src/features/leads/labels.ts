@@ -22,7 +22,7 @@ export const STAGE_TONE: Record<LeadStage, StatusTone> = {
 };
 
 export const INTEREST_LABEL: Record<LeadInterest, string> = {
-  STANDALONE: "Buying containers",
+  STANDALONE: "Investing online",
   UNSURE: "Not sure yet",
 };
 

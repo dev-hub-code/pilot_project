@@ -15,7 +15,15 @@ class ReferralRateVersionTest {
 
 	private final ReferralRateVersion rates = new ReferralRateVersion(Instant.EPOCH,
 			List.of(new BigDecimal("2"), new BigDecimal("1"), new BigDecimal("0.5"), new BigDecimal("0.125")),
-			"Test", null, Instant.EPOCH);
+			new BigDecimal("2"), "Test", null, Instant.EPOCH);
+
+	@Test
+	void theOneTimeRateIsSeparateAndRoundsDown() {
+		ReferralRateVersion version = new ReferralRateVersion(Instant.EPOCH,
+				List.of(new BigDecimal("5"), BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE), new BigDecimal("1.5"), "Test",
+				null, Instant.EPOCH);
+		assertThat(version.oneTimeCommission(Money.of("100.99", "USD"))).isEqualTo(Money.of("1.51", "USD"));
+	}
 
 	@Test
 	void appliesEachLevelsRate() {
@@ -37,7 +45,7 @@ class ReferralRateVersionTest {
 	@Test
 	void knowsOnlyFourLevels() {
 		assertThatThrownBy(() -> rates.percentFor(5)).isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> new ReferralRateVersion(Instant.EPOCH, List.of(BigDecimal.ONE), "Test", null,
+		assertThatThrownBy(() -> new ReferralRateVersion(Instant.EPOCH, List.of(BigDecimal.ONE), BigDecimal.ONE, "Test", null,
 				Instant.EPOCH)).isInstanceOf(IllegalArgumentException.class);
 	}
 

@@ -36,8 +36,8 @@ class BackendApplicationTests {
 	@Test
 	void flywayAppliedSchemaAndLocations() {
 		Integer applied = jdbc.queryForObject(
-				"SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2') AND success", Integer.class);
-		assertThat(applied).isEqualTo(2);
+				"SELECT count(*) FROM flyway_schema_history WHERE version IN ('1', '2', '3', '4', '5', '6') AND success", Integer.class);
+		assertThat(applied).isEqualTo(6);
 	}
 
 	@Test

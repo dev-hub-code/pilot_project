@@ -60,13 +60,12 @@ public class LeaseAgreement {
 	protected LeaseAgreement() {
 	}
 
-	public LeaseAgreement(String agreementNumber, UUID holdingId, UUID orderId, UUID userId, String containerNumber, UUID templateId, String title,
+	public LeaseAgreement(String agreementNumber, UUID holdingId, UUID orderId, UUID userId, UUID templateId, String title,
 			String body, boolean acceptanceRequired, UUID generatedBy, Instant generatedAt) {
 		this.agreementNumber = agreementNumber;
 		this.holdingId = holdingId;
 		this.orderId = orderId;
 		this.userId = userId;
-		this.containerNumber = containerNumber;
 		this.templateId = templateId;
 		this.title = title;
 		this.body = body;

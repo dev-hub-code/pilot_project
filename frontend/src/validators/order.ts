@@ -3,13 +3,9 @@ import { z } from "zod";
 /** Client-side mirrors of the backend's checkout and payment validation; the backend is authoritative. */
 const amount = z.string().trim().regex(/^\d{1,13}(\.\d{1,2})?$/, "Enter an amount with up to 2 decimals");
 
-/** Whole containers of a plan; mirrors the backend's 1-50 per plan in one order. */
-export const cartItemSchema = z.object({
-  quantity: z.coerce.number({ message: "Enter how many containers" }).int("Enter a whole number of containers")
-    .min(1, "Buy at least one container").max(50, "At most 50 containers of one listing in one order"),
-  /** The lease in whole years, within the plan's limits (checked by the backend); omitted keeps the current one. */
-  tenureYears: z.coerce.number({ message: "Choose the lease" }).int("Choose whole years").min(1).max(30).optional(),
-});
+/** Whole units of a plan; the plan's minimum is checked by the backend. */
+export const unitsSchema = z.coerce.number({ message: "Enter the number of units" }).int("Enter whole units")
+  .min(1, "Buy at least 1 unit").max(100_000_000, "Enter fewer units");
 
 export const idempotencyKeySchema = z.string().regex(/^[A-Za-z0-9_-]{8,100}$/);
 

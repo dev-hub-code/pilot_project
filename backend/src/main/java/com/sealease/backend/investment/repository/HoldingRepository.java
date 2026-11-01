@@ -31,6 +31,9 @@ public interface HoldingRepository extends JpaRepository<Holding, UUID> {
 
 	List<Holding> findByOrderIdOrderByCreatedAt(UUID orderId);
 
+	/** The investor's earliest order, as any one of its holdings. */
+	Optional<Holding> findFirstByUserIdOrderByConfirmedAtAscOrderIdAsc(UUID userId);
+
 	List<Holding> findByOrderItemIdIn(Collection<UUID> orderItemIds);
 
 	@Query("select h.productId, count(distinct h.userId) from Holding h where h.productId in :productIds group by h.productId")

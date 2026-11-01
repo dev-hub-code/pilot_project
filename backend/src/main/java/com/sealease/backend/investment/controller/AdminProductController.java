@@ -5,7 +5,7 @@ import com.sealease.backend.common.api.ReasonRequest;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.dto.ProductSearchCriteria;
-import com.sealease.backend.container.entity.ContainerType;
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.investment.entity.ProductStatus;
 import com.sealease.backend.investment.service.ProductService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -43,9 +43,9 @@ public class AdminProductController {
 	@PreAuthorize("hasAuthority('INVESTMENT_VIEW')")
 	public PageResponse<ProductResponse> search(@RequestParam(required = false) @Size(max = 50) String q,
 			@RequestParam(required = false) ProductStatus status,
-			@RequestParam(required = false) ContainerType containerType,
+			@RequestParam(required = false) ReferralScheme audience,
 			@PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return PageResponse.from(products.search(new ProductSearchCriteria(q, status, containerType), pageable));
+		return PageResponse.from(products.search(new ProductSearchCriteria(q, status, audience), pageable));
 	}
 
 	@GetMapping("/{productId}")
@@ -80,6 +80,13 @@ public class AdminProductController {
 	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
 	public ProductResponse close(AuthenticatedUser actor, @PathVariable UUID productId) {
 		return products.close(actor.userId(), productId);
+	}
+
+	/** Makes a closed plan available to new investors again. */
+	@PostMapping("/{productId}/reopen")
+	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
+	public ProductResponse reopen(AuthenticatedUser actor, @PathVariable UUID productId) {
+		return products.reopen(actor.userId(), productId);
 	}
 
 	@PostMapping("/{productId}/cancel")

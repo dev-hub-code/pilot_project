@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     default: "SeaLease",
     template: "%s · SeaLease",
   },
-  description: "Buy shipping containers on lease and receive rent every month of the lease.",
+  description: "Invest in a plan and receive returns every month of the term.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

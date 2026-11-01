@@ -1,6 +1,7 @@
 package com.sealease.backend.referral.repository;
 
 import com.sealease.backend.referral.entity.ReferralEarning;
+import com.sealease.backend.referral.entity.ReferralEarningKind;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -38,6 +39,8 @@ public interface ReferralEarningRepository
 			""", nativeQuery = true)
 	Page<ReferralEarningGroup> grouped(@Param("beneficiary") UUID beneficiaryUserId, @Param("source") UUID sourceUserId,
 			Pageable pageable);
+
+	boolean existsBySourceUserIdAndKind(UUID sourceUserId, ReferralEarningKind kind);
 
 	/** Commission earned by one upline, per referred investor and currency. */
 	@Query("""

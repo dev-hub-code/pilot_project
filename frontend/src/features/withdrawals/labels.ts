@@ -1,7 +1,7 @@
 import type { StatusTone } from "@/components/ui/status-badge";
 import type { BatchStatus, WithdrawalKind, WithdrawalPayoutMethod, WithdrawalStatus } from "@/types/withdrawal";
 
-export const WITHDRAWAL_KIND_LABEL: Record<WithdrawalKind, string> = { RENT: "Rent", REFERRAL: "Referral" };
+export const WITHDRAWAL_KIND_LABEL: Record<WithdrawalKind, string> = { RENT: "Returns", REFERRAL: "Referral" };
 
 /** Which sheet of a withdrawal run: paid into a bank account, or collected in cash at the office. */
 export const PAYOUT_METHOD_LABEL: Record<WithdrawalPayoutMethod, string> = { BANK_TRANSFER: "Bank", OFFICE_CASH: "Cash" };

@@ -1,21 +1,16 @@
 import { z } from "zod";
 
 /** Client-side mirror of the backend's plan validation; the backend is authoritative. */
-const money = z.string().trim().regex(/^\d{1,13}(\.\d{1,2})?$/, "Enter an amount with up to 2 decimals");
 
 export const productSchema = z.object({
-  containerType: z.string().min(1, "Select the container type"),
-  /** Blank: the listing is named after its container type, e.g. "20ft Dry container". */
-  title: z.string().trim().max(140),
+  audience: z.enum(["ONLINE", "NETWORK"], { message: "Choose who the plan is for" }),
+  title: z.string().trim().min(1, "Enter the plan's name").max(140),
   summary: z.string().trim().min(1, "Enter a one-line summary").max(400),
-  description: z.string().trim().min(1, "Describe the container").max(10_000),
   currency: z.string().regex(/^[A-Z]{3}$/, "Select a currency"),
-  price: money,
-  minTenureYears: z.coerce.number({ message: "Enter the shortest lease in years" }).int("Enter whole years")
-    .min(1, "The shortest lease is at least 1 year").max(30, "The shortest lease is at most 30 years"),
-  maxTenureYears: z.coerce.number({ message: "Enter the longest lease in years" }).int("Enter whole years")
-    .min(1, "The longest lease is at least 1 year").max(30, "The longest lease is at most 30 years"),
-}).refine((p) => p.maxTenureYears >= p.minTenureYears, {
-  path: ["maxTenureYears"],
-  message: "The longest lease must be at least the shortest",
+  tenureYears: z.coerce.number({ message: "Enter the tenure in years" }).int("Enter whole years")
+    .min(1, "The tenure is at least 1 year").max(30, "The tenure is at most 30 years"),
+  annualReturnPercent: z.string().trim().regex(/^\d{1,3}(\.\d{1,2})?$/, "Enter a percentage with up to 2 decimals")
+    .refine((v) => Number(v) > 0 && Number(v) <= 100, "Enter a percentage above 0, up to 100"),
+  minUnits: z.coerce.number({ message: "Enter the minimum units" }).int("Enter whole units")
+    .min(1, "The minimum is at least 1 unit").max(1_000_000, "The minimum is at most 10,00,000 units"),
 });

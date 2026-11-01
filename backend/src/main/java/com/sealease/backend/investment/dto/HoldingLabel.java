@@ -9,6 +9,6 @@ import java.util.UUID;
  *
  * @param paidAtOffice its order was paid in cash at the office, so its rent goes to the investor's cash balance
  */
-public record HoldingLabel(UUID holdingId, String productCode, String productTitle, String containerNumber,
+public record HoldingLabel(UUID holdingId, String productCode, String productTitle,
 		int tenureMonths, Money amount, boolean paidAtOffice) {
 }

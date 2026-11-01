@@ -43,17 +43,29 @@ public class CredentialsEmailSender {
 	 * @return whether the email was handed to the mail server
 	 */
 	public boolean send(StaffCredentialsResponse credentials, boolean reset) {
+		String paragraph = reset ? "An administrator issued you a new temporary password for SeaLease."
+				: "An administrator created a SeaLease employee account for you"
+						+ (credentials.roles().isEmpty() ? "" : " (" + String.join(", ", credentials.roles()) + ")") + ".";
+		return send(credentials, reset ? "Your new SeaLease temporary password" : "Your SeaLease employee account",
+				reset ? "An administrator issued you a new temporary password."
+						: "An administrator created a SeaLease employee account for you.", paragraph, reset);
+	}
+
+	/** A network investor's sign-in details, when an administrator makes their account. */
+	public boolean sendNewInvestor(StaffCredentialsResponse credentials) {
+		String text = "We created a SeaLease investor account for you.";
+		return send(credentials, "Your SeaLease investor account", text, text, false);
+	}
+
+	private boolean send(StaffCredentialsResponse credentials, String subject, String preheader, String paragraph,
+			boolean reset) {
 		Map<String, String> signIn = new LinkedHashMap<>();
 		signIn.put("Email", credentials.email());
 		signIn.put("Temporary password", credentials.temporaryPassword());
-		BrandedEmail message = BrandedEmail.builder(
-				reset ? "Your new SeaLease temporary password" : "Your SeaLease employee account", appUrl)
-			.preheader(reset ? "An administrator issued you a new temporary password."
-					: "An administrator created a SeaLease employee account for you.")
+		BrandedEmail message = BrandedEmail.builder(subject, appUrl)
+			.preheader(preheader)
 			.greeting(credentials.firstName())
-			.paragraph(reset ? "An administrator issued you a new temporary password for SeaLease."
-					: "An administrator created a SeaLease employee account for you"
-							+ (credentials.roles().isEmpty() ? "" : " (" + String.join(", ", credentials.roles()) + ")") + ".")
+			.paragraph(paragraph)
 			.details(signIn)
 			.button("Sign in", appUrl + "/login")
 			.paragraph("You will be asked to choose your own password when you sign in. The temporary password stops"

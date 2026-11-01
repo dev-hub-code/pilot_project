@@ -284,6 +284,28 @@ public class UserAccountService {
 		return new IssuedCredentials(UserAccount.from(user), temporary, now.plus(staffAccounts.temporaryPasswordValidity()));
 	}
 
+	/** An investor account made by an administrator: signs in with a temporary password, like a staff account. */
+	@Transactional
+	public IssuedCredentials createInvestorAccount(String email, String firstName, String lastName,
+			PhoneNumbers.Phone phone, UUID actorId) {
+		String normalizedEmail = EmailNormalizer.normalize(email);
+		if (users.existsByEmail(normalizedEmail)) {
+			throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED, "An account with this email already exists");
+		}
+		Instant now = clock.instant();
+		Instant expiresAt = now.plus(staffAccounts.temporaryPasswordValidity());
+		String temporary = TemporaryPasswords.generate();
+		User user = new User(normalizedEmail, passwordEncoder.encode(temporary), firstName.strip(), lastName.strip(), now);
+		user.issueTemporaryPassword(user.getPasswordHash(), expiresAt, now);
+		// Entered by an administrator, and the temporary password reaches the holder at this address.
+		user.markEmailVerified(now);
+		users.saveAndFlush(user);
+		profiles.createFor(user, phone);
+		audit.record(AuditRecord.of(actorId, AuditAction.INVESTOR_ACCOUNT_CREATED, ENTITY, user.getId())
+			.withNewValue(Map.of("email", normalizedEmail, "temporaryPasswordExpiresAt", expiresAt.toString())));
+		return new IssuedCredentials(UserAccount.from(user), temporary, expiresAt);
+	}
+
 	/**
 	 * Replaces a password with a new temporary one (the holder forgot it, or it expired). The caller
 	 * checks the actor may do this and ends the account's sessions.

@@ -89,6 +89,7 @@ public class ReferralService {
 	private final JdbcTemplate jdbc;
 	private final ReferralRateService rates;
 	private final ReferralEarningRepository earnings;
+	private final ReferralSchemeService schemes;
 	private final UserAccountService accounts;
 	private final UserProfileService profiles;
 	private final AuditService audit;
@@ -96,10 +97,11 @@ public class ReferralService {
 	private final SecureRandom random = new SecureRandom();
 
 	public ReferralService(JdbcTemplate jdbc, ReferralRateService rates, ReferralEarningRepository earnings,
-			UserAccountService accounts, UserProfileService profiles, AuditService audit, Clock clock) {
+			ReferralSchemeService schemes, UserAccountService accounts, UserProfileService profiles, AuditService audit, Clock clock) {
 		this.jdbc = jdbc;
 		this.rates = rates;
 		this.earnings = earnings;
+		this.schemes = schemes;
 		this.accounts = accounts;
 		this.profiles = profiles;
 		this.audit = audit;
@@ -124,6 +126,17 @@ public class ReferralService {
 				referrerId, code, now());
 		audit.record(AuditRecord.of(newUserId, AuditAction.REFERRAL_LINKED, ENTITY, newUserId)
 			.withNewValue(Map.of("referrerId", referrerId.toString(), "code", code)));
+		schemes.onLinked(newUserId, referrerId);
+	}
+
+	/**
+	 * The account's direct referrer, if any, with their link locked to the end of the transaction: serialises paying
+	 * the one commission of the online scheme when two leases of the same order start at once.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public Optional<UUID> lockReferrer(UUID userId) {
+		return jdbc.queryForList("SELECT referrer_id FROM referrals WHERE user_id = ? FOR UPDATE", UUID.class, userId)
+			.stream().findFirst();
 	}
 
 	/** The user's referral code, created on first use. */
@@ -178,8 +191,8 @@ public class ReferralService {
 			levels.add(new ReferralOverview.Level(level, inForce.percentFor(level), counts[level - 1]));
 		}
 		Optional<String> ineligible = ineligibility(userId);
-		return new ReferralOverview(code, referredBy, ineligible.isEmpty(), ineligible.orElse(null), levels,
-				totals(earnings.totalsBySource(userId)), inForce.getEffectiveFrom());
+		return new ReferralOverview(code, referredBy, schemes.schemeOf(userId), inForce.getOneTimePercent(),
+				ineligible.isEmpty(), ineligible.orElse(null), levels, totals(earnings.totalsBySource(userId)), inForce.getEffectiveFrom());
 	}
 
 	@Transactional(readOnly = true)
@@ -267,8 +280,8 @@ public class ReferralService {
 		for (long count : downlineSize(userId)) {
 			sizes.add(count);
 		}
-		return new AdminReferralView(existingCode(userId).orElse(null), ancestors, sizes,
-				totals(earnings.totalsBySource(userId)));
+		return new AdminReferralView(existingCode(userId).orElse(null), schemes.schemeOf(userId),
+				schemes.signupsJoinNetwork(userId), ancestors, sizes, totals(earnings.totalsBySource(userId)));
 	}
 
 	/** The investor's whole downline, every level: shown to staff with the user, and arranged by super administrators. */

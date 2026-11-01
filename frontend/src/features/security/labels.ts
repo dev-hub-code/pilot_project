@@ -38,7 +38,7 @@ export const ACTIONS_BY_CATEGORY: Record<AuditCategory, readonly string[]> = {
     "SCHEDULED_WITHDRAWALS_RUN", "WITHDRAWAL_RETURNED", "REFERRAL_PAYOUT_MODE_CHOSEN"],
   OPERATIONS: ["PROFILE_UPDATED", "TAX_INFO_UPDATED", "CONTAINER_CREATED", "CONTAINER_UPDATED", "CONTAINER_STATUS_CHANGED",
     "CONTAINER_DOCUMENT_ADDED", "CONTAINER_DOCUMENT_VISIBILITY_CHANGED", "PRODUCT_CREATED", "PRODUCT_UPDATED",
-    "PRODUCT_PUBLISHED", "PRODUCT_CANCELLED", "PRODUCT_CLOSED", "PRODUCT_LEASE_ACTIVATED", "PRODUCT_MATURED",
+    "PRODUCT_PUBLISHED", "PRODUCT_CANCELLED", "PRODUCT_CLOSED", "PRODUCT_REOPENED", "PRODUCT_LEASE_ACTIVATED", "PRODUCT_MATURED",
     "HOLDING_MATURED", "HOLDING_CONTAINER_ASSIGNED", "AGREEMENT_TEMPLATE_UPDATED", "LEASE_AGREEMENT_ISSUED", "LEASE_AGREEMENT_ACCEPTED",
     "AGREEMENT_REVIEW_ASSIGNED", "AGREEMENT_REVIEW_UNASSIGNED", "AGREEMENT_REVIEW_COMPLETED",
     "PLAN_PHOTO_ADDED", "PLAN_PHOTO_REMOVED", "ORDER_PLACED",
@@ -69,8 +69,8 @@ const ACTION_LABEL: Record<string, string> = {
   REPORT_GENERATED: "Report downloaded",
   AUDIT_LOG_EXPORTED: "Audit log exported",
   AGREEMENT_TEMPLATE_UPDATED: "Agreement wording changed",
-  LEASE_AGREEMENT_ISSUED: "Lease agreement issued",
-  LEASE_AGREEMENT_ACCEPTED: "Lease agreement accepted",
+  LEASE_AGREEMENT_ISSUED: "Investment agreement issued",
+  LEASE_AGREEMENT_ACCEPTED: "Investment agreement accepted",
   AGREEMENT_REVIEW_ASSIGNED: "Agreement review taken",
   AGREEMENT_REVIEW_UNASSIGNED: "Agreement review returned to the queue",
   AGREEMENT_REVIEW_COMPLETED: "Agreement review completed",
@@ -97,10 +97,11 @@ export const PERIODS = [
 /** Where a logged entity is shown in the admin area, if anywhere. */
 export function entityHref(entityType: string, entityId: string | null): string | null {
   if (!entityId) return null;
+  // Bank accounts have no page of their own; they are reviewed in a list.
+  if (entityType === "BANK_ACCOUNT") return "/admin/verification";
   const base: Record<string, string> = {
     USER: "/admin/users",
     KYC_SUBMISSION: "/admin/kyc",
-    BANK_ACCOUNT: "/admin/bank-accounts",
     INVESTMENT_PRODUCT: "/admin/products",
     ORDER: "/admin/orders",
     SUPPORT_TICKET: "/admin/support",

@@ -78,7 +78,7 @@ public class KycFollowUpService {
 		Instant now = clock.instant();
 		UUID ticketId = support.openOnBehalf(null, userId, TicketCategory.ACCOUNT, null, null, null,
 				"Verify your identity to start investing",
-				"Welcome to SeaLease! You have not verified your identity yet. To invest, earn rent and withdraw, upload"
+				"Welcome to SeaLease! You have not verified your identity yet. To invest, earn returns and withdraw, upload"
 						+ " your Aadhaar card and PAN card under Profile → Identity verification. If anything is stopping you,"
 						+ " reply here and we will help.",
 				TicketPriority.NORMAL, null);

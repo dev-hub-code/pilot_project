@@ -83,19 +83,17 @@ class DemoAccountIntegrationTest {
 				{"userId":"%s","startsOn":"%s","endsOn":"%s"}""".formatted(investor.id(), start, end))
 			.andExpect(status().isConflict());
 
-		// Own order: 2 × ₹50,000 = ₹1,00,000 at its rent band's rate, from the frame's start.
+		// Own order: 2 × ₹50,000 = ₹1,00,000 at the plan's return, from the frame's start.
 		String added = send(post(base + "/orders"), order(null, 2, start)).andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
 		BigDecimal band = new BigDecimal(JsonPath.read(added, "$.orders[0].rentPercent").toString());
 		String rent = new BigDecimal("100000").multiply(band).movePointLeft(2).setScale(2).toPlainString();
-		assertThat(band).isEqualByComparingTo(rentFor(added, "100000"));
+		assertThat(band).isEqualByComparingTo(jdbc.queryForObject(
+				"SELECT round(annual_return_percent / 12, 8) FROM investment_products WHERE id = ?", BigDecimal.class, plan));
 		send(get(base), "").andExpect(jsonPath("$.orders[0].monthlyRent.amount").value(rent))
 			.andExpect(jsonPath("$.orders[0].productId").value(plan.toString()))
 			.andExpect(jsonPath("$.orders[0].tenureMonths").value(12))
-			.andExpect(jsonPath("$.plans[?(@.id == '%s')].price.amount".formatted(plan)).value(org.hamcrest.Matchers.hasItem("50000.00")));
-		send(post(base + "/orders"), order(null, 1, start).replace("\"tenureYears\":1", "\"tenureYears\":9"))
-			.andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("1 to 5 years")));
+			.andExpect(jsonPath("$.plans[?(@.id == '%s')].currency".formatted(plan)).value(org.hamcrest.Matchers.hasItem("INR")));
 		send(post(base + "/orders"), order(null, 1, start.minusDays(1)))
 			.andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("within the time frame")));
@@ -120,8 +118,8 @@ class DemoAccountIntegrationTest {
 		page(investor, "/api/v1/auth/me").andExpect(jsonPath("$.demo").value(true));
 		page(investor, "/api/v1/portfolio")
 			.andExpect(jsonPath("$.totalsByCurrency[0].amount").value("100000.00"))
-			.andExpect(jsonPath("$.activeHoldings").value(2))
-			.andExpect(jsonPath("$.holdings.length()").value(2));
+			.andExpect(jsonPath("$.activeHoldings").value(1))
+			.andExpect(jsonPath("$.holdings.length()").value(1));
 		page(investor, "/api/v1/orders")
 			.andExpect(jsonPath("$.content.length()").value(1))
 			.andExpect(jsonPath("$.content[0].orderNumber").value(startsWith("ORD-9")))
@@ -151,6 +149,7 @@ class DemoAccountIntegrationTest {
 			.andExpect(jsonPath("$[0].rentPaid.amount").value(rent));
 
 		// A real balance stays where it is: withdrawal runs leave demo accounts out.
+		new com.sealease.backend.support.InvestorFixtures(mvc, jdbc, new com.sealease.backend.support.TestApi(mvc, jdbc)).enrolInNetwork(investor);
 		mvc.perform(post("/api/v1/admin/ledger/adjustments").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""
 						{"userId":"%s","currency":"INR","direction":"CREDIT","amount":"700","reason":"Test funding","balance":"RENT_BANK"}
@@ -177,25 +176,10 @@ class DemoAccountIntegrationTest {
 
 	private String order(String memberId, int containers, LocalDate startsOn) {
 		return """
-				{%s"productId":"%s","containers":%d,"tenureYears":1,"startsOn":"%s"}""".formatted(
-				memberId == null ? "" : "\"memberId\":\"" + memberId + "\",", plan, containers, startsOn);
+				{%s"productId":"%s","amount":"%d","startsOn":"%s"}""".formatted(
+				memberId == null ? "" : "\"memberId\":\"" + memberId + "\",", plan, containers * 50000, startsOn);
 	}
 
-	/** The rate of the band (listed with the account) an order total of {@code amount} falls in. */
-	private static BigDecimal rentFor(String view, String amount) {
-		java.util.List<java.util.Map<String, Object>> bands = JsonPath.read(view, "$.rentBands");
-		BigDecimal total = new BigDecimal(amount);
-		BigDecimal rate = null;
-		for (java.util.Map<String, Object> band : bands) {
-			BigDecimal from = new BigDecimal(((java.util.Map<?, ?>) band.get("fromAmount")).get("amount").toString());
-			Object to = band.get("toAmount");
-			BigDecimal upTo = to == null ? null : new BigDecimal(((java.util.Map<?, ?>) to).get("amount").toString());
-			if (from.compareTo(total) <= 0 && (upTo == null || total.compareTo(upTo.add(BigDecimal.ONE)) < 0)) {
-				rate = new BigDecimal(band.get("monthlyRentPercent").toString());
-			}
-		}
-		return rate;
-	}
 
 	private ResultActions send(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request,
 			String body) throws Exception {

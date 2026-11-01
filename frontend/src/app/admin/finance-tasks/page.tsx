@@ -93,7 +93,7 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
           <Link key={m} href={href(filters, { method: m })} className={chip(filters.method === m)}>{PAYOUT_METHOD_LABEL[m]}</Link>
         ))}
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
-        <Link href={href(filters, { kind: undefined })} className={chip(!filters.kind)}>Rent and referral</Link>
+        <Link href={href(filters, { kind: undefined })} className={chip(!filters.kind)}>Returns and referral</Link>
         {KINDS.map((k) => (
           <Link key={k} href={href(filters, { kind: k })} className={chip(filters.kind === k)}>{WITHDRAWAL_KIND_LABEL[k]}</Link>
         ))}
@@ -108,7 +108,7 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
           <EmptyState title="No tasks match" description={`Nothing ${open ? "to do" : "done"} matches “${filters.q}” with these filters.`} />
         ) : (
           <EmptyState title={open ? "Nothing to do" : "No tasks done yet"}
-            description={open ? "Tasks appear here when an admin generates rent or referral withdrawals." : undefined} />
+            description={open ? "Tasks appear here when an admin generates a returns or referral payout." : undefined} />
         )
       ) : (
         <DataTable columns={["Task", "Investor", "Pay to", "Amount", open ? "Update" : "Outcome"]}>

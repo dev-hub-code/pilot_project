@@ -345,7 +345,7 @@ public class PayoutBatchService {
 				"Withdrawal " + withdrawal.getReference() + " could not be paid",
 				"Your withdrawal " + withdrawal.getReference() + " of " + withdrawal.amount().display()
 						+ (withdrawal.isOfficeCash() ? " in cash at our office"
-								: " to " + withdrawal.getBankName() + " •••• " + withdrawal.getBankAccountLast4())
+								: " to " + (withdrawal.getBankName() == null ? "account" : withdrawal.getBankName()) + " •••• " + withdrawal.getBankAccountLast4())
 						+ " could not be paid: " + reason + ". The amount is held safely while our finance team sorts it out;"
 						+ " we will update you here.",
 				TicketPriority.HIGH, actorId);

@@ -82,12 +82,6 @@ public final class TestApi {
 		mvc.perform(post("/api/v1/admin/{queue}/{id}/assign", queue, id).header(HttpHeaders.AUTHORIZATION, reviewer.bearer()));
 	}
 
-	/** Takes the task of assigning a paid investment's container, as finance must before assigning it. Not asserted. */
-	public void takeContainerTask(Object holdingId, Account actor) throws Exception {
-		mvc.perform(post("/api/v1/admin/container-assignments/{id}/take", holdingId)
-			.header(HttpHeaders.AUTHORIZATION, actor.bearer()));
-	}
-
 	/** Takes the task of confirming or rejecting a payment, as finance must before deciding it. Not asserted. */
 	public void takePayment(Object paymentId, Account actor) throws Exception {
 		mvc.perform(post("/api/v1/admin/payments/{id}/take", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer()));

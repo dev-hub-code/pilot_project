@@ -1,5 +1,6 @@
 package com.sealease.backend.payment.service;
 
+import com.sealease.backend.bankaccount.service.IfscDirectory;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
@@ -27,10 +28,13 @@ public class CompanyBankAccountService {
 
 	private final CompanyBankAccountRepository accounts;
 	private final AuditService audit;
+	private final IfscDirectory ifscDirectory;
 
-	public CompanyBankAccountService(CompanyBankAccountRepository accounts, AuditService audit) {
+	public CompanyBankAccountService(CompanyBankAccountRepository accounts, AuditService audit,
+			IfscDirectory ifscDirectory) {
 		this.accounts = accounts;
 		this.audit = audit;
+		this.ifscDirectory = ifscDirectory;
 	}
 
 	@Transactional(readOnly = true)
@@ -42,6 +46,11 @@ public class CompanyBankAccountService {
 	@Transactional(readOnly = true)
 	public List<CompanyBankAccountResponse> active() {
 		return accounts.findByActiveTrueOrderByCreatedAtAsc().stream().map(CompanyBankAccountResponse::from).toList();
+	}
+
+	/** The bank an IFSC code belongs to, for the form to fill in as the code is typed. */
+	public IfscDirectory.Lookup lookupIfsc(String code) {
+		return ifscDirectory.lookup(code);
 	}
 
 	@Transactional

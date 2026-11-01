@@ -6,7 +6,7 @@ import { isInvestor } from "@/lib/permissions";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { type OnboardingStep, getOnboarding } from "@/lib/server/onboarding";
 import { missingPersonalDetails } from "@/features/profile/kyc-labels";
-import type { KycSubmission, Profile } from "@/types/user";
+import type { IfscLookup, KycSubmission, Profile } from "@/types/user";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { bankAccountSchema, kycNumberSchema, MAX_FILE_BYTES, profileSchema } from "@/validators/profile";
@@ -123,7 +123,7 @@ export async function submitKycDocumentAction(document: "AADHAAR" | "PAN", _prev
 
 /** The account details, the proof type and the proof file, as the bank account endpoints take them. */
 function bankAccountUpload(formData: FormData): { upload: FormData } | { state: FormState } {
-  const values = text(formData, "bankName", "country", "currency", "routingCode", "proofType");
+  const values = text(formData, "country", "currency", "routingCode", "proofType");
   const parsed = bankAccountSchema.safeParse({ ...values, accountNumber: formData.get("accountNumber") ?? "" });
   if (!parsed.success) return { state: { fieldErrors: firstErrors(parsed.error), values } };
   const proofType = values.proofType;
@@ -142,13 +142,24 @@ function bankAccountUpload(formData: FormData): { upload: FormData } | { state: 
   return { upload };
 }
 
+/** The bank an IFSC code belongs to, for the bank account form to fill in as the code is typed. */
+export async function lookupIfscAction(typed: string): Promise<IfscLookup> {
+  const code = typed.trim().toUpperCase();
+  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) return { status: "NOT_FOUND", bank: null };
+  try {
+    return await authFetch<IfscLookup>(`/api/v1/users/me/bank-accounts/ifsc/${encodeURIComponent(code)}`);
+  } catch {
+    return { status: "UNAVAILABLE", bank: null };
+  }
+}
+
 export async function addBankAccountAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const prepared = bankAccountUpload(formData);
   if ("state" in prepared) return prepared.state;
   try {
     await authFetch("/api/v1/users/me/bank-accounts", { method: "POST", formData: prepared.upload });
   } catch (error) {
-    return failureState(error, text(formData, "bankName", "country", "routingCode", "proofType"));
+    return failureState(error, text(formData, "country", "routingCode", "proofType"));
   }
   revalidatePath("/profile", "layout");
   return { success: "Bank account added. It will be verified by our finance team." };

@@ -40,7 +40,6 @@ export const profileSchema = z.object({
 }).superRefine(validPhone(true));
 
 export const bankAccountSchema = z.object({
-  bankName: z.string().trim().min(1, "Enter the bank's name").max(140),
   country,
   currency: z.string().regex(/^[A-Z]{3}$/, "Select a currency"),
   accountNumber: z.string().trim().regex(/^\d{8,15}$/, "Enter the account number: 8 to 15 digits, numbers only"),

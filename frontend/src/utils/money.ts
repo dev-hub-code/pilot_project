@@ -1,4 +1,4 @@
-import type { Money } from "@/types/marketplace";
+import type { Money } from "@/types/plan";
 import { CURRENCY_SYMBOL } from "@/lib/currency";
 
 const formatters = new Map<string, Intl.NumberFormat>();

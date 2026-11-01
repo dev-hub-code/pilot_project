@@ -63,10 +63,8 @@ class WithdrawalRunIntegrationTest {
 	}
 
 	@Test
-	void adminsAssignContainersButDoNotGenerateWithdrawals() throws Exception {
+	void adminsDoNotGenerateWithdrawals() throws Exception {
 		Account admin = api.staff("ADMIN");
-		mvc.perform(get("/api/v1/admin/container-assignments").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(status().isOk());
 		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isForbidden());
 	}
@@ -90,21 +88,31 @@ class WithdrawalRunIntegrationTest {
 
 	@Test
 	void rentAndReferralRunsMakeFinanceTasksThatFinanceMarksPaidOrFailed() throws Exception {
-		// Alice: rent paid by bank and referral by bank.
+		// Runs are for network investors. Alice: rent paid by bank and referral by bank.
 		Account alice = withBank("Alice Run");
+		investors.enrolInNetwork(alice);
 		credit(alice, "1000.50", "RENT_BANK");
 		credit(alice, "250", "REFERRAL");
-		// Bob: rent on a container paid at the office and referral in cash (cash sheets); and bank rent.
+		// Bob, a network investor, chose cash: all his returns and referral go on the cash sheets.
 		Account bob = withBank("Bob Run");
+		investors.enrolInNetwork(bob);
 		chooseMode(bob, "OFFICE_CASH");
 		credit(bob, "700", "RENT_CASH");
 		credit(bob, "300", "REFERRAL");
 		credit(bob, "900", "RENT_BANK");
-		// Carol has no verified bank account: left out of the bank sheet, with the reason.
-		Account carol = investors.approvedInvestor();
+		// Bea is paid by bank; her transfer will fail.
+		Account bea = withBank("Bea Run");
+		investors.enrolInNetwork(bea);
+		credit(bea, "900", "RENT_BANK");
+		// Carol chose bank but no longer has a verified primary account: left out of the bank sheet, with the reason.
+		Account carol = withBank("Carol Run");
+		investors.enrolInNetwork(carol);
+		chooseMode(carol, "BANK_TRANSFER");
+		jdbc.update("UPDATE bank_accounts SET is_primary = false WHERE user_id = ?", carol.id());
 		credit(carol, "800", "RENT_BANK");
 		// Dave's balances come to less than the minimum: they keep growing until a later run.
 		Account dave = withBank("Dave Run");
+		investors.enrolInNetwork(dave);
 		credit(dave, "20", "RENT_BANK");
 
 		run(alice, "RENT").andExpect(status().isForbidden());
@@ -133,19 +141,20 @@ class WithdrawalRunIntegrationTest {
 			.andExpect(jsonPath("$.withdrawalInProgress[0].amount").value("1000.50"))
 			.andExpect(jsonPath("$.totalWithdrawn.length()").value(0));
 		summary(bob).andExpect(jsonPath("$.withdrawalInProgress[0].amount").value("1600.00"));
+		summary(bea).andExpect(jsonPath("$.withdrawalInProgress[0].amount").value("900.00"));
 		assertThat(jdbc.queryForList("SELECT DISTINCT balance FROM withdrawals WHERE batch_id IN (?::uuid, ?::uuid)",
 				String.class, rentBank, rentCash)).containsOnly("RENT_BANK", "RENT_CASH");
 
 		// The rent bank sheet: one row per investor, by user code, with their account and amount.
-		List<List<String>> bankRows = read(download(rentBank, rentReference + "-Rent-Bank.xlsx"));
+		List<List<String>> bankRows = read(download(rentBank, rentReference + "-Returns-Bank.xlsx"));
 		assertThat(bankRows.getFirst()).containsExactly("Serial No", "User Code", "Name", "Account Number", "IFSC Code",
 				"Amount", "Status");
 		List<String> aliceRow = row(bankRows, alice);
 		assertThat(aliceRow.get(2)).isEqualTo("Alice Run");
 		assertThat(aliceRow.get(4)).isEqualTo("HDFC0001234");
 		assertThat(Double.parseDouble(aliceRow.get(5))).isEqualTo(1000.50);
-		assertThat(Double.parseDouble(row(bankRows, bob).get(5))).isEqualTo(900.0);
-		assertThat(bankRows.stream().map(r -> r.get(1))).doesNotContain(code(carol), code(dave));
+		assertThat(Double.parseDouble(row(bankRows, bea).get(5))).isEqualTo(900.0);
+		assertThat(bankRows.stream().map(r -> r.get(1))).doesNotContain(code(bob), code(carol), code(dave));
 
 		// Cash at the office has no sheet: the batch is being paid by hand from the start.
 		mvc.perform(get("/api/v1/admin/withdrawal-batches/{id}/file", rentCash).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
@@ -155,7 +164,7 @@ class WithdrawalRunIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT status FROM withdrawal_batches WHERE id = ?::uuid", String.class, rentCash))
 			.isEqualTo("SENT");
 		assertThat(jdbc.queryForList("SELECT status FROM withdrawals WHERE batch_id = ?::uuid", String.class, rentCash))
-			.containsExactly("PROCESSING");
+			.containsOnly("PROCESSING");
 
 		// -------------------------------------------------------------- the referral run
 		String referralRun = run(finance, "REFERRAL").andExpect(status().isCreated())
@@ -183,7 +192,7 @@ class WithdrawalRunIntegrationTest {
 		// Every withdrawal is a task for finance; open bank tasks carry the full account number to pay.
 		tasks(investors.approvedInvestor(), "OPEN", rentBank).andExpect(status().isForbidden());
 		tasks(finance, "OPEN", rentBank).andExpect(status().isOk())
-			.andExpect(jsonPath("$.content[*].userCode").value(org.hamcrest.Matchers.hasItems(code(alice), code(bob))))
+			.andExpect(jsonPath("$.content[*].userCode").value(org.hamcrest.Matchers.hasItems(code(alice), code(bea))))
 			.andExpect(jsonPath("$.content[?(@.userCode == '" + code(alice) + "')].kind").value(org.hamcrest.Matchers.contains("RENT")))
 			.andExpect(jsonPath("$.content[?(@.userCode == '" + code(alice) + "')].ifsc")
 				.value(org.hamcrest.Matchers.contains("HDFC0001234")))
@@ -210,14 +219,14 @@ class WithdrawalRunIntegrationTest {
 		search("no such investor 123").andExpect(jsonPath("$.totalElements").value(0));
 
 		// A failed task needs a reason.
-		updateTask(task(bob, rentBank), "FAILED", null, " ").andExpect(status().isBadRequest());
+		updateTask(task(bea, rentBank), "FAILED", null, " ").andExpect(status().isBadRequest());
 
-		// Finance pays the rent bank tasks: Alice is paid; Bob's bank transfer failed.
+		// Finance pays the rent bank tasks: Alice is paid; Bea's bank transfer failed.
 		updateTask(task(alice, rentBank), "PAID", "UTR-1", null).andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("PAID"))
 			.andExpect(jsonPath("$.payoutReference").value("UTR-1"))
 			.andExpect(jsonPath("$.accountNumber").value(org.hamcrest.Matchers.startsWith("••••")));
-		updateTask(task(bob, rentBank), "FAILED", null, "Account closed").andExpect(status().isOk())
+		updateTask(task(bea, rentBank), "FAILED", null, "Account closed").andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("FAILED"));
 		// Done once: it cannot be updated again.
 		updateTask(task(alice, rentBank), "PAID", "UTR-1", null).andExpect(status().is4xxClientError());
@@ -228,27 +237,32 @@ class WithdrawalRunIntegrationTest {
 		summary(alice).andExpect(jsonPath("$.totalWithdrawn[0].amount").value("1250.50"))
 			.andExpect(jsonPath("$.withdrawalInProgress.length()").value(0));
 		tasks(finance, "DONE", rentBank)
-			.andExpect(jsonPath("$.content[*].userCode").value(org.hamcrest.Matchers.hasItems(code(alice), code(bob))));
+			.andExpect(jsonPath("$.content[*].userCode").value(org.hamcrest.Matchers.hasItems(code(alice), code(bea))));
 		// The failed transfer is held, with a ticket, until finance resolves it.
-		String bobsBank = task(bob, rentBank);
-		mvc.perform(get("/api/v1/admin/withdrawals/{id}", bobsBank).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+		String beasBank = task(bea, rentBank);
+		mvc.perform(get("/api/v1/admin/withdrawals/{id}", beasBank).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(jsonPath("$.status").value("FAILED"))
 			.andExpect(jsonPath("$.ticketId").exists());
 
 		// Cash: Bob collects his rent and his referral at the office, each task marked collected with its receipt.
-		updateTask(task(bob, rentCash), "PAID", "Receipt 501", null).andExpect(status().isOk());
+		List<String> rentTasks = jdbc.queryForList("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid AND batch_id = ?::uuid",
+				String.class, bob.id(), rentCash);
+		assertThat(rentTasks).hasSize(2);
+		for (String rentTask : rentTasks) {
+			updateTask(rentTask, "PAID", "Receipt 501", null).andExpect(status().isOk());
+		}
 		updateTask(task(bob, referralCash), "PAID", "Receipt 502", null).andExpect(status().isOk());
 		assertThat(jdbc.queryForList("SELECT status || ' ' || coalesce(payout_reference, '') FROM withdrawals "
 				+ "WHERE user_id = ?::uuid AND batch_id IN (?::uuid, ?::uuid) ORDER BY payout_reference", String.class, bob.id(),
-				rentCash, referralCash)).containsExactly("PAID Receipt 501", "PAID Receipt 502");
-		summary(bob).andExpect(jsonPath("$.totalWithdrawn[0].amount").value("1000.00"))
-			.andExpect(jsonPath("$.withdrawalInProgress[0].amount").value("900.00"));
+				rentCash, referralCash)).containsExactly("PAID Receipt 501", "PAID Receipt 501", "PAID Receipt 502");
+		summary(bob).andExpect(jsonPath("$.totalWithdrawn[0].amount").value("1900.00"))
+			.andExpect(jsonPath("$.withdrawalInProgress.length()").value(0));
 
-		// Bob's failed transfer goes back to his balance.
-		mvc.perform(post("/api/v1/admin/withdrawals/{id}/resolve", bobsBank).header(HttpHeaders.AUTHORIZATION, finance.bearer())
+		// Bea's failed transfer goes back to her balance.
+		mvc.perform(post("/api/v1/admin/withdrawals/{id}/resolve", beasBank).header(HttpHeaders.AUTHORIZATION, finance.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"RETURNED\",\"note\":\"Please update your bank details.\"}"))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.status").value("RETURNED"));
-		summary(bob).andExpect(jsonPath("$.withdrawalInProgress.length()").value(0));
+		summary(bea).andExpect(jsonPath("$.withdrawalInProgress.length()").value(0));
 
 		mvc.perform(get("/api/v1/admin/withdrawal-runs").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
@@ -275,25 +289,61 @@ class WithdrawalRunIntegrationTest {
 	}
 
 	@Test
-	void theReferralPayoutModeIsChosenOnceAYear() throws Exception {
+	void runsLeaveOnlineInvestorsOutAndTheyWithdrawThemselves() throws Exception {
+		Account online = withBank("Otto Online");
+		credit(online, "1000", "RENT_BANK");
+		Account network = withBank("Nia Network");
+		investors.enrolInNetwork(network);
+		credit(network, "1000", "RENT_BANK");
+
+		String run = run(finance, "RENT").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+
+		assertThat(withdrawalCount(network)).isEqualTo(1);
+		assertThat(withdrawalCount(online)).isZero();
+		// Not even listed as left out: a run is simply not for them.
+		assertThat((List<Object>) JsonPath.read(run, "$.skipped[?(@.userId == '" + online.id() + "')]")).isEmpty();
+
+		mvc.perform(post("/api/v1/withdrawals").header(HttpHeaders.AUTHORIZATION, online.bearer())
+				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON).content("{\"balance\":\"RENT_BANK\"}"))
+			.andExpect(status().isCreated());
+		assertThat(withdrawalCount(online)).isEqualTo(1);
+	}
+
+	@Test
+	void onlineInvestorsAreAlwaysPaidByBank() throws Exception {
+		Account investor = withBank("Oma Online");
+		mvc.perform(get("/api/v1/withdrawals/referral-mode").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.mode").value("BANK_TRANSFER"))
+			.andExpect(jsonPath("$.changeable").value(false));
+		chooseMode(investor, "OFFICE_CASH").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("always paid by bank")));
+		mvc.perform(put("/api/v1/admin/users/{id}/referral-mode", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"OFFICE_CASH\"}"))
+			.andExpect(status().isUnprocessableContent());
+	}
+
+	@Test
+	void networkInvestorsChooseHowTheyArePaidAtAnyTime() throws Exception {
 		Account investor = withBank("Ivy Example");
+		investors.enrolInNetwork(investor);
 		mvc.perform(get("/api/v1/withdrawals/referral-mode").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.mode").value("BANK_TRANSFER"))
 			.andExpect(jsonPath("$.chosen").value(false))
-			.andExpect(jsonPath("$.year").value(LocalDate.now(ZoneOffset.UTC).getYear()));
+			.andExpect(jsonPath("$.changeable").value(true));
 		chooseMode(investor, "OFFICE_CASH").andExpect(status().isOk())
 			.andExpect(jsonPath("$.mode").value("OFFICE_CASH")).andExpect(jsonPath("$.chosen").value(true));
-		chooseMode(investor, "BANK_TRANSFER").andExpect(status().isConflict())
-			.andExpect(jsonPath("$.message").value(containsString("already chosen")));
+		chooseMode(investor, "BANK_TRANSFER").andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("BANK_TRANSFER"));
 
 		// Staff change it on the investor's request.
 		mvc.perform(put("/api/v1/admin/users/{id}/referral-mode", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"BANK_TRANSFER\"}"))
-			.andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("BANK_TRANSFER"));
-		assertThat(api.auditCount("REFERRAL_PAYOUT_MODE_CHOSEN", investor.id())).isEqualTo(2);
+				.contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"OFFICE_CASH\"}"))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("OFFICE_CASH"));
+		assertThat(api.auditCount("REFERRAL_PAYOUT_MODE_CHOSEN", investor.id())).isEqualTo(3);
 
 		// Without a verified bank account, it defaults to cash and bank cannot be chosen.
 		Account noBank = investors.approvedInvestor();
+		investors.enrolInNetwork(noBank);
 		mvc.perform(get("/api/v1/withdrawals/referral-mode").header(HttpHeaders.AUTHORIZATION, noBank.bearer()))
 			.andExpect(jsonPath("$.mode").value("OFFICE_CASH"));
 		chooseMode(noBank, "BANK_TRANSFER").andExpect(status().isUnprocessableContent());
@@ -305,6 +355,7 @@ class WithdrawalRunIntegrationTest {
 	void anAdminSetsTheMinimumWithdrawalForTheNextRuns() throws Exception {
 		Account admin = api.admin();
 		Account investor = withBank("Erin Minimum");
+		investors.enrolInNetwork(investor);
 		credit(investor, "1500", "RENT_BANK");
 		try {
 			// Super admins set it (they generate the runs); admins, finance and support do not.
@@ -379,7 +430,7 @@ class WithdrawalRunIntegrationTest {
 		jdbc.update("UPDATE users SET first_name = ?, last_name = '' WHERE id = ?", name, investor.id());
 		String number = String.valueOf(ThreadLocalRandom.current().nextLong(100_000_000_000L, 999_999_999_999L));
 		String bankAccountId = JsonPath.read(mvc.perform(BankAccountUploads.addAccount("""
-						{"accountHolderName":"%s","bankName":"Test Bank","country":"US","currency":"INR",
+						{"accountHolderName":"%s","country":"US","currency":"INR",
 						 "accountNumber":"%s","routingCode":"HDFC0001234"}
 						""".formatted(name, number)).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");

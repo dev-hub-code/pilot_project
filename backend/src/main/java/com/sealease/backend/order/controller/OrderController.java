@@ -42,7 +42,7 @@ public class OrderController {
 		this.demo = demo;
 	}
 
-	/** Checks out the cart. Requires an {@code Idempotency-Key}; a retry returns the same order. */
+	/** Buys units of a plan. Requires an {@code Idempotency-Key}; a retry returns the same order. */
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	public OrderResponse checkout(AuthenticatedUser investor, @RequestHeader(IdempotencyKey.HEADER) String idempotencyKey,

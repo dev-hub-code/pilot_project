@@ -5,12 +5,13 @@ import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
 import java.time.Instant;
 
 /**
- * How an investor's referral commission is withdrawn this year.
+ * How an investor's returns and referral commission are paid out.
  *
- * @param mode      BANK_TRANSFER (in the referral file on the referral withdrawal day) or OFFICE_CASH (collected at the
- *                  office from that day)
- * @param chosen    whether the investor chose it this year; otherwise it is the default and they may still choose
- * @param chosenAt  when it was chosen; null for the default
+ * @param mode       BANK_TRANSFER or OFFICE_CASH
+ * @param chosen     whether a network investor has chosen it; otherwise it is the default
+ * @param chosenAt   when it was chosen; null for the default
+ * @param changeable network investors may change it at any time; online investors are always paid by bank
  */
-public record ReferralPayoutMode(int year, WithdrawalPayoutMethod mode, boolean chosen, Instant chosenAt) {
+public record ReferralPayoutMode(int year, WithdrawalPayoutMethod mode, boolean chosen, Instant chosenAt,
+		boolean changeable) {
 }
