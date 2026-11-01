@@ -10,7 +10,7 @@ import java.util.List;
  */
 public enum WithdrawalKind {
 	/** Rent: on containers paid by bank (bank sheet) and paid in cash at the office (cash sheet). */
-	RENT(EarningsBalance.RENT_BANK, "Rent", List.of(EarningsBalance.RENT_BANK, EarningsBalance.RENT_CASH)),
+	RENT(EarningsBalance.RENT_BANK, "Returns", List.of(EarningsBalance.RENT_BANK, EarningsBalance.RENT_CASH)),
 	/** Referral commission: by bank or in cash, as each investor chose for the year. */
 	REFERRAL(EarningsBalance.REFERRAL, "Referral", List.of(EarningsBalance.REFERRAL));
 

@@ -13,16 +13,16 @@ export async function scheduleRatesAction(_p: FormState, formData: FormData): Pr
   });
   const parsed = scheduleRatesSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
-  const { level1, level2, level3, level4, effectiveFrom, reason } = parsed.data;
+  const { level1, level2, level3, level4, oneTime, effectiveFrom, reason } = parsed.data;
   try {
     await authFetch("/api/v1/admin/referral-rates", {
       method: "POST",
-      json: { percents: [level1, level2, level3, level4], effectiveFrom: effectiveFrom ?? null, reason },
+      json: { percents: [level1, level2, level3, level4], oneTimePercent: oneTime, effectiveFrom: effectiveFrom ?? null, reason },
     });
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/referrals");
+  revalidatePath("/admin/platform-config/referral-rates");
   return { success: effectiveFrom ? "Rates scheduled." : "New rates are in force." };
 }
 
@@ -32,7 +32,7 @@ export async function cancelRatesAction(versionId: string): Promise<FormState> {
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/referrals");
+  revalidatePath("/admin/platform-config/referral-rates");
   return { success: "Scheduled rates cancelled." };
 }
 

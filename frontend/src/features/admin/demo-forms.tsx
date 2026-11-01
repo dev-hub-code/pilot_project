@@ -1,13 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { currencyLabel } from "@/utils/money";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
-import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
+import { yearsLabel } from "@/features/orders/lease-years";
 import type { DemoMember, DemoPlan } from "@/types/demo";
-import type { RentTier } from "@/types/marketplace";
 import { formatDate } from "@/utils/format";
 import { formatMoney, formatPercent } from "@/utils/money";
 import type { FormState } from "@/validators/form-state";
@@ -61,16 +61,15 @@ export function DemoFrameForm({ userId, startsOn, endsOn }: { userId: string; st
 }
 
 /** A dummy order of a real plan: the investor's own, or a downline member's (which earns the investor commission). */
-export function DemoOrderForm({ userId, members, plans, rentBands, startsOn }: {
+export function DemoOrderForm({ userId, members, plans, startsOn }: {
   userId: string;
   members: DemoMember[];
   plans: DemoPlan[];
-  rentBands: RentTier[];
   startsOn: string;
 }) {
   const { state, formAction, e, v } = useForm(addDemoOrderAction.bind(null, userId));
   const [planId, setPlanId] = useState(v("productId", plans[0]?.id ?? "") ?? "");
-  const [containers, setContainers] = useState(v("containers", "1") ?? "1");
+  const [amount, setAmount] = useState(v("amount", "") ?? "");
   const [memberId, setMemberId] = useState(v("memberId", "") ?? "");
   const [start, setStart] = useState(v("startsOn", startsOn) ?? startsOn);
   const member = members.find((m) => m.id === memberId);
@@ -81,22 +80,17 @@ export function DemoOrderForm({ userId, members, plans, rentBands, startsOn }: {
     if (joined && start < joined) setStart(joined);
   };
   const plan = plans.find((p) => p.id === planId);
-  const count = Number(containers);
-  const total = plan && Number.isInteger(count) && count > 0 ? Number(plan.price.amount) * count : null;
-  const band = total === null ? undefined : bandFor(rentBands, total);
+  const entered = Number(amount);
+  const total = plan && Number.isFinite(entered) && entered > 0 ? entered : null;
   if (plans.length === 0) {
-    return <p className="text-sm text-muted">No open or closed plan yet. Publish a plan under Containers first.</p>;
+    return <p className="text-sm text-muted">No open or closed plan yet. Publish a plan under Investment plans first.</p>;
   }
   const owners = [{ value: "", label: "The investor (their own order)" },
     ...members.map((m) => ({ value: m.id, label: `${m.name} · level ${m.level}` }))];
   const planOptions = plans.map((p) => ({
     value: p.id,
-    label: `${p.code} · ${p.title} · ${formatMoney(p.price)}${p.status === "CLOSED" ? " (closed)" : ""}`,
+    label: `${p.code} · ${p.title}${p.status === "CLOSED" ? " (closed)" : ""}`,
   }));
-  const tenures = plan ? Array.from({ length: plan.maxTenureYears - plan.minTenureYears + 1 }, (_, i) => {
-    const years = plan.minTenureYears + i;
-    return { value: String(years), label: `${years} year${years === 1 ? "" : "s"}` };
-  }) : [];
   return (
     <form action={formAction} className="space-y-4" noValidate>
       <FormFeedback state={state} />
@@ -108,42 +102,25 @@ export function DemoOrderForm({ userId, members, plans, rentBands, startsOn }: {
       </div>
       {plan && (
         <p className="text-xs text-muted">
-          {CONTAINER_TYPE_LABEL[plan.containerType]} at {formatMoney(plan.price)} a container, leased for{" "}
-          {plan.minTenureYears === plan.maxTenureYears ? `${plan.minTenureYears} years` : `${plan.minTenureYears} to ${plan.maxTenureYears} years`}.
+          Runs for {yearsLabel(plan.tenureYears)} at {formatPercent(plan.annualReturnPercent, 2)} a year.
         </p>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField label="Containers" name="containers" inputMode="numeric" value={containers}
-          onChange={(event) => setContainers(event.target.value)} error={e.containers} />
-        {/* A tenure kept from a refused submit counts only if this plan offers it; else the longest. */}
-        <SelectField key={planId} label="Tenure" name="tenureYears" options={tenures}
-          defaultValue={tenures.find((t) => t.value === v("tenureYears"))?.value ?? tenures.at(-1)?.value}
-          error={e.tenureYears} />
-        <TextField label={member ? `Lease starts (${member.name} joined ${formatDate(member.joinedOn)})` : "Lease starts"}
+        <TextField label={currencyLabel("Amount")} name="amount" inputMode="decimal" value={amount}
+          onChange={(event) => setAmount(event.target.value)} error={e.amount} />
+        <TextField label={member ? `Starts (${member.name} joined ${formatDate(member.joinedOn)})` : "Starts"}
           name="startsOn" type="date" value={start} min={member?.joinedOn} onChange={(event) => setStart(event.target.value)}
           error={e.startsOn} />
       </div>
       {plan && total !== null && (
         <p className="text-sm">
-          Order total {formatMoney({ amount: String(total), currency: plan.price.currency })}:{" "}
-          {band ? (
-            <>rent band {formatMoney(band.fromAmount)}{band.toAmount ? ` – ${formatMoney(band.toAmount)}` : " and above"},{" "}
-              <strong>{formatPercent(band.monthlyRentPercent, 2)} a month</strong>{" "}
-              ({formatMoney({ amount: String(total * band.monthlyRentPercent / 100), currency: plan.price.currency })}).</>
-          ) : (
-            <span className="text-rose-600">outside every rent band; add containers (a member&apos;s order still counts for commission).</span>
-          )}
+          Order total {formatMoney({ amount: String(total), currency: plan.currency })}:{" "}
+          <strong>{formatMoney({ amount: String((total * plan.annualReturnPercent / 1200).toFixed(2)), currency: plan.currency })} a month</strong>.
         </p>
       )}
       <SubmitButton>Add order</SubmitButton>
     </form>
   );
-}
-
-/** The band an order total falls in; its upper amount covers totals up to the next rupee, as on the server. */
-function bandFor(bands: RentTier[], total: number): RentTier | undefined {
-  return bands.findLast((b) => Number(b.fromAmount.amount) <= total
-    && (b.toAmount === null || total < Number(b.toAmount.amount) + 1));
 }
 
 /** A dummy downline member, referred by the investor or by another member. */
@@ -177,7 +154,7 @@ function RemoveForm({ action, confirm, label }: { action: () => Promise<FormStat
 
 export function RemoveDemoOrder({ userId, orderId, orderNumber }: { userId: string; orderId: string; orderNumber: string }) {
   return <RemoveForm action={() => removeDemoOrderAction(userId, orderId)} label="Remove"
-    confirm={`Remove dummy order ${orderNumber}? Its rent or commission disappears from the figures.`} />;
+    confirm={`Remove dummy order ${orderNumber}? Its returns or commission disappears from the figures.`} />;
 }
 
 export function RemoveDemoMember({ userId, memberId, name }: { userId: string; memberId: string; name: string }) {

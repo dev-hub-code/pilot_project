@@ -12,7 +12,7 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-4xl font-semibold tracking-tight">Create your account</h1>
-        <p className="text-sm text-muted">Start investing in container rental assets.</p>
+        <p className="text-sm text-muted">Start investing with SeaLease.</p>
       </div>
       <RegisterForm referralCode={referralCode} countries={countries} />
     </div>

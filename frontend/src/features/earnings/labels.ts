@@ -30,19 +30,19 @@ export function leaseNote(lease: LeaseRent): string {
 
 export const ACCOUNT_LABEL: Record<AccountType, string> = {
   RENTAL_CASH: "Client money (cash)",
-  INVESTOR_EARNINGS: "Investor rent (bank)",
-  INVESTOR_CASH_EARNINGS: "Investor rent (cash)",
+  INVESTOR_EARNINGS: "Investor returns (bank)",
+  INVESTOR_CASH_EARNINGS: "Investor returns (cash)",
   INVESTOR_REFERRAL_EARNINGS: "Investor referral earnings",
   PLATFORM_ADJUSTMENTS: "Adjustments",
   PLATFORM_REFERRAL_EXPENSE: "Referral commissions",
   WITHDRAWALS_IN_TRANSIT: "Withdrawals in transit",
-  PLATFORM_RENT_EXPENSE: "Rent paid to investors",
+  PLATFORM_RENT_EXPENSE: "Returns paid to investors",
   PLATFORM_CAPITAL_RETURNS: "Capital returned to investors",
 };
 
 export const EARNINGS_BALANCE_LABEL: Record<EarningsBalance, string> = {
-  RENT_BANK: "Rent (bank)",
-  RENT_CASH: "Rent (cash)",
+  RENT_BANK: "Returns (bank)",
+  RENT_CASH: "Returns (cash)",
   REFERRAL: "Referral earnings",
 };
 
@@ -67,7 +67,7 @@ export function formatPeriod(startsOn: string, endsOnExclusive: string): string 
  * hour after the lease agreement is accepted.
  */
 export function nextCreditNote(nextCreditAt: string | null, every: string): string {
-  if (!nextCreditAt) return `Credited ${every} once your lease starts`;
+  if (!nextCreditAt) return `Credited ${every} once your term starts`;
   return new Date(nextCreditAt).getTime() <= Date.now()
     ? "Next credit any minute now"
     : `Next credit ${formatDateTime(nextCreditAt)} (credited ${every})`;

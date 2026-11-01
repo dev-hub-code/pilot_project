@@ -1,6 +1,8 @@
 package com.sealease.backend.payment.controller;
 
+import com.sealease.backend.bankaccount.service.IfscDirectory;
 import com.sealease.backend.payment.dto.CompanyBankAccountRequest;
+import com.sealease.backend.bankaccount.service.IfscDirectory;
 import com.sealease.backend.payment.dto.CompanyBankAccountResponse;
 import com.sealease.backend.payment.service.CompanyBankAccountService;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -32,6 +34,13 @@ public class AdminCompanyBankAccountController {
 	@PreAuthorize("hasAnyAuthority('COMPANY_BANK_ACCOUNT_MANAGE', 'COMPANY_BANK_ACCOUNT_VIEW', 'FINANCE_VIEW')")
 	public List<CompanyBankAccountResponse> list() {
 		return accounts.list();
+	}
+
+	/** The bank an IFSC code belongs to, from the online directory; filled in as staff type the code. */
+	@GetMapping("/api/v1/admin/company-bank-accounts/ifsc/{code}")
+	@PreAuthorize("hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')")
+	public IfscDirectory.Lookup ifsc(@PathVariable String code) {
+		return accounts.lookupIfsc(code);
 	}
 
 	@PostMapping("/api/v1/admin/company-bank-accounts")

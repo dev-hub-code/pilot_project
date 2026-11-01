@@ -9,12 +9,15 @@ import java.util.List;
 /**
  * The investor's referral programme at a glance.
  *
+ * @param oneTimePercent what the online scheme pays, once, on a directly referred investor's first order
  * @param eligible    whether the investor currently earns commissions (active account, verified identity)
  * @param referredBy  display name of the direct referrer, if any
  */
 public record ReferralOverview(
 		String code,
 		String referredBy,
+		ReferralScheme scheme,
+		BigDecimal oneTimePercent,
 		boolean eligible,
 		String ineligibleReason,
 		List<Level> levels,

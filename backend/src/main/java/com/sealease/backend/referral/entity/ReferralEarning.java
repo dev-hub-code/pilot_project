@@ -3,6 +3,8 @@ package com.sealease.backend.referral.entity;
 import com.sealease.backend.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Immutable;
@@ -23,7 +25,7 @@ public class ReferralEarning {
 	@UuidGenerator(style = UuidGenerator.Style.TIME)
 	private UUID id;
 
-	/** The referred investor's holding whose rent the commission was earned on. */
+	/** The referred investor's holding the commission was earned on: its rent, or its lease starting (one-time). */
 	@Column(name = "source_holding_id", nullable = false)
 	private UUID sourceHoldingId;
 
@@ -58,6 +60,10 @@ public class ReferralEarning {
 	@Column(name = "rate_version_id", nullable = false)
 	private UUID rateVersionId;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "kind", nullable = false, length = 20)
+	private ReferralEarningKind kind = ReferralEarningKind.MONTHLY;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -79,6 +85,15 @@ public class ReferralEarning {
 		this.currency = amount.currency().getCurrencyCode();
 		this.rateVersionId = rateVersionId;
 		this.createdAt = createdAt;
+	}
+
+	/** The online scheme's commission: level 1, once, on the referred investor's first order. */
+	public static ReferralEarning oneTime(UUID sourceHoldingId, UUID sourceUserId, UUID beneficiaryUserId, UUID productId,
+			Money base, BigDecimal ratePercent, Money amount, UUID rateVersionId, Instant createdAt) {
+		ReferralEarning earning = new ReferralEarning(sourceHoldingId, null, sourceUserId, beneficiaryUserId, productId, 1,
+				base, ratePercent, amount, rateVersionId, createdAt);
+		earning.kind = ReferralEarningKind.ONE_TIME;
+		return earning;
 	}
 
 	public UUID getId() {

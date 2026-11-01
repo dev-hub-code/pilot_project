@@ -1,4 +1,3 @@
-import type { Assignee } from "@/types/user";
 
 /** One version of the lease agreement's wording. */
 export interface AgreementTemplateVersion {
@@ -30,13 +29,12 @@ export interface AgreementPreview {
   body: string;
 }
 
-/** A lease agreement issued when a container was assigned. */
+/** An investment agreement, issued when its order was confirmed. */
 export interface LeaseAgreement {
   id: string;
   agreementNumber: string;
   holdingId: string;
   orderId: string;
-  containerNumber: string;
   title: string;
   generatedAt: string;
   /** The lease starts only once the investor accepts it. */
@@ -49,32 +47,4 @@ export interface LeaseAgreement {
 export interface LeaseAgreementDocument {
   agreement: LeaseAgreement;
   body: string;
-}
-
-/** Reviewing one issued agreement: a reviewer assigns it to themselves, comments and marks it done. */
-export interface AgreementReviewTask {
-  id: string;
-  status: "OPEN" | "DONE";
-  agreement: LeaseAgreement;
-  investor: { id: string; userCode: string | null; name: string; email: string };
-  assignee: Assignee | null;
-  /** Who marked it done, and when. */
-  completedBy: Assignee | null;
-  comments: number;
-  createdAt: string;
-}
-
-export interface AgreementReviewComment {
-  id: string;
-  authorId: string;
-  authorName: string;
-  body: string;
-  createdAt: string;
-}
-
-/** A task with the agreement's wording and its comments, oldest first. */
-export interface AgreementReviewDetail {
-  task: AgreementReviewTask;
-  wording: string;
-  comments: AgreementReviewComment[];
 }

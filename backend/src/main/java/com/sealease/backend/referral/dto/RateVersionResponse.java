@@ -6,6 +6,6 @@ import java.util.List;
 import java.util.UUID;
 
 /** @param state IN_FORCE, SCHEDULED, SUPERSEDED or CANCELLED, as of now */
-public record RateVersionResponse(UUID id, Instant effectiveFrom, List<BigDecimal> percents, String reason,
-		UUID createdBy, Instant createdAt, Instant cancelledAt, String state) {
+public record RateVersionResponse(UUID id, Instant effectiveFrom, List<BigDecimal> percents,
+		BigDecimal oneTimePercent, String reason, UUID createdBy, Instant createdAt, Instant cancelledAt, String state) {
 }

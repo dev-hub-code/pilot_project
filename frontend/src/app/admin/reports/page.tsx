@@ -16,8 +16,8 @@ import { EmailText } from "@/components/ui/email-text";
 export const metadata: Metadata = { title: "Reports" };
 
 const REPORTS = [
-  { key: "financial-summary", label: "Financial summary", description: "Rent, fees, commissions, withdrawals and balances owed, per currency." },
-  { key: "offerings", label: "Containers & payouts", description: "Containers sold per container listing, and payouts due and not yet paid." },
+  { key: "financial-summary", label: "Financial summary", description: "Returns, fees, commissions, withdrawals and balances owed, per currency." },
+  { key: "offerings", label: "Plans & payouts", description: "Investments per plan, and payouts due and not yet paid." },
   { key: "statement", label: "Investor statement", description: "One investor's account activity, holdings and withdrawals." },
 ] as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;

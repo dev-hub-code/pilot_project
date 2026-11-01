@@ -17,15 +17,15 @@ class AgreementWordingTest {
 
 	@Test
 	void placeholdersAreFilledInOnce() {
-		String filled = Placeholder.fill("Dear {{investorName}}, container {{ containerNumber }}.",
-				Map.of(Placeholder.INVESTOR_NAME, "{{containerNumber}} $1 Rao", Placeholder.CONTAINER_NUMBER, "SLSU1234565"));
+		String filled = Placeholder.fill("Dear {{investorName}}, plan {{ planCode }}.",
+				Map.of(Placeholder.INVESTOR_NAME, "{{planCode}} $1 Rao", Placeholder.PLAN_CODE, "LST-1"));
 		// A value is never itself treated as a placeholder or a regex group.
-		assertThat(filled).isEqualTo("Dear {{containerNumber}} $1 Rao, container SLSU1234565.");
+		assertThat(filled).isEqualTo("Dear {{planCode}} $1 Rao, plan LST-1.");
 	}
 
 	@Test
 	void unknownPlaceholdersAreRefusedByName() {
-		Placeholder.requireKnown("{{investorName}} leases {{containerNumber}}");
+		Placeholder.requireKnown("{{investorName}} leases {{planCode}}");
 		assertThatThrownBy(() -> Placeholder.requireKnown("{{investorNmae}} and {{rent}} and {{investorName}}"))
 			.isInstanceOf(BusinessException.class)
 			.hasMessageContaining("{{investorNmae}}, {{rent}}")
@@ -46,14 +46,15 @@ class AgreementWordingTest {
 
 	@Test
 	void theShippedWordingUsesOnlyKnownPlaceholdersAndRendersAsPdf() throws Exception {
-		String migration = Files.readString(Path.of("src/main/resources/db/migration/V1__schema.sql"),
+		String migration = Files.readString(Path.of("src/main/resources/db/migration/dml/V5__reference_data.sql"),
 				StandardCharsets.UTF_8);
-		String body = migration.substring(migration.indexOf("$body$") + 6, migration.lastIndexOf("$body$"));
+		int start = migration.indexOf("$body$") + 6;
+		String body = migration.substring(start, migration.indexOf("$body$", start));
 		Placeholder.requireKnown(body);
 		String filled = Placeholder.fill(body, Placeholder.examples());
-		assertThat(filled).doesNotContain("{{").contains("SLSU1234565", "₹3,750.00");
+		assertThat(filled).doesNotContain("{{").contains("LST-10001", "₹3,750.00");
 
-		byte[] pdf = new AgreementRenderer().pdf("Container Lease Agreement", "AGR-2026-000042 · issued 17 October 2026",
+		byte[] pdf = new AgreementRenderer().pdf("Investment Agreement", "AGR-2026-000042 · issued 17 October 2026",
 				filled, "Issued electronically by SeaLease");
 		assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
 	}

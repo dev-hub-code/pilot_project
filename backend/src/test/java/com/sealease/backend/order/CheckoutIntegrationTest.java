@@ -1,7 +1,6 @@
 package com.sealease.backend.order;
 
 import com.jayway.jsonpath.JsonPath;
-import com.sealease.backend.container.service.ContainerNumbers;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.outbox.OutboxRelay;
 import com.sealease.backend.outbox.ProcessedEvents;
@@ -43,6 +42,7 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
@@ -87,79 +87,32 @@ class CheckoutIntegrationTest {
 		api = new TestApi(mvc, jdbc);
 		offerings = new OfferingFixtures(mvc, api.admin());
 		companyAccount = api.companyBankAccount();
-		// Checkout arithmetic, not rent by order value (MarketplaceIntegrationTest covers that): a flat 2% on every order.
-		jdbc.update("DELETE FROM rent_rate_tiers");
-		jdbc.update("INSERT INTO rent_rate_tiers (min_order_amount, monthly_rent_percent, updated_at) VALUES (0, 2, now())");
-	}
-
-	@AfterEach
-	void restoreRentTiers() {
-		jdbc.update("UPDATE order_settings SET min_order_amount = 0, updated_at = NULL, updated_by = NULL WHERE id = 1");
-		jdbc.update("DELETE FROM rent_rate_tiers");
-		jdbc.update("""
-				INSERT INTO rent_rate_tiers (min_order_amount, max_order_amount, monthly_rent_percent, updated_at)
-				VALUES (0, 99999, 2, now()), (100000, NULL, 5, now())""");
-	}
-
-	// --------------------------------------------------------------------------------- cart
-
-	@Test
-	void ordersBelowTheMinimumCannotBePlaced() throws Exception {
-		UUID product = offerings.plan();
-		Account investor = approvedInvestor();
-		mvc.perform(put("/api/v1/admin/settings/minimum-order").header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"amount\":\"150000\"}"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.amount.amount").value("150000.00"));
-		// Two containers (₹1,00,000) are below the ₹1,50,000 minimum: the cart says so and checkout refuses.
-		setCartItem(investor, product, 2).andExpect(status().isOk())
-			.andExpect(jsonPath("$.minimumOrder.amount").value("150000.00"))
-			.andExpect(jsonPath("$.problems[0]").value(org.hamcrest.Matchers.startsWith("The minimum order is")))
-			.andExpect(jsonPath("$.checkoutReady").value(false));
-		checkout(investor, UUID.randomUUID().toString(), acceptance(product)).andExpect(status().isUnprocessableContent());
-		// Three (₹1,50,000) meet it.
-		setCartItem(investor, product, 3).andExpect(jsonPath("$.problems").isEmpty())
-			.andExpect(jsonPath("$.checkoutReady").value(true));
-		checkout(investor, UUID.randomUUID().toString(), acceptance(product)).andExpect(status().isCreated());
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'MINIMUM_ORDER_CHANGED'", Integer.class)).isPositive();
 	}
 
 	@Test
-	void cartHoldsContainersOfAPlanAndShowsThePayout() throws Exception {
-		UUID product = offerings.plan();
+	void ordersBelowThePlansMinimumUnitsCannotBePlaced() throws Exception {
+		UUID product = offerings.published(OfferingFixtures.TYPE, "3", 3, 10);
 		Account investor = approvedInvestor();
+		checkout(investor, UUID.randomUUID().toString(), buy(product, 9)).andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(containsString("Buy at least 10 units")));
+		// 10 × ₹500 = ₹5,000 at the plan's 3% a month for 3 years.
+		String orderId = JsonPath.read(checkout(investor, UUID.randomUUID().toString(), buy(product, 10))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.total.amount").value("5000.00"))
+			.andExpect(jsonPath("$.items[0].units").value(10))
+			.andExpect(jsonPath("$.items[0].unitPrice.amount").value("500.00"))
+			.andExpect(jsonPath("$.items[0].monthlyRentPercent").value(3))
+			.andExpect(jsonPath("$.items[0].tenureMonths").value(36))
+			.andReturn().getResponse().getContentAsString(), "$.id");
+		assertThat(api.auditCount("ORDER_PLACED", orderId)).isEqualTo(1);
+	}
 
-		setCartItem(investor, product, 0).andExpect(status().isBadRequest());
-		// ₹50,000 a container; 2% rent = ₹1,000 a month. Plans pay rent only: the price is not paid back.
-		// Without a lease chosen, the line takes the plan's shortest: 1 year (of 1 to 5).
-		setCartItem(investor, product, 2).andExpect(status().isOk())
-			.andExpect(jsonPath("$.items[0].quantity").value(2))
-			.andExpect(jsonPath("$.items[0].pricePerContainer.amount").value("50000.00"))
-			.andExpect(jsonPath("$.items[0].monthlyPayout.amount").value("2000.00"))
-			.andExpect(jsonPath("$.items[0].tenureYears").value(1))
-			.andExpect(jsonPath("$.items[0].minTenureYears").value(1))
-			.andExpect(jsonPath("$.items[0].maxTenureYears").value(5))
-			.andExpect(jsonPath("$.items[0].totalPayout.amount").value("24000.00"))
-			.andExpect(jsonPath("$.total.amount").value("100000.00"))
-			.andExpect(jsonPath("$.checkoutReady").value(true));
-		// Setting the same plan again changes the line instead of adding one.
-		// The investor chooses the lease, in whole years within the plan's limits; changing the quantity keeps it.
-		setCartItem(investor, product, 2, 3).andExpect(status().isOk())
-			.andExpect(jsonPath("$.items[0].tenureYears").value(3))
-			.andExpect(jsonPath("$.items[0].totalPayout.amount").value("72000.00"));
-		setCartItem(investor, product, 2, 6).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("Choose a lease of 1 to 5 years")));
-		setCartItem(investor, product, 1).andExpect(jsonPath("$.items.length()").value(1))
-			.andExpect(jsonPath("$.items[0].tenureYears").value(3))
-			.andExpect(jsonPath("$.total.amount").value("50000.00"));
-
-		Account unverified = api.register();
-		setCartItem(unverified, product, 1).andExpect(status().isUnprocessableContent())
+	@Test
+	void buyingNeedsAWholeUnitAndVerifiedIdentity() throws Exception {
+		UUID product = offerings.plan();
+		checkout(approvedInvestor(), UUID.randomUUID().toString(), purchase(product, 0)).andExpect(status().isBadRequest());
+		checkout(api.register(), UUID.randomUUID().toString(), purchase(product, 1)).andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(containsString("Verify your identity")));
-
-		mvc.perform(delete("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.items.length()").value(0))
-			.andExpect(jsonPath("$.checkoutReady").value(false));
 	}
 
 	// ----------------------------------------------------------------------------- checkout
@@ -168,112 +121,60 @@ class CheckoutIntegrationTest {
 	void checkoutReservesNoContainersAndIsIdempotent() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, 2).andExpect(status().isOk());
 
 		mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content(acceptance(product)))
+				.contentType(MediaType.APPLICATION_JSON).content(purchase(product, 2)))
 			.andExpect(status().isBadRequest());
 
 		String key = UUID.randomUUID().toString();
-		String orderId = JsonPath.read(checkout(investor, key, acceptance(product))
+		String orderId = JsonPath.read(checkout(investor, key, purchase(product, 2))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.status").value("PENDING_PAYMENT"))
 			.andExpect(jsonPath("$.orderNumber").value(matchesPattern("ORD-\\d{6,}")))
 			.andExpect(jsonPath("$.total.amount").value("100000.00"))
-			.andExpect(jsonPath("$.items.length()").value(2))
-			.andExpect(jsonPath("$.items[0].containerType").value(OfferingFixtures.TYPE))
-			// Finance assigns the containers after payment.
-			.andExpect(jsonPath("$.items[0].containerNumber").doesNotExist())
+			.andExpect(jsonPath("$.items.length()").value(1))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
 		assertThat(reservedFor(orderId)).isZero();
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE order_id = ?::uuid AND container_id IS NULL",
-				Integer.class, orderId)).isEqualTo(2);
-		mvc.perform(get("/api/v1/cart").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.items.length()").value(0));
+				Integer.class, orderId)).isEqualTo(1);
 
 		// A retry (lost response) returns the same order; nothing is placed twice.
-		checkout(investor, key, acceptance(product)).andExpect(jsonPath("$.id").value(orderId));
+		checkout(investor, key, purchase(product, 2)).andExpect(jsonPath("$.id").value(orderId));
 		assertThat(ordersOf(investor)).isEqualTo(1);
-		checkout(investor, key, acceptance(UUID.randomUUID())).andExpect(status().isConflict());
+		checkout(investor, key, purchase(product, 3)).andExpect(status().isConflict());
 
 		assertThat(api.auditCount("ORDER_PLACED", orderId)).isEqualTo(1);
 		assertThat(outboxCount("investment.created", orderId)).isEqualTo(1);
 	}
 
 	@Test
-	void checkoutRequiresTheTermsOfEveryPlanToBeAccepted() throws Exception {
+	void checkoutRequiresThePlansTermsToBeAccepted() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, 1).andExpect(status().isOk());
-
-		checkout(investor, UUID.randomUUID().toString(), acceptance(UUID.randomUUID()))
-			.andExpect(status().isUnprocessableContent());
+		checkout(investor, UUID.randomUUID().toString(), """
+				{"productId":"%s","units":1,"acceptTerms":false}""".formatted(product))
+			.andExpect(status().isBadRequest());
 		assertThat(ordersOf(investor)).isZero();
 	}
 
 	@Test
 	void salesAreNotLimitedByStock() throws Exception {
-		// The only test using tank containers: there are none in stock, and investors can still buy.
-		UUID product = offerings.published("TANK_20FT", "80000", "1.5");
-		Account investor = approvedInvestor();
-		setCartItem(investor, product, 3).andExpect(status().isOk());
-		checkout(investor, UUID.randomUUID().toString(), acceptance(product)).andExpect(status().isCreated())
-			.andExpect(jsonPath("$.items.length()").value(3));
-		setCartItem(investor, product, 51).andExpect(status().isBadRequest());
-	}
-
-	@Test
-	void aContainerIsAssignedToOnlyOneInvestmentAtATime() throws Exception {
-		UUID product = offerings.published("REEFER_40FT", "120000", "2.5");
-		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
-		List<String> holdings = new ArrayList<>();
-		for (int i = 0; i < 3; i++) {
-			Account investor = approvedInvestor();
-			String orderId = investors.placeOrder(investor, product, 1);
-			payInFull(investor, orderId);
-			holdings.add(jdbc.queryForObject("SELECT id::text FROM holdings WHERE order_id = ?::uuid", String.class, orderId));
-		}
-
-		// Two finance users type the same new number for two investments at once: one gets it.
-		String number = OfferingFixtures.containerNumber();
-		Account finance = api.admin();
-		List<Callable<Integer>> attempts = holdings.subList(0, 2).stream()
-			.map(h -> (Callable<Integer>) () -> assign(finance, h, number).andReturn().getResponse().getStatus())
-			.toList();
-		List<Integer> statuses = new ArrayList<>();
-		try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
-			for (Future<Integer> result : pool.invokeAll(attempts)) {
-				statuses.add(result.get());
-			}
-		}
-		assertThat(statuses).containsExactlyInAnyOrder(204, 409);
-		assertThat(jdbc.queryForList("SELECT status FROM holdings WHERE id IN (?::uuid, ?::uuid) ORDER BY status",
-				String.class, holdings.get(0), holdings.get(1))).containsExactly("AWAITING_ACCEPTANCE", "AWAITING_CONTAINER");
-
-		// Once its lease has ended the container is free again, and the same number can be assigned anew.
-		assign(finance, holdings.get(2), number).andExpect(status().isConflict())
-			.andExpect(jsonPath("$.message").value(containsString("already leased")));
-		jdbc.update("UPDATE containers SET status = 'AVAILABLE' WHERE container_number = ?", number);
-		jdbc.update("""
-				UPDATE holdings SET status = 'MATURED', matured_at = now(), lease_starts_on = current_date - 30,
-				    lease_ends_on = current_date
-				WHERE container_id = (SELECT id FROM containers WHERE container_number = ?)""", number);
-		assign(finance, holdings.get(2), number).andExpect(status().isNoContent());
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM containers WHERE container_number = ?", Integer.class, number))
-			.isEqualTo(1);
-	}
-
-	@Test
-	void concurrentCheckoutsOfOneCartPlaceOneOrder() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, 1).andExpect(status().isOk());
+		checkout(investor, UUID.randomUUID().toString(), purchase(product, 3)).andExpect(status().isCreated())
+			.andExpect(jsonPath("$.items.length()").value(1));
+	}
+
+	@Test
+	void concurrentRetriesOfOnePurchasePlaceOneOrder() throws Exception {
+		UUID product = offerings.plan();
+		Account investor = approvedInvestor();
+		String key = UUID.randomUUID().toString();
 
 		List<Callable<Integer>> attempts = new ArrayList<>();
 		for (int i = 0; i < 5; i++) {
-			attempts.add(() -> checkout(investor, UUID.randomUUID().toString(), acceptance(product))
-				.andReturn().getResponse().getStatus());
+			attempts.add(() -> checkout(investor, key, purchase(product, 1)).andReturn().getResponse().getStatus());
 		}
 		List<Integer> statuses = new ArrayList<>();
 		try (ExecutorService pool = Executors.newFixedThreadPool(5)) {
@@ -281,7 +182,7 @@ class CheckoutIntegrationTest {
 				statuses.add(result.get());
 			}
 		}
-		assertThat(statuses).containsOnlyOnce(201);
+		assertThat(statuses).doesNotContain(500, 409);
 		assertThat(ordersOf(investor)).isEqualTo(1);
 	}
 
@@ -305,11 +206,11 @@ class CheckoutIntegrationTest {
 
 	@Test
 	void paidInvestmentsAwaitTheContainersFinanceAssignsWhichStartsTheLeaseAndPayouts() throws Exception {
-		UUID product = offerings.plan();
+		UUID product = offerings.published(OfferingFixtures.TYPE, "2", 2);
 		Account investor = approvedInvestor();
 		Account finance = api.staff("ADMIN", "FINANCE");
-		// Leased for 2 years, as the investor chose.
-		String orderId = placeOrder(investor, product, 2, 2);
+		// A two-year plan.
+		String orderId = placeOrder(investor, product, 2);
 
 		String paymentId = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andExpect(status().isCreated())
@@ -328,109 +229,46 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.externalReference").value("BANK-REF-1"));
 		confirmTransfer(finance, paymentId, "100000").andExpect(status().isConflict());
 
-		// Paid: two investments awaiting their containers, with no lease and no payouts yet.
+		// Paid: the investment awaits its agreement, with no term and no payouts yet.
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.activeHoldings").value(0))
 			.andExpect(jsonPath("$.totalsByCurrency[0].amount").value("100000.00"))
-			.andExpect(jsonPath("$.holdings[*].status", containsInAnyOrder("AWAITING_CONTAINER", "AWAITING_CONTAINER")))
-			.andExpect(jsonPath("$.holdings[0].container").doesNotExist())
+			.andExpect(jsonPath("$.holdings[*].status", contains("AWAITING_ACCEPTANCE")))
 			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").doesNotExist())
-			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("1000.00"));
+			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("2000.00"));
 		assertThat(leases(orderId)).isEmpty();
 		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.status").value("CONFIRMED"))
-			.andExpect(jsonPath("$.items[0].containerNumber").doesNotExist());
-
-		// Finance sees them in the queue with the available containers of the plan's type.
-		mvc.perform(get("/api/v1/admin/container-assignments").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(status().isForbidden());
+			.andExpect(jsonPath("$.status").value("CONFIRMED"));
 		List<String> holdings = jdbc.queryForList("SELECT id::text FROM holdings WHERE order_id = ?::uuid ORDER BY id",
 				String.class, orderId);
-		mvc.perform(get("/api/v1/admin/container-assignments?size=100").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.pending.content[?(@.orderId == '%s')].investorEmail".formatted(orderId))
-				.value(containsInAnyOrder(investor.email(), investor.email())));
-
-		// Or generates one: a valid ISO 6346 number under the company's owner code, never the same twice.
-		mvc.perform(post("/api/v1/admin/container-assignments/container-numbers").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(status().isForbidden());
-		List<String> generated = new ArrayList<>();
-		for (int i = 0; i < 2; i++) {
-			generated.add(JsonPath.read(mvc.perform(post("/api/v1/admin/container-assignments/container-numbers")
-					.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getContentAsString(), "$.containerNumber"));
-		}
-		assertThat(generated).allMatch(n -> n.startsWith("SLSU") && ContainerNumbers.isValid(n)).doesNotHaveDuplicates();
-
-		// Finance types each container's number: validated, of the plan's type, and not already leased.
-		String first = OfferingFixtures.containerNumber();
-		// Any format: recorded tidied, as "YARD7A".
-		String second = "yard-7a";
-		String flatRack = OfferingFixtures.containerNumber();
-		jdbc.update("""
-				INSERT INTO containers (id, container_number, container_type, status, created_by, version, created_at, updated_at)
-				VALUES (gen_random_uuid(), ?, 'FLAT_RACK_20FT', 'AVAILABLE', ?, 0, now(), now())""", flatRack, finance.id());
-		assign(investor, holdings.get(0), first).andExpect(status().isForbidden());
-		assign(finance, holdings.get(0), " - ").andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value(containsString("Enter the container number")));
-		assign(finance, holdings.get(0), flatRack).andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(containsString("needs a")));
-		api.takeContainerTask(holdings.get(0), finance);
-		mvc.perform(post("/api/v1/admin/container-assignments/{id}", holdings.get(0)).header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"containerNumber\":\"" + first.toLowerCase() + "\",\"currentLocation\":\"Mundra Port, Gujarat\"}"))
-			.andExpect(status().isNoContent());
-		assign(finance, holdings.get(1), first).andExpect(status().isConflict());
-		assign(finance, holdings.get(0), second).andExpect(status().isConflict());
-		assign(finance, holdings.get(1), second).andExpect(status().isNoContent());
-		assertThat(jdbc.queryForObject("SELECT status FROM containers WHERE container_number = 'YARD7A'", String.class))
-			.isEqualTo("ON_LEASE");
-
-		// Each container is now the investor's, but nothing is earned until they accept its lease agreement.
-		assertThat(jdbc.queryForList("SELECT DISTINCT status FROM holdings WHERE order_id = ?::uuid", String.class, orderId))
-			.containsExactly("AWAITING_ACCEPTANCE");
-		assertThat(leases(orderId)).isEmpty();
-		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.activeHoldings").value(0))
-			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").doesNotExist());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM lease_agreements WHERE order_id = ?::uuid", Integer.class, orderId))
+			.isEqualTo(1);
 		for (String holding : holdings) {
 			new InvestorFixtures(mvc, jdbc, api).acceptAgreement(investor, UUID.fromString(holding));
 		}
 
-		// Accepted, each is on lease from today with its monthly payouts.
-		List<String> numbers = jdbc.queryForList("""
-				SELECT c.container_number FROM holdings h JOIN containers c ON c.id = h.container_id
-				WHERE h.order_id = ?::uuid AND c.status = 'ON_LEASE' ORDER BY c.container_number""", String.class, orderId);
-		assertThat(numbers).hasSize(2);
-		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.items[*].containerNumber", containsInAnyOrder(numbers.toArray())));
-
 		LocalDate today = LocalDate.now(ZoneOffset.UTC);
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
-			.andExpect(jsonPath("$.activeHoldings").value(2))
-			.andExpect(jsonPath("$.holdings[*].container.containerNumber", containsInAnyOrder(numbers.toArray())))
-			.andExpect(jsonPath("$.holdings[*].container.currentLocation", hasItem("Mundra Port, Gujarat")))
-			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("1000.00"))
+			.andExpect(jsonPath("$.activeHoldings").value(1))
+			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("2000.00"))
 			.andExpect(jsonPath("$.holdings[0].monthlyCapitalReturn.amount").value("0.00"))
-			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("1000.00"))
+			.andExpect(jsonPath("$.holdings[0].monthlyPayout.amount").value("2000.00"))
 			.andExpect(jsonPath("$.holdings[0].tenureMonths").value(24))
-			.andExpect(jsonPath("$.holdings[0].totalPayout.amount").value("24000.00"))
+			.andExpect(jsonPath("$.holdings[0].totalPayout.amount").value("48000.00"))
 			.andExpect(jsonPath("$.holdings[0].leaseStartsOn").value(today.toString()))
 			.andExpect(jsonPath("$.holdings[0].leaseEndsOn").value(today.plusMonths(24).toString()));
 
-		// One rent accrual per container: the lease from the next full hour for 24 months, ₹1,000 a month.
+		// One accrual: the term from the next full hour for 24 months, ₹2,000 a month.
 		List<Map<String, Object>> leases = leases(orderId);
-		assertThat(leases).hasSize(2).allSatisfy(lease -> {
+		assertThat(leases).hasSize(1).allSatisfy(lease -> {
 			Instant start = ((Timestamp) lease.get("starts_at")).toInstant();
 			assertThat(start.getEpochSecond() % 3600).isZero();
 			assertThat(((Timestamp) lease.get("ends_at")).toInstant())
 				.isEqualTo(start.atZone(ZoneOffset.UTC).plusMonths(24).toInstant());
-			assertThat((BigDecimal) lease.get("monthly_rent")).isEqualByComparingTo("1000");
+			assertThat((BigDecimal) lease.get("monthly_rent")).isEqualByComparingTo("2000");
 		});
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND type = 'CONTAINER_ASSIGNED'",
-				Integer.class, investor.id())).isEqualTo(2);
-		assertThat(api.auditCount("HOLDING_CONTAINER_ASSIGNED", holdings.get(0))).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND type = 'AGREEMENT_ISSUED'",
+				Integer.class, investor.id())).isEqualTo(1);
 
 		String invoice = mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
@@ -438,8 +276,8 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.total.amount").value("100000.00"))
 			.andExpect(jsonPath("$.issuer.name").value("SeaLease Test Ltd"))
 			.andExpect(jsonPath("$.buyer.email").value(investor.email()))
-			.andExpect(jsonPath("$.lines.length()").value(2))
-			.andExpect(jsonPath("$.lines[0].description").value(containsString("24-month lease")))
+			.andExpect(jsonPath("$.lines.length()").value(1))
+			.andExpect(jsonPath("$.lines[0].description").value(containsString("24-month investment")))
 			.andReturn().getResponse().getContentAsString();
 		Account stranger = approvedInvestor();
 		mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, stranger.bearer()))
@@ -601,32 +439,27 @@ class CheckoutIntegrationTest {
 	@Test
 	void theInvestorPaysThePriceAndTheInvoiceListsIt() throws Exception {
 		// ₹50,000 a container; rent is 2% of it.
-		UUID product = offerings.published(OfferingFixtures.TYPE, "50000", "2", 1, 5);
-		mvc.perform(get("/api/v1/marketplace/{id}", product).header(HttpHeaders.AUTHORIZATION, approvedInvestor().bearer()))
-			.andExpect(jsonPath("$.listing.price.amount").value("50000.00"));
-
+		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
-		setCartItem(investor, product, 2).andExpect(jsonPath("$.total.amount").value("100000.00"))
-			.andExpect(jsonPath("$.items[0].amount.amount").value("100000.00"));
-		String orderId = JsonPath.read(checkout(investor, UUID.randomUUID().toString(), acceptance(product))
+		String orderId = JsonPath.read(checkout(investor, UUID.randomUUID().toString(), purchase(product, 2))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.total.amount").value("100000.00"))
-			.andExpect(jsonPath("$.items[0].amount.amount").value("50000.00"))
+			.andExpect(jsonPath("$.items[0].amount.amount").value("100000.00"))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 		pay(investor, orderId, "100000");
 		mvc.perform(get("/api/v1/orders/{id}/invoice", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.total.amount").value("100000.00"))
-			.andExpect(jsonPath("$.lines.length()").value(2))
-			.andExpect(jsonPath("$.lines[0].amount.amount").value("50000.00"));
+			.andExpect(jsonPath("$.lines.length()").value(1))
+			.andExpect(jsonPath("$.lines[0].amount.amount").value("100000.00"));
 		mvc.perform(get("/api/v1/portfolio").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.totalsByCurrency[0].amount").value("100000.00"))
-			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("1000.00"));
+			.andExpect(jsonPath("$.holdings[0].monthlyRent.amount").value("2000.00"));
 	}
 
 	@Test
 	void cashPaidAtTheOfficeIsThePriceAndEarnsThePlansRent() throws Exception {
 		// ₹50,000 a container; the plan pays 2% rent a month.
-		UUID product = offerings.published(OfferingFixtures.TYPE, "50000", "2", 1, 5);
+		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, product, 1);
 
@@ -654,7 +487,7 @@ class CheckoutIntegrationTest {
 
 	@Test
 	void cashAtTheOfficeOnceChosenStaysAndThePaymentItReplacedIsNotConfirmed() throws Exception {
-		UUID product = offerings.published(OfferingFixtures.TYPE, "50000", "2", 1, 5);
+		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, product, 1);
 		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
@@ -696,25 +529,9 @@ class CheckoutIntegrationTest {
 		return investor;
 	}
 
-	private String placeOrder(Account investor, UUID product, int containers) throws Exception {
-		return placeOrder(investor, product, containers, 1);
-	}
-
-	private String placeOrder(Account investor, UUID product, int containers, int tenureYears) throws Exception {
-		setCartItem(investor, product, containers, tenureYears).andExpect(status().isOk());
-		return JsonPath.read(checkout(investor, UUID.randomUUID().toString(), acceptance(product))
+	private String placeOrder(Account investor, UUID product, int units) throws Exception {
+		return JsonPath.read(checkout(investor, UUID.randomUUID().toString(), purchase(product, units))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
-	}
-
-	private ResultActions setCartItem(Account investor, UUID product, int containers) throws Exception {
-		return mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":" + containers + "}"));
-	}
-
-	private ResultActions setCartItem(Account investor, UUID product, int containers, int tenureYears) throws Exception {
-		return mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"quantity\":" + containers + ",\"tenureYears\":" + tenureYears + "}"));
 	}
 
 	/** Containers reserved for the order (only orders placed before manual assignment reserved any). */
@@ -728,12 +545,6 @@ class CheckoutIntegrationTest {
 		return jdbc.queryForList("""
 				SELECT a.starts_at, a.ends_at, a.monthly_rent FROM rent_accruals a JOIN holdings h ON h.id = a.holding_id
 				WHERE h.order_id = ?::uuid""", orderId);
-	}
-
-	private ResultActions assign(Account actor, String holdingId, String containerNumber) throws Exception {
-		api.takeContainerTask(holdingId, actor);
-		return mvc.perform(post("/api/v1/admin/container-assignments/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"containerNumber\":\"" + containerNumber + "\"}"));
 	}
 
 	/** The order's owner pays by bank and the admin confirms the full amount. */
@@ -750,9 +561,14 @@ class CheckoutIntegrationTest {
 		return count == null ? 0 : count;
 	}
 
-	private static String acceptance(UUID product) {
+	/** Buys lots of ₹50,000. */
+	private static String purchase(UUID product, int lots) {
+		return buy(product, lots * OfferingFixtures.LOT);
+	}
+
+	private static String buy(UUID product, int units) {
 		return """
-				{"acceptedTerms":["%s"]}""".formatted(product);
+				{"productId":"%s","units":%d,"acceptTerms":true}""".formatted(product, units);
 	}
 
 	private ResultActions checkout(Account investor, String key, String body) throws Exception {

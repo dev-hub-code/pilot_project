@@ -5,8 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { issueMissingAgreementsAction } from "@/features/admin/agreement-actions";
-import { ConfirmForm } from "@/features/admin/decision-forms";
 import { RefundForm } from "@/features/admin/payment-forms";
 import { PaymentDecision } from "@/features/admin/payment-decision";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
@@ -46,7 +44,6 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
   const agreements = order.status === "CONFIRMED"
     ? await authFetch<LeaseAgreement[]>(`/api/v1/admin/agreements?orderId=${order.id}`)
     : [];
-  const containersAssigned = order.status === "CONFIRMED" ? order.items.filter((i) => i.containerNumber).length : 0;
   const investor = can(Permission.USER_VIEW)
     ? await authFetch<AdminUserDetail>(`/api/v1/admin/users/${order.userId}`).then((u) => u.summary).catch(() => null)
     : null;
@@ -80,24 +77,10 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         </dl>
       </Card>
 
-      <DataTable columns={["Listing", "Container", "Price", "Rent monthly", "Tenure"]}>
+      <DataTable columns={["Plan", "Amount", "Returns monthly", "Term"]}>
         {order.items.map((item) => (
           <tr key={item.id}>
             <Cell><Link href={`/admin/products/${item.productId}`} className="font-mono text-gold-text hover:underline">{item.productCode}</Link></Cell>
-            <Cell>
-              {item.containerNumber ? (
-                <>
-                  <span className="font-mono">{item.containerNumber}</span>
-                  <span className="block text-xs text-muted">
-                    {order.status === "CONFIRMED" ? "Leased to the investor" : order.status === "PENDING_PAYMENT" ? "Reserved for this order" : "Released"}
-                  </span>
-                </>
-              ) : order.status === "CONFIRMED" ? (
-                <Link href="/admin/container-assignments" className="text-gold-text hover:underline">To be assigned</Link>
-              ) : (
-                <span className="text-muted">Assigned after payment</span>
-              )}
-            </Cell>
             <Cell className="tabular-nums font-medium">{formatMoney(item.amount)}</Cell>
             <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
             <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
@@ -105,20 +88,19 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         ))}
       </DataTable>
 
-      {containersAssigned > 0 && (
-        <section className="space-y-3" aria-label="Lease agreements">
-          <h2 className="text-lg font-semibold tracking-tight">Lease agreements</h2>
+      {agreements.length > 0 && (
+        <section className="space-y-3" aria-label="Investment agreements">
+          <h2 className="text-lg font-semibold tracking-tight">Investment agreements</h2>
           {agreements.length > 0 && (
-            <DataTable columns={["Agreement", "Container", "Issued", "Investor acceptance", ""]}>
+            <DataTable columns={["Agreement", "Issued", "Investor acceptance", ""]}>
               {agreements.map((a) => (
                 <tr key={a.id}>
                   <Cell className="font-mono">{a.agreementNumber}</Cell>
-                  <Cell className="font-mono">{a.containerNumber}</Cell>
                   <Cell className="text-muted">{formatDateTime(a.generatedAt)}</Cell>
                   <Cell>
                     {a.acceptedAt ? <StatusBadge tone="success">{`Accepted ${formatDateTime(a.acceptedAt)}`}</StatusBadge>
-                      : a.acceptanceRequired ? <StatusBadge tone="warning">Awaiting acceptance · no rent yet</StatusBadge>
-                        : <span className="text-xs text-muted">Not needed (lease already running)</span>}
+                      : a.acceptanceRequired ? <StatusBadge tone="warning">Awaiting acceptance · no returns yet</StatusBadge>
+                        : <span className="text-xs text-muted">Not needed (term already running)</span>}
                   </Cell>
                   <Cell>
                     <a href={`/admin/orders/${order.id}/agreements/${a.holdingId}`} className="text-sm text-gold-text hover:underline">Download PDF</a>
@@ -126,18 +108,6 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                 </tr>
               ))}
             </DataTable>
-          )}
-          {agreements.length < containersAssigned && (
-            <div className="space-y-3 border border-border bg-surface p-5 text-sm">
-              <p className="text-muted">
-                {containersAssigned - agreements.length} container{containersAssigned - agreements.length === 1 ? " was" : "s were"} assigned
-                before lease agreements were issued.
-              </p>
-              {can(Permission.CONTAINER_ASSIGN) && (
-                <ConfirmForm action={issueMissingAgreementsAction.bind(null, order.id)} submitLabel="Issue agreements"
-                  variant="secondary" confirm="Issue lease agreements, in the wording in force, for the containers without one?" />
-              )}
-            </div>
           )}
         </section>
       )}

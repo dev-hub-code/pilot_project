@@ -60,20 +60,20 @@ class AgreementIntegrationTest {
 		mvc.perform(get("/api/v1/admin/agreement-template").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.current.version").isNumber())
-			.andExpect(jsonPath("$.placeholders[?(@.key == 'containerNumber')]").exists());
+			.andExpect(jsonPath("$.placeholders[?(@.key == 'planCode')]").exists());
 
 		// A typo in a placeholder is refused, naming it; a preview fills in example values.
 		save("Lease {{agreementNumber}}", "Hello {{investorNmae}}").andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.message").value(containsString("{{investorNmae}}")));
 		mvc.perform(post("/api/v1/admin/agreement-template/preview").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"title\":\"Lease\",\"body\":\"Container {{containerNumber}}\"}"))
+				.content("{\"title\":\"Lease\",\"body\":\"Container {{planCode}}\"}"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.body").value("Container SLSU1234565"));
+			.andExpect(jsonPath("$.body").value("Container LST-10001"));
 
 		String marker = "Clause-" + UUID.randomUUID();
-		save("Lease {{agreementNumber}}", marker + " for {{investorEmail}}: container {{containerNumber}}, "
-				+ "{{tenureMonths}} months at {{monthlyRent}}.\n\n# Signed\nBy SeaLease")
+		save("Lease {{agreementNumber}}", marker + " for {{investorEmail}}: container {{planCode}}, "
+				+ "{{tenureMonths}} months at {{monthlyReturns}}.\n\n# Signed\nBy SeaLease")
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.version").isNumber());
 		mvc.perform(get("/api/v1/admin/agreement-template/sample").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
@@ -83,10 +83,6 @@ class AgreementIntegrationTest {
 		Account investor = investors.approvedInvestor();
 		UUID plan = new OfferingFixtures(mvc, admin).plan();
 		String orderId = investors.paidOrder(investor, plan, 1);
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM lease_agreements WHERE order_id = ?::uuid", Long.class, orderId))
-			.as("no agreement before a container is assigned").isZero();
-
-		investors.assignContainersOnly(orderId);
 		String holdingId = jdbc.queryForObject("SELECT id::text FROM holdings WHERE order_id = ?::uuid", String.class, orderId);
 
 		// Assigned, but nothing is earned until the investor accepts: no lease dates, no rent schedule.
@@ -113,9 +109,7 @@ class AgreementIntegrationTest {
 			.andExpect(status().isConflict());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM lease_agreement_acceptances a JOIN lease_agreements l "
 				+ "ON l.id = a.agreement_id WHERE l.holding_id = ?::uuid", Long.class, holdingId)).isOne();
-		String container = jdbc.queryForObject("""
-				SELECT c.container_number FROM holdings h JOIN containers c ON c.id = h.container_id WHERE h.id = ?::uuid""",
-				String.class, holdingId);
+		String container = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
 		var stored = jdbc.queryForMap("SELECT agreement_number, title, body FROM lease_agreements WHERE holding_id = ?::uuid",
 				holdingId);
 		assertThat((String) stored.get("agreement_number")).matches("AGR-\\d{4}-\\d{6}");
@@ -139,13 +133,8 @@ class AgreementIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[0].agreementNumber").value(startsWith("AGR-")));
 
-		// Changing the wording later leaves the issued agreement as it was; issuing again changes nothing.
-		save("Lease v-next", "New wording {{containerNumber}}").andExpect(status().isOk());
-		mvc.perform(post("/api/v1/admin/container-assignments/orders/{id}/agreements", orderId)
-				.header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.length()").value(1))
-			.andExpect(jsonPath("$[0].agreementNumber").value(stored.get("agreement_number")));
+		// Changing the wording later leaves the issued agreement as it was.
+		save("Lease v-next", "New wording {{planCode}}").andExpect(status().isOk());
 		assertThat(jdbc.queryForObject("SELECT body FROM lease_agreements WHERE holding_id = ?::uuid", String.class, holdingId))
 			.isEqualTo(stored.get("body"));
 	}

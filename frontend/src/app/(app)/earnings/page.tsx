@@ -19,7 +19,7 @@ export default async function EarningsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Earnings"
-        description={`Each of your containers earns rent throughout its lease, credited to your wallet ${credit}. Your wallet is paid out when our team makes a withdrawal (see Withdrawals).`}
+        description={`Each of your investments earns returns throughout its term, credited to your wallet ${credit}. Your wallet is paid out when our team makes a withdrawal (see Withdrawals).`}
         actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
       <section className={`grid gap-px bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">
@@ -28,7 +28,7 @@ export default async function EarningsPage() {
           <Link href="/withdrawals" className="text-sm text-gold-text hover:underline">Withdraw →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Rent received</p>
+          <p className="text-xs uppercase tracking-[0.1em] text-muted">Returns received</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.rentPaid)}</p>
         </div>
         {hasCapital && (

@@ -15,9 +15,8 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Issues a holding's lease agreement once it has a container, from the holding's plan, container and lease. Called in
- * the transaction that assigns the container. A holding whose lease has not started (it awaits the investor's
- * acceptance) gets an agreement to accept; one already on lease gets one stating its dates.
+ * Issues a holding's investment agreement from its plan and terms, in the transaction that confirms the order. The
+ * investor accepts it to start the term.
  */
 @Component
 class LeaseAgreementIssuer {
@@ -30,7 +29,7 @@ class LeaseAgreementIssuer {
 		this.agreements = agreements;
 	}
 
-	/** @param actorId who assigned the container; {@code null} when it was leased on payment */
+	/** @param actorId who issued it; {@code null} when issued on payment */
 	@Transactional(propagation = Propagation.MANDATORY)
 	LeaseAgreementResponse issue(UUID actorId, UUID holdingId, UUID userId, String orderNumber) {
 		return issue(actorId, holdings.get(holdingId), userId, orderNumber);
@@ -38,12 +37,8 @@ class LeaseAgreementIssuer {
 
 	@Transactional(propagation = Propagation.MANDATORY)
 	LeaseAgreementResponse issue(UUID actorId, HoldingResponse h, UUID userId, String orderNumber) {
-		if (h.container() == null) {
-			throw new IllegalStateException("Holding " + h.id() + " has no container yet");
-		}
 		return agreements.issue(actorId, new AgreementFacts(h.id(), h.orderId(), orderNumber, userId, h.productCode(),
-				h.productTitle(), h.container().containerNumber(), h.container().containerType().label(),
-				h.container().currentLocation(), money(h.amount()), h.monthlyRentPercent(), money(h.monthlyRent()),
+				h.productTitle(), money(h.amount()), h.monthlyRentPercent(), money(h.monthlyRent()),
 				h.tenureMonths(), h.leaseStartsOn(), h.leaseEndsOn()));
 	}
 

@@ -97,7 +97,8 @@ export type BankProofType = "BANK_STATEMENT" | "CANCELLED_CHEQUE";
 export interface BankAccount {
   id: string;
   accountHolderName: string;
-  bankName: string;
+  /** From the IFSC directory; missing when it did not know the code or could not be reached. */
+  bankName: string | null;
   country: string;
   currency: string;
   accountNumberMasked: string;
@@ -150,4 +151,10 @@ export interface AdminUserDetail {
   profile: Profile;
   statusReason: string | null;
   statusChangedAt: string | null;
+}
+
+/** The bank an IFSC code belongs to; `bank` is set when the status is FOUND. */
+export interface IfscLookup {
+  status: "FOUND" | "NOT_FOUND" | "UNAVAILABLE";
+  bank: string | null;
 }

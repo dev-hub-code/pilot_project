@@ -36,7 +36,9 @@ class GeneratedSheetIntegrationTest {
 	void aCashBatchHasNoSheetAndIsReadyToMarkByHand() throws Exception {
 		TestApi api = new TestApi(mvc, jdbc);
 		Account finance = api.staff("SUPER_ADMIN", "FINANCE");
-		Account investor = new InvestorFixtures(mvc, jdbc, api).approvedInvestor();
+		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
+		Account investor = investors.approvedInvestor();
+		investors.enrolInNetwork(investor);
 		// Referral paid in cash at the office: no bank account needed.
 		mvc.perform(put("/api/v1/withdrawals/referral-mode").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"OFFICE_CASH\"}"))

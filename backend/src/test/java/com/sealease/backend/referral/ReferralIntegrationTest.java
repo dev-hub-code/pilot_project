@@ -105,6 +105,9 @@ class ReferralIntegrationTest {
 		Account l2 = investors.approve(api.register(codeOf(l3)));
 		Account l1 = investors.approve(api.register(codeOf(l2)));
 		Account investor = investors.approve(api.register(codeOf(l1)));
+		for (Account upline : List.of(top, l4, l3, l2, l1)) {
+			network(upline);
+		}
 
 		// ₹50,000 container at 2%, leased for 1 year: each payout is ₹1,000 rent.
 		String orderId = investors.invest(investor, offerings.plan(), 1);
@@ -377,10 +380,15 @@ class ReferralIntegrationTest {
 		return holding.toString();
 	}
 
+	private void network(Account account) {
+		jdbc.update("INSERT INTO network_investors (user_id, signups_join_network, created_at) VALUES (?, false, now())",
+				account.id());
+	}
+
 	private ResultActions schedule(Account actor, Instant from, String... percents) throws Exception {
 		return mvc.perform(post("/api/v1/admin/referral-rates").header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("""
-					{"effectiveFrom":"%s","percents":["%s"],"reason":"Quarterly review"}
+					{"effectiveFrom":"%s","percents":["%s"],"oneTimePercent":"2","reason":"Quarterly review"}
 					""".formatted(from, String.join("\",\"", percents))));
 	}
 

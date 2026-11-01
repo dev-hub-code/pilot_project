@@ -14,7 +14,6 @@ import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.user.service.UserProfileService;
-import com.sealease.backend.reporting.dto.Workload;
 import com.sealease.backend.withdrawal.dto.FinanceTaskResponse;
 import com.sealease.backend.withdrawal.dto.FinanceTaskUpdateRequest;
 import com.sealease.backend.withdrawal.entity.Withdrawal;
@@ -35,7 +34,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -154,14 +152,6 @@ public class FinanceTaskService {
 					? "Assign this task to yourself before marking it"
 					: "Another finance member is paying this withdrawal");
 		}
-	}
-
-	/** Finance tasks open, the viewer's among them, and done in each period ({@code [from, to)}) by anyone and by the viewer. */
-	@Transactional(readOnly = true)
-	public Workload.Counts workload(UUID viewerId, Instant today, Instant month, Instant to) {
-		return new Workload.Counts(withdrawals.countOpenTasks(null), null, withdrawals.countOpenTasks(viewerId),
-				withdrawals.countTasksDone(null, today, to), withdrawals.countTasksDone(viewerId, today, to),
-				withdrawals.countTasksDone(null, month, to), withdrawals.countTasksDone(viewerId, month, to));
 	}
 
 	/** Marks the task paid (with the bank reference or cash receipt) or failed (with the reason). */

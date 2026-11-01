@@ -33,7 +33,7 @@ export function ShareLink({ code }: { code: string }) {
     try {
       await navigator.share({
         title: "Join me on SeaLease",
-        text: `Own shipping containers on lease and receive rent every month. Sign up with my referral code ${code}:`,
+        text: `Invest with SeaLease and receive returns every month. Sign up with my referral code ${code}:`,
         url: link,
       });
     } catch (error) {

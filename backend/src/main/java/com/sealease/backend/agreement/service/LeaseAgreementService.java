@@ -4,11 +4,9 @@ import com.sealease.backend.agreement.dto.AgreementPdf;
 import com.sealease.backend.agreement.dto.LeaseAgreementDocument;
 import com.sealease.backend.agreement.dto.LeaseAgreementResponse;
 import com.sealease.backend.agreement.entity.AgreementAcceptance;
-import com.sealease.backend.agreement.entity.AgreementReviewTask;
 import com.sealease.backend.agreement.entity.AgreementTemplate;
 import com.sealease.backend.agreement.entity.LeaseAgreement;
 import com.sealease.backend.agreement.repository.AgreementAcceptanceRepository;
-import com.sealease.backend.agreement.repository.AgreementReviewTaskRepository;
 import com.sealease.backend.agreement.repository.AgreementTemplateRepository;
 import com.sealease.backend.agreement.repository.LeaseAgreementRepository;
 import com.sealease.backend.audit.AuditAction;
@@ -44,7 +42,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Issues each holding's lease agreement when its container is assigned: the wording in force, filled in with the
+ * Issues each holding's investment agreement when its order is confirmed: the wording in force, filled in with the
  * investment's facts, numbered ({@code AGR-2026-000042}) and stored word for word. The investor then accepts it, which
  * starts the lease. Until then the lease dates are not known, so the stored wording keeps their placeholders and they
  * read "the day this Agreement is accepted"; once accepted, the dates of the lease it started are shown. Agreements
@@ -60,7 +58,6 @@ public class LeaseAgreementService {
 	private final LeaseAgreementRepository agreements;
 	private final AgreementAcceptanceRepository acceptances;
 	private final AgreementTemplateRepository templates;
-	private final AgreementReviewTaskRepository reviewTasks;
 	private final AgreementTemplateService wording;
 	private final AgreementRenderer renderer;
 	private final UserProfileService profiles;
@@ -70,12 +67,11 @@ public class LeaseAgreementService {
 	private final Clock clock;
 
 	public LeaseAgreementService(LeaseAgreementRepository agreements, AgreementAcceptanceRepository acceptances,
-			AgreementTemplateRepository templates, AgreementReviewTaskRepository reviewTasks, AgreementTemplateService wording, AgreementRenderer renderer,
+			AgreementTemplateRepository templates, AgreementTemplateService wording, AgreementRenderer renderer,
 			UserProfileService profiles, InvoiceProperties company, DisplayTimeZone display, AuditService audit, Clock clock) {
 		this.agreements = agreements;
 		this.acceptances = acceptances;
 		this.templates = templates;
-		this.reviewTasks = reviewTasks;
 		this.wording = wording;
 		this.renderer = renderer;
 		this.profiles = profiles;
@@ -103,13 +99,11 @@ public class LeaseAgreementService {
 		String number = "AGR-%d-%06d".formatted(now.atZone(ZoneOffset.UTC).getYear(), agreements.nextNumber());
 		Map<Placeholder, String> values = values(facts, number, LocalDate.ofInstant(now, display.zone()));
 		LeaseAgreement agreement = agreements.saveAndFlush(new LeaseAgreement(number, facts.holdingId(), facts.orderId(),
-				facts.userId(), facts.containerNumber(), template.getId(), Placeholder.fill(template.getTitle(), values),
+				facts.userId(), template.getId(), Placeholder.fill(template.getTitle(), values),
 				Placeholder.fill(template.getBody(), values), facts.awaitsAcceptance(), actorId, now));
-		// Opens its review task (AgreementReviewService).
-		reviewTasks.save(new AgreementReviewTask(agreement.getId()));
 		audit.record(AuditRecord.of(actorId, AuditAction.LEASE_AGREEMENT_ISSUED, ENTITY, agreement.getId())
 			.withNewValue(Map.of("agreementNumber", number, "holdingId", facts.holdingId().toString(),
-					"containerNumber", facts.containerNumber(), "templateVersion", template.getVersion(),
+					"templateVersion", template.getVersion(),
 					"acceptanceRequired", facts.awaitsAcceptance())));
 		return LeaseAgreementResponse.from(agreement, null);
 	}
@@ -124,10 +118,10 @@ public class LeaseAgreementService {
 	public LeaseAgreementResponse accept(UUID userId, UUID holdingId, LocalDate leaseStartsOn, LocalDate leaseEndsOn) {
 		LeaseAgreement agreement = owned(holdingId, userId);
 		if (!agreement.isAcceptanceRequired()) {
-			throw new BusinessException(ErrorCode.CONFLICT, "This lease agreement does not need accepting");
+			throw new BusinessException(ErrorCode.CONFLICT, "This investment agreement does not need accepting");
 		}
 		if (acceptances.existsById(agreement.getId())) {
-			throw new BusinessException(ErrorCode.CONFLICT, "This lease agreement has already been accepted");
+			throw new BusinessException(ErrorCode.CONFLICT, "This investment agreement has already been accepted");
 		}
 		ClientInfo client = ClientInfo.current();
 		AgreementAcceptance acceptance = acceptances.saveAndFlush(new AgreementAcceptance(agreement.getId(), userId,
@@ -170,11 +164,11 @@ public class LeaseAgreementService {
 		String body = wording(a, acceptance);
 		if (a.isAcceptanceRequired()) {
 			body += "\n\n# Acceptance\n" + (acceptance == null
-					? "Not yet accepted. The lease and rent start when the Owner accepts this Agreement in their SeaLease account."
-					: "Accepted electronically by the Owner in their SeaLease account on "
+					? "Not yet accepted. The term and returns start when the Investor accepts this Agreement in their SeaLease account."
+					: "Accepted electronically by the Investor in their SeaLease account on "
 							+ STAMP.format(acceptance.getAcceptedAt().atZone(display.zone()))
 							+ (acceptance.getIpAddress() == null ? "" : " from " + acceptance.getIpAddress())
-							+ ". The lease runs from " + DATE.format(acceptance.getLeaseStartsOn()) + " to "
+							+ ". The term runs from " + DATE.format(acceptance.getLeaseStartsOn()) + " to "
 							+ DATE.format(acceptance.getLeaseEndsOn().minusDays(1)) + ".");
 		}
 		return new AgreementPdf("agreement-" + a.getAgreementNumber(), renderer.pdf(a.getTitle(),
@@ -186,7 +180,7 @@ public class LeaseAgreementService {
 	private LeaseAgreement owned(UUID holdingId, UUID ownerId) {
 		return agreements.findByHoldingId(holdingId)
 			.filter(found -> ownerId == null || found.getUserId().equals(ownerId))
-			.orElseThrow(() -> new ResourceNotFoundException("Lease agreement for holding", holdingId));
+			.orElseThrow(() -> new ResourceNotFoundException("Investment agreement for holding", holdingId));
 	}
 
 	private LeaseAgreementResponse response(LeaseAgreement a) {
@@ -230,12 +224,9 @@ public class LeaseAgreementService {
 		v.put(Placeholder.ORDER_NUMBER, orDash(f.orderNumber()));
 		v.put(Placeholder.PLAN_CODE, orDash(f.planCode()));
 		v.put(Placeholder.PLAN_TITLE, orDash(f.planTitle()));
-		v.put(Placeholder.CONTAINER_NUMBER, f.containerNumber());
-		v.put(Placeholder.CONTAINER_TYPE, orDash(f.containerType()));
-		v.put(Placeholder.CONTAINER_LOCATION, f.containerLocation() == null || f.containerLocation().isBlank()
-				? "the location recorded by SeaLease" : f.containerLocation().strip());
 		v.put(Placeholder.PURCHASE_PRICE, f.purchasePrice().display());
-		v.put(Placeholder.MONTHLY_RENT_PERCENT, f.monthlyRentPercent().stripTrailingZeros().toPlainString() + "%");
+		v.put(Placeholder.ANNUAL_RETURNS_PERCENT, percent(f.monthlyRentPercent().multiply(BigDecimal.valueOf(12))));
+		v.put(Placeholder.MONTHLY_RENT_PERCENT, percent(f.monthlyRentPercent()));
 		v.put(Placeholder.MONTHLY_RENT, f.monthlyRent().display());
 		v.put(Placeholder.TOTAL_RENT, f.monthlyRent().times(BigDecimal.valueOf(f.tenureMonths())).display());
 		v.put(Placeholder.TENURE_MONTHS, String.valueOf(f.tenureMonths()));
@@ -263,6 +254,11 @@ public class LeaseAgreementService {
 
 	private static String orDash(String value) {
 		return value == null || value.isBlank() ? "—" : value;
+	}
+
+	/** "15%", "1.33%": two decimals at most, as a rate reads in a contract. */
+	private static String percent(BigDecimal value) {
+		return value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + "%";
 	}
 
 }

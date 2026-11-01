@@ -11,7 +11,7 @@ import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { LeaseAgreementDocument } from "@/types/agreement";
 import { formatDateTime } from "@/utils/format";
 
-export const metadata: Metadata = { title: "Lease agreement" };
+export const metadata: Metadata = { title: "Investment agreement" };
 
 export default async function AgreementPage({ params }: PageProps<"/portfolio/[id]/agreement">) {
   const { id } = await params;
@@ -29,9 +29,9 @@ export default async function AgreementPage({ params }: PageProps<"/portfolio/[i
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Lease agreement"
-        description={`${agreement.agreementNumber} · container ${agreement.containerNumber} · issued ${formatDateTime(agreement.generatedAt)}`} />
-      <Notice tone="warning">Read the agreement below. Your lease and rent start only once you accept it.</Notice>
+      <PageHeader title="Investment agreement"
+        description={`${agreement.agreementNumber} · issued ${formatDateTime(agreement.generatedAt)}`} />
+      <Notice tone="warning">Read the agreement below. Your term and returns start only once you accept it.</Notice>
 
       <AgreementText title={agreement.title} body={doc.body} />
 

@@ -9,7 +9,6 @@ import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
-import { CONTAINER_TYPE_LABEL } from "@/features/marketplace/labels";
 import { DepositForm } from "@/features/orders/deposit-form";
 import { ReceiptForm } from "@/features/orders/receipt-form";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
@@ -66,11 +65,11 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       {order.status === "CONFIRMED" && (
         <Notice tone="success">
-          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; each lease starts, and earns rent, once you accept its agreement there.
+          Your investment is confirmed ({formatDateTime(order.confirmedAt)}). Your containers are listed below and in your <Link href="/portfolio" className="underline">portfolio</Link>; each term starts, and earns returns, once you accept its agreement there.
         </Notice>
       )}
       {(order.status === "EXPIRED" || order.status === "CANCELLED") && (
-        <Notice tone="warning">{order.closeReason ?? ORDER_STATUS_LABEL[order.status]}. The reserved containers were released.</Notice>
+        <Notice tone="warning">{order.closeReason ?? ORDER_STATUS_LABEL[order.status]}. It can no longer be paid.</Notice>
       )}
       {order.status === "PENDING_PAYMENT" && awaitingVerification && pending?.deposit && (
         <Notice tone="info">
@@ -93,38 +92,30 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
-          <CardList label="Containers">
+          <CardList label="Plans">
             {order.items.map((item) => (
               <CardListItem key={item.id}>
                 <div>
-                  <Link href={`/marketplace/${item.productId}`} className="font-medium text-gold-text hover:underline">{item.productTitle}</Link>
-                  <p className="text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</p>
+                  <Link href={`/invest/${item.productId}`} className="font-medium text-gold-text hover:underline">{item.productTitle}</Link>
                 </div>
                 <dl className="grid grid-cols-2 gap-3">
-                  <CardField label="Price"><span className="font-medium tabular-nums">{formatMoney(item.amount)}</span></CardField>
-                  <CardField label="Rent monthly"><span className="tabular-nums">{formatMoney(item.monthlyPayout)}</span></CardField>
-                  <CardField label="Tenure"><span className="tabular-nums">{item.tenureMonths} months</span></CardField>
-                  <CardField label="Container number">
-                    {item.containerNumber
-                      ? <span className="font-mono font-medium">{item.containerNumber}</span>
-                      : <span className="text-muted">Assigned by our team after payment</span>}
-                  </CardField>
+                  {item.units !== null && item.unitPrice && (
+                    <CardField label="Units"><span className="tabular-nums">{item.units} × {formatMoney(item.unitPrice)}</span></CardField>
+                  )}
+                  <CardField label="Amount"><span className="font-medium tabular-nums">{formatMoney(item.amount)}</span></CardField>
+                  <CardField label="Returns monthly"><span className="tabular-nums">{formatMoney(item.monthlyPayout)}</span></CardField>
+                  <CardField label="Term"><span className="tabular-nums">{item.tenureMonths} months</span></CardField>
                 </dl>
               </CardListItem>
             ))}
           </CardList>
-          <DataTable columns={["Container type", "Container number", "Price", "Rent monthly", "Tenure"]} className="hidden sm:block">
+          <DataTable columns={["Plan", "Units", "Amount", "Returns monthly", "Term"]} className="hidden sm:block">
             {order.items.map((item) => (
               <tr key={item.id}>
                 <Cell>
-                  <Link href={`/marketplace/${item.productId}`} className="text-gold-text hover:underline">{item.productTitle}</Link>
+                  <Link href={`/invest/${item.productId}`} className="text-gold-text hover:underline">{item.productTitle}</Link>
                 </Cell>
-                <Cell>
-                  {item.containerNumber
-                    ? <span className="font-mono font-medium">{item.containerNumber}</span>
-                    : <span className="text-muted">Assigned by our team after payment</span>}
-                  <span className="block text-xs text-muted">{CONTAINER_TYPE_LABEL[item.containerType]}</span>
-                </Cell>
+                <Cell className="tabular-nums">{item.units !== null && item.unitPrice ? `${item.units} × ${formatMoney(item.unitPrice)}` : "—"}</Cell>
                 <Cell className="tabular-nums font-medium">{formatMoney(item.amount)}</Cell>
                 <Cell className="tabular-nums">{formatMoney(item.monthlyPayout)}</Cell>
                 <Cell className="tabular-nums">{item.tenureMonths} months</Cell>
@@ -195,7 +186,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                   ? `Payment being verified. Reserved until ${formatDateTime(order.expiresAt)}.`
                   : pending?.officeCash
                     ? `Pay at our office by ${formatDateTime(order.expiresAt)}, or the order lapses.`
-                    : `Pay by ${formatDateTime(order.expiresAt)}, or the reservation lapses.`}
+                    : `Pay by ${formatDateTime(order.expiresAt)}, or the order lapses.`}
               </p>
             )}
           </Card>
@@ -236,8 +227,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                 <div className="border-t border-border pt-4">
                   <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"
                     confirm={awaitingVerification
-                      ? `Cancel ${order.orderNumber}? Your reserved containers are released, and money you already paid is refunded once it arrives.`
-                      : `Cancel ${order.orderNumber}? Your reserved containers are released.`} className="w-full" />
+                      ? `Cancel ${order.orderNumber}? Money you already paid is refunded once it arrives.`
+                      : `Cancel ${order.orderNumber}?`} className="w-full" />
                 </div>
               </div>
             </Card>

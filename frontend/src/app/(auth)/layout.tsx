@@ -11,9 +11,9 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
           <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-ink/40 to-ink/20" />
           <Logo tone="light" />
           <div className="space-y-5">
-            <Eyebrow tone="light">Container Investment Platform</Eyebrow>
+            <Eyebrow tone="light">Investment Platform</Eyebrow>
             <p className="max-w-md text-4xl leading-tight font-bold tracking-tight">
-              Real Assets. Real Rental Income. Every Cent On The Ledger.
+              Real Assets. Real Returns Income. Every Cent On The Ledger.
             </p>
           </div>
         </aside>

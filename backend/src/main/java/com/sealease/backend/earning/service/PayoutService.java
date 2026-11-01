@@ -11,6 +11,7 @@ import com.sealease.backend.earning.dto.LeaseRentResponse.LeaseRentStatus;
 import com.sealease.backend.earning.dto.LeaseSearchCriteria;
 import com.sealease.backend.earning.dto.PayoutMonth;
 import com.sealease.backend.earning.entity.RentAccrual;
+import com.sealease.backend.earning.event.LeaseStartedEvent;
 import com.sealease.backend.earning.event.RentCreditedEvent;
 import com.sealease.backend.earning.repository.RentAccrualRepository;
 import com.sealease.backend.investment.dto.HoldingLabel;
@@ -63,7 +64,7 @@ import java.util.stream.Collectors;
  * run credits up to the last interval boundary that has passed, from where the lease was last credited, in one
  * balanced ledger transaction per calendar month it covers (unique per holding and starting instant), so monthly
  * statements add up exactly. Referral commission on those hours is paid with them. Once the lease end is credited the
- * holding matures and its container returns to inventory. A suspended or disabled investor's rent (and so the
+ * holding matures. A suspended or disabled investor's rent (and so the
  * commission on it) is held back, and credited in full once the account is active again.
  */
 @Service
@@ -116,11 +117,12 @@ public class PayoutService {
 		return credits.current();
 	}
 
-	/** Called when a holding's lease starts (its container is assigned), in that transaction. */
+	/** Called when a holding's lease starts (its investor accepts the agreement), in that transaction. */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void schedule(PayoutTerms terms) {
 		accruals.saveAndFlush(new RentAccrual(terms.holdingId(), terms.userId(), terms.productId(), terms.leaseStartsAt(),
 				terms.tenureMonths(), terms.monthlyRent(), terms.capitalReturned()));
+		events.publishEvent(new LeaseStartedEvent(terms.holdingId(), terms.userId(), terms.productId()));
 	}
 
 	/**
@@ -202,8 +204,7 @@ public class PayoutService {
 			}
 			postings.add(Posting.credit(balance.account(), accrual.getUserId(), total));
 			transactionId = ledger.post(TransactionType.INVESTOR_PAYOUT, accrual.getHoldingId() + ":" + from,
-					"Rent %s to %s · %s · container %s".formatted(HOUR.format(from), HOUR.format(to), label.productCode(),
-							label.containerNumber()),
+					"Returns %s to %s · %s".formatted(HOUR.format(from), HOUR.format(to), label.productCode()),
 					null, postings);
 		}
 		accrual.creditUpTo(to, rent, capital, now);

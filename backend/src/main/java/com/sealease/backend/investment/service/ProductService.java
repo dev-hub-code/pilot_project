@@ -6,7 +6,6 @@ import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
-import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.investment.dto.ProductRequest;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.dto.ProductSearchCriteria;
@@ -60,6 +59,7 @@ public class ProductService {
 	@Transactional
 	public ProductResponse create(UUID actorId, ProductRequest request) {
 		InvestmentProduct product = new InvestmentProduct("LST-" + products.nextCodeNumber(), actorId);
+		product.setAudience(request.audience());
 		product.defineTerms(validatedTerms(request));
 		products.saveAndFlush(product);
 		audit.record(AuditRecord.of(actorId, AuditAction.PRODUCT_CREATED, ENTITY, product.getId())
@@ -72,9 +72,10 @@ public class ProductService {
 	public ProductResponse update(UUID actorId, UUID productId, ProductRequest request) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only draft listings can be edited");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only draft plans can be edited");
 		}
 		Map<String, Object> before = snapshot(product);
+		product.setAudience(request.audience());
 		product.defineTerms(validatedTerms(request));
 		products.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.PRODUCT_UPDATED, ENTITY, productId)
@@ -87,7 +88,7 @@ public class ProductService {
 	public ProductResponse publish(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
-			throw new BusinessException(ErrorCode.CONFLICT, "The listing is already " + product.getStatus());
+			throw new BusinessException(ErrorCode.CONFLICT, "The plan is already " + product.getStatus());
 		}
 		product.publish(actorId, clock.instant());
 		products.flush();
@@ -97,8 +98,7 @@ public class ProductService {
 	}
 
 	/**
-	 * Stops selling containers under the plan. Orders already placed can still be paid, and sold
-	 * containers keep their lease and payouts.
+	 * Stops selling the plan. Orders already placed can still be paid, and investments made keep their term and payouts.
 	 */
 	@Transactional
 	public ProductResponse close(UUID actorId, UUID productId) {
@@ -114,7 +114,7 @@ public class ProductService {
 		return view(product);
 	}
 
-	/** Sells containers under a closed plan again, on the terms it was published with. */
+	/** Sells a closed plan again, on the terms it was published with. */
 	@Transactional
 	public ProductResponse reopen(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
@@ -176,39 +176,23 @@ public class ProductService {
 	}
 
 	private static ProductTerms validatedTerms(ProductRequest r) {
-		Currency currency = Currency.getInstance(r.currency());
-		List<String> problems = new ArrayList<>();
-		int digits = Math.max(currency.getDefaultFractionDigits(), 0);
-		if (r.price().stripTrailingZeros().scale() > digits) {
-			problems.add("Amounts in " + currency.getCurrencyCode() + " allow at most " + digits + " decimals");
-		}
-		if (r.maxTenureYears() < r.minTenureYears()) {
-			problems.add("The longest lease must be at least the shortest");
-		}
-		if (!problems.isEmpty()) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, String.join("; ", problems));
-		}
-		// A listing is named after its container type unless staff give it a name.
-		String title = r.title() == null || r.title().isBlank() ? r.containerType().listingName() : r.title().strip();
-		return new ProductTerms(r.containerType(), title, r.summary().strip(), r.description().strip(),
-				currency, r.price(), BigDecimal.ZERO, r.minTenureYears(),
-				r.maxTenureYears());
+		return new ProductTerms(r.title().strip(), r.summary().strip(), Currency.getInstance(r.currency()), BigDecimal.ZERO,
+				r.tenureYears(), r.annualReturnPercent(), PlanRules.UNIT_PRICE, r.minUnits());
 	}
 
 	private static Map<String, Object> snapshot(InvestmentProduct p) {
 		ProductTerms t = p.terms();
-		return Map.of("code", p.getCode(), "containerType", t.containerType(), "currency", t.currency().getCurrencyCode(),
-				"price", t.price().toPlainString(),
-				"monthlyCapitalReturnPercent", t.monthlyCapitalReturnPercent().toPlainString(),
-				"minTenureYears", t.minTenureYears(), "maxTenureYears", t.maxTenureYears());
+		return Map.of("code", p.getCode(), "audience", p.getAudience(), "currency", t.currency().getCurrencyCode(),
+				"tenureYears", t.tenureYears(), "annualReturnPercent", t.annualReturnPercent().toPlainString(),
+				"unitPrice", t.unitPrice().toPlainString(), "minUnits", t.minUnits());
 	}
 
 	private InvestmentProduct load(UUID id) {
-		return products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Container listing", id));
+		return products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Plan", id));
 	}
 
 	private InvestmentProduct lock(UUID id) {
-		return products.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Container listing", id));
+		return products.findByIdForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Plan", id));
 	}
 
 	private static Specification<InvestmentProduct> matching(ProductSearchCriteria c) {
@@ -223,8 +207,8 @@ public class ProductService {
 			if (c.status() != null) {
 				predicates.add(cb.equal(root.get("status"), c.status()));
 			}
-			if (c.containerType() != null) {
-				predicates.add(cb.equal(root.get("containerType"), c.containerType()));
+			if (c.audience() != null) {
+				predicates.add(cb.equal(root.get("audience"), c.audience()));
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};

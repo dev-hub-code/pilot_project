@@ -1,15 +1,20 @@
 package com.sealease.backend.order.dto;
 
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
- * Checkout of the whole cart. The investor confirms, by plan id, that they accept the terms of every
- * plan in the cart.
+ * Buys units of one plan.
+ *
+ * @param units        how many units; what they cost follows from the plan's unit price
+ * @param acceptTerms  the investor accepts the plan's terms
  */
-public record CheckoutRequest(@NotEmpty @Size(max = 20) List<@NotNull UUID> acceptedTerms) {
+public record CheckoutRequest(
+		@NotNull UUID productId,
+		@NotNull @Min(1) @Max(100000000) Integer units,
+		@NotNull @AssertTrue(message = "Accept the plan's terms to invest") Boolean acceptTerms) {
 }

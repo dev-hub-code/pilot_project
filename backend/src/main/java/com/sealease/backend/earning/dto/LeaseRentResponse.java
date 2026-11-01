@@ -22,7 +22,6 @@ public record LeaseRentResponse(
 		UUID productId,
 		String productCode,
 		String productTitle,
-		String containerNumber,
 		int tenureMonths,
 		Instant startsAt,
 		Instant endsAt,
@@ -42,7 +41,7 @@ public record LeaseRentResponse(
 	public static LeaseRentResponse from(RentAccrual a, HoldingLabel label, boolean staff) {
 		return new LeaseRentResponse(a.getHoldingId(), staff ? a.getUserId() : null, a.getProductId(),
 				label == null ? null : label.productCode(), label == null ? null : label.productTitle(),
-				label == null ? null : label.containerNumber(), a.getTenureMonths(), a.getStartsAt(), a.getEndsAt(),
+				a.getTenureMonths(), a.getStartsAt(), a.getEndsAt(),
 				a.getCreditedUntil(), MoneyResponse.from(a.monthlyRent()), MoneyResponse.from(a.totalRent()),
 				MoneyResponse.from(a.creditedRent()), MoneyResponse.from(a.capitalTotal()),
 				MoneyResponse.from(a.creditedCapital()),

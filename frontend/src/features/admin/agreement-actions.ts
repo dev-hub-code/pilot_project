@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
-import type { AgreementPreview, LeaseAgreement } from "@/types/agreement";
+import type { AgreementPreview } from "@/types/agreement";
 import { agreementTemplateSchema } from "@/validators/agreement";
 import { type FormState, firstErrors } from "@/validators/form-state";
 
@@ -33,14 +33,3 @@ export async function agreementTemplateAction(_p: AgreementFormState, formData: 
   return { success: "Saved. Agreements issued from now on use this wording." };
 }
 
-/** Issues agreements for an order's containers assigned before agreements were issued. */
-export async function issueMissingAgreementsAction(orderId: string): Promise<FormState> {
-  try {
-    const issued = await authFetch<LeaseAgreement[]>(
-      `/api/v1/admin/container-assignments/orders/${encodeURIComponent(orderId)}/agreements`, { method: "POST" });
-    revalidatePath(`/admin/orders/${orderId}`);
-    return { success: `${issued.length} agreement${issued.length === 1 ? "" : "s"} on this order.` };
-  } catch (error) {
-    return failureState(error);
-  }
-}

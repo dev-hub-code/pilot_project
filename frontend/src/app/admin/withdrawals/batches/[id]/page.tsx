@@ -49,7 +49,7 @@ export default async function BatchPage({ params }: PageProps<"/admin/withdrawal
           <h1 className="text-3xl font-semibold tracking-tight"><span className="font-mono">{b.reference}</span> · {formatMoney(b.total)}</h1>
           <p className="text-sm text-muted">
             {b.period ? `${b.kind ? WITHDRAWAL_KIND_LABEL[b.kind] : "Monthly"} withdrawals for ${formatPeriod(b.period)} · `
-              : `${b.kind ? `${WITHDRAWAL_KIND_LABEL[b.kind]} withdrawals` : "Rent and referral withdrawals"} · ${PAYOUT_METHOD_LABEL[b.payoutMethod]} · `}
+              : `${b.kind ? `${WITHDRAWAL_KIND_LABEL[b.kind]} withdrawals` : "Returns and referral withdrawals"} · ${PAYOUT_METHOD_LABEL[b.payoutMethod]} · `}
             {b.itemCount} payment(s) · created {formatDateTime(b.createdAt)}{b.sentAt ? ` · sent ${formatDateTime(b.sentAt)}` : ""}
           </p>
         </div>

@@ -60,6 +60,7 @@ public class BankAccountService {
 	private final UserProfileService profiles;
 	private final UserAccountService users;
 	private final FieldEncryptor encryptor;
+	private final IfscDirectory ifscDirectory;
 	private final AuditService audit;
 	private final DocumentService documents;
 	private final NotificationService notifications;
@@ -68,7 +69,8 @@ public class BankAccountService {
 	public BankAccountService(BankAccountRepository accounts, UserProfileService profiles, UserAccountService users,
 			FieldEncryptor encryptor,
 			AuditService audit, DocumentService documents, NotificationService notifications,
-			Clock clock) {
+			Clock clock, IfscDirectory ifscDirectory) {
+		this.ifscDirectory = ifscDirectory;
 		this.accounts = accounts;
 		this.profiles = profiles;
 		this.users = users;
@@ -97,7 +99,7 @@ public class BankAccountService {
 		accounts.saveAndFlush(account);
 
 		audit.record(AuditRecord.of(userId, AuditAction.BANK_ACCOUNT_ADDED, "BANK_ACCOUNT", account.getId())
-			.withNewValue(Map.of("bankName", account.getBankName(), "country", account.getCountry(),
+			.withNewValue(Map.of("country", account.getCountry(),
 					"currency", account.getCurrency(), "accountNumberLast4", account.getAccountNumberLast4())));
 		return BankAccountResponse.from(account);
 	}
@@ -113,6 +115,11 @@ public class BankAccountService {
 		account.provedBy(proofType, documents.store(userId, proofType.purpose(), proof));
 	}
 
+	/** The bank an IFSC code belongs to, for the form to show as it is typed. */
+	public IfscDirectory.Lookup lookupIfsc(String code) {
+		return ifscDirectory.lookup(code);
+	}
+
 	/** Validates a new account for the owner and builds it (unsaved, not primary). */
 	private BankAccount register(UUID userId, AddBankAccountRequest request, List<BankAccount> active) {
 		if (active.stream().filter(a -> IN_USE.contains(a.getStatus())).count() >= MAX_ACTIVE_ACCOUNTS) {
@@ -126,7 +133,7 @@ public class BankAccountService {
 			throw new BusinessException(ErrorCode.CONFLICT, "This bank account is already registered");
 		}
 
-		BankAccount account = new BankAccount(userId, holderName(userId), request.bankName().strip(),
+		BankAccount account = new BankAccount(userId, holderName(userId), ifscDirectory.lookup(routingCode).bank(),
 				request.country(), request.currency(), encryptor.encrypt(accountNumber, ACCOUNT_NUMBER_CONTEXT),
 				FieldEncryptor.lastChars(accountNumber, 4), fingerprint,
 				encryptor.encrypt(routingCode, ROUTING_CODE_CONTEXT));
@@ -250,7 +257,7 @@ public class BankAccountService {
 			completeChange(reviewerId, account, active);
 		}
 		notifications.notify(account.getUserId(), "BANK_ACCOUNT_VERIFIED", "Your bank account is verified",
-				label(account) + " was checked and verified. Your payouts and withdrawals can now be paid into it.",
+				"Your " + label(account) + " was checked and verified. Your payouts and withdrawals can now be paid into it.",
 				"/profile/bank-accounts");
 		accounts.flush();
 		return adminView(account);
@@ -289,9 +296,9 @@ public class BankAccountService {
 		return adminView(account);
 	}
 
-	/** e.g. "HDFC Bank account ending 4321"; never the full number. */
+	/** e.g. "account ending 4321"; never the full number. */
 	private static String label(BankAccount account) {
-		return account.getBankName() + " account ending " + account.getAccountNumberLast4();
+		return "account ending " + account.getAccountNumberLast4();
 	}
 
 	/** The account's proof document, for a verifier; every view is audited. */

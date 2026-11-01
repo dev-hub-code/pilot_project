@@ -55,7 +55,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
       ) : orders.content.length === 0 ? (
         <EmptyState title="No orders" description={q && searchOnly ? `Nothing matches “${q}” exactly.` : undefined} />
       ) : (
-        <DataTable columns={["Order", "Placed", "Containers", "Total", "Status"]}>
+        <DataTable columns={["Order", "Placed", "Plans", "Total", "Status"]}>
           {orders.content.map((o) => (
             <tr key={o.id} className="hover:bg-background">
               <Cell><Link href={`/admin/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>

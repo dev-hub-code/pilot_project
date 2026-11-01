@@ -15,11 +15,13 @@ import java.util.List;
  * New commission rates for levels 1-4, in percent of the referred investor's investment,
  * paid every month of the tenure.
  *
+ * @param oneTimePercent the online scheme's rate: once, on a directly referred investor's first order
  * @param effectiveFrom when they take effect; omitted means immediately. Never in the past.
  */
 public record ScheduleRatesRequest(
 		Instant effectiveFrom,
 		@NotNull @Size(min = 4, max = 4)
 		List<@NotNull @DecimalMin("0") @DecimalMax("10") @Digits(integer = 2, fraction = 3) BigDecimal> percents,
+		@NotNull @DecimalMin("0") @DecimalMax("10") @Digits(integer = 2, fraction = 3) BigDecimal oneTimePercent,
 		@NotBlank @Size(max = 500) String reason) {
 }

@@ -1,5 +1,5 @@
 /** Mirrors of the backend's Phase 9 DTOs (sales CRM). */
-import type { Money } from "./marketplace";
+import type { Money } from "./plan";
 
 export type LeadStage = "NEW" | "CONTACTED" | "QUALIFIED" | "PROPOSAL" | "WON" | "LOST";
 export type LeadSource = "WEBSITE" | "STAFF";

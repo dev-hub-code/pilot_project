@@ -50,8 +50,14 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
     <div className="space-y-6">
       <PageHeader title="Users"
         description={seesEmployees ? "Investors and employees." : "Investors."}
-        actions={hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
-          ? <LinkButton href="/admin/users/new">New employee</LinkButton> : undefined} />
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            {hasPermission(session.permissions, Permission.INVESTOR_ACCOUNT_CREATE)
+              && <LinkButton href="/admin/users/new-investor">New investor</LinkButton>}
+            {hasPermission(session.permissions, Permission.USER_ROLE_ASSIGN) && hasPermission(session.permissions, Permission.ROLE_VIEW)
+              && <LinkButton href="/admin/users/new">New employee</LinkButton>}
+          </div>
+        )} />
       {seesEmployees && (
         <nav aria-label="Show" className="flex flex-wrap gap-2">
           {[{ value: undefined, label: "All users" }, { value: "INVESTOR", label: "Investors" }, { value: "EMPLOYEE", label: "Employees" }]

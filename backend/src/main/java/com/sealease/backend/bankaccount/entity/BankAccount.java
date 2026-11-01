@@ -21,7 +21,8 @@ public class BankAccount extends BaseEntity {
 	@Column(name = "account_holder_name", nullable = false, length = 140, updatable = false)
 	private String accountHolderName;
 
-	@Column(name = "bank_name", nullable = false, length = 140, updatable = false)
+	/** From the IFSC directory; missing when the directory did not know the code or could not be reached. */
+	@Column(name = "bank_name", length = 140, updatable = false)
 	private String bankName;
 
 	@Column(name = "country", nullable = false, length = 2, updatable = false)

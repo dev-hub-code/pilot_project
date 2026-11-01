@@ -6,8 +6,6 @@ import java.util.List;
 import java.util.UUID;
 
 import com.sealease.backend.common.money.MoneyResponse;
-import com.sealease.backend.container.entity.ContainerType;
-import com.sealease.backend.investment.dto.RentTier;
 
 /**
  * A demo account with its dummy orders and downline, and the figures worked out from them.
@@ -17,16 +15,14 @@ import com.sealease.backend.investment.dto.RentTier;
  * @param months         every month of the time frame, oldest first
  * @param payouts        made so far, oldest first: rent on the 1st, commission on the 5th
  * @param plans          the plans an order can be of
- * @param rentBands      monthly rent by order total, lowest first: an order earns its band's rate
  */
 public record DemoAccountView(UUID userId, String userCode, String name, String email, LocalDate startsOn,
 		LocalDate endsOn, LocalDate today, LocalDate creditedUntil, List<BigDecimal> rates, List<Order> orders,
-		List<Member> members, List<Month> months, List<Payout> payouts, Totals totals, List<Plan> plans,
-		List<RentTier> rentBands) {
+		List<Member> members, List<Month> months, List<Payout> payouts, Totals totals, List<Plan> plans) {
 
 	/** A plan dummy orders can be of: open or closed. */
-	public record Plan(UUID id, String code, String title, ContainerType containerType, MoneyResponse price,
-			int minTenureYears, int maxTenureYears, String status) {
+	public record Plan(UUID id, String code, String title, String currency, int tenureYears,
+			BigDecimal annualReturnPercent, String status) {
 	}
 
 	/**
@@ -35,7 +31,7 @@ public record DemoAccountView(UUID userId, String userCode, String name, String 
 	 */
 	public record Order(UUID id, UUID memberId, String memberName, String orderNumber, UUID productId, String planCode,
 			String planTitle,
-			ContainerType containerType, int containers, MoneyResponse pricePerContainer, MoneyResponse amount,
+			int containers, MoneyResponse pricePerContainer, MoneyResponse amount,
 			BigDecimal rentPercent, MoneyResponse monthlyRent, int tenureMonths, LocalDate startsOn, LocalDate endsOn,
 			MoneyResponse earned) {
 	}

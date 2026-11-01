@@ -1,5 +1,5 @@
 /** Mirrors of the backend's rent, earnings and ledger DTOs. */
-import type { Money } from "./marketplace";
+import type { Money } from "./plan";
 
 export type LeaseRentStatus = "RUNNING" | "COMPLETED";
 
@@ -11,7 +11,6 @@ export interface LeaseRent {
   productId: string;
   productCode: string | null;
   productTitle: string | null;
-  containerNumber: string | null;
   tenureMonths: number;
   startsAt: string;
   endsAt: string;

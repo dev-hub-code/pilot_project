@@ -17,11 +17,11 @@ export function RentCreditIntervalForm({ intervalMinutes, options }: {
     <form action={action} className="flex flex-wrap items-end gap-3" noValidate>
       <div className="w-full"><FormFeedback state={state} /></div>
       <div className="w-56">
-        <SelectField label="Credit rent" name="intervalMinutes" defaultValue={String(intervalMinutes)} options={choices}
+        <SelectField label="Credit returns" name="intervalMinutes" defaultValue={String(intervalMinutes)} options={choices}
           error={state.fieldErrors?.intervalMinutes} />
       </div>
       <SubmitButton variant="secondary"
-        confirm="Change how often rent is credited to investors' wallets? It applies from the next run.">Save</SubmitButton>
+        confirm="Change how often returns are credited to investors' wallets? It applies from the next run.">Save</SubmitButton>
     </form>
   );
 }

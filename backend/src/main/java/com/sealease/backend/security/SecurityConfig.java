@@ -47,8 +47,7 @@ public class SecurityConfig {
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
 	/** The website's public read-only data: the track record, the open plans, and countries, states and cities. */
 	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans",
-			"/api/v1/public/rent-credit", "/api/v1/public/rent-tiers", "/api/v1/public/minimum-order",
-			"/api/v1/public/locations/**", "/api/v1/public/terms" };
+			"/api/v1/public/rent-credit", "/api/v1/public/locations/**", "/api/v1/public/terms" };
 	private static final String[] API_DOCS = { "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**" };
 
 	@Bean
@@ -80,7 +79,7 @@ public class SecurityConfig {
 				auth.requestMatchers(PUBLIC_AUTH).permitAll();
 				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
 				auth.requestMatchers(HttpMethod.GET, PUBLIC_WEBSITE).permitAll();
-				// The open API: the marketplace, read-only.
+				// The open API: plans, read-only.
 				auth.requestMatchers(HttpMethod.GET, "/api/v1/open/**").permitAll();
 				if (apiDocsEnabled) {
 					auth.requestMatchers(API_DOCS).permitAll();

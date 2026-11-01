@@ -12,7 +12,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.demo.service.DemoBook;
 import com.sealease.backend.demo.service.DemoBook.Kind;
 import com.sealease.backend.demo.service.DemoBook.Payout;
@@ -47,7 +46,7 @@ class DemoBookTest {
 	}
 
 	private static DemoBook.Order order(UUID member, int containers, String price, LocalDate startsOn) {
-		return new DemoBook.Order(UUID.randomUUID(), member, "ORD-1", UUID.randomUUID(), "LST-1", "Plan", ContainerType.DRY_20FT, containers,
+		return new DemoBook.Order(UUID.randomUUID(), member, "ORD-1", UUID.randomUUID(), "LST-1", "Plan", containers,
 				Money.of(new BigDecimal(price), INR), new BigDecimal("2"), 12, startsOn);
 	}
 
@@ -109,7 +108,7 @@ class DemoBookTest {
 	@Test
 	void aWholeLeasePaysExactlyRentTimesTenure() {
 		// From the 31st: lease months end on the last day of shorter months.
-		DemoBook.Order order = new DemoBook.Order(UUID.randomUUID(), null, "ORD-2", UUID.randomUUID(), "LST-1", "Plan", ContainerType.DRY_20FT, 1,
+		DemoBook.Order order = new DemoBook.Order(UUID.randomUUID(), null, "ORD-2", UUID.randomUUID(), "LST-1", "Plan", 1,
 				inr("50000"), new BigDecimal("2"), 3, LocalDate.of(2026, 1, 31));
 		DemoBook book = new DemoBook(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), LocalDate.of(2026, 12, 31), INR,
 				List.of(order), List.of(), RATES);

@@ -1,9 +1,14 @@
 /** Mirrors of the backend's Phase 7 DTOs (referrals). */
-import type { Money } from "./marketplace";
+import type { Money } from "./plan";
+
+/** NETWORK: made by an administrator, monthly on four levels. ONLINE: registered online, once on level 1. */
+export type ReferralScheme = "NETWORK" | "ONLINE";
 
 export interface ReferralOverview {
   code: string;
   referredBy: string | null;
+  scheme: ReferralScheme;
+  oneTimePercent: number;
   eligible: boolean;
   ineligibleReason: string | null;
   levels: { level: number; ratePercent: number; members: number }[];
@@ -84,6 +89,7 @@ export interface RateVersion {
   id: string;
   effectiveFrom: string;
   percents: number[];
+  oneTimePercent: number;
   reason: string;
   createdBy: string | null;
   createdAt: string;
@@ -93,6 +99,8 @@ export interface RateVersion {
 
 export interface AdminReferralView {
   code: string | null;
+  scheme: ReferralScheme;
+  signupsJoinNetwork: boolean;
   uplines: { level: number; userId: string; name: string; email: string }[];
   downlineSize: number[];
   totalEarned: Money[];

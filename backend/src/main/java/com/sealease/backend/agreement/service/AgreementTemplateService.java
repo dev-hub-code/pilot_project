@@ -98,7 +98,7 @@ public class AgreementTemplateService {
 	public AgreementTemplate current() {
 		return templates.findTopByOrderByVersionDesc()
 			.orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"No lease agreement wording has been written yet"));
+					"No investment agreement wording has been written yet"));
 	}
 
 	/** Windows line breaks become plain ones, and trailing spaces go, so stored wording is consistent. */

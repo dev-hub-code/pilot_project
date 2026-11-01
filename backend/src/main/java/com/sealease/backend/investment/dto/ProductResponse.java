@@ -1,7 +1,6 @@
 package com.sealease.backend.investment.dto;
 
-import com.sealease.backend.common.money.MoneyResponse;
-import com.sealease.backend.container.entity.ContainerType;
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.investment.entity.InvestmentProduct;
 import com.sealease.backend.investment.entity.ProductStatus;
 import com.sealease.backend.investment.entity.ProductTerms;
@@ -11,25 +10,23 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Full plan view (staff, and the basis of the investor detail view). Payout figures are per
- * container.
+ * Full plan view, for staff.
  *
- * @param price               per container (rent is based on it)
- * @param minTenureYears      the shortest lease an investor may choose; the investor picks whole years
- * @param maxTenureYears      the longest lease an investor may choose
- * @param containersSold      containers bought under this plan
+ * @param audience            the investor type it is offered to
+ * @param containersSold      investments made under this plan
  */
 public record ProductResponse(
 		UUID id,
 		String code,
 		ProductStatus status,
-		ContainerType containerType,
+		ReferralScheme audience,
 		String title,
 		String summary,
-		String description,
-		MoneyResponse price,
-		int minTenureYears,
-		int maxTenureYears,
+		String currency,
+		int tenureYears,
+		BigDecimal annualReturnPercent,
+		BigDecimal unitPrice,
+		int minUnits,
 		long containersSold,
 		Instant publishedAt,
 		Instant closedAt,
@@ -40,9 +37,9 @@ public record ProductResponse(
 
 	public static ProductResponse from(InvestmentProduct p, long containersSold) {
 		ProductTerms t = p.terms();
-		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), t.containerType(), t.title(), t.summary(),
-				t.description(), MoneyResponse.from(t.pricePerContainer()), t.minTenureYears(),
-				t.maxTenureYears(), containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
+		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), p.getAudience(), t.title(), t.summary(),
+				t.currency().getCurrencyCode(), t.tenureYears(), t.annualReturnPercent(), t.unitPrice(), t.minUnits(),
+				containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
 				p.getCancellationReason(), p.getCreatedAt(), p.getVersion());
 	}
 

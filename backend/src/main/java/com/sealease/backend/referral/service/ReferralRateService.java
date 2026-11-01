@@ -79,10 +79,11 @@ public class ReferralRateService {
 			throw new BusinessException(ErrorCode.CONFLICT, "Other rates already take effect at that moment");
 		}
 		ReferralRateVersion version = versions.saveAndFlush(new ReferralRateVersion(from, request.percents(),
-				request.reason().strip(), actorId, now));
+				request.oneTimePercent(), request.reason().strip(), actorId, now));
 		audit.record(AuditRecord.of(actorId, AuditAction.REFERRAL_RATES_SCHEDULED, ENTITY, version.getId())
 			.withOldValue(Map.of("percents", plain(inForce().percents())))
-			.withNewValue(Map.of("percents", plain(version.percents()), "effectiveFrom", from.toString(),
+			.withNewValue(Map.of("percents", plain(version.percents()),
+					"oneTimePercent", version.getOneTimePercent().stripTrailingZeros().toPlainString(), "effectiveFrom", from.toString(),
 					"reason", version.getReason())));
 		return view(version, inForce().getId(), now);
 	}
@@ -112,7 +113,7 @@ public class ReferralRateService {
 		String state = v.isCancelled() ? "CANCELLED"
 				: v.getId().equals(current) ? "IN_FORCE"
 				: v.getEffectiveFrom().isAfter(now) ? "SCHEDULED" : "SUPERSEDED";
-		return new RateVersionResponse(v.getId(), v.getEffectiveFrom(), v.percents(), v.getReason(), v.getCreatedBy(),
+		return new RateVersionResponse(v.getId(), v.getEffectiveFrom(), v.percents(), v.getOneTimePercent(), v.getReason(), v.getCreatedBy(),
 				v.getCreatedAt(), v.getCancelledAt(), state);
 	}
 

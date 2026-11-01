@@ -69,8 +69,8 @@ const ACTION_LABEL: Record<string, string> = {
   REPORT_GENERATED: "Report downloaded",
   AUDIT_LOG_EXPORTED: "Audit log exported",
   AGREEMENT_TEMPLATE_UPDATED: "Agreement wording changed",
-  LEASE_AGREEMENT_ISSUED: "Lease agreement issued",
-  LEASE_AGREEMENT_ACCEPTED: "Lease agreement accepted",
+  LEASE_AGREEMENT_ISSUED: "Investment agreement issued",
+  LEASE_AGREEMENT_ACCEPTED: "Investment agreement accepted",
   AGREEMENT_REVIEW_ASSIGNED: "Agreement review taken",
   AGREEMENT_REVIEW_UNASSIGNED: "Agreement review returned to the queue",
   AGREEMENT_REVIEW_COMPLETED: "Agreement review completed",
@@ -97,10 +97,11 @@ export const PERIODS = [
 /** Where a logged entity is shown in the admin area, if anywhere. */
 export function entityHref(entityType: string, entityId: string | null): string | null {
   if (!entityId) return null;
+  // Bank accounts have no page of their own; they are reviewed in a list.
+  if (entityType === "BANK_ACCOUNT") return "/admin/verification";
   const base: Record<string, string> = {
     USER: "/admin/users",
     KYC_SUBMISSION: "/admin/kyc",
-    BANK_ACCOUNT: "/admin/bank-accounts",
     INVESTMENT_PRODUCT: "/admin/products",
     ORDER: "/admin/orders",
     SUPPORT_TICKET: "/admin/support",

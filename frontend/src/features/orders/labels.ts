@@ -51,7 +51,5 @@ export const DEPOSIT_MODE_HINT: Record<DepositMode, string> = {
 
 /** "2 × PLAN-10001, 1 × PLAN-10002": an order's containers, per plan. */
 export function containersSummary(items: readonly { productCode: string }[]): string {
-  const counts = new Map<string, number>();
-  for (const item of items) counts.set(item.productCode, (counts.get(item.productCode) ?? 0) + 1);
-  return [...counts].map(([code, n]) => `${n} × ${code}`).join(", ");
+  return [...new Set(items.map((item) => item.productCode))].join(", ");
 }

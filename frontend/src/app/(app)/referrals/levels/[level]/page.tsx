@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,6 +19,8 @@ export default async function ReferralLevelPage({ params }: PageProps<"/referral
     authFetch<ReferralOverview>("/api/v1/referrals/me"),
     authFetch<Downline>("/api/v1/referrals/downline"),
   ]);
+  // Online investors have no levels: their page lists the people they invited.
+  if (overview.scheme === "ONLINE") redirect("/referrals");
   const rate = overview.levels.find((l) => l.level === level)?.ratePercent;
   const names = new Map(downline.members.map((m) => [m.id, m.displayName]));
   const members = downline.members.filter((m) => m.level === level);

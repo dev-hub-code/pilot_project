@@ -30,7 +30,6 @@ import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.money.MoneyProperties;
 import com.sealease.backend.common.money.MoneyResponse;
 import com.sealease.backend.common.time.DisplayTimeZone;
-import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.demo.dto.DemoAccountRequest;
 import com.sealease.backend.demo.dto.DemoAccountSummary;
 import com.sealease.backend.demo.dto.DemoAccountView;
@@ -41,7 +40,6 @@ import com.sealease.backend.demo.service.DemoBook.Kind;
 import com.sealease.backend.investment.dto.ProductResponse;
 import com.sealease.backend.investment.entity.ProductTerms;
 import com.sealease.backend.investment.service.ProductService;
-import com.sealease.backend.investment.service.RentRateService;
 import com.sealease.backend.referral.service.ReferralRateService;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.UserCodes;
@@ -63,7 +61,6 @@ public class DemoAccountService {
 	private final JdbcTemplate jdbc;
 	private final UserAccountService accounts;
 	private final ReferralRateService referralRates;
-	private final RentRateService rentRates;
 	private final ProductService products;
 	private final MoneyProperties money;
 	private final DisplayTimeZone zone;
@@ -71,12 +68,11 @@ public class DemoAccountService {
 	private final Clock clock;
 
 	public DemoAccountService(JdbcTemplate jdbc, UserAccountService accounts, ReferralRateService referralRates,
-			RentRateService rentRates, ProductService products, MoneyProperties money, DisplayTimeZone zone,
+			ProductService products, MoneyProperties money, DisplayTimeZone zone,
 			AuditService audit, Clock clock) {
 		this.jdbc = jdbc;
 		this.accounts = accounts;
 		this.referralRates = referralRates;
-		this.rentRates = rentRates;
 		this.products = products;
 		this.money = money;
 		this.zone = zone;
@@ -110,13 +106,13 @@ public class DemoAccountService {
 		LocalDate[] frame = frame(userId);
 		Map<UUID, DemoBook.Member> members = members(userId);
 		List<DemoBook.Order> orders = jdbc.query("""
-				SELECT id, member_id, order_number, product_id, plan_code, plan_title, container_type, containers,
+				SELECT id, member_id, order_number, product_id, plan_code, plan_title, containers,
 				       price_per_container, currency, rent_percent, tenure_months, starts_on
 				FROM demo_orders WHERE account_id = ? ORDER BY starts_on, created_at""",
 				(rs, i) -> new DemoBook.Order(rs.getObject("id", UUID.class), rs.getObject("member_id", UUID.class),
 						rs.getString("order_number"), rs.getObject("product_id", UUID.class), rs.getString("plan_code"),
 						rs.getString("plan_title"),
-						ContainerType.valueOf(rs.getString("container_type")), rs.getInt("containers"),
+						rs.getInt("containers"),
 						Money.of(rs.getBigDecimal("price_per_container"), Currency.getInstance(rs.getString("currency"))),
 						rs.getBigDecimal("rent_percent"), rs.getInt("tenure_months"),
 						rs.getObject("starts_on", LocalDate.class)),
@@ -156,8 +152,7 @@ public class DemoAccountService {
 				MoneyResponse.from(book.withdrawn(Kind.REFERRAL)), MoneyResponse.from(book.balance(Kind.RENT)),
 				MoneyResponse.from(book.balance(Kind.REFERRAL)));
 		return new DemoAccountView(userId, user.userCode(), name(user), user.email(), book.startsOn(), book.endsOn(),
-				book.today(), book.creditedUntil(), book.rates(), orders, members, months, payouts, totals, plans(),
-				rentRates.get().tiers());
+				book.today(), book.creditedUntil(), book.rates(), orders, members, months, payouts, totals, plans());
 	}
 
 	// ----------------------------------------------------------------------------- changes
@@ -214,7 +209,7 @@ public class DemoAccountService {
 	@Transactional
 	public DemoAccountView addOrder(UUID actorId, UUID userId, DemoOrderRequest request) {
 		LocalDate[] frame = lock(userId);
-		inFrame(frame, request.startsOn(), "The lease start");
+		inFrame(frame, request.startsOn(), "The start date");
 		if (request.memberId() != null) {
 			DemoBook.Member member = members(userId).get(request.memberId());
 			if (member == null) {
@@ -222,38 +217,25 @@ public class DemoAccountService {
 			}
 			if (request.startsOn().isBefore(member.joinedOn())) {
 				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-						"The lease cannot start before " + member.name() + " joined, on " + day(member.joinedOn()));
+						"The investment cannot start before " + member.name() + " joined, on " + day(member.joinedOn()));
 			}
 		}
 		ProductResponse plan = products.published().stream().filter(p -> p.id().equals(request.productId())).findFirst()
 			.orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					"Choose an open or closed plan"));
-		if (request.tenureYears() < plan.minTenureYears() || request.tenureYears() > plan.maxTenureYears()) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, plan.title() + " is leased for "
-					+ plan.minTenureYears() + " to " + plan.maxTenureYears() + " years");
-		}
-		Currency currency = Currency.getInstance(plan.price().currency());
-		BigDecimal price = new BigDecimal(plan.price().amount());
-		Money total = Money.of(price, currency).times(BigDecimal.valueOf(request.containers()));
-		// Rent is the rate of the band the order's total falls in, as for a real order.
-		BigDecimal rent = rentRates.percentFor(total);
-		if (rent == null && request.memberId() != null) {
-			// A member's rent is not shown anywhere: their commission is on the investment.
-			rent = BigDecimal.ZERO;
-		}
-		if (rent == null) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"An order of " + total.display() + " is outside every rent band; add containers");
-		}
+		Currency currency = Currency.getInstance(plan.currency());
+		BigDecimal price = request.amount();
+		Money total = Money.of(price, currency);
+		BigDecimal rent = ProductTerms.monthlyPercentOf(plan.annualReturnPercent());
 		Long number = jdbc.queryForObject("SELECT nextval('demo_order_number_seq')", Long.class);
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
 				INSERT INTO demo_orders (id, account_id, member_id, order_number, product_id, plan_code, plan_title,
-				                         container_type, containers, price_per_container, currency, rent_percent,
+				                         containers, price_per_container, currency, rent_percent,
 				                         tenure_months, starts_on, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, userId, request.memberId(), "ORD-" + number,
-				plan.id(), plan.code(), plan.title(), plan.containerType().name(), request.containers(), price,
-				currency.getCurrencyCode(), rent, ProductTerms.monthsOf(request.tenureYears()),
+				VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""", id, userId, request.memberId(), "ORD-" + number,
+				plan.id(), plan.code(), plan.title(), price,
+				currency.getCurrencyCode(), rent, ProductTerms.monthsOf(plan.tenureYears()),
 				Date.valueOf(request.startsOn()), Timestamp.from(clock.instant()));
 		record(actorId, userId, "order added", Map.of("order", "ORD-" + number, "plan", plan.code(), "member",
 				request.memberId() == null ? "own" : request.memberId().toString(), "amount", total.toString(),
@@ -349,7 +331,7 @@ public class DemoAccountService {
 
 	private DemoAccountView.Order order(DemoBook.Order o, String memberName, Money rentCredited) {
 		return new DemoAccountView.Order(o.id(), o.memberId(), memberName, o.number(), o.productId(), o.planCode(),
-				o.planTitle(), o.containerType(),
+				o.planTitle(),
 				o.containers(), MoneyResponse.from(o.pricePerContainer()), MoneyResponse.from(o.amount()), o.rentPercent(),
 				MoneyResponse.from(o.monthlyRent()), o.tenureMonths(), o.startsOn(), o.endsOn(),
 				rentCredited == null ? null : MoneyResponse.from(rentCredited));
@@ -357,8 +339,8 @@ public class DemoAccountService {
 
 	private List<DemoAccountView.Plan> plans() {
 		return products.published().stream()
-			.map(p -> new DemoAccountView.Plan(p.id(), p.code(), p.title(), p.containerType(), p.price(),
-					p.minTenureYears(), p.maxTenureYears(), p.status().name()))
+			.map(p -> new DemoAccountView.Plan(p.id(), p.code(), p.title(), p.currency(),
+					p.tenureYears(), p.annualReturnPercent(), p.status().name()))
 			.toList();
 	}
 

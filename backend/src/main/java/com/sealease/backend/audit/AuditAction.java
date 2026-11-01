@@ -112,6 +112,9 @@ public enum AuditAction {
 	LEDGER_ADJUSTMENT_POSTED,
 
 	REFERRAL_LINKED,
+	/** An investor joined the network referral scheme: made by an administrator, or through a network investor's code. */
+	REFERRAL_NETWORK_JOINED,
+	INVESTOR_ACCOUNT_CREATED,
 	/** A super administrator moved a member (and their downline) to another referrer. */
 	REFERRAL_MOVED,
 	/** A super administrator marked or unmarked a demo account, or changed its dummy orders or downline. */

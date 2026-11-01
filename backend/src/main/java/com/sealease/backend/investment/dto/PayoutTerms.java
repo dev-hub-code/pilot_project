@@ -13,6 +13,6 @@ import java.util.UUID;
  *                        ended, otherwise zero (rent only)
  * @param leaseStartsAt   the lease's first hour: rent is credited hourly from then
  */
-public record PayoutTerms(UUID holdingId, UUID userId, UUID productId, String productCode, String containerNumber,
+public record PayoutTerms(UUID holdingId, UUID userId, UUID productId, String productCode,
 		Money amount, Money monthlyRent, Money capitalReturned, int tenureMonths, Instant leaseStartsAt) {
 }

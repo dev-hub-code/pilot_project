@@ -27,6 +27,18 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: UPLOAD_LIMIT },
     proxyClientMaxBodySize: UPLOAD_LIMIT,
   },
+  // Pages that moved; old links keep working.
+  async redirects() {
+    return [
+      { source: "/admin/kyc", destination: "/admin/verification", permanent: false },
+      { source: "/admin/bank-accounts", destination: "/admin/verification", permanent: false },
+      { source: "/admin/withdrawal-runs", destination: "/admin/platform-config/withdrawals", permanent: false },
+      { source: "/admin/company-bank-accounts", destination: "/admin/platform-config/company-accounts", permanent: false },
+      { source: "/admin/agreement-reviews/:path*", destination: "/admin", permanent: false },
+      { source: "/containers", destination: "/plans", permanent: true },
+      { source: "/containers/:code", destination: "/plans/:code", permanent: true },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

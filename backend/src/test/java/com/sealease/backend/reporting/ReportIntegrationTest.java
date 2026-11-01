@@ -75,6 +75,7 @@ class ReportIntegrationTest {
 
 		// A rent withdrawal run takes the ₹500: it is listed, in progress.
 		Account finance = api.staff("SUPER_ADMIN", "FINANCE");
+		investors.enrolInNetwork(investor);
 		mvc.perform(post("/api/v1/admin/withdrawal-runs").param("kind", "RENT").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isCreated());
 		String withdrawal = jdbc.queryForObject("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid", String.class,
@@ -82,7 +83,7 @@ class ReportIntegrationTest {
 		String reference = jdbc.queryForObject("SELECT reference FROM withdrawals WHERE id = ?::uuid", String.class, withdrawal);
 		statement(investor, today, today, null)
 			.andExpect(jsonPath("$.subtitle").value(containsString(investor.email())))
-			.andExpect(jsonPath("$.sections[0].rows[0].c2").value(reference + " · Rent"))
+			.andExpect(jsonPath("$.sections[0].rows[0].c2").value(reference + " · Returns"))
 			.andExpect(jsonPath("$.sections[0].rows[0].c3").value(containsString("In progress")))
 			.andExpect(jsonPath("$.sections[0].rows[0].c4").value("₹500.00"))
 			.andExpect(jsonPath("$.sections[0].rows[1].c1").value("In progress"))
@@ -135,7 +136,7 @@ class ReportIntegrationTest {
 				Integer.class, viewer.id())).isEqualTo(1);
 		List<String> sections = JsonPath.read(mvc.perform(get("/api/v1/admin/reports/offerings")
 				.header(HttpHeaders.AUTHORIZATION, viewer.bearer())).andReturn().getResponse().getContentAsString(), "$.sections[*].name");
-		assertThat(sections).containsExactly("Container listings", "Payouts due and not yet paid");
+		assertThat(sections).containsExactly("Plans", "Payouts due and not yet paid");
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'REPORT_GENERATED' AND actor_user_id = ?",
 				Integer.class, viewer.id())).isEqualTo(1);
 
@@ -173,182 +174,6 @@ class ReportIntegrationTest {
 			.andExpect(status().isOk()).andExpect(content().contentType(MediaType.APPLICATION_PDF));
 	}
 
-	// ---------------------------------------------------------------------------- dashboard
-
-	@Test
-	void theDashboardShowsOnlyWhatTheViewerMaySee() throws Exception {
-		List<String> all = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$[*].key");
-		assertThat(all).containsExactly("investors", "capital", "payouts", "owed", "withdrawals", "leads", "security");
-
-		List<String> sales = JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard")
-				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString(), "$[*].key");
-		assertThat(sales).containsExactly("capital", "leads");
-
-		// Support may look up users, investments and withdrawals for tickets, but sees no business figures.
-		Account support = api.staff("SUPPORT");
-		mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, support.bearer()))
-			.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
-		String charts = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, support.bearer()))
-			.andReturn().getResponse().getContentAsString();
-		assertThat((Object) JsonPath.read(charts, "$.invested")).isNull();
-		assertThat((Object) JsonPath.read(charts, "$.investors")).isNull();
-
-		// Nor when they also verify KYC: the roles' permissions add up, and neither brings the figures.
-		Account supportAndVerification = api.staff("SUPPORT", "VERIFICATION");
-		mvc.perform(get("/api/v1/admin/dashboard").header(HttpHeaders.AUTHORIZATION, supportAndVerification.bearer()))
-			.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
-		String both = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, supportAndVerification.bearer()))
-			.andReturn().getResponse().getContentAsString();
-		assertThat((Object) JsonPath.read(both, "$.invested")).isNull();
-		assertThat((Object) JsonPath.read(both, "$.investors")).isNull();
-	}
-
-	@Test
-	void eachEmployeeArrangesTheirOwnDashboard() throws Exception {
-		Account agent = api.staff("SUPPORT");
-		Account colleague = api.staff("SUPPORT");
-		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(status().isOk()).andExpect(jsonPath("$.cards.length()").value(0))
-			.andExpect(jsonPath("$.updatedAt").doesNotExist());
-
-		layout(agent, "{\"cards\":[\"support-priority\",\"support-mine\"],\"hidden\":[\"support-pending\"]}")
-			.andExpect(status().isOk()).andExpect(jsonPath("$.updatedAt").isNotEmpty());
-		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(jsonPath("$.cards[0]").value("support-priority"))
-			.andExpect(jsonPath("$.cards[1]").value("support-mine"))
-			.andExpect(jsonPath("$.hidden[0]").value("support-pending"));
-		// Theirs alone.
-		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, colleague.bearer()))
-			.andExpect(jsonPath("$.cards.length()").value(0));
-
-		// A card once only, and only card keys.
-		layout(agent, "{\"cards\":[\"support-mine\"],\"hidden\":[\"support-mine\"]}").andExpect(status().is4xxClientError());
-		layout(agent, "{\"cards\":[\"<script>\"],\"hidden\":[]}").andExpect(status().isBadRequest());
-
-		mvc.perform(delete("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(status().isOk());
-		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(jsonPath("$.updatedAt").doesNotExist());
-
-		// Investors have no dashboard to arrange.
-		mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, api.register().bearer()))
-			.andExpect(status().isForbidden());
-	}
-
-	private org.springframework.test.web.servlet.ResultActions layout(Account who, String body) throws Exception {
-		return mvc.perform(put("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, who.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content(body));
-	}
-
-	@Test
-	void adminsChooseTheDashboardCardsEachRoleShows() throws Exception {
-		String support = jdbc.queryForObject("SELECT id::text FROM roles WHERE name = 'SUPPORT'", String.class);
-		String verification = jdbc.queryForObject("SELECT id::text FROM roles WHERE name = 'VERIFICATION'", String.class);
-		Account agent = api.staff("SUPPORT");
-		Account both = api.staff("SUPPORT", "VERIFICATION");
-		try {
-			// Until chosen, a role shows every card.
-			mvc.perform(get("/api/v1/admin/roles/{id}/dashboard-cards", support).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-				.andExpect(jsonPath("$.configured").value(false))
-				.andExpect(jsonPath("$.cards", hasItem("kpi-investors")));
-			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-				.andExpect(jsonPath("$.allowed").doesNotExist());
-
-			roleCards(admin, support, "[\"support-pending\",\"support-priority\"]").andExpect(status().isOk())
-				.andExpect(jsonPath("$.configured").value(true));
-			assertThat(api.auditCount("ROLE_DASHBOARD_CARDS_CHANGED", support)).isEqualTo(1);
-			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-				.andExpect(jsonPath("$.allowed.length()").value(2))
-				.andExpect(jsonPath("$.allowed", hasItem("support-priority")));
-			// With another role that has not chosen, everything is allowed; once both have chosen, either's cards.
-			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, both.bearer()))
-				.andExpect(jsonPath("$.allowed").doesNotExist());
-			roleCards(admin, verification, "[\"queue-kyc\"]").andExpect(status().isOk());
-			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, both.bearer()))
-				.andExpect(jsonPath("$.allowed.length()").value(3));
-
-			// Only known cards, and only by those who manage roles.
-			roleCards(admin, support, "[\"no-such-card\"]").andExpect(status().isBadRequest());
-			roleCards(agent, support, "[]").andExpect(status().isForbidden());
-
-			mvc.perform(delete("/api/v1/admin/roles/{id}/dashboard-cards", support).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.configured").value(false));
-			mvc.perform(get("/api/v1/admin/dashboard/layout").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-				.andExpect(jsonPath("$.allowed").doesNotExist());
-		}
-		finally {
-			jdbc.update("DELETE FROM role_dashboard_cards");
-		}
-	}
-
-	private org.springframework.test.web.servlet.ResultActions roleCards(Account who, String roleId, String cards) throws Exception {
-		return mvc.perform(put("/api/v1/admin/roles/{id}/dashboard-cards", roleId).header(HttpHeaders.AUTHORIZATION, who.bearer())
-			.contentType(MediaType.APPLICATION_JSON).content("{\"cards\":" + cards + "}"));
-	}
-
-	@Test
-	void supportSeesItsTicketWorkload() throws Exception {
-		Account agent = api.staff("SUPPORT");
-		Map<String, Integer> before = supportWorkload(agent);
-		assertThat(before).containsEntry("assignedToMe", 0).containsEntry("doneThisMonthByMe", 0);
-		mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(jsonPath("$.financeTasks").doesNotExist()).andExpect(jsonPath("$.financeTickets").doesNotExist());
-
-		String ticket = JsonPath.read(mvc.perform(multipart("/api/v1/support/tickets").param("subject", "Statement question")
-				.param("category", "OTHER").param("message", "Please help.")
-				.header(HttpHeaders.AUTHORIZATION, api.register().bearer()))
-			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.ticket.id");
-		mvc.perform(post("/api/v1/admin/support/tickets/{id}/assign", ticket).header(HttpHeaders.AUTHORIZATION, agent.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"assigneeId\":\"" + agent.id() + "\"}"))
-			.andExpect(status().isOk());
-		Map<String, Integer> assigned = supportWorkload(agent);
-		assertThat(assigned.get("pending")).isEqualTo(before.get("pending") + 1);
-		assertThat(assigned).containsEntry("assignedToMe", 1);
-		// The priority table: every priority, most urgent first; the new ticket is NORMAL and the agent's.
-		String workload = mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andReturn().getResponse().getContentAsString();
-		assertThat(JsonPath.<List<String>>read(workload, "$.supportByPriority[*].priority"))
-			.containsExactly("URGENT", "HIGH", "NORMAL", "LOW");
-		assertThat(JsonPath.<List<Integer>>read(workload, "$.supportByPriority[?(@.priority == 'NORMAL')].assignedToMe"))
-			.containsExactly(1);
-		assertThat(JsonPath.<List<Integer>>read(workload, "$.supportByPriority[?(@.priority != 'NORMAL')].assignedToMe"))
-			.containsOnly(0);
-
-		mvc.perform(post("/api/v1/admin/support/tickets/{id}/status", ticket).header(HttpHeaders.AUTHORIZATION, agent.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
-			.andExpect(status().isOk());
-		Map<String, Integer> done = supportWorkload(agent);
-		assertThat(done.get("pending")).isEqualTo(before.get("pending"));
-		assertThat(done.get("doneToday")).isEqualTo(before.get("doneToday") + 1);
-		assertThat(done).containsEntry("assignedToMe", 0).containsEntry("doneTodayByMe", 1).containsEntry("doneThisMonthByMe", 1);
-	}
-
-	private Map<String, Integer> supportWorkload(Account agent) throws Exception {
-		return JsonPath.read(mvc.perform(get("/api/v1/admin/dashboard/workload").header(HttpHeaders.AUTHORIZATION, agent.bearer()))
-			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.supportTickets");
-	}
-
-	@Test
-	void theDashboardChartsShowOnlyWhatTheViewerMaySee() throws Exception {
-		String all = mvc.perform(get("/api/v1/admin/dashboard/charts").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
-			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-		assertThat((Object) JsonPath.read(all, "$.payouts")).isNotNull();
-		assertThat((Object) JsonPath.read(all, "$.investors")).isNotNull();
-		List<String> stages = JsonPath.read(all, "$.pipeline[*].stage");
-		assertThat(stages).containsExactly("NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "WON", "LOST");
-
-		String sales = mvc.perform(get("/api/v1/admin/dashboard/charts")
-				.header(HttpHeaders.AUTHORIZATION, api.staff("SALES").bearer())).andReturn().getResponse().getContentAsString();
-		assertThat((Object) JsonPath.read(sales, "$.payouts")).isNull();
-		assertThat((Object) JsonPath.read(sales, "$.investors")).isNull();
-		assertThat((Object) JsonPath.read(sales, "$.invested")).isNotNull();
-		assertThat((Object) JsonPath.read(sales, "$.pipeline")).isNotNull();
-	}
-
-	// ----------------------------------------------------------------------------- helpers
-
-	/** One INR figure of today's financial summary, e.g. "₹1,23,450.00" → 123450.00. */
 	private java.math.BigDecimal summaryFigure(String day, String label) throws Exception {
 		String summary = mvc.perform(get("/api/v1/admin/reports/financial-summary").param("from", day).param("to", day)
 				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))

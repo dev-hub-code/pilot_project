@@ -8,15 +8,15 @@ import { forwardedClientHeaders } from "@/lib/server/request-context";
 /** Refresh this long before expiry so bursts of requests rarely race on an expired token. */
 const REFRESH_AHEAD_MS = 60_000;
 
-const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/marketplace", "/cart", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/settings", "/admin"];
+const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/invest", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/settings", "/admin"];
 const STAFF_PREFIXES = ["/admin"];
 /** The investor portal; staff accounts are never investors and are sent to the admin area instead. */
-const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/orders", "/cart", "/statements", "/profile/verification", "/profile/bank-accounts"];
+const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/orders", "/statements", "/profile/verification", "/profile/bank-accounts"];
 const GUEST_ONLY = ["/login", "/register"];
+const RETIRED = ["/marketplace", "/cart"];
 /** Route handlers that send their own, stricter CSP (sandboxed file downloads). */
 const OWN_CSP = [
-  /^\/(?:admin\/kyc|marketplace)\/[^/]+\/documents\/[^/]+$/,
-  /^\/admin\/products\/[^/]+\/photos\/[^/]+$/,
+  /^\/admin\/kyc\/[^/]+\/documents\/[^/]+$/,
   /^\/admin\/bank-accounts\/[^/]+\/proof$/,
   /^\/admin\/withdrawals\/batches\/[^/]+\/file$/,
   /^\/(?:admin\/)?support\/[^/]+\/attachments\/[^/]+$/,
@@ -54,14 +54,15 @@ export async function proxy(request: NextRequest) {
   const session = effectiveAccess ? await verifyAccessToken(effectiveAccess) : null;
 
   let response: NextResponse;
-  if (!session && matches(pathname, ["/marketplace"])) {
-    // Visitors see the public, read-only marketplace; signing in from there leads back to the full one.
-    const open = new URL("/containers", request.url);
-    if (pathname === "/marketplace") open.search = search;
-    response = NextResponse.redirect(open);
-  } else if (session && pathname === "/containers") {
-    // Signed in, the full marketplace replaces the public one.
-    const full = new URL("/marketplace", request.url);
+  if (matches(pathname, RETIRED)) {
+    // The marketplace and cart are gone: old links and bookmarks land on the plans.
+    response = NextResponse.redirect(new URL("/invest", request.url));
+  } else if (!session && pathname === "/invest") {
+    // Visitors see the public, read-only plans; signing in from there leads to the full page.
+    response = NextResponse.redirect(new URL("/plans", request.url));
+  } else if (session && pathname === "/plans") {
+    // Signed in, investors buy from the full page.
+    const full = new URL("/invest", request.url);
     full.search = search;
     response = NextResponse.redirect(full);
   } else if (!session && matches(pathname, PROTECTED_PREFIXES)) {

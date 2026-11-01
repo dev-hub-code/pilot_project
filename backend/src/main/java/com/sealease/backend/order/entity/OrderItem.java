@@ -17,8 +17,7 @@ import java.util.Currency;
 import java.util.UUID;
 
 /**
- * One container in an order, with the plan terms the investor accepted - frozen at checkout. The
- * container is reserved for the order and allocated to the investor once it is paid.
+ * What an order bought, with the plan terms the investor accepted - frozen when the order is placed.
  */
 @Entity
 @Immutable
@@ -55,7 +54,15 @@ public class OrderItem {
 	@Column(name = "currency", nullable = false, length = 3)
 	private String currency;
 
-	@Column(name = "monthly_rent_percent", nullable = false, precision = 5, scale = 2)
+	/** The units bought; null on orders placed before units. */
+	@Column(name = "units")
+	private Integer units;
+
+	/** What one unit cost; null on orders placed before units. */
+	@Column(name = "unit_price", precision = 19, scale = 4)
+	private BigDecimal unitPrice;
+
+	@Column(name = "monthly_rent_percent", nullable = false, precision = 12, scale = 8)
 	private BigDecimal monthlyRentPercent;
 
 	@Column(name = "monthly_capital_return_percent", nullable = false, precision = 9, scale = 4)
@@ -70,26 +77,34 @@ public class OrderItem {
 	protected OrderItem() {
 	}
 
-	public OrderItem(UUID orderId, UUID productId, String productCode, String productTitle, ContainerType containerType,
-			UUID containerId, Money amount, BigDecimal monthlyRentPercent,
+	public OrderItem(UUID orderId, UUID productId, String productCode, String productTitle, Money amount, int units,
+			BigDecimal unitPrice, BigDecimal monthlyRentPercent,
 			BigDecimal monthlyCapitalReturnPercent, int tenureMonths, Instant createdAt) {
 		this.orderId = orderId;
 		this.productId = productId;
 		this.productCode = productCode;
 		this.productTitle = productTitle;
-		this.containerType = containerType;
-		this.containerId = containerId;
 		this.amount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
+		this.units = units;
+		this.unitPrice = unitPrice;
 		this.monthlyRentPercent = monthlyRentPercent;
 		this.monthlyCapitalReturnPercent = monthlyCapitalReturnPercent;
 		this.tenureMonths = tenureMonths;
 		this.createdAt = createdAt;
 	}
 
-	/** The price of the container. */
+	/** The amount invested. */
 	public Money amount() {
 		return Money.of(amount, Currency.getInstance(currency));
+	}
+
+	public Integer getUnits() {
+		return units;
+	}
+
+	public BigDecimal getUnitPrice() {
+		return unitPrice;
 	}
 
 	public UUID getId() {

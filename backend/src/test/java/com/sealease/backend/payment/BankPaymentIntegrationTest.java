@@ -92,6 +92,16 @@ class BankPaymentIntegrationTest {
 	// ------------------------------------------------------------------ payment details
 
 	@Test
+	void onlyThoseManagingCompanyAccountsLookUpIfscCodes() throws Exception {
+		// The directory is switched off in tests, so a well-formed code comes back unavailable (IfscDirectoryTest covers it).
+		mvc.perform(get(ACCOUNTS + "/ifsc/HDFC0001234").header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("UNAVAILABLE"));
+		mvc.perform(get(ACCOUNTS + "/ifsc/HDFC0001234").header(HttpHeaders.AUTHORIZATION, approvedInvestor().bearer()))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
 	void investorsSayHowTheyPaidAndFinanceConfirms() throws Exception {
 		UUID account = api.companyBankAccount();
 		Account investor = approvedInvestor();
@@ -214,13 +224,10 @@ class BankPaymentIntegrationTest {
 	}
 
 	private String placeOrder(Account investor, UUID product) throws Exception {
-		mvc.perform(put("/api/v1/cart/items/{id}", product).header(HttpHeaders.AUTHORIZATION, investor.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
-			.andExpect(status().isOk());
 		return JsonPath.read(mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"acceptedTerms":["%s"]}""".formatted(product)))
+						{"productId":"%s","units":100,"acceptTerms":true}""".formatted(product)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 

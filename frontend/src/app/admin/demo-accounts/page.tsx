@@ -52,7 +52,7 @@ export default async function DemoAccountsPage({ searchParams }: PageProps<"/adm
   return (
     <div className="space-y-6">
       <PageHeader title="Demo accounts"
-        description="Give an investor dummy orders, a dummy downline and payouts over a time frame. Their own pages then show these figures: rent paid out on the 1st and referral commission on the 5th of every month, worked out from the percentages. Demo accounts are never paid out for real. Only super administrators can open this page." />
+        description="Give an investor dummy orders, a dummy downline and payouts over a time frame. Their own pages then show these figures: returns paid out on the 1st and referral commission on the 5th of every month, worked out from the percentages. Demo accounts are never paid out for real. Only super administrators can open this page." />
       <Card title="Demo accounts">
         {accounts.length === 0 ? <EmptyState title="No demo accounts yet" description="Find an investor below to make one." /> : (
           <DataTable columns={["Investor", "Time frame", "Dummy orders", "Downline", ""]}>

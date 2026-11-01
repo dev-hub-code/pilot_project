@@ -26,7 +26,7 @@ export default async function BatchesPage({ searchParams }: PageProps<"/admin/wi
     <div className="space-y-6">
       <PageHeader title="Withdrawal files"
         description="The bank sheets and cash batches each withdrawal run makes, for finance to pay and hand over at the office."
-        actions={canGenerate ? <LinkButton href="/admin/withdrawal-runs" variant="secondary">Generate withdrawals</LinkButton> : undefined} />
+        actions={canGenerate ? <LinkButton href="/admin/platform-config/withdrawals" variant="secondary">Generate payout</LinkButton> : undefined} />
 
       {batches.content.length === 0 ? (
         <EmptyState title="No withdrawal files yet" />

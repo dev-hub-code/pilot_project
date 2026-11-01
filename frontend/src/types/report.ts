@@ -1,7 +1,4 @@
-import type { TicketPriority } from "@/types/support";
 /** Mirrors of the backend's report documents (Phase 11). */
-
-import type { Money } from "@/types/marketplace";
 
 export interface ReportRow {
   c1: string;
@@ -24,74 +21,4 @@ export interface ReportDocument {
   generatedAt: string;
   sections: ReportSection[];
   footnote: string | null;
-}
-
-/** One queue: pending, the viewer's, and done today and this month (by anyone, and by the viewer). */
-export interface WorkloadCounts {
-  pending: number;
-  /** Pending tickets past their first-response target; null for finance tasks. */
-  overdue: number | null;
-  assignedToMe: number;
-  doneToday: number;
-  doneTodayByMe: number;
-  doneThisMonth: number;
-  doneThisMonthByMe: number;
-}
-
-/** Pending support tickets of one priority. */
-export interface PriorityRow {
-  priority: TicketPriority;
-  pending: number;
-  overdue: number;
-  /** Waiting for a reply with nobody on them. */
-  unassigned: number;
-  assignedToMe: number;
-}
-
-/** The viewer's arrangement of the overview; updatedAt is null until they arrange it (the default applies). */
-export interface DashboardLayout {
-  cards: string[];
-  hidden: string[];
-  updatedAt: string | null;
-  /** The cards the viewer's roles show; null when every card is allowed. */
-  allowed: string[] | null;
-}
-
-/** One card the overview can show. */
-export interface DashboardCardInfo {
-  key: string;
-  title: string;
-  group: string;
-}
-
-/** The cards a role shows; `configured` is false while it shows every card (the default). */
-export interface RoleDashboardCards {
-  configured: boolean;
-  cards: string[];
-  updatedAt: string | null;
-}
-
-/** The queues the viewer works; a queue they do not work on is null. */
-export interface Workload {
-  financeTasks: WorkloadCounts | null;
-  financeTickets: WorkloadCounts | null;
-  supportTickets: WorkloadCounts | null;
-  /** Most urgent first. */
-  supportByPriority: PriorityRow[] | null;
-}
-
-export interface KpiTile {
-  key: string;
-  label: string;
-  values: string[];
-  note: string;
-  link: string;
-}
-
-/** Twelve months of trends for the admin overview; a series the viewer may not see is null. */
-export interface DashboardCharts {
-  payouts: { month: string; rent: Money; capital: Money; referral: Money }[] | null;
-  invested: { month: string; amount: Money }[] | null;
-  investors: { month: string; count: number }[] | null;
-  pipeline: { stage: string; leads: number }[] | null;
 }

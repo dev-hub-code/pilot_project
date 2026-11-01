@@ -1,33 +1,28 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Notice } from "@/components/ui/notice";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  cancelProductAction, closeProductAction, publishProductAction, removePlanPhotoAction, reopenProductAction,
-  uploadPlanPhotosAction,
+  cancelProductAction, closeProductAction, publishProductAction, reopenProductAction,
 } from "@/features/admin/investment-actions";
-import { PlanPhotoForm } from "@/features/admin/plan-photo-form";
-import { MAX_PLAN_PHOTOS as MAX_PHOTOS } from "@/features/admin/plan-photos";
 import { ConfirmForm, ReasonForm } from "@/features/admin/decision-forms";
-import { CONTAINER_TYPE_LABEL, PRODUCT_STATUS_LABEL, PRODUCT_TONE } from "@/features/marketplace/labels";
+import { AUDIENCE_LABEL, PRODUCT_STATUS_LABEL, PRODUCT_TONE } from "@/features/plans/labels";
 import { yearsLabel } from "@/features/orders/lease-years";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { PlanPhoto, Product } from "@/types/marketplace";
+import type { Product } from "@/types/plan";
 import { formatDateTime } from "@/utils/format";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatPercent } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Container listing" };
+export const metadata: Metadata = { title: "Plan" };
 
 
-export default async function ProductPage({ params, searchParams }: PageProps<"/admin/products/[id]">) {
+export default async function ProductPage({ params }: PageProps<"/admin/products/[id]">) {
   const { id } = await params;
-  const photosFailed = Number((await searchParams).photosFailed ?? 0);
   if (!isUuid(id)) notFound();
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
@@ -40,8 +35,6 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   }
   const credit = creditLabel(await getRentCredit());
   const decisions = can(Permission.INVESTMENT_APPROVE) && (p.status === "DRAFT" || p.status === "OPEN");
-  const canEdit = can(Permission.INVESTMENT_UPDATE) && p.status !== "CANCELLED";
-  const photos = await authFetch<PlanPhoto[]>(`/api/v1/admin/investment-products/${id}/photos`);
 
   return (
     <div className="space-y-6">
@@ -52,8 +45,8 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge tone={PRODUCT_TONE[p.status]}>{PRODUCT_STATUS_LABEL[p.status]}</StatusBadge>
-          {p.status !== "DRAFT" && p.status !== "CANCELLED" && (
-            <LinkButton href={`/marketplace/${p.id}`} variant="secondary">View as investor</LinkButton>
+          {p.audience === "ONLINE" && p.status !== "DRAFT" && p.status !== "CANCELLED" && (
+            <LinkButton href={`/invest/${p.id}`} variant="secondary">View as investor</LinkButton>
           )}
           {p.status === "DRAFT" && can(Permission.INVESTMENT_UPDATE) && (
             <LinkButton href={`/admin/products/${p.id}/edit`} variant="secondary">Edit draft</LinkButton>
@@ -65,84 +58,52 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
         <div className="space-y-6">
           <Card title="Sales">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Containers sold">{p.containersSold}</Item>
+              <Item label="Investments">{p.containersSold}</Item>
               <Item label="Published">{formatDateTime(p.publishedAt)}</Item>
             </dl>
           </Card>
-          {photosFailed > 0 && (
-            <Notice tone="warning">
-              The listing was saved, but {photosFailed === 1 ? "1 photo" : `${photosFailed} photos`} could not be uploaded. Add
-              {photosFailed === 1 ? " it" : " them"} again below.
-            </Notice>
+          <Card title="Payout" description={`Returns are credited to the investor's wallet ${credit}.`}>
+            <dl className="grid gap-4 text-sm sm:grid-cols-3">
+              <Item label="Offered to">{AUDIENCE_LABEL[p.audience]}</Item>
+              <Item label="Tenure">{yearsLabel(p.tenureYears)}</Item>
+              <Item label="Return a year">{formatPercent(p.annualReturnPercent)}</Item>
+              <Item label="Price of 1 unit">{formatMoney({ amount: String(p.unitPrice), currency: p.currency })}</Item>
+              <Item label="Minimum units">{p.minUnits}</Item>
+            </dl>
+          </Card>
+          {(p.closedAt || p.cancellationReason) && (
+            <Card title="Terms">
+              <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                {p.closedAt && <Item label="Closed">{formatDateTime(p.closedAt)}</Item>}
+                {p.cancellationReason && <Item label="Cancelled">{p.cancellationReason}</Item>}
+              </dl>
+            </Card>
           )}
-          <Card title="Photos" description={`Shown in the marketplace, the first as the cover. Up to ${MAX_PHOTOS} photos.`}>
-            {photos.length === 0 ? (
-              <p className="text-sm text-muted">No photos yet: the marketplace shows this container without a picture.</p>
-            ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {photos.map((photo, index) => (
-                  <li key={photo.id} className="space-y-2">
-                    <a href={`/admin/products/${p.id}/photos/${photo.documentId}`} target="_blank" rel="noopener noreferrer"
-                      className="block aspect-[4/3] overflow-hidden border border-border bg-ink">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- authenticated document, not an optimisable asset */}
-                      <img src={`/admin/products/${p.id}/photos/${photo.documentId}`} alt={`Photo ${index + 1} of ${p.code}`}
-                        className="size-full object-cover" />
-                    </a>
-                    {index === 0 && <p className="text-xs text-muted">Cover</p>}
-                    {canEdit && (
-                      <ConfirmForm action={removePlanPhotoAction.bind(null, p.id, photo.id)} submitLabel="Remove"
-                        confirm="Remove this photo from the listing?" />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canEdit && photos.length < MAX_PHOTOS && (
-              <div className="mt-4 border-t border-border pt-4">
-                <PlanPhotoForm action={uploadPlanPhotosAction.bind(null, p.id)} room={MAX_PHOTOS - photos.length} />
-              </div>
-            )}
-          </Card>
-          <Card title="Payout per container" description={`Credited to the investor's wallet ${credit} for the lease they choose; part months at the start and end are paid by the hour.`}>
-            <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Price">{formatMoney(p.price)}</Item>
-              <Item label="Lease (investor's choice)">{p.minTenureYears === p.maxTenureYears ? yearsLabel(p.minTenureYears)
-                : `${p.minTenureYears} to ${p.maxTenureYears} years`}</Item>
-              <Item label="Rent">Set by each order&apos;s total value (see Rent by order value)</Item>
-            </dl>
-          </Card>
-          <Card title="Terms">
-            <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Container type">{CONTAINER_TYPE_LABEL[p.containerType]}</Item>
-              {p.closedAt && <Item label="Closed">{formatDateTime(p.closedAt)}</Item>}
-              {p.cancellationReason && <Item label="Cancelled">{p.cancellationReason}</Item>}
-            </dl>
-          </Card>
         </div>
 
         {decisions && (
           <div className="space-y-6">
             {p.status === "DRAFT" && (
-              <Card title="Publish" description="Terms become binding and investors can buy these containers.">
-                <ConfirmForm action={publishProductAction.bind(null, p.id)} submitLabel="Publish listing"
+              <Card title="Publish" description="Terms become binding and investors can invest in this plan.">
+                <ConfirmForm action={publishProductAction.bind(null, p.id)} submitLabel="Publish plan"
                   confirm={`Publish ${p.code}? Its terms can no longer be edited.`} />
               </Card>
             )}
             {p.status === "OPEN" && (
-              <Card title="Close to new investors" description="Containers already sold keep their lease and keep earning rent every hour.">
-                <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close listing"
-                  confirm={`Close ${p.code}? Investors can no longer buy containers under it.`} />
+              <Card title="Close to new investors" description="Investments already made keep their term and keep earning returns every hour.">
+                <ConfirmForm action={closeProductAction.bind(null, p.id)} submitLabel="Close plan"
+                  confirm={`Close ${p.code}? Investors can no longer invest in it.`} />
               </Card>
             )}
             {p.status === "CLOSED" && (
-              <Card title="Reopen to new investors" description="Investors can buy containers under this listing again, on the same terms.">
-                <ConfirmForm action={reopenProductAction.bind(null, p.id)} submitLabel="Reopen listing"
-                  confirm={`Reopen ${p.code}? Investors can buy containers under it again.`} />
+              <Card title="Reopen to new investors" description="Investors can invest in this plan again, on the same terms.">
+                <ConfirmForm action={reopenProductAction.bind(null, p.id)} submitLabel="Reopen plan"
+                  confirm={`Reopen ${p.code}? Investors can invest in it again.`} />
               </Card>
             )}
             {p.status === "DRAFT" && (
               <Card title="Cancel draft">
-                <ReasonForm action={cancelProductAction.bind(null, p.id)} label="Reason" submitLabel="Cancel listing"
+                <ReasonForm action={cancelProductAction.bind(null, p.id)} label="Reason" submitLabel="Cancel plan"
                   confirm={`Cancel ${p.code}?`} />
               </Card>
             )}

@@ -21,7 +21,7 @@ public class OpenApiConfig {
 	@Bean
 	OpenAPI platformOpenApi(@Value("${app.version:dev}") String version) {
 		return new OpenAPI()
-			.info(new Info().title("Container Investment Platform API").version(version))
+			.info(new Info().title("SeaLease Investment Platform API").version(version))
 			.components(new Components().addSecuritySchemes(BEARER,
 					new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
 			.addSecurityItem(new SecurityRequirement().addList(BEARER));

@@ -11,7 +11,7 @@ const id = (value: string) => encodeURIComponent(value);
 
 function refresh() {
   revalidatePath("/admin/withdrawals", "layout");
-  revalidatePath("/admin/withdrawal-runs");
+  revalidatePath("/admin/platform-config/withdrawals");
   revalidatePath("/admin/finance-tasks");
   revalidatePath("/admin/ledger", "layout");
 }

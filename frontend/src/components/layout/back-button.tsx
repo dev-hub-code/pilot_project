@@ -52,17 +52,18 @@ function usePrevious(): string | null {
 
 /** Every page of the app, to find the nearest one above a path ("[id]" matches one segment). */
 const PAGES = [
-  "/dashboard", "/marketplace", "/marketplace/[id]", "/cart", "/orders", "/orders/[id]", "/orders/[id]/invoice",
+  "/dashboard", "/invest", "/invest/[id]", "/orders", "/orders/[id]", "/orders/[id]/invoice",
   "/portfolio", "/earnings", "/statements", "/referrals", "/withdrawals", "/support", "/support/new", "/support/[id]",
   "/notifications", "/profile", "/profile/bank-accounts", "/profile/verification", "/settings",
   "/settings/notifications", "/settings/password",
-  "/admin", "/admin/agreement", "/admin/agreement-reviews", "/admin/agreement-reviews/[id]", "/admin/audit", "/admin/audit/[id]", "/admin/bank-accounts",
-  "/admin/company-bank-accounts", "/admin/container-assignments", "/admin/finance-tasks", "/admin/kyc",
+  "/admin", "/admin/agreement", "/admin/audit", "/admin/audit/[id]",
+  "/admin/platform-config", "/admin/platform-config/withdrawals", "/admin/platform-config/returns",
+  "/admin/platform-config/referral-rates", "/admin/platform-config/company-accounts", "/admin/finance-tasks", "/admin/kyc", "/admin/verification",
   "/admin/kyc/[id]", "/admin/leads", "/admin/leads/new", "/admin/leads/[id]", "/admin/ledger", "/admin/ledger/[id]",
   "/admin/orders", "/admin/orders/[id]", "/admin/orders/[id]/invoice", "/admin/payments", "/admin/payouts",
   "/admin/products", "/admin/products/new", "/admin/products/[id]", "/admin/products/[id]/edit", "/admin/referrals",
   "/admin/reports", "/admin/roles", "/admin/roles/[id]", "/admin/security", "/admin/support", "/admin/support/[id]",
-  "/admin/users", "/admin/users/new", "/admin/users/[id]", "/admin/withdrawal-runs", "/admin/withdrawals",
+  "/admin/users", "/admin/users/new", "/admin/users/new-investor", "/admin/users/[id]", "/admin/withdrawals",
   "/admin/withdrawals/batches", "/admin/withdrawals/batches/[id]", "/admin/withdrawals/[id]",
 ].map((page) => new RegExp(`^${page.replaceAll("[id]", "[^/]+")}$`));
 
@@ -79,7 +80,7 @@ function parentOf(path: string, home: string): string {
 /** What a page is called on the button ("Back to Orders"), by its path; null for a generic "Back". */
 const NAMES: [RegExp, string][] = [
   [/^\/dashboard$/, "Dashboard"], [/^\/admin$/, "Dashboard"],
-  [/^\/marketplace\/[^/]+$/, "container"], [/^\/orders\/[^/]+\/invoice$/, "invoice"], [/^\/orders\/[^/]+$/, "order"],
+  [/^\/invest$/, "Plans"], [/^\/invest\/[^/]+$/, "plan"], [/^\/orders\/[^/]+\/invoice$/, "invoice"], [/^\/orders\/[^/]+$/, "order"],
   [/^\/support\/new$/, "new ticket"], [/^\/support\/[^/]+$/, "ticket"], [/^\/portfolio\/[^/]+\/agreement$/, "agreement"],
   [/^\/referrals\/levels\/([^/]+)$/, "level $1"], [/^\/referrals\/members\/[^/]+$/, "member"],
   [/^\/profile\/bank-accounts$/, "Bank accounts"], [/^\/profile\/verification$/, "Verification"],
@@ -87,11 +88,11 @@ const NAMES: [RegExp, string][] = [
   [/^\/admin\/orders\/[^/]+\/invoice$/, "invoice"], [/^\/admin\/products\/[^/]+\/edit$/, "edit product"],
   [/^\/admin\/withdrawals\/batches\/[^/]+$/, "withdrawal file"], [/^\/admin\/withdrawals\/batches$/, "Withdrawal files"],
   [/^\/admin\/users\/new$/, "new user"], [/^\/admin\/leads\/new$/, "new lead"], [/^\/admin\/products\/new$/, "new product"],
-  [/^\/admin\/users\/[^/]+$/, "user"], [/^\/admin\/kyc\/[^/]+$/, "KYC submission"], [/^\/admin\/agreement-reviews\/[^/]+$/, "agreement review"], [/^\/admin\/leads\/[^/]+$/, "lead"],
+  [/^\/admin\/users\/[^/]+$/, "user"], [/^\/admin\/kyc\/[^/]+$/, "KYC submission"], [/^\/admin\/kyc$/, "Verification"], [/^\/admin\/leads\/[^/]+$/, "lead"],
   [/^\/admin\/ledger\/[^/]+$/, "ledger account"], [/^\/admin\/orders\/[^/]+$/, "order"],
   [/^\/admin\/products\/[^/]+$/, "product"], [/^\/admin\/roles\/[^/]+$/, "role"], [/^\/admin\/support\/[^/]+$/, "ticket"],
   [/^\/admin\/withdrawals\/[^/]+$/, "withdrawal"], [/^\/admin\/audit\/[^/]+$/, "audit entry"],
-  [/^\/admin\/kyc$/, "KYC"],
+  [/^\/admin\/kyc$/, "KYC"], [/^\/admin\/platform-config(?:\/.*)?$/, "Platform config"],
 ];
 const words = (segment: string) => segment.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase());
 

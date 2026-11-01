@@ -104,8 +104,8 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
                       <form action={removeBankAccountAction.bind(null, account.id)}>
                         <SubmitButton variant="quiet" pendingLabel="Removing…"
                           confirm={isPendingChange
-                            ? `Cancel the change to ${account.bankName} ${account.accountNumberMasked}? Your current account stays as it is.`
-                            : `Remove ${account.bankName} ${account.accountNumberMasked}?`}>
+                            ? `Cancel the change to ${account.bankName ?? "Account"} ${account.accountNumberMasked}? Your current account stays as it is.`
+                            : `Remove ${account.bankName ?? "Account"} ${account.accountNumberMasked}?`}>
                           {isPendingChange ? "Cancel change" : "Remove"}
                         </SubmitButton>
                       </form>

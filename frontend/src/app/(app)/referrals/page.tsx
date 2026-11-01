@@ -26,12 +26,21 @@ export default async function ReferralsPage() {
   const example = level1 && level1.ratePercent > 0
     ? `${formatPercent(level1.ratePercent, level1.ratePercent % 1 === 0 ? 0 : 2)} of ${formatMoney({ amount: "100000", currency: CURRENCY })} is ${formatMoney({ amount: (1000 * level1.ratePercent).toFixed(2), currency: CURRENCY })} a month at level 1`
     : null;
+  const online = overview.scheme === "ONLINE";
+  // Online investors earn only from the people they invite themselves: no levels, and nobody further down.
+  const invited = downline.members.filter((m) => m.level === 1);
+  const oneTime = formatPercent(overview.oneTimePercent, overview.oneTimePercent % 1 === 0 ? 0 : 2);
+  const oneTimeExample = overview.oneTimePercent > 0
+    ? `${oneTime} of ${formatMoney({ amount: "100000", currency: CURRENCY })} is ${formatMoney({ amount: (1000 * overview.oneTimePercent).toFixed(2), currency: CURRENCY })}`
+    : null;
   const earned = overview.totalEarned.length === 0 ? "—" : overview.totalEarned.map((m) => formatMoney(m)).join(" · ");
 
   return (
     <div className="space-y-6">
       <PageHeader title="Referrals"
-        description="Invite investors. Every month of their lease you earn a percentage of what they invested, and of what the people they invite invest, four levels deep." />
+        description={online
+          ? "Invite investors. You earn a one-time commission on the first order of each person you invite."
+          : "Invite investors. Every month of their term you earn a percentage of what they invested, and of what the people they invite invest, four levels deep."} />
       {!overview.eligible && overview.ineligibleReason && (
         <Notice tone="warning">{overview.ineligibleReason}. Until then, commissions on your referrals are not paid to you.</Notice>
       )}
@@ -43,57 +52,103 @@ export default async function ReferralsPage() {
         </div>
       </Card>
 
-      <section className="grid gap-px bg-border sm:grid-cols-5" aria-label="Referral summary">
-        <div className="space-y-2 bg-surface p-6 sm:col-span-1">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Commission earned</p>
-          <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
-        </div>
-        {overview.levels.map((l) => (
-          <Link key={l.level} href={`/referrals/levels/${l.level}`} className="group space-y-2 bg-surface p-6 hover:bg-background">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">Level {l.level} · {formatPercent(l.ratePercent, l.ratePercent % 1 === 0 ? 0 : 2)}</p>
-            <p className="font-display text-3xl font-semibold tabular-nums">{l.members}</p>
-            <p className="text-xs text-muted">
-              {l.level === 1 ? "invited by you" : `invited by level ${l.level - 1}`}
-              <span className="ml-1 text-gold-text group-hover:underline">· View members →</span>
-            </p>
-          </Link>
-        ))}
-      </section>
-      <p className="text-xs text-muted">
-        Each level&apos;s rate is a percentage of the referred investor&apos;s investment, paid to you every month of its tenure by SeaLease{example ? ` (e.g. ${example})` : ""}. Your referrals&apos;
-        own income is never reduced. Rates in force since {formatDate(overview.ratesEffectiveFrom)}.
-      </p>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">Your network</h2>
-        {downline.members.length === 0 ? (
-          <EmptyState title="No referrals yet" description="People who sign up with your link appear here." />
-        ) : (
-          <>
-            <DownlineTree members={downline.members} />
-            {downline.truncated && <p className="text-xs text-muted">Showing the earliest {downline.members.length} members.</p>}
-          </>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">Monthly earnings by level</h2>
-        {monthly.length === 0 ? (
-          <p className="text-sm text-muted">Each month&apos;s commission appears here, split by level. It is added to your wallet every hour, with your referrals&apos; rent.</p>
-        ) : (
-          <DataTable columns={["Month", ...overview.levels.map((l) => `Level ${l.level}`), "Total"]}>
-            {monthly.map((m) => (
-              <tr key={`${m.month}-${m.total.currency}`} className="hover:bg-background">
-                <Cell>{formatMonth(m.month)}</Cell>
-                {m.levels.map((amount, i) => (
-                  <Cell key={i} className={`tabular-nums ${Number(amount.amount) === 0 ? "text-muted" : ""}`}>{formatMoney(amount)}</Cell>
-                ))}
-                <Cell className="tabular-nums font-medium">{formatMoney(m.total)}</Cell>
-              </tr>
+      {online ? (
+        <>
+          <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Referral summary">
+            <div className="space-y-2 bg-surface p-6">
+              <p className="text-xs uppercase tracking-[0.1em] text-muted">Commission earned</p>
+              <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
+            </div>
+            <div className="space-y-2 bg-surface p-6">
+              <p className="text-xs uppercase tracking-[0.1em] text-muted">People you invited</p>
+              <p className="font-display text-3xl font-semibold tabular-nums">{invited.length}</p>
+            </div>
+            <div className="space-y-2 bg-surface p-6">
+              <p className="text-xs uppercase tracking-[0.1em] text-muted">Your commission</p>
+              <p className="font-display text-3xl font-semibold tabular-nums">{oneTime}</p>
+              <p className="text-xs text-muted">once per person invited</p>
+            </div>
+          </section>
+          <p className="text-xs text-muted">
+            You earn {oneTime} of the first order of each person you invite, once, paid by SeaLease when its term starts{oneTimeExample ? ` (e.g. ${oneTimeExample})` : ""}. Their later orders, and the people they invite, earn you nothing more. Your referrals&apos;
+            own income is never reduced.
+          </p>
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">People you invited</h2>
+            {invited.length === 0 ? (
+              <EmptyState title="No referrals yet" description="People who sign up with your link appear here." />
+            ) : (
+              <>
+                <DataTable columns={["Name", "Joined", "You earned"]}>
+                  {invited.map((m) => (
+                    <tr key={m.id} className="hover:bg-background">
+                      <Cell className="font-medium">{m.displayName}</Cell>
+                      <Cell className="text-muted">{formatDate(m.joinedAt)}</Cell>
+                      <Cell className="tabular-nums">{m.earned.length === 0
+                        ? <span className="text-muted">Not earned yet</span>
+                        : m.earned.map((e) => formatMoney(e)).join(" · ")}</Cell>
+                    </tr>
+                  ))}
+                </DataTable>
+                {downline.truncated && <p className="text-xs text-muted">Showing the earliest people you invited.</p>}
+              </>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="grid gap-px bg-border sm:grid-cols-5" aria-label="Referral summary">
+            <div className="space-y-2 bg-surface p-6 sm:col-span-1">
+              <p className="text-xs uppercase tracking-[0.1em] text-muted">Commission earned</p>
+              <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
+            </div>
+            {overview.levels.map((l) => (
+              <Link key={l.level} href={`/referrals/levels/${l.level}`} className="group space-y-2 bg-surface p-6 hover:bg-background">
+                <p className="text-xs uppercase tracking-[0.1em] text-muted">Level {l.level} · {formatPercent(l.ratePercent, l.ratePercent % 1 === 0 ? 0 : 2)}</p>
+                <p className="font-display text-3xl font-semibold tabular-nums">{l.members}</p>
+                <p className="text-xs text-muted">
+                  {l.level === 1 ? "invited by you" : `invited by level ${l.level - 1}`}
+                  <span className="ml-1 text-gold-text group-hover:underline">· View members →</span>
+                </p>
+              </Link>
             ))}
-          </DataTable>
-        )}
-      </section>
+          </section>
+          <p className="text-xs text-muted">
+            Each level&apos;s rate is a percentage of the referred investor&apos;s investment, paid to you every month of its tenure by SeaLease{example ? ` (e.g. ${example})` : ""}. Your referrals&apos;
+            own income is never reduced. Rates in force since {formatDate(overview.ratesEffectiveFrom)}.
+          </p>
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">Your network</h2>
+            {downline.members.length === 0 ? (
+              <EmptyState title="No referrals yet" description="People who sign up with your link appear here." />
+            ) : (
+              <>
+                <DownlineTree members={downline.members} />
+                {downline.truncated && <p className="text-xs text-muted">Showing the earliest {downline.members.length} members.</p>}
+              </>
+            )}
+          </section>
+
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold tracking-tight">Monthly earnings by level</h2>
+              {monthly.length === 0 ? (
+                <p className="text-sm text-muted">Each month&apos;s commission appears here, split by level. It is added to your wallet every hour, with your referrals&apos; returns.</p>
+              ) : (
+                <DataTable columns={["Month", ...overview.levels.map((l) => `Level ${l.level}`), "Total"]}>
+                  {monthly.map((m) => (
+                    <tr key={`${m.month}-${m.total.currency}`} className="hover:bg-background">
+                      <Cell>{formatMonth(m.month)}</Cell>
+                      {m.levels.map((amount, i) => (
+                        <Cell key={i} className={`tabular-nums ${Number(amount.amount) === 0 ? "text-muted" : ""}`}>{formatMoney(amount)}</Cell>
+                      ))}
+                      <Cell className="tabular-nums font-medium">{formatMoney(m.total)}</Cell>
+                    </tr>
+                  ))}
+                </DataTable>
+              )}
+            </section>
+        </>
+      )}
     </div>
   );
 }

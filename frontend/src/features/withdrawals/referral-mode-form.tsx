@@ -7,10 +7,8 @@ import type { WithdrawalPayoutMethod } from "@/types/withdrawal";
 import type { FormState } from "@/validators/form-state";
 import { chooseReferralModeAction } from "./actions";
 
-/** The once-a-year choice of how referral earnings are paid: into the bank account or in cash at the office. */
-export function ReferralModeForm({ year, current, bankAvailable }: {
-  year: number;
-  /** The default until the investor chooses. */
+/** A network investor's choice, at any time, of how returns and referral earnings are paid: by bank or in cash at the office. */
+export function ReferralModeForm({ current, bankAvailable }: {
   current: WithdrawalPayoutMethod;
   /** Bank needs a verified bank account. */
   bankAvailable: boolean;
@@ -21,7 +19,7 @@ export function ReferralModeForm({ year, current, bankAvailable }: {
     <form action={action} className="space-y-4" noValidate>
       <FormFeedback state={state} />
       <fieldset className="space-y-2">
-        <legend className="sr-only">How referral earnings are paid in {year}</legend>
+        <legend className="sr-only">How returns and referral earnings are paid</legend>
         <label className={`flex items-start gap-2 text-sm ${bankAvailable ? "" : "text-muted"}`}>
           <input type="radio" name="mode" value="BANK_TRANSFER" checked={mode === "BANK_TRANSFER"} disabled={!bankAvailable}
             onChange={() => setMode("BANK_TRANSFER")} className="mt-1" />
@@ -30,10 +28,10 @@ export function ReferralModeForm({ year, current, bankAvailable }: {
         <label className="flex items-start gap-2 text-sm">
           <input type="radio" name="mode" value="OFFICE_CASH" checked={mode === "OFFICE_CASH"}
             onChange={() => setMode("OFFICE_CASH")} className="mt-1" />
-          <span>Cash</span>
+          <span>In cash at the office</span>
         </label>
       </fieldset>
-      <SubmitButton confirm={`You can choose only once in ${year}. Save this choice?`}>Save my choice for {year}</SubmitButton>
+      <SubmitButton disabled={mode === current}>Save my choice</SubmitButton>
     </form>
   );
 }

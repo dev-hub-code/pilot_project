@@ -1,7 +1,6 @@
 package com.sealease.backend.investment.entity;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.container.entity.ContainerType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -20,24 +19,22 @@ class ProductTermsTest {
 	private static final Currency INR = Currency.getInstance("INR");
 
 	@Test
-	void plansPayRentOnlyForTheLeaseTheInvestorChooses() {
-		ProductTerms t = terms("500000", 2, 5);
-		BigDecimal rate = new BigDecimal("2");
-		assertThat(t.monthlyRent(rate)).isEqualTo(Money.of("10000", "INR"));
-		assertThat(t.minTenureMonths()).isEqualTo(24);
-		// 2 years: 24 months of rent (48% of the price); 5 years: 60 months. The price is not paid back.
-		assertThat(t.totalPayout(2, rate)).isEqualTo(Money.of("240000", "INR"));
-		assertThat(t.totalPayout(5, rate)).isEqualTo(Money.of("600000", "INR"));
+	void unitsCostTheUnitPriceAndPayTheMonthlyReturnForTheTenure() {
+		ProductTerms t = terms(3, "36", "500", 10);
+		Money amount = t.amountFor(200);
+		assertThat(amount).isEqualTo(Money.of("100000", "INR"));
+		assertThat(ProductTerms.monthlyRent(amount, t.monthlyReturnPercent())).isEqualTo(Money.of("3000", "INR"));
+		// 36 months of returns. The amount is not paid back.
+		assertThat(ProductTerms.totalPayout(amount, t.tenureYears(), t.monthlyReturnPercent()))
+			.isEqualTo(Money.of("108000", "INR"));
 	}
 
 	@Test
-	void theLeaseMustBeWithinThePlansLimits() {
-		ProductTerms t = terms("500000", 2, 5);
-		assertThat(t.tenureProblems(2)).isEmpty();
-		assertThat(t.tenureProblems(5)).isEmpty();
-		assertThat(t.tenureProblems(1)).containsExactly("Choose a lease of 2 to 5 years");
-		assertThat(t.tenureProblems(6)).containsExactly("Choose a lease of 2 to 5 years");
-		assertThat(terms("500000", 3, 3).tenureProblems(4)).containsExactly("The lease for this container is 3 years");
+	void aPlanSetsTheFewestUnitsThatCanBeBought() {
+		ProductTerms t = terms(3, "36", "500", 10);
+		assertThat(t.unitProblems(10)).isEmpty();
+		assertThat(t.unitProblems(9)).containsExactly("Buy at least 10 units of this plan");
+		assertThat(terms(3, "36", "500", 1).unitProblems(0)).containsExactly("Buy at least 1 unit of this plan");
 	}
 
 	@Test
@@ -71,13 +68,13 @@ class ProductTermsTest {
 
 	@Test
 	void rentIsRoundedHalfUpToThePaisa() {
-		assertThat(terms("33333.33", 1, 2).monthlyRent(new BigDecimal("1.75"))).isEqualTo(Money.of("583.33", "INR"));
+		assertThat(ProductTerms.monthlyRent(Money.of("33333.33", "INR"), new BigDecimal("1.75"))).isEqualTo(Money.of("583.33", "INR"));
 		assertThat(ProductTerms.percentOf(Money.of("10.10", "INR"), new BigDecimal("5"))).isEqualTo(Money.of("0.51", "INR"));
 	}
 
-	private static ProductTerms terms(String price, int minYears, int maxYears) {
-		return new ProductTerms(ContainerType.DRY_20FT, "Title", "Summary", "Description", INR, new BigDecimal(price),
-				BigDecimal.ZERO, minYears, maxYears);
+	private static ProductTerms terms(int years, String percent, String unitPrice, int minUnits) {
+		return new ProductTerms("Title", "Summary", INR, BigDecimal.ZERO, years, new BigDecimal(percent),
+				new BigDecimal(unitPrice), minUnits);
 	}
 
 }
