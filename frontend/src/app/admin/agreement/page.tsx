@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import { buttonBase, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +12,8 @@ import { formatDateTime } from "@/utils/format";
 export const metadata: Metadata = { title: "Investment agreement" };
 
 export default async function AdminAgreementPage() {
+  const denied = await deniedUnlessInMenu("/admin/agreement");
+  if (denied) return denied;
   await requireStaff();
   const view = await authFetch<AgreementTemplateView>("/api/v1/admin/agreement-template");
   const current = view.current;

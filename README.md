@@ -569,8 +569,36 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 - **Resets.** `POST /api/v1/admin/users/{id}/temporary-password` (`USER_ROLE_ASSIGN`, staff accounts only, never your
   own, and only if you hold every permission the target holds) issues a new temporary password and ends all of the
   person's sessions. Both actions are audited (`STAFF_ACCOUNT_CREATED`, `TEMPORARY_PASSWORD_ISSUED`).
-- **UI.** *Users → New staff member*. The user page shows roles, lets `USER_ROLE_ASSIGN` holders edit them, and offers
+- **UI.** *Staff → New employee*. Investors and employees are listed apart: *Investors* and *Staff*. The user page shows roles, lets `USER_ROLE_ASSIGN` holders edit them, and offers
   *Issue temporary password* for staff. Everyone can change their password from *Profile → Password*.
+
+### Departments, job roles & permissions
+
+- **Departments** (`/api/v1/admin/departments`) organise staff. Assignment grants no permission, so authorization stays
+  on roles alone. An employee has one primary department and any number of additional ones. Changes are kept in
+  `department_history` (append-only) and audited. `DEPARTMENT_VIEW` alone shows only the departments you belong to;
+  `DEPARTMENT_MANAGE` shows all. Investors cannot join, and inactive departments take no new employees.
+- **Job roles** are ordinary, editable roles linked to a department. Each saved change adds a row to `role_revisions`
+  (`GET /api/v1/admin/roles/{id}/revisions`). `SUPER_ADMIN` has `protected_role` set: it cannot be edited or deleted,
+  and its last holder cannot lose it.
+- **Old roles.** `V10` removed `ADMIN`, `ADMINISTRATION`, `FINANCE`, `REPORT_VIEWER`, `SALES`, `SUPPORT` and `VERIFICATION`,
+  and stops if any account still holds one. `SUPER_ADMIN` and `INVESTOR` remain. Integration tests keep those names as
+  test-only permission bundles in `src/test/resources/db/test-roles`.
+- **Permissions** carry `sensitive` (the editor asks before adding one) and `reserved`. A reserved permission has no
+  feature behind it yet: no endpoint checks it, so granting one changes nothing. `SUPER_ADMIN` does not hold them yet, which also
+  keeps the access token small. The migration that adds such a feature clears the flag and grants the permission.
+- **Menu.** `ADMIN_NAV` in `frontend/src/components/layout/admin-nav.ts` is the one registry of admin pages. It follows
+  permissions for convenience only; the API enforces them.
+
+### Approvals (maker-checker)
+
+- `app.approvals.required` (`APP_APPROVALS_REQUIRED`; default `LEDGER_ADJUSTMENT,PAYMENT_REFUND`) lists operations whose
+  direct endpoint is closed. It is deployment configuration, so nobody can switch off the second person from the admin panel.
+- `POST /api/v1/admin/approvals` records the request; `POST .../{id}/approve` or `.../reject` decides it. The checker needs
+  `APPROVAL_DECIDE` and the operation's own permission, and cannot be the maker (also a database constraint).
+- A decision locks its row and runs the operation in the same transaction, so a request runs once. If the operation
+  fails, the decision rolls back and the request stays pending.
+- Withdrawals keep their existing dual approval.
 
 ### Reporting
 

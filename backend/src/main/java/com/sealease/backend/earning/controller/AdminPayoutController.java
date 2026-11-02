@@ -25,7 +25,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin/payouts")
 public class AdminPayoutController {
 
-	private static final String VIEW = "hasAnyAuthority('FINANCE_VIEW', 'PAYOUT_PROCESS')";
+	private static final String VIEW = "hasAnyAuthority('PAYOUT_VIEW', 'FINANCE_VIEW', 'PAYOUT_PROCESS')";
 
 	private final PayoutService payouts;
 

@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -15,6 +16,8 @@ import { formatMoney, formatPercent } from "@/utils/money";
 export const metadata: Metadata = { title: "Referrals" };
 
 export default async function AdminReferralsPage({ searchParams }: PageProps<"/admin/referrals">) {
+  const denied = await deniedUnlessInMenu("/admin/referrals");
+  if (denied) return denied;
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
   const page = Math.max(0, Number.parseInt(String((await searchParams).page ?? "0"), 10) || 0);

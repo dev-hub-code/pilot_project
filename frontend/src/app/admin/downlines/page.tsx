@@ -1,13 +1,12 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { DownlineEditor } from "@/features/admin/downline-editor";
 import { InvestorPicker } from "@/features/admin/investor-picker";
-import { Permission, hasPermission } from "@/lib/permissions";
 import { BackendError } from "@/lib/server/backend-client";
-import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AdminDownline } from "@/types/referral";
 import type { AdminUserSummary } from "@/types/user";
@@ -22,8 +21,8 @@ const HERE = "/admin/downlines";
  * alongside (?with=), to drag members onto a new referrer, into the other downline, or out of their downline.
  */
 export default async function DownlinesPage({ searchParams }: PageProps<"/admin/downlines">) {
-  const session = await requireStaff();
-  if (!hasPermission(session.permissions, Permission.REFERRAL_TREE_MANAGE)) notFound();
+  const denied = await deniedUnlessInMenu("/admin/downlines");
+  if (denied) return denied;
   const query = await searchParams;
   const param = (name: string) => (typeof query[name] === "string" && UUID.test(query[name]) ? query[name] : null);
   const investorId = param("investor");

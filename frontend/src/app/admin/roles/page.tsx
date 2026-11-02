@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Permission, hasPermission } from "@/lib/permissions";
@@ -21,14 +22,17 @@ export default async function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Roles" description="Employee roles and what they can do." />
-      <DataTable columns={["Role", "Description", "Permissions", "Type"]}>
+      <PageHeader title="Roles" description="Employee roles and what they can do."
+        actions={hasPermission(session.permissions, Permission.ROLE_MANAGE)
+          ? <LinkButton href="/admin/roles/new">New role</LinkButton> : undefined} />
+      <DataTable columns={["Role", "Description", "Employees", "Permissions", "Type"]}>
         {roles.map((role) => (
           <tr key={role.id} className="hover:bg-background">
             <Cell className="font-mono text-xs font-medium">
               <Link href={`/admin/roles/${role.id}`} className="card-link text-gold-text hover:underline">{role.name}</Link>
             </Cell>
             <Cell className="text-muted">{role.description}</Cell>
+            <Cell className="tabular-nums">{role.employees}</Cell>
             <Cell className="tabular-nums">{role.permissions.length}</Cell>
             <Cell><StatusBadge tone={role.system ? "neutral" : "success"}>{role.system ? "System" : "Custom"}</StatusBadge></Cell>
           </tr>

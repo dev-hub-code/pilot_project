@@ -21,6 +21,9 @@ export interface Role {
   name: string;
   description: string;
   system: boolean;
+  protectedRole: boolean;
+  departmentId: string | null;
+  employees: number;
   permissions: string[];
   version: number;
 }

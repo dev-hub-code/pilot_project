@@ -46,6 +46,12 @@ public class RoleController {
 		return roleService.get(id);
 	}
 
+	@GetMapping("/{id}/revisions")
+	@PreAuthorize("hasAuthority('ROLE_VIEW')")
+	public java.util.List<com.sealease.backend.role.dto.RoleRevisionResponse> revisions(@PathVariable UUID id) {
+		return roleService.revisions(id);
+	}
+
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	@PreAuthorize("hasAuthority('ROLE_MANAGE')")

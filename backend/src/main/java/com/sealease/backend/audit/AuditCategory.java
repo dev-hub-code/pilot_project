@@ -20,6 +20,7 @@ public enum AuditCategory {
 	/** Who may do what: roles, staff accounts, suspensions. */
 	ACCESS_CONTROL(EnumSet.of(AuditAction.ROLE_CREATED, AuditAction.ROLE_UPDATED, AuditAction.ROLE_DELETED,
 			AuditAction.ROLE_DASHBOARD_CARDS_CHANGED,
+			AuditAction.DEPARTMENT_CREATED, AuditAction.DEPARTMENT_UPDATED, AuditAction.DEPARTMENT_STAFF_CHANGED,
 			AuditAction.USER_ROLES_CHANGED, AuditAction.STAFF_ACCOUNT_CREATED, AuditAction.USER_SUSPENDED,
 			AuditAction.USER_REACTIVATED, AuditAction.USER_DISABLED, AuditAction.USER_ENABLED,
 			AuditAction.INVESTOR_CLASSIFIED)),
@@ -38,7 +39,8 @@ public enum AuditCategory {
 			AuditAction.BANK_ACCOUNT_ASSIGNED, AuditAction.BANK_ACCOUNT_UNASSIGNED)),
 
 	/** Money moving: payments, payouts, ledger, withdrawals, commissions and the accounts behind them. */
-	MONEY(EnumSet.of(AuditAction.PAYMENT_STARTED, AuditAction.PAYMENT_DETAILS_SUBMITTED,
+	MONEY(EnumSet.of(AuditAction.APPROVAL_REQUESTED, AuditAction.APPROVAL_APPROVED, AuditAction.APPROVAL_REJECTED,
+			AuditAction.PAYMENT_STARTED, AuditAction.PAYMENT_DETAILS_SUBMITTED,
 			AuditAction.PAYMENT_SUCCEEDED, AuditAction.PAYMENT_FAILED, AuditAction.PAYMENT_REJECTED,
 			AuditAction.PAYMENT_REFUND_REQUIRED, AuditAction.PAYMENT_REFUNDED, AuditAction.INVOICE_ISSUED,
 			AuditAction.PAYOUT_PAID, AuditAction.PAYOUT_DAY_CHANGED, AuditAction.RENT_CREDIT_INTERVAL_CHANGED, AuditAction.RENT_RATE_TIERS_CHANGED, AuditAction.MINIMUM_ORDER_CHANGED,

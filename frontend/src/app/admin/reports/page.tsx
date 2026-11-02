@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Notice } from "@/components/ui/notice";
@@ -23,6 +24,8 @@ const REPORTS = [
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function ReportsPage({ searchParams }: PageProps<"/admin/reports">) {
+  const denied = await deniedUnlessInMenu("/admin/reports");
+  if (denied) return denied;
   const session = await requireStaff();
   const canDownload = hasPermission(session.permissions, Permission.REPORT_GENERATE);
   const params = await searchParams;

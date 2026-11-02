@@ -57,7 +57,8 @@ const PAGES = [
   "/notifications", "/profile", "/profile/bank-accounts", "/profile/verification", "/settings",
   "/settings/notifications", "/settings/password",
   "/admin", "/admin/agreement", "/admin/audit", "/admin/audit/[id]",
-  "/admin/platform-config", "/admin/platform-config/withdrawals", "/admin/platform-config/returns",
+  "/admin/departments", "/admin/departments/[id]", "/admin/staff", "/admin/staff/new", "/admin/staff/[id]", "/admin/permissions",
+  "/admin/approvals", "/admin/roles/new", "/admin/platform-config", "/admin/platform-config/withdrawals", "/admin/platform-config/returns",
   "/admin/platform-config/referral-rates", "/admin/platform-config/company-accounts", "/admin/finance-tasks", "/admin/kyc", "/admin/verification",
   "/admin/kyc/[id]", "/admin/leads", "/admin/leads/new", "/admin/leads/[id]", "/admin/ledger", "/admin/ledger/[id]",
   "/admin/orders", "/admin/orders/[id]", "/admin/orders/[id]/invoice", "/admin/payments", "/admin/payouts",
@@ -92,7 +93,7 @@ const NAMES: [RegExp, string][] = [
   [/^\/admin\/ledger\/[^/]+$/, "ledger account"], [/^\/admin\/orders\/[^/]+$/, "order"],
   [/^\/admin\/products\/[^/]+$/, "product"], [/^\/admin\/roles\/[^/]+$/, "role"], [/^\/admin\/support\/[^/]+$/, "ticket"],
   [/^\/admin\/withdrawals\/[^/]+$/, "withdrawal"], [/^\/admin\/audit\/[^/]+$/, "audit entry"],
-  [/^\/admin\/kyc$/, "KYC"], [/^\/admin\/platform-config(?:\/.*)?$/, "Platform config"],
+  [/^\/admin\/kyc$/, "KYC"], [/^\/admin\/departments\/[^/]+$/, "department"], [/^\/admin\/staff\/[^/]+$/, "employee"], [/^\/admin\/platform-config(?:\/.*)?$/, "Platform config"],
 ];
 const words = (segment: string) => segment.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase());
 

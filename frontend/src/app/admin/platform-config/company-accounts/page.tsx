@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,6 +15,8 @@ import { formatDateTime } from "@/utils/format";
 export const metadata: Metadata = { title: "Company bank accounts" };
 
 export default async function CompanyBankAccountsPage() {
+  const denied = await deniedUnlessInMenu("/admin/platform-config/company-accounts");
+  if (denied) return denied;
   const session = await requireStaff();
   const canManage = hasPermission(session.permissions, Permission.COMPANY_BANK_ACCOUNT_MANAGE);
   const accounts = await authFetch<CompanyBankAccount[]>("/api/v1/admin/company-bank-accounts");

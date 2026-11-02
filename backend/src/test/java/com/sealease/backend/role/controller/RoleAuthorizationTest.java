@@ -92,8 +92,7 @@ class RoleAuthorizationTest {
 	void managePermissionCreatesRoleAsActor() throws Exception {
 		UUID actor = UUID.randomUUID();
 		when(roleService.create(eq(actor), any()))
-			.thenReturn(new RoleResponse(UUID.randomUUID(), "AUDITOR", "Read-only auditors", false,
-					List.of("AUDIT_VIEW"), 0));
+			.thenReturn(new RoleResponse(UUID.randomUUID(), "AUDITOR", "Read-only auditors", false, false, null, 0, List.of("AUDIT_VIEW"), 0));
 
 		mvc.perform(post("/api/v1/admin/roles").with(TestJwts.userWith(actor, "ROLE_MANAGE"))
 				.contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))

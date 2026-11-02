@@ -11,6 +11,9 @@ JWT_PRIVATE_KEY_LOCATION: classpath:jwt/test-only-private.pem
 JWT_PUBLIC_KEY_LOCATION: classpath:jwt/test-only-public.pem
 
 app:
+  # Most tests use the direct routes as fixtures; MakerCheckerIntegrationTest turns the rule on.
+  approvals:
+    required: ""
   bootstrap:
     super-admin:
       email: root-admin@sealease.test
@@ -56,8 +59,8 @@ app:
 spring:
   flyway:
     enabled: true
-    # Schema only: tests create their own super admin and plans.
-    locations: classpath:db/migration
+    # Schema only: tests create their own super admin and plans. db/test-roles holds roles only tests use.
+    locations: classpath:db/migration,classpath:db/test-roles
   jpa:
     defer-datasource-initialization: false
     hibernate:

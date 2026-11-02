@@ -427,7 +427,7 @@ export default async function Home() {
                   { term: "Your own agreement", detail: "An agreement for every investment you make" },
                 ].map((point) => (
                   <div key={point.term} className="flex items-baseline gap-3 sm:block sm:space-y-1.5">
-                    <dt className="w-36 shrink-0 text-sm font-semibold text-gold first-letter:uppercase sm:w-auto">{point.term}</dt>
+                    <dt className="w-36 shrink-0 text-sm font-semibold text-gold-on-ink first-letter:uppercase sm:w-auto">{point.term}</dt>
                     <dd className="text-xs leading-relaxed text-on-ink/75">{point.detail}</dd>
                   </div>
                 ))}
@@ -462,7 +462,7 @@ export default async function Home() {
             <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/90 to-ink/75" />
             <div className={`grid gap-10 px-6 py-12 sm:px-10 lg:items-center lg:gap-14 lg:px-14 lg:py-16 ${figures ? "lg:grid-cols-[1fr_1.1fr]" : ""}`}>
               <div className="space-y-5">
-                <p className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-gold">
+                <p className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-gold-on-ink">
                   <span aria-hidden="true" className="size-1.5 rounded-full bg-gold" />
                   Since 2022
                 </p>
@@ -484,7 +484,7 @@ export default async function Home() {
                   ].filter((figure) => figure.value).map((figure) => (
                     <div key={figure.label} className="flex flex-col-reverse justify-end gap-2 bg-ink/85 px-4 py-6 backdrop-blur-sm min-[400px]:px-5 sm:px-7 sm:py-8">
                       <dt className="text-xs leading-snug text-on-ink/70 sm:text-sm">{figure.label}</dt>
-                      <dd className="font-display text-2xl font-semibold whitespace-nowrap text-gold min-[400px]:text-3xl sm:text-4xl">{figure.value}</dd>
+                      <dd className="font-display text-2xl font-semibold whitespace-nowrap text-gold-on-ink min-[400px]:text-3xl sm:text-4xl">{figure.value}</dd>
                     </div>
                   ))}
                 </dl>

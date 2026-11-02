@@ -1,6 +1,6 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmailText } from "@/components/ui/email-text";
@@ -8,8 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { CreateDemoAccountForm } from "@/features/admin/demo-forms";
 import { InvestorPicker } from "@/features/admin/investor-picker";
-import { Permission, hasPermission } from "@/lib/permissions";
-import { authFetch, requireStaff } from "@/lib/server/auth/session";
+import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { DemoAccountSummary } from "@/types/demo";
 import type { AdminUserDetail, AdminUserSummary } from "@/types/user";
@@ -30,8 +29,8 @@ function isoDay(date: Date): string {
  * them dummy orders and a downline.
  */
 export default async function DemoAccountsPage({ searchParams }: PageProps<"/admin/demo-accounts">) {
-  const session = await requireStaff();
-  if (!hasPermission(session.permissions, Permission.DEMO_ACCOUNT_MANAGE)) notFound();
+  const denied = await deniedUnlessInMenu("/admin/demo-accounts");
+  if (denied) return denied;
   const query = await searchParams;
   const find = typeof query.find === "string" ? query.find.trim().slice(0, 100) : "";
   const pickId = typeof query.pick === "string" && UUID.test(query.pick) ? query.pick : null;

@@ -1,5 +1,7 @@
 package com.sealease.backend.ledger.controller;
 
+import com.sealease.backend.approval.entity.ApprovalType;
+import com.sealease.backend.approval.service.ApprovalService;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.ledger.dto.AdjustmentRequest;
@@ -32,33 +34,35 @@ import java.util.UUID;
 public class AdminLedgerController {
 
 	private final LedgerService ledger;
+	private final ApprovalService approvals;
 
-	public AdminLedgerController(LedgerService ledger) {
+	public AdminLedgerController(ApprovalService approvals, LedgerService ledger) {
 		this.ledger = ledger;
+		this.approvals = approvals;
 	}
 
 	@GetMapping("/accounts")
-	@PreAuthorize("hasAuthority('FINANCE_VIEW')")
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')")
 	public PageResponse<LedgerAccountResponse> accounts(@RequestParam(required = false) AccountType type,
 			@RequestParam(required = false) UUID userId, @PageableDefault(size = 50) Pageable pageable) {
 		return PageResponse.from(ledger.accounts(type, userId, pageable));
 	}
 
 	@GetMapping("/accounts/{accountId}")
-	@PreAuthorize("hasAuthority('FINANCE_VIEW')")
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')")
 	public LedgerAccountResponse account(@PathVariable UUID accountId) {
 		return ledger.account(accountId);
 	}
 
 	@GetMapping("/accounts/{accountId}/entries")
-	@PreAuthorize("hasAuthority('FINANCE_VIEW')")
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')")
 	public PageResponse<LedgerEntryResponse> entries(@PathVariable UUID accountId,
 			@PageableDefault(size = 50) Pageable pageable) {
 		return PageResponse.from(ledger.entries(accountId, pageable));
 	}
 
 	@GetMapping("/trial-balance")
-	@PreAuthorize("hasAuthority('FINANCE_VIEW')")
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')")
 	public List<TrialBalanceLine> trialBalance() {
 		return ledger.trialBalance();
 	}
@@ -69,6 +73,7 @@ public class AdminLedgerController {
 	public LedgerAccountResponse adjust(AuthenticatedUser actor,
 			@RequestHeader(IdempotencyKey.HEADER) String idempotencyKey,
 			@Valid @RequestBody AdjustmentRequest request) {
+		approvals.requireDirectAllowed(ApprovalType.LEDGER_ADJUSTMENT);
 		return ledger.adjust(actor.userId(), request, idempotencyKey);
 	}
 

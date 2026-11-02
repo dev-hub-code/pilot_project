@@ -1,0 +1,1496 @@
+{
+ "endpoints": [
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/agreement-template",
+   "rule": "hasAuthority('AGREEMENT_TEMPLATE_MANAGE')",
+   "operation": "AdminAgreementTemplateController.view"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/agreement-template",
+   "rule": "hasAuthority('AGREEMENT_TEMPLATE_MANAGE')",
+   "operation": "AdminAgreementTemplateController.save",
+   "body": {
+    "title": "E2E",
+    "body": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/agreement-template/preview",
+   "rule": "hasAuthority('AGREEMENT_TEMPLATE_MANAGE')",
+   "operation": "AdminAgreementTemplateController.preview",
+   "body": {
+    "title": "E2E",
+    "body": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/agreement-template/sample",
+   "rule": "hasAuthority('AGREEMENT_TEMPLATE_MANAGE')",
+   "operation": "AdminAgreementTemplateController.sample"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/agreements",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminAgreementController.forOrder",
+   "query": "orderId=00000000-0000-4000-8000-000000000001"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/agreements/{holdingId}/pdf",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminAgreementController.pdf"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/approvals",
+   "rule": "hasAnyAuthority('APPROVAL_VIEW', 'APPROVAL_DECIDE')",
+   "operation": "ApprovalController.list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/approvals",
+   "rule": "hasAuthority('FINANCE_ADJUST')",
+   "operation": "ApprovalController.create",
+   "body": {
+    "type": "LEDGER_ADJUSTMENT",
+    "reason": "e2e",
+    "adjustment": {
+     "userId": "00000000-0000-4000-8000-000000000001",
+     "currency": "INR",
+     "direction": "CREDIT",
+     "amount": "1",
+     "reason": "e2e"
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/approvals/{id}",
+   "rule": "hasAnyAuthority('APPROVAL_VIEW', 'APPROVAL_DECIDE')",
+   "operation": "ApprovalController.get"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/approvals/{id}/approve",
+   "rule": "hasAuthority('APPROVAL_DECIDE')",
+   "operation": "ApprovalController.approve"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/approvals/{id}/reject",
+   "rule": "hasAuthority('APPROVAL_DECIDE')",
+   "operation": "ApprovalController.reject",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/audit-logs",
+   "rule": "hasAnyAuthority('AUDIT_VIEW', 'SECURITY_VIEW')",
+   "operation": "AdminSecurityController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/audit-logs/export",
+   "rule": "hasAnyAuthority('AUDIT_VIEW', 'SECURITY_VIEW')",
+   "operation": "AdminSecurityController.export"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/audit-logs/{id}",
+   "rule": "hasAnyAuthority('AUDIT_VIEW', 'SECURITY_VIEW')",
+   "operation": "AdminSecurityController.entry"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/bank-accounts",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.queue"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/bank-accounts/{accountId}/assign",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.assign"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/bank-accounts/{accountId}/proof",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.proof"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/bank-accounts/{accountId}/reject",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.reject",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/bank-accounts/{accountId}/unassign",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.unassign"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/bank-accounts/{accountId}/verify",
+   "rule": "hasAuthority('BANK_ACCOUNT_VERIFY')",
+   "operation": "AdminBankAccountController.verify"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/company-bank-accounts",
+   "rule": "hasAnyAuthority('COMPANY_BANK_ACCOUNT_MANAGE', 'COMPANY_BANK_ACCOUNT_VIEW', 'FINANCE_VIEW')",
+   "operation": "AdminCompanyBankAccountController.list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/company-bank-accounts",
+   "rule": "hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')",
+   "operation": "AdminCompanyBankAccountController.create",
+   "body": {
+    "accountName": "E2E",
+    "bankName": "E2E",
+    "accountNumber": "123456789",
+    "ifscCode": "HDFC0001234"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/company-bank-accounts/ifsc/{code}",
+   "rule": "hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')",
+   "operation": "AdminCompanyBankAccountController.ifsc"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/company-bank-accounts/{accountId}",
+   "rule": "hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')",
+   "operation": "AdminCompanyBankAccountController.update",
+   "body": {
+    "accountName": "E2E",
+    "bankName": "E2E",
+    "accountNumber": "123456789",
+    "ifscCode": "HDFC0001234"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/company-bank-accounts/{accountId}/activate",
+   "rule": "hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')",
+   "operation": "AdminCompanyBankAccountController.activate"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/company-bank-accounts/{accountId}/deactivate",
+   "rule": "hasAuthority('COMPANY_BANK_ACCOUNT_MANAGE')",
+   "operation": "AdminCompanyBankAccountController.deactivate"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/dashboard",
+   "rule": "isAuthenticated()",
+   "operation": "DashboardController.dashboard"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/demo-accounts",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/demo-accounts",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.create",
+   "body": {
+    "userId": "00000000-0000-4000-8000-000000000001",
+    "startsOn": "2026-01-01",
+    "endsOn": "2026-12-31"
+   }
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/admin/demo-accounts/{userId}",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.remove"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/demo-accounts/{userId}",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.view"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/demo-accounts/{userId}",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.changeFrame",
+   "body": {
+    "startsOn": "2026-01-01",
+    "endsOn": "2026-12-31"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/demo-accounts/{userId}/members",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.addMember",
+   "body": {
+    "name": "E2E",
+    "joinedOn": "2026-01-01"
+   }
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/admin/demo-accounts/{userId}/members/{memberId}",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.removeMember"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/demo-accounts/{userId}/orders",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.addOrder",
+   "body": {
+    "productId": "00000000-0000-4000-8000-000000000001",
+    "amount": "1",
+    "startsOn": "2026-01-01"
+   }
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/admin/demo-accounts/{userId}/orders/{orderId}",
+   "rule": "hasAuthority('DEMO_ACCOUNT_MANAGE')",
+   "operation": "AdminDemoAccountController.removeOrder"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/departments",
+   "rule": "hasAnyAuthority('DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/departments",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.create",
+   "body": {
+    "code": "E2E_@UNIQUEUPPER",
+    "name": "E2E"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/departments/{id}",
+   "rule": "hasAnyAuthority('DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.get"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/departments/{id}",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.update",
+   "body": {
+    "name": "E2E",
+    "version": 0
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/departments/{id}/activate",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.activate"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/departments/{id}/deactivate",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.deactivate"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/departments/{id}/employees",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.assign",
+   "body": {
+    "userId": "00000000-0000-4000-8000-000000000001",
+    "primary": false
+   }
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/admin/departments/{id}/employees/{userId}",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.unassign"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/departments/{id}/head",
+   "rule": "hasAuthority('DEPARTMENT_MANAGE')",
+   "operation": "DepartmentController.setHead",
+   "body": {
+    "userId": "00000000-0000-4000-8000-000000000001"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/finance-tasks",
+   "rule": "hasAnyAuthority('WITHDRAWAL_PROCESS', 'FINANCE_TASK_PROCESS')",
+   "operation": "AdminFinanceTaskController.search"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/finance-tasks/{withdrawalId}",
+   "rule": "hasAnyAuthority('WITHDRAWAL_PROCESS', 'FINANCE_TASK_PROCESS')",
+   "operation": "AdminFinanceTaskController.update",
+   "body": {
+    "outcome": "PAID"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/finance-tasks/{withdrawalId}/release",
+   "rule": "hasAnyAuthority('WITHDRAWAL_PROCESS', 'FINANCE_TASK_PROCESS')",
+   "operation": "AdminFinanceTaskController.release"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/finance-tasks/{withdrawalId}/take",
+   "rule": "hasAnyAuthority('WITHDRAWAL_PROCESS', 'FINANCE_TASK_PROCESS')",
+   "operation": "AdminFinanceTaskController.take"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/investment-products",
+   "rule": "hasAuthority('INVESTMENT_VIEW')",
+   "operation": "AdminProductController.search"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investment-products",
+   "rule": "hasAuthority('INVESTMENT_CREATE')",
+   "operation": "AdminProductController.create",
+   "body": {
+    "audience": "ONLINE",
+    "title": "E2E",
+    "summary": "e2e",
+    "currency": "INR",
+    "tenureYears": 1,
+    "annualReturnPercent": "15",
+    "minUnits": 1
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/investment-products/{productId}",
+   "rule": "hasAuthority('INVESTMENT_VIEW')",
+   "operation": "AdminProductController.detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/investment-products/{productId}",
+   "rule": "hasAuthority('INVESTMENT_UPDATE')",
+   "operation": "AdminProductController.update",
+   "body": {
+    "audience": "ONLINE",
+    "title": "E2E",
+    "summary": "e2e",
+    "currency": "INR",
+    "tenureYears": 1,
+    "annualReturnPercent": "15",
+    "minUnits": 1
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investment-products/{productId}/cancel",
+   "rule": "hasAuthority('INVESTMENT_APPROVE')",
+   "operation": "AdminProductController.cancel",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investment-products/{productId}/close",
+   "rule": "hasAuthority('INVESTMENT_APPROVE')",
+   "operation": "AdminProductController.close"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investment-products/{productId}/publish",
+   "rule": "hasAuthority('INVESTMENT_APPROVE')",
+   "operation": "AdminProductController.publish"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investment-products/{productId}/reopen",
+   "rule": "hasAuthority('INVESTMENT_APPROVE')",
+   "operation": "AdminProductController.reopen"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/investors",
+   "rule": "hasAuthority('INVESTOR_ACCOUNT_CREATE')",
+   "operation": "AdminInvestorController.create",
+   "body": {
+    "email": "@UNIQUE@e2e.test",
+    "firstName": "E2E",
+    "lastName": "Probe",
+    "phone": "98@DIGITS",
+    "phoneCountry": "IN",
+    "signupsJoinNetwork": false
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/kyc",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.queue"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/kyc/{submissionId}",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/kyc/{submissionId}/approve",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.approve"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/kyc/{submissionId}/assign",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.assign"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/kyc/{submissionId}/documents/{documentId}",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.document"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/kyc/{submissionId}/reject",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.reject",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/kyc/{submissionId}/unassign",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.unassign"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/leads",
+   "rule": "hasAuthority('LEAD_VIEW')",
+   "operation": "AdminLeadController.search"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/leads",
+   "rule": "hasAuthority('LEAD_CREATE')",
+   "operation": "AdminLeadController.create",
+   "body": {
+    "firstName": "E2E",
+    "email": "lead@e2e.test",
+    "interest": "STANDALONE"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/leads/assignees",
+   "rule": "hasAuthority('LEAD_ASSIGN')",
+   "operation": "AdminLeadController.assignees"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/leads/pipeline",
+   "rule": "hasAuthority('LEAD_VIEW')",
+   "operation": "AdminLeadController.pipeline"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/leads/{leadId}",
+   "rule": "hasAuthority('LEAD_VIEW')",
+   "operation": "AdminLeadController.detail"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/leads/{leadId}",
+   "rule": "hasAuthority('LEAD_UPDATE')",
+   "operation": "AdminLeadController.update",
+   "body": {
+    "firstName": "E2E",
+    "email": "lead@e2e.test",
+    "interest": "STANDALONE"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/leads/{leadId}/activities",
+   "rule": "hasAuthority('LEAD_UPDATE')",
+   "operation": "AdminLeadController.activity",
+   "body": {
+    "type": "NOTE",
+    "body": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/leads/{leadId}/assign",
+   "rule": "hasAuthority('LEAD_ASSIGN')",
+   "operation": "AdminLeadController.assign",
+   "body": {
+    "ownerId": "00000000-0000-4000-8000-000000000001"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/leads/{leadId}/claim",
+   "rule": "hasAuthority('LEAD_UPDATE')",
+   "operation": "AdminLeadController.claim"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/leads/{leadId}/stage",
+   "rule": "hasAuthority('LEAD_UPDATE')",
+   "operation": "AdminLeadController.stage",
+   "body": {
+    "stage": "NEW"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/ledger/accounts",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')",
+   "operation": "AdminLedgerController.accounts"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/ledger/accounts/{accountId}",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')",
+   "operation": "AdminLedgerController.account"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/ledger/accounts/{accountId}/entries",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')",
+   "operation": "AdminLedgerController.entries"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/ledger/adjustments",
+   "rule": "hasAuthority('FINANCE_ADJUST')",
+   "operation": "AdminLedgerController.adjust",
+   "body": {
+    "userId": "00000000-0000-4000-8000-000000000001",
+    "currency": "INR",
+    "direction": "CREDIT",
+    "amount": "1",
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/ledger/trial-balance",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'LEDGER_VIEW')",
+   "operation": "AdminLedgerController.trialBalance"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/orders",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminOrderController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/orders/{orderId}",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminOrderController.detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/orders/{orderId}/holdings",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminOrderController.holdings"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/orders/{orderId}/invoice",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminOrderController.invoice"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/orders/{orderId}/payments",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'ORDER_VIEW')",
+   "operation": "AdminPaymentController.forOrder"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/payments",
+   "rule": "hasAnyAuthority('FINANCE_VIEW', 'PAYMENT_CONFIRM', 'PAYMENT_SEARCH')",
+   "operation": "AdminPaymentController.search"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payments/{paymentId}/confirm",
+   "rule": "hasAuthority('PAYMENT_CONFIRM')",
+   "operation": "AdminPaymentController.confirm",
+   "body": {
+    "externalReference": "E2E",
+    "amountReceived": "1"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payments/{paymentId}/refund",
+   "rule": "hasAuthority('FINANCE_ADJUST')",
+   "operation": "AdminPaymentController.refund",
+   "body": {
+    "reference": "E2E",
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payments/{paymentId}/reject",
+   "rule": "hasAnyAuthority('PAYMENT_CONFIRM', 'PAYMENT_REJECT')",
+   "operation": "AdminPaymentController.reject",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payments/{paymentId}/release",
+   "rule": "hasAuthority('PAYMENT_CONFIRM')",
+   "operation": "AdminPaymentController.release"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payments/{paymentId}/take",
+   "rule": "hasAuthority('PAYMENT_CONFIRM')",
+   "operation": "AdminPaymentController.take"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/payouts",
+   "rule": "hasAnyAuthority('PAYOUT_VIEW', 'FINANCE_VIEW', 'PAYOUT_PROCESS')",
+   "operation": "AdminPayoutController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/payouts/due",
+   "rule": "hasAnyAuthority('PAYOUT_VIEW', 'FINANCE_VIEW', 'PAYOUT_PROCESS')",
+   "operation": "AdminPayoutController.due"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/payouts/run",
+   "rule": "hasAuthority('PAYOUT_PROCESS')",
+   "operation": "AdminPayoutController.run"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/permissions",
+   "rule": "hasAuthority('ROLE_VIEW')",
+   "operation": "PermissionController.list"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/referral-earnings",
+   "rule": "hasAuthority('FINANCE_VIEW')",
+   "operation": "AdminReferralController.earnings"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/referral-rates",
+   "rule": "hasAnyAuthority('REFERRAL_CONFIG_MANAGE', 'FINANCE_VIEW')",
+   "operation": "AdminReferralController.rates"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/referral-rates",
+   "rule": "hasAuthority('REFERRAL_CONFIG_MANAGE')",
+   "operation": "AdminReferralController.schedule",
+   "body": {
+    "percents": [
+     "1",
+     "1",
+     "1",
+     "1"
+    ],
+    "oneTimePercent": "1",
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/referral-rates/{versionId}/cancel",
+   "rule": "hasAuthority('REFERRAL_CONFIG_MANAGE')",
+   "operation": "AdminReferralController.cancel"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/reports/financial-summary",
+   "rule": "hasAnyAuthority('REPORT_VIEW', 'REPORT_GENERATE')",
+   "operation": "AdminReportController.financialSummary",
+   "query": "from=2026-01-01&to=2026-01-31"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/reports/invoices/{orderId}",
+   "rule": "hasAuthority('ORDER_VIEW')",
+   "operation": "AdminReportController.invoice"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/reports/offerings",
+   "rule": "hasAnyAuthority('REPORT_VIEW', 'REPORT_GENERATE')",
+   "operation": "AdminReportController.offerings"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/reports/statement",
+   "rule": "hasAnyAuthority('REPORT_VIEW', 'REPORT_GENERATE')",
+   "operation": "AdminReportController.statement",
+   "query": "from=2026-01-01&to=2026-01-31&userId=00000000-0000-4000-8000-000000000001"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/roles",
+   "rule": "hasAuthority('ROLE_VIEW')",
+   "operation": "RoleController.list"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/roles",
+   "rule": "hasAuthority('ROLE_MANAGE')",
+   "operation": "RoleController.create",
+   "body": {
+    "name": "E2E_@UNIQUEUPPER",
+    "description": "e2e",
+    "permissions": [
+     "REPORT_VIEW"
+    ]
+   }
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/admin/roles/{id}",
+   "rule": "hasAuthority('ROLE_MANAGE')",
+   "operation": "RoleController.delete"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/roles/{id}",
+   "rule": "hasAuthority('ROLE_VIEW')",
+   "operation": "RoleController.get"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/roles/{id}",
+   "rule": "hasAuthority('ROLE_MANAGE')",
+   "operation": "RoleController.update",
+   "body": {
+    "description": "e2e",
+    "permissions": [
+     "REPORT_VIEW"
+    ],
+    "version": 0
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/roles/{id}/revisions",
+   "rule": "hasAuthority('ROLE_VIEW')",
+   "operation": "RoleController.revisions"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/security/overview",
+   "rule": "hasAnyAuthority('AUDIT_VIEW', 'SECURITY_VIEW')",
+   "operation": "AdminSecurityController.overview"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/settings/rent-credit",
+   "rule": "hasAnyAuthority('SYSTEM_SETTINGS_MANAGE', 'PAYOUT_PROCESS', 'FINANCE_VIEW')",
+   "operation": "RentCreditSettingsController.get"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/settings/rent-credit",
+   "rule": "hasAnyAuthority('SYSTEM_SETTINGS_MANAGE', 'PAYOUT_PROCESS')",
+   "operation": "RentCreditSettingsController.update",
+   "body": {
+    "intervalMinutes": 60
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/settings/withdrawals",
+   "rule": "hasAnyAuthority('SYSTEM_SETTINGS_MANAGE', 'WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.settings"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/settings/withdrawals",
+   "rule": "hasAnyAuthority('SYSTEM_SETTINGS_MANAGE', 'WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.updateSettings",
+   "body": {
+    "minimumAmount": "1000"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/staff",
+   "rule": "hasAuthority('STAFF_ACCOUNT_VIEW')",
+   "operation": "DepartmentController.staff"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/staff",
+   "rule": "hasAuthority('USER_ROLE_ASSIGN')",
+   "operation": "AdminStaffController.create",
+   "body": {
+    "email": "@UNIQUE@e2e.test",
+    "firstName": "E2E",
+    "lastName": "Probe",
+    "roles": [
+     "SUPPORT_EXECUTIVE"
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/staff/search",
+   "rule": "hasAuthority('STAFF_ACCOUNT_VIEW')",
+   "operation": "DepartmentController.searchStaff"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/staff/{userId}",
+   "rule": "hasAuthority('STAFF_ACCOUNT_VIEW')",
+   "operation": "DepartmentController.staffMember"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/support/agents",
+   "rule": "hasAuthority('SUPPORT_TICKET_MANAGE')",
+   "operation": "AdminSupportController.agents"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/support/tickets",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_VIEW', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/support/tickets/{ticketId}",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_VIEW', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/assign",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.assign",
+   "body": {
+    "assigneeId": "00000000-0000-4000-8000-000000000001"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/attachments/{attachmentId}",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_VIEW', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.attachment"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/messages",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.reply",
+   "multipart": true
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/priority",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.priority",
+   "body": {
+    "priority": "LOW"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/status",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.status",
+   "body": {
+    "status": "RESOLVED"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/support/tickets/{ticketId}/team",
+   "rule": "hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'FINANCE_TICKET_HANDLE')",
+   "operation": "AdminSupportController.team",
+   "body": {
+    "team": "SUPPORT"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/terms",
+   "rule": "hasAuthority('TERMS_MANAGE')",
+   "operation": "AdminTermsController.view"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/terms",
+   "rule": "hasAuthority('TERMS_MANAGE')",
+   "operation": "AdminTermsController.save",
+   "body": {
+    "title": "E2E",
+    "body": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users",
+   "rule": "hasAuthority('USER_VIEW')",
+   "operation": "AdminUserController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}",
+   "rule": "hasAuthority('USER_VIEW')",
+   "operation": "AdminUserController.detail"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/bank-accounts",
+   "rule": "hasAnyAuthority('BANK_ACCOUNT_VERIFY', 'FINANCE_VIEW')",
+   "operation": "AdminBankAccountController.forUser"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/disable",
+   "rule": "hasAuthority('USER_DISABLE')",
+   "operation": "AdminUserController.disable",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/downline",
+   "rule": "hasAnyAuthority('USER_VIEW', 'REFERRAL_TREE_MANAGE')",
+   "operation": "AdminReferralController.downline"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/enable",
+   "rule": "hasAuthority('USER_DISABLE')",
+   "operation": "AdminUserController.enable",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/kyc",
+   "rule": "hasAuthority('KYC_REVIEW')",
+   "operation": "AdminKycController.history"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/reactivate",
+   "rule": "hasAuthority('USER_SUSPEND')",
+   "operation": "AdminUserController.reactivate",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/referral-mode",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.referralMode"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/users/{userId}/referral-mode",
+   "rule": "hasAuthority('WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.setReferralMode",
+   "body": {
+    "mode": "BANK_TRANSFER"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/referrals",
+   "rule": "hasAuthority('USER_VIEW')",
+   "operation": "AdminReferralController.user"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/referrer",
+   "rule": "hasAuthority('REFERRAL_TREE_MANAGE')",
+   "operation": "AdminReferralController.move",
+   "body": {
+    "referrerId": "00000000-0000-4000-8000-000000000001",
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/users/{userId}/roles",
+   "rule": "hasAuthority('ROLE_VIEW')",
+   "operation": "UserRoleController.get"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/admin/users/{userId}/roles",
+   "rule": "hasAuthority('USER_ROLE_ASSIGN')",
+   "operation": "UserRoleController.replace",
+   "body": {
+    "roles": [
+     "SUPPORT_EXECUTIVE"
+    ]
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/suspend",
+   "rule": "hasAuthority('USER_SUSPEND')",
+   "operation": "AdminUserController.suspend",
+   "body": {
+    "reason": "e2e"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/users/{userId}/temporary-password",
+   "rule": "hasAuthority('USER_ROLE_ASSIGN')",
+   "operation": "AdminStaffController.resetPassword"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-batches",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.batches"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-batches/{batchId}",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.batch"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-batches/{batchId}/file",
+   "rule": "hasAuthority('WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.file"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-batches/{batchId}/files",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.files"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-batches/{batchId}/files/{fileId}",
+   "rule": "hasAuthority('WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.storedFile"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawal-runs",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.runs"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/withdrawal-runs",
+   "rule": "hasAuthority('WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.generate",
+   "query": "kind=RENT"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawals",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.search"
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/admin/withdrawals/{withdrawalId}",
+   "rule": "hasAuthority('WITHDRAWAL_VIEW')",
+   "operation": "AdminWithdrawalController.detail"
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/admin/withdrawals/{withdrawalId}/resolve",
+   "rule": "hasAuthority('WITHDRAWAL_PROCESS')",
+   "operation": "AdminWithdrawalController.resolve",
+   "body": {
+    "outcome": "PAID"
+   }
+  }
+ ],
+ "pages": [
+  {
+   "label": "Dashboard",
+   "href": "/admin",
+   "category": "Overview",
+   "menu": true,
+   "requires": []
+  },
+  {
+   "label": "Investor Management",
+   "href": "/admin/users",
+   "category": "Business Operations",
+   "menu": true,
+   "requires": [
+    "USER_VIEW"
+   ]
+  },
+  {
+   "label": "Investment Products",
+   "href": "/admin/products",
+   "category": "Business Operations",
+   "menu": true,
+   "requires": [
+    "INVESTMENT_VIEW"
+   ]
+  },
+  {
+   "label": "Orders & Agreements",
+   "href": "/admin/orders",
+   "category": "Business Operations",
+   "menu": true,
+   "requires": [
+    "ORDER_VIEW"
+   ]
+  },
+  {
+   "label": "Payments",
+   "href": "/admin/payments",
+   "category": "Finance",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW",
+    "PAYMENT_CONFIRM",
+    "PAYMENT_SEARCH"
+   ]
+  },
+  {
+   "label": "Investor Payouts",
+   "href": "/admin/payouts",
+   "category": "Finance",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW",
+    "PAYOUT_PROCESS",
+    "PAYOUT_VIEW"
+   ]
+  },
+  {
+   "label": "Withdrawals",
+   "href": "/admin/withdrawals",
+   "category": "Finance",
+   "menu": true,
+   "requires": [
+    "WITHDRAWAL_VIEW"
+   ]
+  },
+  {
+   "label": "Finance Tasks",
+   "href": "/admin/finance-tasks",
+   "category": "Finance",
+   "menu": true,
+   "requires": [
+    "WITHDRAWAL_PROCESS",
+    "FINANCE_TASK_PROCESS"
+   ]
+  },
+  {
+   "label": "Financial Ledger",
+   "href": "/admin/ledger",
+   "category": "Finance",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW",
+    "LEDGER_VIEW"
+   ]
+  },
+  {
+   "label": "KYC & Bank Verification",
+   "href": "/admin/verification",
+   "category": "Compliance",
+   "menu": true,
+   "requires": [
+    "KYC_REVIEW",
+    "BANK_ACCOUNT_VERIFY"
+   ]
+  },
+  {
+   "label": "CRM & Leads",
+   "href": "/admin/leads",
+   "category": "Customer Operations",
+   "menu": true,
+   "requires": [
+    "LEAD_VIEW"
+   ]
+  },
+  {
+   "label": "Support Tickets",
+   "href": "/admin/support",
+   "category": "Customer Operations",
+   "menu": true,
+   "requires": [
+    "SUPPORT_TICKET_VIEW",
+    "FINANCE_TICKET_HANDLE"
+   ]
+  },
+  {
+   "label": "Referral Management",
+   "href": "/admin/downlines",
+   "category": "Partner Management",
+   "menu": true,
+   "requires": [
+    "REFERRAL_TREE_MANAGE"
+   ]
+  },
+  {
+   "label": "Referral Commissions",
+   "href": "/admin/referrals",
+   "category": "Partner Management",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW"
+   ]
+  },
+  {
+   "label": "Reports",
+   "href": "/admin/reports",
+   "category": "Analytics",
+   "menu": true,
+   "requires": [
+    "REPORT_VIEW",
+    "REPORT_GENERATE"
+   ]
+  },
+  {
+   "label": "Staff Management",
+   "href": "/admin/staff",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "STAFF_ACCOUNT_VIEW",
+    "USER_ROLE_ASSIGN"
+   ]
+  },
+  {
+   "label": "Departments",
+   "href": "/admin/departments",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "DEPARTMENT_VIEW",
+    "DEPARTMENT_MANAGE"
+   ]
+  },
+  {
+   "label": "Roles",
+   "href": "/admin/roles",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "ROLE_VIEW"
+   ]
+  },
+  {
+   "label": "Permissions",
+   "href": "/admin/permissions",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "ROLE_VIEW"
+   ]
+  },
+  {
+   "label": "Approvals",
+   "href": "/admin/approvals",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "APPROVAL_VIEW",
+    "APPROVAL_DECIDE"
+   ]
+  },
+  {
+   "label": "Demo Accounts",
+   "href": "/admin/demo-accounts",
+   "category": "Administration",
+   "menu": true,
+   "requires": [
+    "DEMO_ACCOUNT_MANAGE"
+   ]
+  },
+  {
+   "label": "Return Configuration",
+   "href": "/admin/platform-config/returns",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "PAYOUT_PROCESS",
+    "SYSTEM_SETTINGS_MANAGE",
+    "FINANCE_VIEW"
+   ]
+  },
+  {
+   "label": "Withdrawal Configuration",
+   "href": "/admin/platform-config/withdrawals",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "WITHDRAWAL_PROCESS"
+   ]
+  },
+  {
+   "label": "Referral Configuration",
+   "href": "/admin/platform-config/referral-rates",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW",
+    "REFERRAL_CONFIG_MANAGE"
+   ]
+  },
+  {
+   "label": "Company Bank Accounts",
+   "href": "/admin/platform-config/company-accounts",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "FINANCE_VIEW",
+    "COMPANY_BANK_ACCOUNT_MANAGE",
+    "COMPANY_BANK_ACCOUNT_VIEW"
+   ]
+  },
+  {
+   "label": "Terms & Conditions",
+   "href": "/admin/terms",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "TERMS_MANAGE"
+   ]
+  },
+  {
+   "label": "Agreement Templates",
+   "href": "/admin/agreement",
+   "category": "Platform Settings",
+   "menu": true,
+   "requires": [
+    "AGREEMENT_TEMPLATE_MANAGE"
+   ]
+  },
+  {
+   "label": "Security Dashboard",
+   "href": "/admin/security",
+   "category": "Security",
+   "menu": true,
+   "requires": [
+    "AUDIT_VIEW",
+    "SECURITY_VIEW"
+   ]
+  },
+  {
+   "label": "Audit Logs",
+   "href": "/admin/audit",
+   "category": "Security",
+   "menu": true,
+   "requires": [
+    "AUDIT_VIEW"
+   ]
+  },
+  {
+   "label": "/admin/roles/new",
+   "href": "/admin/roles/new",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "ROLE_MANAGE"
+   ]
+  },
+  {
+   "label": "/admin/staff/new",
+   "href": "/admin/staff/new",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "USER_ROLE_ASSIGN+ROLE_VIEW"
+   ]
+  },
+  {
+   "label": "/admin/users/new-investor",
+   "href": "/admin/users/new-investor",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "INVESTOR_ACCOUNT_CREATE"
+   ]
+  },
+  {
+   "label": "/admin/leads/new",
+   "href": "/admin/leads/new",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "LEAD_CREATE"
+   ]
+  },
+  {
+   "label": "/admin/products/new",
+   "href": "/admin/products/new",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "INVESTMENT_CREATE"
+   ]
+  },
+  {
+   "label": "/admin/withdrawals/batches",
+   "href": "/admin/withdrawals/batches",
+   "category": "Not in the menu",
+   "menu": false,
+   "requires": [
+    "WITHDRAWAL_VIEW"
+   ]
+  }
+ ]
+}

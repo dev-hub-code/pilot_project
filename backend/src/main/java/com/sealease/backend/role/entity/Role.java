@@ -25,6 +25,13 @@ public class Role extends BaseEntity {
 	@Column(name = "system", nullable = false, updatable = false)
 	private boolean system;
 
+	@Column(name = "department_id")
+	private java.util.UUID departmentId;
+
+	/** Cannot be edited or deleted by anyone: the role that can always recover the platform. */
+	@Column(name = "protected_role", nullable = false, updatable = false)
+	private boolean protectedRole;
+
 	@ManyToMany
 	@JoinTable(name = "role_permissions",
 			joinColumns = @JoinColumn(name = "role_id"),
@@ -39,6 +46,18 @@ public class Role extends BaseEntity {
 		this.description = description;
 		this.system = false;
 		this.permissions = new HashSet<>(permissions);
+	}
+
+	public java.util.UUID getDepartmentId() {
+		return departmentId;
+	}
+
+	public void setDepartmentId(java.util.UUID value) {
+		this.departmentId = value;
+	}
+
+	public boolean isProtectedRole() {
+		return protectedRole;
 	}
 
 	public void update(String description, Set<Permission> permissions) {

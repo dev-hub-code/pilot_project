@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -22,6 +23,8 @@ const TYPES: readonly AccountType[] = [
 ];
 
 export default async function LedgerPage({ searchParams }: PageProps<"/admin/ledger">) {
+  const denied = await deniedUnlessInMenu("/admin/ledger");
+  if (denied) return denied;
   const session = await requireStaff();
   const params = await searchParams;
   const type = TYPES.find((t) => t === params.type);
