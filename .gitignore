@@ -18,3 +18,10 @@
 
 # Python
 __pycache__/
+
+# Terraform: local state and plans hold generated secrets; never commit them.
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+crash.log

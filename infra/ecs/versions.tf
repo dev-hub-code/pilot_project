@@ -24,5 +24,6 @@ locals {
   name     = "sealease"
   site     = "www.${var.domain}"
   site_url = "https://www.${var.domain}"
-  azs      = slice(data.aws_availability_zones.available.names, 0, 2)
+  # Every tier is spread over these zones, so losing one zone leaves the site up.
+  azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 }
