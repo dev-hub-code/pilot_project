@@ -32,6 +32,7 @@ export const ADMIN_NAV: readonly NavItem[] = [
 
   { id: "leads", label: "CRM & Leads", href: "/admin/leads", icon: "target", category: "Customer Operations", requires: [P.LEAD_VIEW] },
   { id: "support", label: "Support Tickets", href: "/admin/support", icon: "life", category: "Customer Operations", requires: [P.SUPPORT_TICKET_VIEW, P.FINANCE_TICKET_HANDLE] },
+  { id: "announcements", label: "Announcements", href: "/admin/announcements", icon: "megaphone", category: "Customer Operations", requires: [P.ANNOUNCEMENT_MANAGE] },
 
   { id: "referrals", label: "Referral Management", href: "/admin/downlines", icon: "network", category: "Partner Management", requires: [P.REFERRAL_TREE_MANAGE] },
   { id: "commissions", label: "Referral Commissions", href: "/admin/referrals", icon: "percent", category: "Partner Management", requires: [P.FINANCE_VIEW] },

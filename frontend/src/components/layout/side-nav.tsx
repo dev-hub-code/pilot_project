@@ -2,7 +2,7 @@
 
 import {
   Award, Banknote, BookOpen, Building2, ChartColumn, Check, ChevronDown, Circle, ClipboardList, Coins, CreditCard,
-  FileText, History, KeyRound, LayoutDashboard, LifeBuoy, type LucideIcon, Network, Package, PanelLeftClose, PanelLeftOpen, Percent, Settings,
+  FileText, History, KeyRound, LayoutDashboard, LifeBuoy, type LucideIcon, Megaphone, Network, Package, PanelLeftClose, PanelLeftOpen, Percent, Settings,
   ShieldCheck, Stamp, Target, User, Users, Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -12,7 +12,7 @@ import type { MenuLink, MenuSection } from "@/components/layout/account-menu";
 
 const ICONS: Record<string, LucideIcon> = {
   badge: Award, bank: Banknote, book: BookOpen, building: Building2, card: CreditCard, chart: ChartColumn, check: Check,
-  coins: Coins, dashboard: LayoutDashboard, file: FileText, history: History, key: KeyRound, life: LifeBuoy,
+  coins: Coins, dashboard: LayoutDashboard, file: FileText, history: History, key: KeyRound, life: LifeBuoy, megaphone: Megaphone,
   network: Network, package: Package, percent: Percent, settings: Settings, shield: ShieldCheck, stamp: Stamp,
   target: Target, tasks: ClipboardList, user: User, users: Users, wallet: Wallet,
 };
