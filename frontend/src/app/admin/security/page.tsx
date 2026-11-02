@@ -84,11 +84,11 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
         <span className="text-xs text-muted">Since {formatDateTime(overview.from)}</span>
       </nav>
 
-      <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Key figures">
+      <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Key figures">
         {tiles.map((tile) => {
           const body = (
             <>
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">{tile.label}</p>
+              <p className="text-sm text-muted">{tile.label}</p>
               <p className={`font-display text-2xl font-semibold tabular-nums ${tile.alert ? "text-rose-600 dark:text-rose-400" : ""}`}>
                 {tile.value}
               </p>
@@ -107,7 +107,7 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
         <ColumnChart series={ACTIVITY_SERIES} data={activityColumns(overview)} label="Sign-ins and failed sign-ins over time" />
       </Card>
 
-      <section className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0" aria-label="Failed sign-ins">
+      <section className="grid gap-6" aria-label="Failed sign-ins">
         <Card title="Failed sign-ins by account" description="Many on one account suggests password guessing">
           {overview.failedByAccount.length === 0 ? <EmptyState title="No failed sign-ins" /> : (
             <DataTable columns={["Account", "Attempts", "Latest"]}>
@@ -176,7 +176,7 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
         )}
       </Card>
 
-      <section id="changes" className="grid scroll-mt-6 gap-6 xl:grid-cols-2 [&>*]:min-w-0">
+      <section id="changes" className="grid scroll-mt-6 gap-6">
         <Card title="Access & settings changes" description="Roles, staff accounts, suspensions and money settings; latest 10">
           {overview.privilegedChanges.length === 0 ? <EmptyState title="No changes in this period" /> : (
             <AuditTable entries={overview.privilegedChanges} showIp={false} />

@@ -31,9 +31,9 @@ export default async function ReferralMemberPage({ params }: PageProps<"/referra
     <div className="space-y-6">
       <PageHeader title={member.displayName} description={`Level ${member.level} · joined ${formatDate(member.joinedAt)}`} />
 
-      <section className="grid gap-px bg-border" aria-label="Commission from this member">
+      <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border" aria-label="Commission from this member">
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">You earned from {member.displayName}</p>
+          <p className="text-sm text-muted">You earned from {member.displayName}</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
           <p className="text-xs text-muted">Commission is credited {credit}, alongside this member&apos;s returns.</p>
         </div>

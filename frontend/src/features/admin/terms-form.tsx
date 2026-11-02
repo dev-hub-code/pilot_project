@@ -27,7 +27,7 @@ export function TermsForm({ title, body }: { title: string; body: string }) {
         onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
       <TextArea label="Wording" name="body" rows={24} value={draft.body} error={e.body}
         onChange={(event) => setDraft({ ...draft, body: event.target.value })}
-        className="w-full rounded-none border border-border bg-surface px-3 py-2 font-mono text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
+        className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
       <p className="text-xs text-muted">
         Leave a blank line between paragraphs. Start a line with <code className="font-mono"># </code> to make it a heading.
       </p>
@@ -39,7 +39,7 @@ export function TermsForm({ title, body }: { title: string; body: string }) {
       </div>
       {preview && (
         <section className="space-y-2" aria-label="Preview">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Preview</p>
+          <p className="text-sm text-muted">Preview</p>
           <AgreementText title={draft.title} body={draft.body} />
         </section>
       )}

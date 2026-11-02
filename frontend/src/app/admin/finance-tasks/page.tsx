@@ -131,7 +131,7 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
                   <span className="block text-xs text-muted">{formatDateTime(t.createdAt)}</span>
                 </Cell>
                 <Cell>
-                  <Link href={`/admin/users/${t.userId}`} className="font-mono text-xs text-gold-text hover:underline">{t.userCode ?? "Investor"}</Link>
+                  <Link href={`/admin/users/${t.userId}`} className="inline-flex min-h-6 items-center font-mono text-xs text-gold-text hover:underline">{t.userCode ?? "Investor"}</Link>
                   <span className="block">{t.name}</span>
                 </Cell>
                 <Cell className="text-sm">

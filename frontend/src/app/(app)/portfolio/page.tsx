@@ -6,6 +6,8 @@ import { buttonBase, buttonVariants } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { StatGrid } from "@/components/ui/stat-grid";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { formatPeriod, leasePercent, nextCreditNote } from "@/features/earnings/labels";
 import { yearsLabel } from "@/features/orders/lease-years";
@@ -65,24 +67,11 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
           agreement: <Link href={`/portfolio/${firstToAccept.id}/agreement`} className="font-medium underline">review and accept</Link>.
         </Notice>
       )}
-      <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Portfolio summary">
-        <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Total invested</p>
-          <p className="font-display text-4xl font-semibold tabular-nums">
-            {portfolio.totalsByCurrency.length === 0 ? "—" : portfolio.totalsByCurrency.map((m) => formatMoney(m)).join(" · ")}
-          </p>
-        </div>
-        <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Investments</p>
-          <p className="font-display text-4xl font-semibold tabular-nums">{containersOwned(portfolio.holdings)}</p>
-          <p className="text-xs text-muted">{holdingBreakdown(portfolio.holdings) || "None yet"}</p>
-        </div>
-        <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Returns wallet</p>
-          <p className="font-display text-4xl font-semibold tabular-nums">{rentWallet}</p>
-          <p className="text-xs text-muted">{nextCreditNote(earnings.nextCreditAt, credit)}</p>
-        </div>
-      </section>
+      <StatGrid label="Portfolio summary" stats={[
+        { label: "Total invested", value: portfolio.totalsByCurrency.length === 0 ? "—" : portfolio.totalsByCurrency.map((m) => formatMoney(m)).join(" · ") },
+        { label: "Investments", value: containersOwned(portfolio.holdings), note: holdingBreakdown(portfolio.holdings) || "None yet" },
+        { label: "Returns wallet", value: rentWallet, note: nextCreditNote(earnings.nextCreditAt, credit) },
+      ]} />
 
       {portfolio.holdings.length === 0 ? (
         <div className="space-y-4">
@@ -120,6 +109,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
                 <Cell className="tabular-nums">
                   {lease ? formatMoney(lease.rentCredited) : "—"}
                   {lease && <span className="block text-xs text-muted">{Math.round(leasePercent(lease))}% of {formatMoney(lease.totalRent)}</span>}
+                  {lease && <div className="mt-1.5 w-28"><ProgressBar percent={leasePercent(lease)} label={`${h.productTitle} term progress`} /></div>}
                 </Cell>
                 <Cell>
                   <div className="flex flex-col items-stretch gap-2 lg:items-start">

@@ -139,7 +139,7 @@ export function DownlineEditor({ panes, side }: { panes: AdminDownline[]; side: 
 
       <dialog ref={dialog} aria-labelledby={titleId}
         onClose={() => setPending(null)}
-        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
         {pending && (
           <form action={formAction} className="space-y-5 p-6" noValidate>
             <div className="space-y-1.5">

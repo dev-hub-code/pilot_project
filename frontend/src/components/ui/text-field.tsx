@@ -27,7 +27,7 @@ export function TextField({ label, name, error, id, type, ...props }: TextFieldP
           type={isPassword && revealed ? "text" : type}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          className={`h-11 w-full rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600 read-only:bg-background read-only:text-muted${isPassword ? " pr-11" : ""}`}
+          className={`h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600 read-only:bg-background read-only:text-muted${isPassword ? " pr-11" : ""}`}
           {...props}
         />
         {isPassword && (

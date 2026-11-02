@@ -73,7 +73,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
         <form className="flex gap-2" action="/admin/payments" role="search">
           <input name="q" defaultValue={q} placeholder="Order no., reference, investor ID or email"
             aria-label="Search payments by order number, payment reference, or investor ID or email"
-            className="h-9 w-72 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+            className="h-9 w-72 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
         </form>
       </div>
       {!payments ? (
@@ -85,7 +85,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
       ) : decide ? (
         <ul className="space-y-4">
           {payments.content.map((p) => (
-            <li key={p.id} className="space-y-4 border border-border bg-surface p-5">
+            <li key={p.id} className="space-y-4 rounded-xl border border-border bg-surface p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <span>
                   <strong>{METHOD_LABEL[p.method]}</strong> · <span className="font-mono">{p.providerReference}</span> ·{" "}

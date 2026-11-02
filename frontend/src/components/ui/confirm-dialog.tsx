@@ -41,7 +41,7 @@ export function useConfirm() {
     <dialog ref={ref} aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); close(false); }}
       onClick={(event) => { if (event.target === ref.current) close(false); }}
-      className="m-auto w-[min(28rem,calc(100vw-2rem))] border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
+      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
       {question && (
         <div className="space-y-5 p-6">
           <div className="flex items-start gap-4">

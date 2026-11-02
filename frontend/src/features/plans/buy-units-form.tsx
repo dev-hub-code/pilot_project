@@ -112,7 +112,7 @@ export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, 
 function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-display text-xl font-semibold">{value}</dd>
       <dd className="mt-0.5 text-xs text-muted">{note}</dd>
     </div>

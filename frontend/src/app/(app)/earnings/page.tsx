@@ -21,29 +21,29 @@ export default async function EarningsPage() {
       <PageHeader title="Earnings"
         description={`Each of your investments earns returns throughout its term, credited to your wallet ${credit}. Your wallet is paid out when our team makes a withdrawal (see Withdrawals).`}
         actions={<LinkButton href="/statements" variant="secondary">Statements</LinkButton>} />
-      <section className={`grid gap-px bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
+      <section className={`grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 ${hasCapital ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Earnings summary">
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Wallet balance</p>
+          <p className="text-sm text-muted">Wallet balance</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.balances)}</p>
-          <Link href="/withdrawals" className="text-sm text-gold-text hover:underline">Withdraw →</Link>
+          <Link href="/withdrawals" className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Withdraw →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Returns received</p>
+          <p className="text-sm text-muted">Returns received</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.rentPaid)}</p>
         </div>
         {hasCapital && (
           <div className="space-y-2 bg-surface p-6">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">Capital returned</p>
+            <p className="text-sm text-muted">Capital returned</p>
             <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.capitalReturned)}</p>
           </div>
         )}
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Referral earnings</p>
+          <p className="text-sm text-muted">Referral earnings</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.referralEarned)}</p>
-          <Link href="/referrals" className="text-sm text-gold-text hover:underline">By month and level →</Link>
+          <Link href="/referrals" className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">By month and level →</Link>
         </div>
         <div className="space-y-2 bg-surface p-6">
-          <p className="text-xs uppercase tracking-[0.1em] text-muted">Total withdrawn</p>
+          <p className="text-sm text-muted">Total withdrawn</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.totalWithdrawn)}</p>
           {summary.withdrawalInProgress.length > 0 && (
             <p className="text-xs text-muted">{totals(summary.withdrawalInProgress)} in progress</p>

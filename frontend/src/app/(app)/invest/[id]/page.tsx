@@ -40,7 +40,7 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
   return (
     <div className="space-y-8">
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href="/invest" className="hover:text-foreground">Plans</Link> / <span>{plan.title}</span>
+        <Link href="/invest" className="inline-flex min-h-6 items-center hover:text-foreground">Plans</Link> / <span>{plan.title}</span>
       </nav>
       <header className="space-y-3">
         {!open && <StatusBadge tone="neutral">{PRODUCT_STATUS_LABEL[plan.status]}</StatusBadge>}
@@ -67,7 +67,7 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
           </Card>
         </div>
 
-        <section className="space-y-5 border border-border bg-surface p-6 lg:sticky lg:top-6 lg:self-start" aria-label="Buy units">
+        <section className="space-y-5 rounded-xl border border-border bg-surface p-6 lg:sticky lg:top-6 lg:self-start" aria-label="Buy units">
           <BuyUnitsForm productId={id} tenureYears={plan.tenureYears} initial={quote} idempotencyKey={randomUUID()}
             canBuy={investor && eligibility.eligible} />
           {!investor ? (
@@ -91,7 +91,7 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
 function Fact({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div className="bg-surface p-4">
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className={`mt-1 ${emphasis ? "font-display text-2xl font-semibold text-gold-text" : "font-semibold"}`}>{value}</dd>
     </div>
   );

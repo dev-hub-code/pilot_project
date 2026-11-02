@@ -29,3 +29,7 @@ because Spring validates a body before it checks permission, and a refused role 
 
 These tests show that each role gets what its permissions say. Whether a role *should* hold those permissions is a
 business decision: review the Permissions section of each scenario for that.
+
+## Screen sizes
+
+`responsive.cjs` opens every investor, admin and public page at 15 screen sizes, from a 320px phone to a 2560px desktop, and writes what does not fit to `responsive-results.json`: sideways page scrolling, content past the screen edge, and controls under 24px. It needs the same setup as `run.cjs` plus `E2E_INVESTOR_EMAIL` and `E2E_INVESTOR_PASSWORD` for an investor with data, and `E2E_IDS`, a JSON file of ids for detail pages. Sign-ins end a user's other sessions, so do not use those accounts elsewhere while it runs.

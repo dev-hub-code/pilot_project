@@ -46,7 +46,7 @@ export function SelectField({ label, name, options, error, placeholder, id, ...p
         name={name}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${selectId}-error` : undefined}
-        className="h-11 w-full rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600"
+        className="h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600"
         {...props}
       >
         {placeholder !== undefined && <option value="">{placeholder}</option>}

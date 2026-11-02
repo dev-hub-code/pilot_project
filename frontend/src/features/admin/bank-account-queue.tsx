@@ -18,7 +18,7 @@ export async function BankAccountQueue({ page }: { page: number }) {
       ) : (
         <ul className="space-y-4">
           {queue.content.map((item) => (
-            <li key={item.account.id} className="border border-border bg-surface p-6">
+            <li key={item.account.id} className="rounded-xl border border-border bg-surface p-6">
               <BankAccountReview item={item} viewerId={session.userId} />
             </li>
           ))}

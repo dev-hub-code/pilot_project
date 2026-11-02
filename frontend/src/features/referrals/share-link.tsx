@@ -45,7 +45,7 @@ export function ShareLink({ code }: { code: string }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <input ref={input} readOnly value={link} aria-label="Your referral link" onFocus={(e) => e.currentTarget.select()}
-        className="h-11 min-w-0 flex-1 basis-full rounded-none border border-border bg-background px-3 font-mono text-sm sm:basis-0" />
+        className="h-11 min-w-0 flex-1 basis-full rounded-lg border border-border bg-background px-3 font-mono text-sm sm:basis-0" />
       {canShare && <Button type="button" onClick={share}>Share</Button>}
       <Button type="button" variant="secondary" onClick={copy}>{status === "copied" ? "Copied" : "Copy link"}</Button>
       <span role="status" className={status === "failed" ? "w-full text-xs text-muted" : "sr-only"}>

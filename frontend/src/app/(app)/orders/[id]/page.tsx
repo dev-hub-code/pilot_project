@@ -49,7 +49,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   return (
     <div className="space-y-6">
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href="/orders" className="hover:text-foreground">Orders</Link> / <span className="font-mono">{order.orderNumber}</span>
+        <Link href="/orders" className="inline-flex min-h-6 items-center hover:text-foreground">Orders</Link> / <span className="font-mono">{order.orderNumber}</span>
       </nav>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
@@ -113,7 +113,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
             {order.items.map((item) => (
               <tr key={item.id}>
                 <Cell>
-                  <Link href={`/invest/${item.productId}`} className="text-gold-text hover:underline">{item.productTitle}</Link>
+                  <Link href={`/invest/${item.productId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{item.productTitle}</Link>
                 </Cell>
                 <Cell className="tabular-nums">{item.units !== null && item.unitPrice ? `${item.units} × ${formatMoney(item.unitPrice)}` : "—"}</Cell>
                 <Cell className="tabular-nums font-medium">{formatMoney(item.amount)}</Cell>

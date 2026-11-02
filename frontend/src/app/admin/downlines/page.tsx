@@ -54,11 +54,11 @@ export default async function DownlinesPage({ searchParams }: PageProps<"/admin/
             </Notice>
           ))}
           <p className="text-sm">
-            <Link href={HERE} className="text-gold-text hover:underline">Choose a different investor</Link>
+            <Link href={HERE} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Choose a different investor</Link>
           </p>
           <DownlineEditor panes={right ? [left, right] : [left]}
             side={right ? (
-              <Link href={`${HERE}?investor=${left.investor.userId}`} className="text-sm text-gold-text hover:underline">
+              <Link href={`${HERE}?investor=${left.investor.userId}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">
                 Close {right.investor.name}&apos;s downline
               </Link>
             ) : (

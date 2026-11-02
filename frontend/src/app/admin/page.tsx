@@ -22,7 +22,7 @@ export default async function AdminDashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {section.metrics.map((metric) => (
               <Link key={metric.label} href={metric.href}
-                className="border border-border bg-surface p-4 transition-colors hover:border-gold">
+                className="rounded-xl border border-border bg-surface p-4 transition-colors hover:border-gold">
                 <p className="text-sm text-muted">{metric.label}</p>
                 <p className="mt-1 font-display text-3xl font-semibold tabular-nums">{metric.value.toLocaleString("en-IN")}</p>
               </Link>

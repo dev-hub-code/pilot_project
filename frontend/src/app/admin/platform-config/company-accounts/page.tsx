@@ -35,7 +35,7 @@ export default async function CompanyBankAccountsPage() {
       ) : (
         <ul className="space-y-4">
           {accounts.map((a) => (
-            <li key={a.id} className="space-y-4 border border-border bg-surface p-5">
+            <li key={a.id} className="space-y-4 rounded-xl border border-border bg-surface p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold">{a.bankName}{a.branch && <span className="font-normal text-muted"> · {a.branch}</span>}</p>
@@ -79,7 +79,7 @@ export default async function CompanyBankAccountsPage() {
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-medium">{children}</dd>
     </div>
   );

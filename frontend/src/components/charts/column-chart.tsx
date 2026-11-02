@@ -164,7 +164,7 @@ export function ColumnChart({ series, data, currency, currentIndex, label }: Pro
       </div>
 
       <details className="text-sm">
-        <summary className="cursor-pointer text-xs text-muted hover:text-foreground">Show as table</summary>
+        <summary className="min-h-6 cursor-pointer py-1 text-xs text-muted hover:text-foreground">Show as table</summary>
         <div className="mt-3 overflow-x-auto">
           <table id={tableId} className="w-full text-left text-xs tabular-nums">
             <thead className="text-muted">
@@ -209,7 +209,7 @@ function Tooltip({ x, width, title, rows, total }: { x: number; width: number; t
   const TIP = 240;
   const left = Math.min(Math.max(0, x - TIP / 2), Math.max(0, width - TIP));
   return (
-    <div role="status" className="pointer-events-none absolute top-0 z-10 w-[240px] border border-border bg-surface p-3 text-xs shadow-lg"
+    <div role="status" className="pointer-events-none absolute top-0 z-10 w-[240px] rounded-xl border border-border bg-surface p-3 text-xs shadow-lg"
       style={{ left }}>
       <p className="mb-2 text-muted">{title}</p>
       <ul className="space-y-1.5">

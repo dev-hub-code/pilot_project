@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { EmailText } from "@/components/ui/email-text";
 
@@ -19,11 +17,9 @@ export interface MenuSection {
 }
 
 /**
- * The avatar in the header: who is signed in and sign-out. On narrower screens, where there is no side panel, it also
- * opens the site menu as a vertical list.
+ * The avatar in the header: who is signed in and sign-out.
  */
-export function AccountMenu({ sections, name, email, userCode, demo = false }: {
-  sections: readonly MenuSection[];
+export function AccountMenu({ name, email, userCode, demo = false }: {
   name: string;
   email: string | null;
   /** The readable ID ("SL03500"), shown so the user can quote it to us. */
@@ -32,12 +28,11 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
   demo?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
-  // Close on outside click and Escape; following a link closes it too.
+  // Close on outside click and Escape.
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {
@@ -57,9 +52,6 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
     };
   }, [open]);
 
-  const active = sections.flatMap((section) => section.links)
-    .filter((link) => pathname === link.href || pathname.startsWith(`${link.href}/`))
-    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
     <div ref={root} className="relative">
@@ -75,34 +67,8 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
             {email && <p className="truncate text-xs text-muted"><EmailText>{email}</EmailText></p>}
             {userCode && <p className="mt-1 font-mono text-xs text-muted">ID {userCode}</p>}
           </div>
-          <nav aria-label="Main" className="max-h-[75vh] overflow-y-auto py-1 text-sm lg:hidden">
-            {sections.map((section, index) => (
-              <div key={section.label ?? index} className={index > 0 ? "mt-1 border-t border-border pt-1" : ""}>
-                {sections.length > 1 && section.label && (
-                  <p id={`${menuId}-${index}`} className="px-4 pt-2 pb-1 text-[11px] uppercase tracking-[0.1em] text-muted">
-                    {section.label}
-                  </p>
-                )}
-                <ul aria-labelledby={sections.length > 1 && section.label ? `${menuId}-${index}` : undefined}>
-                  {section.links.map((link) => {
-                    const isActive = link === active;
-                    return (
-                      <li key={link.href}>
-                        <Link href={link.href} aria-current={isActive ? "page" : undefined} onClick={() => setOpen(false)}
-                          className={`block border-l-2 px-4 py-1.5 ${isActive
-                            ? "border-gold bg-background font-medium text-foreground"
-                            : "border-transparent text-muted hover:bg-background hover:text-foreground"}`}>
-                          {link.label}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
           {/* A full page request (see app/logout/route.ts), so no signed-in page stays in the browser. */}
-          <form action="/logout" method="post" className="border-t border-border lg:border-t-0">
+          <form action="/logout" method="post" className="">
             <button type="submit" className="block w-full px-4 py-3 text-left text-sm text-muted hover:bg-background hover:text-foreground">
               Sign out
             </button>

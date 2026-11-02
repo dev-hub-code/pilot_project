@@ -85,7 +85,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <Card title="Account">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Item label="Email">
@@ -196,7 +196,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                     {referral.uplines.map((u) => (
                       <li key={u.userId}>
                         <span className="text-muted">L{u.level}</span>{" "}
-                        <Link href={`/admin/users/${u.userId}`} className="text-gold-text hover:underline">{u.name}</Link>
+                        <Link href={`/admin/users/${u.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{u.name}</Link>
                         <span className="block text-xs text-muted"><EmailText>{u.email}</EmailText></span>
                       </li>
                     ))}

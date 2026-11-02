@@ -38,9 +38,9 @@ export default async function WithdrawalRunsPage() {
             confirm="Withdraw every eligible network investor's referral commission now? Bank withdrawals go on a bank sheet, cash on a batch handed over at the office. Returns are not included." />
         </div>
         <p className="mt-4 text-sm text-muted">
-          Each withdrawal then becomes a task on <Link href="/admin/finance-tasks" className="text-gold-text hover:underline">Finance tasks</Link>,
+          Each withdrawal then becomes a task on <Link href="/admin/finance-tasks" className="inline-flex min-h-6 items-center text-gold-text hover:underline">Finance tasks</Link>,
           where finance marks it paid (or collected at the office), or failed with the reason. Bank batches also have an
-          Excel sheet to pay from, under <Link href="/admin/withdrawals/batches" className="text-gold-text hover:underline">Withdrawal files</Link>.
+          Excel sheet to pay from, under <Link href="/admin/withdrawals/batches" className="inline-flex min-h-6 items-center text-gold-text hover:underline">Withdrawal files</Link>.
         </p>
       </Card>
 

@@ -57,13 +57,13 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Card title="Details">
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <Item label="Investor"><Link href={`/admin/users/${w.userId}`} className="text-gold-text hover:underline">View investor</Link></Item>
+            <Item label="Investor"><Link href={`/admin/users/${w.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View investor</Link></Item>
             <Item label="From">{EARNINGS_BALANCE_LABEL[w.balance]}</Item>
             <Item label="Paid by">{cash ? "Cash" : `${w.bankName ?? "Account"} ${w.bankAccountMasked}`}</Item>
             <Item label="Made">{made} · {formatDateTime(w.createdAt)}</Item>
             {w.origin === "INVESTOR" && <Item label="Approvals">{`${w.approvals} of ${w.requiredApprovals}`}</Item>}
             {w.batchId && (
-              <Item label="Withdrawal file"><Link href={`/admin/withdrawals/batches/${w.batchId}`} className="text-gold-text hover:underline">Open file</Link></Item>
+              <Item label="Withdrawal file"><Link href={`/admin/withdrawals/batches/${w.batchId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Open file</Link></Item>
             )}
             {w.payoutReference && (
               <Item label={cash ? "Cash receipt number" : "Bank reference"}><span className="font-mono">{w.payoutReference}</span></Item>
@@ -71,7 +71,7 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
             {w.rejectionReason && <Item label="Cancelled">{w.rejectionReason}</Item>}
             {w.failureReason && <Item label="Payment failed">{w.failureReason}</Item>}
             {w.ticketId && (
-              <Item label="Support ticket"><Link href={`/admin/support/${w.ticketId}`} className="text-gold-text hover:underline">Open ticket</Link></Item>
+              <Item label="Support ticket"><Link href={`/admin/support/${w.ticketId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Open ticket</Link></Item>
             )}
             {w.closedAt && <Item label="Closed">{formatDateTime(w.closedAt)}</Item>}
           </dl>
@@ -95,7 +95,7 @@ export default async function AdminWithdrawalPage({ params }: PageProps<"/admin/
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-medium">{children}</dd>
     </div>
   );

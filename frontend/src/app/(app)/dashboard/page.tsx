@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { ContainerScene } from "@/components/brand/container-scene";
-import { Eyebrow } from "@/components/brand/eyebrow";
 import { ColumnChart, type ColumnSeries } from "@/components/charts/column-chart";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
+import { PageHeader } from "@/components/ui/page-header";
+import { type Stat, StatGrid } from "@/components/ui/stat-grid";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
 import { monthColumns, monthKey } from "@/features/dashboard/months";
 import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
+import { TermProgress } from "@/features/dashboard/term-progress";
+import { UpcomingReturns } from "@/features/dashboard/upcoming-returns";
 import { VerifyEmailDialog } from "@/features/auth/verify-email-dialog";
 import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
@@ -43,10 +45,6 @@ const PAYOUT_SERIES: readonly ColumnSeries[] = [
 
 /** Plans pay rent only; capital appears only for containers bought before that, so its series shows only then. */
 const RENT_SERIES = PAYOUT_SERIES.filter((s) => !s.key.startsWith("capital"));
-
-const LEASE_SERIES: readonly ColumnSeries[] = [
-  { key: "rentPaid", label: "Returns", fill: "fill-chart-1", swatch: "bg-chart-1" },
-];
 
 const REFERRAL_SERIES: readonly ColumnSeries[] = [
   { key: "total", label: "Commission", fill: "fill-chart-3", swatch: "bg-chart-3" },
@@ -82,53 +80,38 @@ export default async function DashboardPage() {
   // Only investments made before plans became returns-only return capital.
   const hasCapital = (earnings?.capitalReturned.length ?? 0) > 0
     || (payoutMonths ?? []).some((m) => Number(m.capitalPaid.amount) > 0 || Number(m.capitalScheduled.amount) > 0);
-  const kpis = [
-    { label: "Total invested", value: invested, note: portfolio ? (holdingBreakdown(portfolio.holdings) || "No investments yet") : "Investor accounts only" },
+  const monthlyIncome = (earnings?.leases ?? []).reduce((total, l) => total + Number(l.monthlyRent.amount), 0);
+  const stats: Stat[] = [
+    { label: "Total invested", value: invested, note: portfolio ? (holdingBreakdown(portfolio.holdings) || "No investments yet") : undefined },
+    { label: "Returns earned", value: list(earnings?.rentPaid),
+      note: monthlyIncome > 0 ? `${formatMoney({ amount: monthlyIncome.toFixed(2), currency: CURRENCY })} a month` : "Credited to your wallet" },
+    { label: "Available balance", value: list(earnings?.balances), note: earnings ? nextCreditNote(earnings.nextCreditAt, credit) : undefined },
     { label: "Total withdrawn", value: list(earnings?.totalWithdrawn),
-      note: earnings ? (earnings.withdrawalInProgress.length > 0 ? `${list(earnings.withdrawalInProgress)} in progress` : "Paid out to you so far")
-        : "Investor accounts only" },
-    { label: "Available balance", value: list(earnings?.balances),
-      note: earnings ? nextCreditNote(earnings.nextCreditAt, credit) : "Investor accounts only" },
+      note: earnings && earnings.withdrawalInProgress.length > 0 ? `${list(earnings.withdrawalInProgress)} in progress` : "Paid out to you so far" },
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Signing in does not wait for the address to be confirmed. */}
       {!me.emailVerified && !emailPromptShown && <VerifyEmailDialog email={me.email} />}
-      <section className="relative isolate overflow-hidden bg-ink px-6 py-12 text-on-ink sm:px-10 sm:py-16">
-        <ContainerScene focus="side" className="absolute inset-0 -z-10 size-full" />
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/85 to-ink/10" />
-        <div className="max-w-xl space-y-5">
-          <Eyebrow tone="light">Investor Dashboard</Eyebrow>
-          <h1 className="text-4xl leading-tight font-bold tracking-tight sm:text-5xl">Welcome back, {me.firstName}</h1>
-          {needsVerification ? (
-            <div className="space-y-5">
-              <p className="text-on-ink/85">
-                Verify your identity to start investing and to receive withdrawals.
-              </p>
-              {/* Account setup in order: personal details, identity verification, then a bank account. */}
-              <LinkButton href={setupHref ?? "/profile/verification"}>
-                {profile.kycStatus === "PENDING" ? "View Verification Status" : "Complete Onboarding"}
-              </LinkButton>
-            </div>
-          ) : (
-            <div className="space-y-5">
-              <p className="text-on-ink/85">Your account is verified. Explore the plans open for investment.</p>
-              <LinkButton href="/invest">See the plans</LinkButton>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Portfolio summary">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className="space-y-3 bg-surface p-6">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">{kpi.label}</p>
-            <p className="font-display text-4xl font-semibold tabular-nums">{kpi.value}</p>
-            <p className="text-xs text-muted">{kpi.note}</p>
+      <PageHeader title={`Welcome back, ${me.firstName}`} description="Your investments and returns at a glance."
+        actions={!needsVerification && (
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href="/withdrawals" variant="secondary">Withdraw</LinkButton>
+            <LinkButton href="/invest">Invest</LinkButton>
           </div>
-        ))}
-      </section>
+        )} />
+      {needsVerification && (
+        <section aria-label="Account setup" className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
+          <p className="text-sm">Verify your identity to start investing and to receive withdrawals.</p>
+          {/* Account setup in order: personal details, identity verification, then a bank account. */}
+          <LinkButton href={setupHref ?? "/profile/verification"}>
+            {profile.kycStatus === "PENDING" ? "View Verification Status" : "Complete Onboarding"}
+          </LinkButton>
+        </section>
+      )}
+
+      <StatGrid stats={stats} label="Portfolio summary" />
 
       {earnings && (
         <>
@@ -147,6 +130,18 @@ export default async function DashboardPage() {
                   }))} />
               )}
             </Card>
+            <Card title="Upcoming returns" description="Scheduled for the months ahead">
+              {payoutMonths === null
+                ? <EmptyState title="Could not be loaded" description="Your returns are listed on the Earnings page." />
+                : <UpcomingReturns months={payoutMonths} fromMonth={monthKey(0)} />}
+            </Card>
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-3" aria-label="Terms and earnings">
+            <Card title="Term progress" description="How far each investment has come" className="lg:col-span-2"
+              actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
+              <TermProgress leases={earnings.leases} />
+            </Card>
             <Card title="Your returns" description="Everything paid into your wallet">
               <ReturnsBreakdown currency={CURRENCY} parts={[
                 { label: "Returns", amount: sum(earnings.rentPaid), fill: "fill-chart-1", swatch: "bg-chart-1" },
@@ -156,28 +151,16 @@ export default async function DashboardPage() {
             </Card>
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-2" aria-label="Terms and referrals">
-            <Card title="Term progress" description="Returns credited from your terms, last six months"
-              actions={<LinkButton href="/earnings" variant="secondary">Earnings</LinkButton>}>
-              {payoutMonths && payoutMonths.some((m) => Number(m.rentPaid.amount) > 0) ? (
-                <ColumnChart series={LEASE_SERIES} currency={CURRENCY} label="Returns credited by month"
-                  data={monthColumns(payoutMonths, PAST, 0, CURRENCY, (m) => ({ rentPaid: m.rentPaid }))} />
-              ) : (
-                <EmptyState title="No returns credited yet"
-                  description="Invest in a plan and the returns it earns each month appear here." />
-              )}
-            </Card>
-            <Card title="Referral commission" description="Earned from your network, last six months"
-              actions={<LinkButton href="/referrals" variant="secondary">Referrals</LinkButton>}>
-              {referralMonths && referralMonths.length > 0 ? (
-                <ColumnChart series={REFERRAL_SERIES} currency={CURRENCY} label="Referral commission by month"
-                  data={monthColumns(referralMonths, PAST, 0, CURRENCY, (m) => ({ total: m.total }))} />
-              ) : (
-                <EmptyState title="No commission yet"
-                  description="Share your referral link: you earn a share of what the people you invite invest, every month." />
-              )}
-            </Card>
-          </section>
+          <Card title="Referral commission" description="Earned from your network, last six months"
+            actions={<LinkButton href="/referrals" variant="secondary">Referrals</LinkButton>}>
+            {referralMonths && referralMonths.length > 0 ? (
+              <ColumnChart series={REFERRAL_SERIES} currency={CURRENCY} label="Referral commission by month"
+                data={monthColumns(referralMonths, PAST, 0, CURRENCY, (m) => ({ total: m.total }))} />
+            ) : (
+              <EmptyState title="No commission yet"
+                description="Share your referral link: you earn a share of what the people you invite invest, every month." />
+            )}
+          </Card>
         </>
       )}
 
@@ -204,7 +187,7 @@ function sum(amounts: readonly Money[]): number {
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <dt className="text-xs uppercase tracking-[0.1em] text-muted">{label}</dt>
+      <dt className="text-sm text-muted">{label}</dt>
       <dd className="font-medium">{children}</dd>
     </div>
   );

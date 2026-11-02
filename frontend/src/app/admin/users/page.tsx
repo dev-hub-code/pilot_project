@@ -58,7 +58,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
               && <LinkButton href="/admin/users/new-investor">New investor</LinkButton>}
           </div>
         )} />
-      <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6" role="search">
+      <form className="grid items-end gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-6" role="search">
         <div className="sm:col-span-2">
           <TextField label="Search" name="q" type="search" placeholder="Email, name or ID (SL03500)" defaultValue={filters.q} />
         </div>

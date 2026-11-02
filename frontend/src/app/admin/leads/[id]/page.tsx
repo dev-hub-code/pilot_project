@@ -68,7 +68,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
               <Item label="Owner">{l.ownerName ?? "Unassigned"}</Item>
               <Item label="Next follow-up">{formatDateTime(l.nextFollowUpAt)}</Item>
               <Item label="Investor account">
-                {l.userId ? <Link href={`/admin/users/${l.userId}`} className="text-gold-text hover:underline">View account</Link> : "Not registered"}
+                {l.userId ? <Link href={`/admin/users/${l.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View account</Link> : "Not registered"}
               </Item>
               {l.won && <Item label="Invested">{formatMoney(l.won)}</Item>}
               {l.lostReason && <Item label="Lost because">{l.lostReason}</Item>}
@@ -110,7 +110,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-medium">{children}</dd>
     </div>
   );

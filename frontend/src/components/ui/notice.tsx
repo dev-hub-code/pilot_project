@@ -6,7 +6,7 @@ const tones = {
 
 export function Notice({ tone = "info", children }: { tone?: keyof typeof tones; children: React.ReactNode }) {
   return (
-    <div role="status" className={`rounded-none border-l-4 px-3 py-2 text-sm ${tones[tone]}`}>
+    <div role="status" className={`rounded-lg border-l-4 px-3 py-2 text-sm ${tones[tone]}`}>
       {children}
     </div>
   );

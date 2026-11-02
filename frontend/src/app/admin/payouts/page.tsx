@@ -76,7 +76,7 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
         <DataTable columns={["Investor", "Plan", "Term", "Monthly returns", "Returns credited", "Capital back", "Progress", "Status"]}>
           {leases.content.map((l) => (
             <tr key={l.holdingId} className="align-top">
-              <Cell>{l.userId && <Link href={`/admin/users/${l.userId}`} className="text-gold-text hover:underline">View</Link>}</Cell>
+              <Cell>{l.userId && <Link href={`/admin/users/${l.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View</Link>}</Cell>
               <Cell className="font-mono text-xs">{l.productCode}</Cell>
               <Cell className="whitespace-nowrap text-xs text-muted">
                 {formatDate(l.startsAt)} – {formatDate(l.endsAt)}

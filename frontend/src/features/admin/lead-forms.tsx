@@ -73,7 +73,7 @@ export function ActivityForm({ leadId }: { leadId: string }) {
       <div className="space-y-1.5">
         <label htmlFor="activity-body" className="block text-sm font-medium text-foreground">What happened</label>
         <textarea id="activity-body" name="body" rows={3} maxLength={4000} defaultValue={state.values?.body}
-          className="w-full rounded-none border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold" />
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold" />
         {state.fieldErrors?.body && <p className="text-xs text-rose-600 dark:text-rose-400">{state.fieldErrors.body}</p>}
       </div>
       <SubmitButton variant="secondary">Log activity</SubmitButton>

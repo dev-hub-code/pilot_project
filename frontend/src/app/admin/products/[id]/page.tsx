@@ -117,7 +117,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/products
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-medium">{children}</dd>
     </div>
   );

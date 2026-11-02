@@ -56,7 +56,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <p className="text-sm text-muted">
             Placed {formatDateTime(order.createdAt)} by{" "}
             {investor
-              ? <Link href={`/admin/users/${order.userId}`} className="text-gold-text hover:underline">
+              ? <Link href={`/admin/users/${order.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">
                 {investor.firstName} {investor.lastName} (<EmailText>{investor.email}</EmailText>)
               </Link>
               : <span className="font-mono">{order.userId}</span>}
@@ -103,7 +103,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
                         : <span className="text-xs text-muted">Not needed (term already running)</span>}
                   </Cell>
                   <Cell>
-                    <a href={`/admin/orders/${order.id}/agreements/${a.holdingId}`} className="text-sm text-gold-text hover:underline">Download PDF</a>
+                    <a href={`/admin/orders/${order.id}/agreements/${a.holdingId}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Download PDF</a>
                   </Cell>
                 </tr>
               ))}
@@ -119,7 +119,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
         ) : (
           <ul className="space-y-4">
             {payments.map((p) => (
-              <li key={p.id} className="space-y-4 border border-border bg-surface p-5">
+              <li key={p.id} className="space-y-4 rounded-xl border border-border bg-surface p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                   <span>
                     <strong>{METHOD_LABEL[p.method]}</strong> · <span className="font-mono">{p.providerReference}</span> · {formatMoney(p.amount)}
@@ -165,7 +165,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 font-medium text-foreground">{children}</dd>
     </div>
   );

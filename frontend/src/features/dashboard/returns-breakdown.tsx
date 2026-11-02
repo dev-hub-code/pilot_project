@@ -23,7 +23,7 @@ export function ReturnsBreakdown({ parts, currency }: { parts: readonly ReturnPa
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs uppercase tracking-[0.1em] text-muted">Received to date</p>
+        <p className="text-sm text-muted">Received to date</p>
         <p className="mt-1 font-display text-4xl font-semibold">{money(total)}</p>
       </div>
 

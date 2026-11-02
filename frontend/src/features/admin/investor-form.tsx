@@ -19,7 +19,7 @@ export function CreateInvestorForm({ countries }: { countries: Country[] }) {
       <div className="space-y-4">
         <FormFeedback state={state} />
         <IssuedCredentials credentials={state.credentials} />
-        <a href={`/admin/users/${state.credentials.userId}`} className="text-sm text-gold-text hover:underline">Open their account</a>
+        <a href={`/admin/users/${state.credentials.userId}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Open their account</a>
       </div>
     );
   }

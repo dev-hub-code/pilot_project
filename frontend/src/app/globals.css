@@ -260,3 +260,20 @@ h1, h2, h3 {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
+
+/* Long unbroken values (emails, role names) wrap instead of pushing a phone's page sideways. */
+main dd,
+main label {
+  overflow-wrap: anywhere;
+}
+
+/* Links in table cells are comfortable to tap. */
+.data-table td a {
+  display: inline-block;
+  padding-block: 0.25rem;
+}
+
+/* Grid columns may shrink below their content, so a wide table scrolls inside its column, not the page. */
+main .grid > * {
+  min-width: 0;
+}

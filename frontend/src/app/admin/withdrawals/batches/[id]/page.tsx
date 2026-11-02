@@ -94,7 +94,7 @@ export default async function BatchPage({ params }: PageProps<"/admin/withdrawal
                 <Cell className="tabular-nums">{f.kind === "PAYMENT" ? "—" : `${f.paidCount ?? 0} / ${f.failedCount ?? 0}`}</Cell>
                 <Cell>
                   {canProcess && (
-                    <a href={`/admin/withdrawals/batches/${b.id}/files/${f.id}`} className="text-sm text-gold-text hover:underline" download>
+                    <a href={`/admin/withdrawals/batches/${b.id}/files/${f.id}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline" download>
                       Download
                     </a>
                   )}
@@ -110,7 +110,7 @@ export default async function BatchPage({ params }: PageProps<"/admin/withdrawal
           <tr key={w.id} className="align-top">
             <Cell><Link href={`/admin/withdrawals/${w.id}`} className="font-mono text-gold-text hover:underline">{w.reference}</Link></Cell>
             <Cell>
-              <Link href={`/admin/users/${w.userId}`} className="font-mono text-xs text-gold-text hover:underline">
+              <Link href={`/admin/users/${w.userId}`} className="inline-flex min-h-6 items-center font-mono text-xs text-gold-text hover:underline">
                 {investors.get(w.userId)?.userCode ?? "Investor"}
               </Link>
               <span className="block">{cash ? investors.get(w.userId)?.name : w.bankHolderName}</span>
