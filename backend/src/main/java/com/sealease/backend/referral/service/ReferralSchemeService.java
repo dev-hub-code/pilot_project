@@ -11,8 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -38,6 +41,16 @@ public class ReferralSchemeService {
 	@Transactional(readOnly = true)
 	public ReferralScheme schemeOf(UUID userId) {
 		return setting(userId).isEmpty() ? ReferralScheme.ONLINE : ReferralScheme.NETWORK;
+	}
+
+	/** Which of these accounts are on the network scheme, in one query; the rest are online. */
+	@Transactional(readOnly = true)
+	public Set<UUID> networkInvestorsAmong(Collection<UUID> userIds) {
+		if (userIds.isEmpty()) {
+			return Set.of();
+		}
+		return new HashSet<>(jdbc.queryForList("SELECT user_id FROM network_investors WHERE user_id = ANY (?)",
+				UUID.class, (Object) userIds.toArray(UUID[]::new)));
 	}
 
 	/** Whether people signing up with this investor's code join the network. False for online investors. */

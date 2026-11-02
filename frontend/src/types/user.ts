@@ -144,6 +144,8 @@ export interface AdminUserSummary {
   emailVerifiedAt: string | null;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Network (made by an administrator) or online (self-registered); null for employees. */
+  investorType: "NETWORK" | "ONLINE" | null;
 }
 
 export interface AdminUserDetail {

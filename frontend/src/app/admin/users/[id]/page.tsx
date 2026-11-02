@@ -81,6 +81,9 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
         <span className="font-mono text-sm text-muted">{summary.userCode}</span>
         <StatusBadge tone={toneFor(summary.status)}>{humanize(summary.status)}</StatusBadge>
         {!summary.emailVerifiedAt && <StatusBadge tone="warning">Email not verified</StatusBadge>}
+        {summary.investorType && (
+          <StatusBadge tone="neutral">{humanize(summary.investorType)} investor</StatusBadge>
+        )}
         <StatusBadge tone={toneFor(summary.kycStatus)}>KYC {humanize(summary.kycStatus).toLowerCase()}</StatusBadge>
       </div>
 
