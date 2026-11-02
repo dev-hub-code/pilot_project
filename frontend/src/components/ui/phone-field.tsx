@@ -108,7 +108,7 @@ export function PhoneField({ label, countries, defaultNumber, defaultCountry, er
             formatAsTyped((value) => formatPhoneInput(value, select.current?.value ?? defaultCountry))(e);
             setProblem(null);
           }}
-          className="h-11 w-full min-w-0 rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
+          className="h-11 w-full min-w-0 rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
       </div>
       {shown && <p id={errorId} className="text-xs text-rose-600 dark:text-rose-400">{shown}</p>}
     </div>

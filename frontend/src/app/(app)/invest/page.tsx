@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Eyebrow } from "@/components/brand/eyebrow";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { PlanCard } from "@/features/plans/plan-card";
 import { authFetch } from "@/lib/server/auth/session";
@@ -19,15 +19,8 @@ export default async function PlansPage({ searchParams }: PageProps<"/invest">) 
   const plans = await authFetch<PageResponse<Plan>>(`/api/v1/plans?${query}`);
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-4">
-        <Eyebrow>Plans</Eyebrow>
-        <h1 className="max-w-2xl text-4xl leading-tight font-bold tracking-tight sm:text-5xl">Investment plans</h1>
-        <p className="max-w-2xl text-muted">
-          Choose a plan by its tenure and buy units of it. Once your payment is confirmed and you accept your investment
-          agreement, you receive returns every month of the tenure.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader title="Investment plans" description="Choose a plan by its tenure and buy units of it. Once your payment is confirmed and you accept your investment agreement, you receive returns every month of the tenure." />
       <nav aria-label="Filter plans" className="flex gap-2 text-sm">
         {[{ href: "/invest", label: "Open for investment", on: !closed }, { href: "/invest?status=CLOSED", label: "Closed", on: closed }].map((tab) => (
           <Link key={tab.href} href={tab.href} aria-current={tab.on ? "page" : undefined}

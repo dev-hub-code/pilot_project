@@ -52,7 +52,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
   return (
     <div className="space-y-6">
       <PageHeader title="Staff" description="Employees, their roles and their departments." actions={newEmployee} />
-      <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4" role="search">
+      <form className="grid items-end gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4" role="search">
         <div className="sm:col-span-2">
           <TextField label="Search" name="q" type="search" placeholder="Email, name or ID (SL03500)" defaultValue={filters.q} />
         </div>

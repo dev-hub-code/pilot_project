@@ -49,7 +49,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps<"/admi
           {status && <input type="hidden" name="status" value={status} />}
           <input name="q" defaultValue={q} placeholder="Order number, investor ID or email"
             aria-label="Search by order number, or the investor's ID or email"
-            className="h-9 w-72 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+            className="h-9 w-72 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
         </form>
       </div>
       {!orders ? (

@@ -44,7 +44,7 @@ export default function CreditsPage() {
             </li>
           ))}
         </ul>
-        <Link href="/" className="mt-10 inline-block text-sm font-semibold underline-offset-4 hover:underline">
+        <Link href="/" className="mt-10 inline-flex min-h-6 items-center text-sm font-semibold underline-offset-4 hover:underline">
           Back to the home page
         </Link>
       </div>

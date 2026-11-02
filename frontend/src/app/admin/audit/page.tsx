@@ -55,7 +55,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/admin/a
           <a href={`/admin/audit/export?${query}`} className={`${buttonBase} ${buttonVariants.secondary}`}>Download CSV</a>
         } />
 
-      <form className="grid items-end gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4" role="search">
+      <form className="grid items-end gap-3 rounded-xl border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4" role="search">
         <SelectField label="Category" name="category" placeholder="Any" defaultValue={filters.category ?? ""}
           options={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))} />
         <SelectField label="Action" name="action" placeholder="Any" defaultValue={filters.action ?? ""}

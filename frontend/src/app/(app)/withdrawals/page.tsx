@@ -86,10 +86,10 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
           ? `Returns and referral earnings are credited to your wallets ${credit}. Request a withdrawal at any time: it is paid into your bank account.`
           : `Returns and referral earnings are credited to your wallets ${credit}, and paid out when our team makes a withdrawal, the way you choose below.`} />
 
-      <section className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Balances">
+      <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Balances">
         {tiles.map((tile) => (
           <div key={tile.label} className="space-y-1 bg-surface p-6">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">{tile.label}</p>
+            <p className="text-sm text-muted">{tile.label}</p>
             <p className="font-display text-3xl font-semibold tabular-nums">{formatMoney(tile.amount)}</p>
             <p className="text-xs text-muted">{tile.note}</p>
           </div>

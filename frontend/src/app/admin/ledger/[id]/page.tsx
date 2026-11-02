@@ -35,7 +35,7 @@ export default async function LedgerAccountPage({ params, searchParams }: PagePr
       <PageHeader title={ACCOUNT_LABEL[account.accountType]}
         description={`${account.balance.currency} · balance ${formatMoney(account.balance)} (${account.normalBalance.toLowerCase()} side)`}
         actions={account.ownerUserId ? (
-          <Link href={`/admin/users/${account.ownerUserId}`} className="text-sm text-gold-text hover:underline">View investor</Link>
+          <Link href={`/admin/users/${account.ownerUserId}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">View investor</Link>
         ) : undefined} />
       {entries.content.length === 0 ? (
         <EmptyState title="No entries" />
@@ -47,7 +47,7 @@ export default async function LedgerAccountPage({ params, searchParams }: PagePr
               <Cell>{humanize(e.transactionType)}</Cell>
               <Cell className="max-w-md truncate">
                 {e.transactionType.startsWith("WITHDRAWAL_")
-                    ? <Link href={`/admin/withdrawals/${e.reference}`} className="text-gold-text hover:underline">{e.description}</Link>
+                    ? <Link href={`/admin/withdrawals/${e.reference}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{e.description}</Link>
                     : e.description}
               </Cell>
               <Cell className="tabular-nums">{e.direction === "DEBIT" ? formatMoney(e.amount) : ""}</Cell>

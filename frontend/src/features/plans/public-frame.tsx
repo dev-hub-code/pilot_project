@@ -10,7 +10,7 @@ export function PublicFrame({ next, children }: { next: string; children: React.
         <header className="flex flex-wrap items-center justify-between gap-4">
           <Logo />
           <nav className="flex items-center gap-3 text-sm">
-            <Link href={`/login?next=${encodeURIComponent(next)}`} className="px-2 underline-offset-4 hover:underline">Sign in</Link>
+            <Link href={`/login?next=${encodeURIComponent(next)}`} className="inline-flex min-h-6 items-center px-2 underline-offset-4 hover:underline">Sign in</Link>
             <LinkButton href="/register">Register</LinkButton>
           </nav>
         </header>

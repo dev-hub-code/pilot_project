@@ -60,7 +60,7 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
               const replaces = account.replacesAccountId ? accounts.find((a) => a.id === account.replacesAccountId) : undefined;
               const isPendingChange = account.status === "PENDING_VERIFICATION" && replaces !== undefined;
               return (
-                <li key={account.id} className="border border-border bg-surface p-6">
+                <li key={account.id} className="rounded-xl border border-border bg-surface p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-medium">

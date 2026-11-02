@@ -6,9 +6,9 @@ import { Children, Fragment, cloneElement, isValidElement, type ReactElement, ty
  */
 export function DataTable({ columns, children, className = "" }: { columns: readonly string[]; children: ReactNode; className?: string }) {
   return (
-    <div className={`overflow-x-auto border border-border bg-surface ${className}`}>
+    <div className={`overflow-x-auto rounded-xl border border-border bg-surface shadow-sm ${className}`}>
       <table className="data-table w-full text-left text-sm">
-        <thead className="border-b border-border bg-background text-xs uppercase tracking-[0.08em] text-muted">
+        <thead className="border-b border-border text-xs text-muted">
           <tr>
             {columns.map((column) => (
               <th key={column} scope="col" className="whitespace-nowrap px-4 py-3 font-medium">{column}</th>

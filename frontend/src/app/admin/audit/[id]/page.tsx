@@ -33,7 +33,7 @@ export default async function AuditEntryPage({ params }: PageProps<"/admin/audit
   return (
     <div className="space-y-6">
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href="/admin/audit" className="hover:text-foreground">Audit log</Link> / <span className="font-mono">{entry.id.slice(0, 8)}</span>
+        <Link href="/admin/audit" className="inline-flex min-h-6 items-center hover:text-foreground">Audit log</Link> / <span className="font-mono">{entry.id.slice(0, 8)}</span>
       </nav>
       <PageHeader title={actionLabel(entry.action)} description={formatDateTime(entry.createdAt)}
         actions={<StatusBadge tone={actionTone(entry.action)}>{CATEGORY_LABEL[entry.category]}</StatusBadge>} />

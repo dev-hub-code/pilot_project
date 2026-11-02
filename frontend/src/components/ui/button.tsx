@@ -1,16 +1,16 @@
 import type { ButtonHTMLAttributes } from "react";
 
 /**
- * primary   — solid gold, square corners (the main call to action)
- * secondary — outlined pill (header actions, secondary choices)
- * quiet     — bordered square, for low-emphasis actions inside cards
+ * primary   — solid accent (the main call to action)
+ * secondary — outlined (header actions, secondary choices)
+ * quiet     — bordered, for low-emphasis actions inside cards
  * danger    — destructive decisions
  */
 export const buttonVariants = {
-  primary: "rounded-none bg-gold text-on-gold hover:bg-gold-hover",
-  secondary: "rounded-full border border-foreground/80 bg-transparent text-foreground hover:bg-foreground hover:text-surface",
-  quiet: "rounded-none border border-border bg-surface text-foreground hover:border-foreground/40",
-  danger: "rounded-none bg-rose-700 text-white hover:bg-rose-800",
+  primary: "rounded-lg bg-gold text-on-gold hover:bg-gold-hover",
+  secondary: "rounded-lg border border-border bg-surface text-foreground hover:border-gold hover:text-gold-text",
+  quiet: "rounded-lg border border-border bg-surface text-foreground hover:border-foreground/40",
+  danger: "rounded-lg bg-rose-700 text-white hover:bg-rose-800",
 } as const;
 
 export const buttonBase =

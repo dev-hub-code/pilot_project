@@ -77,7 +77,7 @@ export default async function VerificationPage({ searchParams }: PageProps<"/pro
                     to send them for review.
                   </Notice>
                 )}
-                <div className="grid gap-px bg-border md:grid-cols-2">
+                <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-2">
                   <DocumentSlot title="Aadhaar card" uploaded={draft?.aadhaarNumber ? `Aadhaar ${formatAadhaar(draft.aadhaarNumber)}` : null}>
                     <KycDocumentForm document="AADHAAR" replacing={Boolean(draft?.aadhaarNumber)} />
                   </DocumentSlot>

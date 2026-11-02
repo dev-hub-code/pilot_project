@@ -40,7 +40,7 @@ export default async function StaffMemberPage({ params }: PageProps<"/admin/staf
             <ul className="space-y-1 text-sm">
               {member.departments.map((d) => (
                 <li key={d.id}>
-                  <Link href={`/admin/departments/${d.id}`} className="text-gold-text hover:underline">{d.name}</Link>
+                  <Link href={`/admin/departments/${d.id}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{d.name}</Link>
                   {d.primary && <span className="text-muted"> · Primary</span>}
                 </li>
               ))}

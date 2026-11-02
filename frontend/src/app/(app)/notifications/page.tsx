@@ -25,7 +25,7 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/no
       {notifications.content.length === 0 ? (
         <EmptyState title="You're all caught up" />
       ) : (
-        <ul className="divide-y divide-border border border-border bg-surface">
+        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
           {notifications.content.map((n) => (
             <li key={n.id}>
               <form action={openNotificationAction.bind(null, n.id, n.link)}>

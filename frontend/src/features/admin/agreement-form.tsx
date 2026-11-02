@@ -40,7 +40,7 @@ export function AgreementTemplateForm({ title, body, placeholders }: {
         <FormFeedback state={state} />
         <TextField label="Title" name="title" defaultValue={v("title", title)} error={e.title} />
         <TextArea id="agreement-body" label="Wording" name="body" rows={24} defaultValue={v("body", body)} error={e.body}
-          className="w-full rounded-none border border-border bg-surface px-3 py-2 font-mono text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
         <p className="text-xs text-muted">
           Leave a blank line between paragraphs. Start a line with <code className="font-mono"># </code> to make it a heading.
           Placeholders are replaced with each investment&apos;s details when the agreement is issued.
@@ -51,19 +51,19 @@ export function AgreementTemplateForm({ title, body, placeholders }: {
         </div>
         {state.preview && (
           <section className="space-y-2" aria-label="Preview">
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">Preview with example values</p>
+            <p className="text-sm text-muted">Preview with example values</p>
             <AgreementText title={state.preview.title} body={state.preview.body} />
           </section>
         )}
       </form>
 
       <aside className="space-y-3" aria-label="Placeholders">
-        <p className="text-xs uppercase tracking-[0.1em] text-muted">Placeholders</p>
+        <p className="text-sm text-muted">Placeholders</p>
         <ul className="space-y-2 text-sm">
           {placeholders.map((p) => (
             <li key={p.key}>
               <button type="button" onClick={() => insert(p.key)}
-                className="font-mono text-xs text-gold-text hover:underline" title="Insert at the cursor">
+                className="inline-flex min-h-6 items-center font-mono text-xs text-gold-text hover:underline" title="Insert at the cursor">
                 {`{{${p.key}}}`}
               </button>
               <span className="block text-xs text-muted">{p.description} · e.g. {p.example}</span>

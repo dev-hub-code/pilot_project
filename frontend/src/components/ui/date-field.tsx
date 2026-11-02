@@ -55,7 +55,7 @@ export function DateField({ label, name, defaultValue = "", error, max, autoComp
           }}
           placeholder="DD/MM/YYYY" inputMode="numeric" autoComplete={autoComplete}
           aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
-          className="h-11 w-full rounded-none border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
+          className="h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600" />
         <button type="button" onClick={openPicker} aria-label={`Choose ${label.toLowerCase()} from a calendar`}
           className="flex h-11 w-11 shrink-0 items-center justify-center border border-l-0 border-border bg-surface text-muted transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-gold focus-visible:outline-none">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="size-5">

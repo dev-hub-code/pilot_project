@@ -6,7 +6,7 @@ import { EmailText } from "@/components/ui/email-text";
 /** The invoice as a printable document (print styles strip the surrounding app chrome). */
 export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
   return (
-    <article className="mx-auto max-w-3xl space-y-10 border border-border bg-surface p-8 sm:p-12 print:max-w-none print:border-0 print:p-0">
+    <article className="mx-auto max-w-3xl space-y-10 rounded-xl border border-border bg-surface p-8 sm:p-12 print:max-w-none print:border-0 print:p-0">
       <header className="flex flex-wrap items-start justify-between gap-6">
         <div className="space-y-1 text-sm">
           <p className="text-lg font-semibold">{invoice.issuer.name}</p>
@@ -21,7 +21,7 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
 
       <dl className="grid gap-6 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">Billed to</dt>
+          <dt className="text-xs text-muted">Billed to</dt>
           <dd className="mt-1 space-y-0.5">
             <p className="font-medium">{invoice.buyer.name}</p>
             {invoice.buyer.address && <p className="text-muted">{invoice.buyer.address}</p>}
@@ -29,11 +29,11 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           </dd>
         </div>
         <div>
-          <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">Issued</dt>
+          <dt className="text-xs text-muted">Issued</dt>
           <dd className="mt-1 font-medium">{formatDate(invoice.issuedAt)}</dd>
         </div>
         <div>
-          <dt className="text-[11px] tracking-[0.1em] text-muted uppercase">Order</dt>
+          <dt className="text-xs text-muted">Order</dt>
           <dd className="mt-1 font-mono font-medium">{invoice.orderNumber}</dd>
         </div>
       </dl>

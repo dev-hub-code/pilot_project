@@ -51,7 +51,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
         <form className="flex gap-2" action="/admin/withdrawals" role="search">
           <input name="q" defaultValue={q} placeholder="Reference, investor ID or email"
             aria-label="Search withdrawals by reference, or the investor's ID or email"
-            className="h-9 w-72 rounded-none border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+            className="h-9 w-72 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
         </form>
       </div>
       {withdrawals.content.length === 0 ? (

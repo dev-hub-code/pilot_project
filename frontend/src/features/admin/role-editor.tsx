@@ -82,13 +82,13 @@ export function RoleEditor({ role, catalog, departments, readOnly }: {
         const codes = shown.filter((p) => p.category === category);
         const usable = codes.filter((p) => p.code !== "INVESTOR_PORTAL");
         return (
-          <fieldset key={category} className="border border-border bg-surface p-4" disabled={readOnly}>
+          <fieldset key={category} className="rounded-xl border border-border bg-surface p-4" disabled={readOnly}>
             <legend className="px-1 text-sm font-semibold">{humanize(category)}</legend>
             {!readOnly && (
               <div className="mb-3 flex gap-4 text-xs">
-                <button type="button" className="text-gold-text hover:underline"
+                <button type="button" className="inline-flex min-h-6 items-center text-gold-text hover:underline"
                   onClick={() => change(usable.map((p) => p.code), true)}>Select all</button>
-                <button type="button" className="text-gold-text hover:underline"
+                <button type="button" className="inline-flex min-h-6 items-center text-gold-text hover:underline"
                   onClick={() => change(usable.map((p) => p.code), false)}>Clear</button>
               </div>
             )}
@@ -113,7 +113,7 @@ export function RoleEditor({ role, catalog, departments, readOnly }: {
       })}
 
       {!readOnly && (
-        <div className="sticky bottom-0 space-y-3 border border-border bg-surface p-4">
+        <div className="sticky bottom-0 space-y-3 rounded-xl border border-border bg-surface p-4">
           <p className="text-sm">
             <span className="font-medium">{chosen.size}</span> permission(s).
             {added.length > 0 && <span className="text-emerald-700 dark:text-emerald-400"> Adding: {added.join(", ")}.</span>}

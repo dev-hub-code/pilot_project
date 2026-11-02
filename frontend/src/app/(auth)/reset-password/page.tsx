@@ -29,7 +29,7 @@ export default async function ResetPasswordPage({ searchParams }: PageProps<"/re
         {email ? (
           <ForgotPasswordForm email={email} stay />
         ) : (
-          <Link href="/forgot-password" className="text-sm font-medium underline underline-offset-4">Request a code</Link>
+          <Link href="/forgot-password" className="inline-flex min-h-6 items-center text-sm font-medium underline underline-offset-4">Request a code</Link>
         )}
       </div>
     </div>

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleEditor } from "@/features/admin/role-editor";
@@ -40,8 +39,7 @@ export default async function RolePage({ params }: PageProps<"/admin/roles/[id]"
 
   return (
     <div className="space-y-6">
-      <PageHeader title={humanize(role.name)} description={`${role.employees} employee(s) · version ${role.version}`}
-        actions={<LinkButton href="/admin/roles" variant="secondary">All roles</LinkButton>} />
+      <PageHeader title={humanize(role.name)} description={`${role.employees} employee(s) · version ${role.version}`} />
       {role.protectedRole && <Notice tone="info">This role is protected and cannot be changed.</Notice>}
       <RoleEditor role={role} catalog={catalog} departments={departments} readOnly={readOnly} />
       <Card title="Revisions" description="Each saved version of this role.">

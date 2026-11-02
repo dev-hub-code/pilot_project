@@ -100,7 +100,7 @@ function StatusTracker({ ticket: t, agent, canReopen }: { ticket: Ticket; agent:
     CLOSED: "This request is closed.",
   };
   return (
-    <div className="space-y-4 border border-border bg-surface p-5">
+    <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
       <ol className="grid grid-cols-4 gap-2" aria-label="Request progress">
         {STEPS.map((step, index) => (
           <li key={step} aria-current={index === current ? "step" : undefined} className="space-y-2">

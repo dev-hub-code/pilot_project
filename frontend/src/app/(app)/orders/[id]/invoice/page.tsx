@@ -24,11 +24,11 @@ export default async function InvoicePage({ params }: PageProps<"/orders/[id]/in
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <nav aria-label="Breadcrumb" className="text-sm text-muted">
-          <Link href="/orders" className="hover:text-foreground">Orders</Link> /{" "}
-          <Link href={`/orders/${id}`} className="font-mono hover:text-foreground">{invoice.orderNumber}</Link> / Invoice
+          <Link href="/orders" className="inline-flex min-h-6 items-center hover:text-foreground">Orders</Link> /{" "}
+          <Link href={`/orders/${id}`} className="inline-flex min-h-6 items-center font-mono hover:text-foreground">{invoice.orderNumber}</Link> / Invoice
         </nav>
         <div className="flex items-center gap-3">
-          <a href={`/orders/${id}/invoice/pdf`} className="text-sm text-gold-text hover:underline">Download PDF</a>
+          <a href={`/orders/${id}/invoice/pdf`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Download PDF</a>
           <PrintButton />
         </div>
       </div>

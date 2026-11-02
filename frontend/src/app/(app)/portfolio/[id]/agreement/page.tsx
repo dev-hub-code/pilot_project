@@ -36,7 +36,7 @@ export default async function AgreementPage({ params }: PageProps<"/portfolio/[i
       <AgreementText title={agreement.title} body={doc.body} />
 
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <a href={`/portfolio/agreements/${id}`} className="text-gold-text hover:underline">Download PDF</a>
+        <a href={`/portfolio/agreements/${id}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Download PDF</a>
       </div>
 
       <Card title="Accept the agreement">

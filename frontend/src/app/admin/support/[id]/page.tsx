@@ -55,9 +55,9 @@ export default async function AdminTicketPage({ params }: PageProps<"/admin/supp
           <h1 className="text-3xl font-semibold tracking-tight">{t.subject}</h1>
           <p className="text-sm text-muted">
             <span className="font-mono">{t.reference}</span> · {CATEGORY_LABEL[t.category]} · from{" "}
-            <Link href={`/admin/users/${t.requesterId}`} className="text-gold-text hover:underline">{t.requesterName}</Link>
+            <Link href={`/admin/users/${t.requesterId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{t.requesterName}</Link>
             {t.team === "FINANCE" && <> · with the finance team</>}
-            {t.relatedLabel && <> · {relatedHref ? <Link href={relatedHref} className="text-gold-text hover:underline">{t.relatedLabel}</Link> : t.relatedLabel}</>}
+            {t.relatedLabel && <> · {relatedHref ? <Link href={relatedHref} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{t.relatedLabel}</Link> : t.relatedLabel}</>}
           </p>
         </div>
         <div className="flex items-center gap-2">

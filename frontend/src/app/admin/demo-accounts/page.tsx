@@ -64,7 +64,7 @@ export default async function DemoAccountsPage({ searchParams }: PageProps<"/adm
                 <Cell label="Time frame">{formatDate(a.startsOn)} – {formatDate(a.endsOn)}</Cell>
                 <Cell label="Dummy orders" className="tabular-nums">{a.orders}</Cell>
                 <Cell label="Downline" className="tabular-nums">{a.members}</Cell>
-                <Cell><Link href={`${HERE}/${a.userId}`} className="text-gold-text hover:underline">Open</Link></Cell>
+                <Cell><Link href={`${HERE}/${a.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Open</Link></Cell>
               </tr>
             ))}
           </DataTable>

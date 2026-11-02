@@ -56,16 +56,6 @@ const PAGES = [
   "/portfolio", "/earnings", "/statements", "/referrals", "/withdrawals", "/support", "/support/new", "/support/[id]",
   "/notifications", "/profile", "/profile/bank-accounts", "/profile/verification", "/settings",
   "/settings/notifications", "/settings/password",
-  "/admin", "/admin/agreement", "/admin/audit", "/admin/audit/[id]",
-  "/admin/departments", "/admin/departments/[id]", "/admin/staff", "/admin/staff/new", "/admin/staff/[id]", "/admin/permissions",
-  "/admin/approvals", "/admin/roles/new", "/admin/platform-config", "/admin/platform-config/withdrawals", "/admin/platform-config/returns",
-  "/admin/platform-config/referral-rates", "/admin/platform-config/company-accounts", "/admin/finance-tasks", "/admin/kyc", "/admin/verification",
-  "/admin/kyc/[id]", "/admin/leads", "/admin/leads/new", "/admin/leads/[id]", "/admin/ledger", "/admin/ledger/[id]",
-  "/admin/orders", "/admin/orders/[id]", "/admin/orders/[id]/invoice", "/admin/payments", "/admin/payouts",
-  "/admin/products", "/admin/products/new", "/admin/products/[id]", "/admin/products/[id]/edit", "/admin/referrals",
-  "/admin/reports", "/admin/roles", "/admin/roles/[id]", "/admin/security", "/admin/support", "/admin/support/[id]",
-  "/admin/users", "/admin/users/new", "/admin/users/new-investor", "/admin/users/[id]", "/admin/withdrawals",
-  "/admin/withdrawals/batches", "/admin/withdrawals/batches/[id]", "/admin/withdrawals/[id]",
 ].map((page) => new RegExp(`^${page.replaceAll("[id]", "[^/]+")}$`));
 
 /** The nearest page above a path: "/portfolio/1/agreement" → "/portfolio", "/support/1" → "/support". */
@@ -80,20 +70,12 @@ function parentOf(path: string, home: string): string {
 
 /** What a page is called on the button ("Back to Orders"), by its path; null for a generic "Back". */
 const NAMES: [RegExp, string][] = [
-  [/^\/dashboard$/, "Dashboard"], [/^\/admin$/, "Dashboard"],
+  [/^\/dashboard$/, "Dashboard"],
   [/^\/invest$/, "Plans"], [/^\/invest\/[^/]+$/, "plan"], [/^\/orders\/[^/]+\/invoice$/, "invoice"], [/^\/orders\/[^/]+$/, "order"],
   [/^\/support\/new$/, "new ticket"], [/^\/support\/[^/]+$/, "ticket"], [/^\/portfolio\/[^/]+\/agreement$/, "agreement"],
   [/^\/referrals\/levels\/([^/]+)$/, "level $1"], [/^\/referrals\/members\/[^/]+$/, "member"],
   [/^\/profile\/bank-accounts$/, "Bank accounts"], [/^\/profile\/verification$/, "Verification"],
   [/^\/settings\/notifications$/, "Notification settings"], [/^\/settings\/password$/, "Password"],
-  [/^\/admin\/orders\/[^/]+\/invoice$/, "invoice"], [/^\/admin\/products\/[^/]+\/edit$/, "edit product"],
-  [/^\/admin\/withdrawals\/batches\/[^/]+$/, "withdrawal file"], [/^\/admin\/withdrawals\/batches$/, "Withdrawal files"],
-  [/^\/admin\/users\/new$/, "new user"], [/^\/admin\/leads\/new$/, "new lead"], [/^\/admin\/products\/new$/, "new product"],
-  [/^\/admin\/users\/[^/]+$/, "user"], [/^\/admin\/kyc\/[^/]+$/, "KYC submission"], [/^\/admin\/kyc$/, "Verification"], [/^\/admin\/leads\/[^/]+$/, "lead"],
-  [/^\/admin\/ledger\/[^/]+$/, "ledger account"], [/^\/admin\/orders\/[^/]+$/, "order"],
-  [/^\/admin\/products\/[^/]+$/, "product"], [/^\/admin\/roles\/[^/]+$/, "role"], [/^\/admin\/support\/[^/]+$/, "ticket"],
-  [/^\/admin\/withdrawals\/[^/]+$/, "withdrawal"], [/^\/admin\/audit\/[^/]+$/, "audit entry"],
-  [/^\/admin\/kyc$/, "KYC"], [/^\/admin\/departments\/[^/]+$/, "department"], [/^\/admin\/staff\/[^/]+$/, "employee"], [/^\/admin\/platform-config(?:\/.*)?$/, "Platform config"],
 ];
 const words = (segment: string) => segment.replaceAll("-", " ").replace(/^./, (c) => c.toUpperCase());
 
@@ -102,8 +84,8 @@ function nameOf(entry: string): string {
   for (const [pattern, name] of NAMES) {
     if (pattern.test(path)) return path.replace(pattern, name);
   }
-  // Top-level pages: "/orders" → "Orders", "/admin/finance-tasks" → "Finance tasks".
-  const top = /^(?:\/admin)?\/([^/]+)$/.exec(path);
+  // Top-level pages: "/orders" → "Orders".
+  const top = /^\/([^/]+)$/.exec(path);
   return top?.[1] ? words(top[1]) : "previous page";
 }
 
@@ -132,7 +114,7 @@ function BackButtonInner({ home }: { home: string }) {
 }
 
 /**
- * "← Back to …" above every page but the home page: returns to the page the user came from in this tab (the browser's
+ * "← Back to …" above every investor page but the home page (admin pages have breadcrumbs instead): returns to the page the user came from in this tab (the browser's
  * history, so scroll and forward still work), or, when they arrived directly, to the page's parent.
  */
 export function BackButton({ home }: { home: string }) {

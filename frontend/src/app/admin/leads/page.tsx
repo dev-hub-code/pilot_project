@@ -53,12 +53,12 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
       <PageHeader title="Leads" description={manager ? "The whole sales pipeline." : "Your leads and unassigned enquiries."}
         actions={can(Permission.LEAD_CREATE) ? <LinkButton href="/admin/leads/new">New lead</LinkButton> : undefined} />
 
-      <section aria-label="Pipeline" className="grid gap-px bg-border sm:grid-cols-3 lg:grid-cols-6">
+      <section aria-label="Pipeline" className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
         {pipeline.map((p) => (
           <Link key={p.stage} href={link({ stage: p.stage === stage ? undefined : p.stage })}
             aria-current={p.stage === stage ? "page" : undefined}
             className={`space-y-1 bg-surface p-4 hover:bg-background ${p.stage === stage ? "outline outline-2 -outline-offset-2 outline-gold" : ""}`}>
-            <p className="text-xs uppercase tracking-[0.1em] text-muted">{STAGE_LABEL[p.stage as LeadStage]}</p>
+            <p className="text-sm text-muted">{STAGE_LABEL[p.stage as LeadStage]}</p>
             <p className="font-display text-3xl font-semibold tabular-nums">{p.leads}</p>
             <p className="truncate text-xs text-muted">{p.value.map((m) => formatMoney(m, { compact: true })).join(" · ") || "—"}</p>
           </Link>
@@ -79,7 +79,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
         <form action="/admin/leads" className="ml-auto flex gap-2">
           <input type="hidden" name="owner" value={owner} />
           <input name="q" defaultValue={q} placeholder="Name, email or LD-…" aria-label="Search leads"
-            className="h-9 w-56 rounded-none border border-border bg-surface px-3 text-sm" />
+            className="h-9 w-56 rounded-lg border border-border bg-surface px-3 text-sm" />
         </form>
       </div>
 

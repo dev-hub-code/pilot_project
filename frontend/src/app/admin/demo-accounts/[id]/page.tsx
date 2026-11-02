@@ -44,7 +44,7 @@ export default async function DemoAccountPage({ params }: PageProps<"/admin/demo
         description={`Figures as of ${formatDate(demo.today)}: returns and commission credited up to today (or the time frame's end), returns paid out on the 1st and commission on the 5th of each following month. The investor sees these on their own pages; real withdrawal runs leave this account out.`} />
       <p className="text-sm text-muted">
         <span className="font-mono">{demo.userCode}</span> · <EmailText>{demo.email}</EmailText> ·{" "}
-        <Link href={`/admin/users/${demo.userId}`} className="text-gold-text hover:underline">User page</Link>
+        <Link href={`/admin/users/${demo.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">User page</Link>
       </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -149,7 +149,7 @@ export default async function DemoAccountPage({ params }: PageProps<"/admin/demo
 
 function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="border border-border bg-surface p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs tracking-[0.08em] text-muted uppercase">{label}</p>
       <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted">{note}</p>

@@ -42,7 +42,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
                   <CardField label="Plans" className="col-span-2">{containersSummary(o.items)}</CardField>
                 </dl>
                 <div className="flex items-center justify-between gap-3">
-                  <Link href={`/orders/${o.id}`} className="text-gold-text hover:underline">View order →</Link>
+                  <Link href={`/orders/${o.id}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View order →</Link>
                   {o.status === "PENDING_PAYMENT" && (
                     <ActionButton action={cancelOrderAction.bind(null, o.id)} label="Cancel" variant="quiet" pendingLabel="Cancelling…"
                       confirm={`Cancel ${o.orderNumber}? If you have already paid for it, the money is refunded to you once it arrives.`} />

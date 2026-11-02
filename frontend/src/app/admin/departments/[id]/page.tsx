@@ -49,7 +49,7 @@ export default async function DepartmentPage({ params }: PageProps<"/admin/depar
           <DataTable columns={["Name", "Email", "Assignment", "Since", ""]}>
             {employees.map((e) => (
               <tr key={e.userId}>
-                <Cell><Link href={`/admin/staff/${e.userId}`} className="text-gold-text hover:underline">{e.name}</Link></Cell>
+                <Cell><Link href={`/admin/staff/${e.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{e.name}</Link></Cell>
                 <Cell className="text-muted">{e.email}</Cell>
                 <Cell>{e.head ? "Head" : e.primary ? "Primary" : "Additional"}</Cell>
                 <Cell className="text-muted">{formatDateTime(e.assignedAt)}</Cell>
@@ -71,7 +71,7 @@ export default async function DepartmentPage({ params }: PageProps<"/admin/depar
           <DataTable columns={["Role", "Description", "Employees"]}>
             {roles.map((r) => (
               <tr key={r.id}>
-                <Cell className="font-mono text-xs"><Link href={`/admin/roles/${r.id}`} className="text-gold-text hover:underline">{r.name}</Link></Cell>
+                <Cell className="font-mono text-xs"><Link href={`/admin/roles/${r.id}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">{r.name}</Link></Cell>
                 <Cell className="text-muted">{r.description}</Cell>
                 <Cell className="tabular-nums">{r.employees}</Cell>
               </tr>

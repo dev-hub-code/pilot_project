@@ -447,7 +447,7 @@ export default async function Home() {
             investors returns from that income. We handle everything. You don&apos;t need any shipping experience, and
             you can start with just a few units of a plan{lowest ? `, from ${formatMoney(lowest)} a unit` : ""}.
           </p>
-          <ul className="mt-14 grid gap-px bg-border text-left sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="mt-14 grid gap-px overflow-hidden rounded-xl border border-border bg-border text-left sm:grid-cols-2 xl:grid-cols-4">
             {BENEFITS(credit).map((benefit) => (
               <li key={benefit.title} className="space-y-3 bg-surface p-8">
                 <h3 className="text-lg font-semibold tracking-tight">{benefit.title}</h3>
@@ -574,7 +574,7 @@ export default async function Home() {
             </div>
             <LinkButton href="/register" variant="secondary">Create Your Account</LinkButton>
           </div>
-          <ol className="mt-12 grid gap-px bg-border md:grid-cols-3">
+          <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
             {STEPS(credit).map((step, index) => (
               <li key={step.title} className="space-y-4 bg-surface p-8">
                 <div className="-mx-8 -mt-8 mb-8 aspect-[16/10] overflow-hidden bg-ink">
@@ -598,7 +598,7 @@ export default async function Home() {
               Every investment appears in your portfolio once your payment is confirmed, with its amount, term and
               investment agreement to accept and download.
             </p>
-            <div className="max-w-md border border-border bg-surface">
+            <div className="max-w-md rounded-xl border border-border bg-surface">
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
                 <p className="text-sm font-semibold">Example investor&apos;s portfolio</p>
                 <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">Example</span>
@@ -738,7 +738,7 @@ export default async function Home() {
         <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-5 py-8 sm:px-10 lg:px-14">
           <Logo />
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted">
-            <Link href="/terms" className="underline-offset-4 hover:text-foreground hover:underline">Terms & conditions</Link>
+            <Link href="/terms" className="inline-flex min-h-6 items-center underline-offset-4 hover:text-foreground hover:underline">Terms & conditions</Link>
             <p className="flex items-center gap-3">
               Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>
             </p>

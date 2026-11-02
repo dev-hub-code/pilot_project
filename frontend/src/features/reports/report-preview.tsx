@@ -9,7 +9,7 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
       {report.sections.map((section, i) => (
         <section key={`${i}-${section.name}`} className="space-y-2">
           <h2 className="text-lg font-semibold tracking-tight">{section.name}</h2>
-          <div className="overflow-x-auto border border-border bg-surface">
+          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-background text-xs uppercase tracking-[0.08em] text-muted">
                 <tr>

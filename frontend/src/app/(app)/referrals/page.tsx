@@ -54,17 +54,17 @@ export default async function ReferralsPage() {
 
       {online ? (
         <>
-          <section className="grid gap-px bg-border sm:grid-cols-3" aria-label="Referral summary">
+          <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3" aria-label="Referral summary">
             <div className="space-y-2 bg-surface p-6">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">Commission earned</p>
+              <p className="text-sm text-muted">Commission earned</p>
               <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
             </div>
             <div className="space-y-2 bg-surface p-6">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">People you invited</p>
+              <p className="text-sm text-muted">People you invited</p>
               <p className="font-display text-3xl font-semibold tabular-nums">{invited.length}</p>
             </div>
             <div className="space-y-2 bg-surface p-6">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">Your commission</p>
+              <p className="text-sm text-muted">Your commission</p>
               <p className="font-display text-3xl font-semibold tabular-nums">{oneTime}</p>
               <p className="text-xs text-muted">once per person invited</p>
             </div>
@@ -97,14 +97,14 @@ export default async function ReferralsPage() {
         </>
       ) : (
         <>
-          <section className="grid gap-px bg-border sm:grid-cols-5" aria-label="Referral summary">
+          <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-5" aria-label="Referral summary">
             <div className="space-y-2 bg-surface p-6 sm:col-span-1">
-              <p className="text-xs uppercase tracking-[0.1em] text-muted">Commission earned</p>
+              <p className="text-sm text-muted">Commission earned</p>
               <p className="font-display text-3xl font-semibold tabular-nums">{earned}</p>
             </div>
             {overview.levels.map((l) => (
               <Link key={l.level} href={`/referrals/levels/${l.level}`} className="group space-y-2 bg-surface p-6 hover:bg-background">
-                <p className="text-xs uppercase tracking-[0.1em] text-muted">Level {l.level} · {formatPercent(l.ratePercent, l.ratePercent % 1 === 0 ? 0 : 2)}</p>
+                <p className="text-sm text-muted">Level {l.level} · {formatPercent(l.ratePercent, l.ratePercent % 1 === 0 ? 0 : 2)}</p>
                 <p className="font-display text-3xl font-semibold tabular-nums">{l.members}</p>
                 <p className="text-xs text-muted">
                   {l.level === 1 ? "invited by you" : `invited by level ${l.level - 1}`}

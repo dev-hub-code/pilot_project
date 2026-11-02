@@ -44,7 +44,7 @@ export default async function AdminReferralsPage({ searchParams }: PageProps<"/a
                     <Cell className="text-muted">{formatDateTime(c.paidAt)}</Cell>
                     <Cell>
                       {c.beneficiaryUserId && (
-                        <Link href={`/admin/users/${c.beneficiaryUserId}`} className="font-mono text-xs text-gold-text hover:underline">
+                        <Link href={`/admin/users/${c.beneficiaryUserId}`} className="inline-flex min-h-6 items-center font-mono text-xs text-gold-text hover:underline">
                           {c.beneficiaryUserId.slice(0, 8)}…
                         </Link>
                       )}
