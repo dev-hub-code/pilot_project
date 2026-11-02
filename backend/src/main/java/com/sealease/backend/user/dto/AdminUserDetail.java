@@ -1,5 +1,6 @@
 package com.sealease.backend.user.dto;
 
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.user.entity.UserProfile;
 
 import java.time.Instant;
@@ -14,8 +15,8 @@ public record AdminUserDetail(
 		String statusReason,
 		Instant statusChangedAt) {
 
-	public static AdminUserDetail from(UserProfile p, UserKind kind) {
-		return new AdminUserDetail(AdminUserSummary.from(p, kind), ProfileResponse.from(p), p.getUser().getStatusReason(),
+	public static AdminUserDetail from(UserProfile p, UserKind kind, ReferralScheme investorType) {
+		return new AdminUserDetail(AdminUserSummary.from(p, kind, investorType), ProfileResponse.from(p), p.getUser().getStatusReason(),
 				p.getUser().getStatusChangedAt());
 	}
 

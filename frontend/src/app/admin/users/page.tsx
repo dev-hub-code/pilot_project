@@ -72,7 +72,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
       {users.content.length === 0 ? (
         <EmptyState title="No investors match these filters" />
       ) : (
-        <DataTable columns={["ID", "Name", "Email", "Status", "KYC", "Joined", "Last sign-in"]}>
+        <DataTable columns={["ID", "Name", "Email", "Type", "Status", "KYC", "Joined", "Last sign-in"]}>
           {users.content.map((user) => (
             <tr key={user.id} className="hover:bg-background">
               <Cell className="font-mono text-xs">{user.userCode}</Cell>
@@ -82,6 +82,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
                 </Link>
               </Cell>
               <Cell className="text-muted"><EmailText>{user.email}</EmailText></Cell>
+              <Cell>
+                {user.investorType && (
+                  <StatusBadge tone="neutral">{humanize(user.investorType)}</StatusBadge>
+                )}
+              </Cell>
               <Cell>
                 <span className="inline-flex flex-wrap gap-1.5">
                   <StatusBadge tone={toneFor(user.status)}>{humanize(user.status)}</StatusBadge>

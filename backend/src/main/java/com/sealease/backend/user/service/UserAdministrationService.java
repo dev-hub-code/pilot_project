@@ -7,7 +7,9 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.permission.PermissionCode;
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.permission.entity.Permission;
+import com.sealease.backend.referral.service.ReferralSchemeService;
 import com.sealease.backend.role.entity.Role;
 import com.sealease.backend.role.entity.UserRole;
 import com.sealease.backend.user.dto.AdminUserDetail;
@@ -56,9 +58,12 @@ public class UserAdministrationService {
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
+	private final ReferralSchemeService schemes;
 
 	public UserAdministrationService(UserProfileRepository profiles,
-			AuthorityGuard authorityGuard, AuditService audit, ApplicationEventPublisher events, Clock clock) {
+			AuthorityGuard authorityGuard, AuditService audit, ApplicationEventPublisher events, Clock clock,
+			ReferralSchemeService schemes) {
+		this.schemes = schemes;
 		this.profiles = profiles;
 		this.authorityGuard = authorityGuard;
 		this.audit = audit;
@@ -74,8 +79,10 @@ public class UserAdministrationService {
 		Set<UUID> investors = ids.isEmpty() ? Set.of() : profiles.findAll((root, query, cb) -> cb.and(
 				root.get("user").get("id").in(ids), investor(root.get("user"), query, cb))).stream()
 			.map(p -> p.getUser().getId()).collect(Collectors.toSet());
+		Set<UUID> network = schemes.networkInvestorsAmong(investors);
 		return page.map(p -> AdminUserSummary.from(p,
-				investors.contains(p.getUser().getId()) ? UserKind.INVESTOR : UserKind.EMPLOYEE));
+				investors.contains(p.getUser().getId()) ? UserKind.INVESTOR : UserKind.EMPLOYEE,
+				network.contains(p.getUser().getId()) ? ReferralScheme.NETWORK : ReferralScheme.ONLINE));
 	}
 
 	@Transactional(readOnly = true)
@@ -83,7 +90,8 @@ public class UserAdministrationService {
 		UserProfile profile = profiles.findByUserId(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
 		boolean investor = profiles.count((root, query, cb) -> cb.and(
 				cb.equal(root.get("user").get("id"), userId), investor(root.get("user"), query, cb))) > 0;
-		return AdminUserDetail.from(profile, investor ? UserKind.INVESTOR : UserKind.EMPLOYEE);
+		return AdminUserDetail.from(profile, investor ? UserKind.INVESTOR : UserKind.EMPLOYEE,
+				investor ? schemes.schemeOf(userId) : null);
 	}
 
 	/** One account; with {@code investorsOnly}, a staff account is not found. */

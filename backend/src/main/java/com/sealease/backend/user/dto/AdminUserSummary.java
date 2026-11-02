@@ -1,5 +1,6 @@
 package com.sealease.backend.user.dto;
 
+import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserProfile;
 import com.sealease.backend.user.entity.UserStatus;
@@ -21,12 +22,15 @@ public record AdminUserSummary(
 		Instant createdAt,
 		Instant lastLoginAt,
 		/** Investor or employee. */
-		UserKind kind) {
+		UserKind kind,
+		/** Investor type - network (made by an administrator) or online (self-registered); null for employees. */
+		ReferralScheme investorType) {
 
-	public static AdminUserSummary from(UserProfile p, UserKind kind) {
+	public static AdminUserSummary from(UserProfile p, UserKind kind, ReferralScheme investorType) {
 		var u = p.getUser();
 		return new AdminUserSummary(u.getId(), u.getUserCode(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus(),
-				p.getKycStatus(), u.getEmailVerifiedAt(), u.getCreatedAt(), u.getLastLoginAt(), kind);
+				p.getKycStatus(), u.getEmailVerifiedAt(), u.getCreatedAt(), u.getLastLoginAt(), kind,
+				kind == UserKind.INVESTOR ? investorType : null);
 	}
 
 }
