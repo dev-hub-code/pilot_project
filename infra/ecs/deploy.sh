@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the backend and frontend images, pushes them to ECR tagged with the current git commit, and rolls them out
-# (terraform apply with that tag). Run from a clean checkout of what should go live, with AWS credentials set.
+# Manual deployment (normally GitHub Actions deploys every push to main; see .github/workflows/ci-cd.yml). Builds the
+# backend and frontend images, pushes them to ECR tagged with the current git commit, and rolls them out (terraform
+# apply with that tag). Run from a clean checkout of what should go live, with AWS credentials set.
 #   infra/ecs/deploy.sh            build, push and deploy HEAD
 #   infra/ecs/deploy.sh --push     build and push only (the first time, before the services exist)
 set -euo pipefail
@@ -33,4 +34,6 @@ if [[ "${1:-}" == "--push" ]]; then
 fi
 terraform -chdir=infra/ecs apply -var "image_tag=$tag"
 aws ecs wait services-stable --region "$region" --cluster sealease --services backend frontend
+# Record the live tag, as GitHub Actions deployments do (infra/ecs/rollout.sh), so later applies keep it.
+aws ssm put-parameter --region "$region" --name /sealease/image-tag --value "$tag" --overwrite >/dev/null
 echo "Deployed $tag: $(terraform -chdir=infra/ecs output -raw godaddy_forwarding)"

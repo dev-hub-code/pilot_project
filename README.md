@@ -88,7 +88,23 @@ TF_VAR_bootstrap_admin_email=you@example.com TF_VAR_bootstrap_admin_password='â€
 ```
 
 Then point `www` at the load balancer (the CNAME in `godaddy_dns_records`) and forward the bare domain to
-`https://www.sealease.in`. Later deployments are just `infra/ecs/deploy.sh`. New SES accounts are in the sandbox (mail
+`https://www.sealease.in`.
+
+### CI/CD
+
+`.github/workflows/ci-cd.yml` runs the backend tests (`./mvnw verify`, with Testcontainers) and the frontend
+typecheck, lint, build and production-dependency audit on every pull request and push to `main`. Every push to `main`
+that passes is deployed: the images are built, pushed to ECR tagged with the commit, and `infra/ecs/rollout.sh` rolls
+the API and then the web app onto them, failing the run if ECS rolls a service back.
+
+GitHub signs in to AWS through OpenID Connect (the `sealease-github-deploy` role, no stored keys), and only from the
+repository's `production` environment. One-time setup on GitHub: Settings > Environments > New environment
+`production`, add the variable `AWS_DEPLOY_ROLE_ARN` = `terraform -chdir=infra/ecs output -raw github_deploy_role_arn`,
+and optionally required reviewers (to approve each deployment) and a `main`-only deployment branch rule.
+
+Every deployment records the live tag in SSM (`/sealease/image-tag`), and Terraform runs that tag unless
+`-var image_tag=â€¦` is given, so infrastructure changes never roll the app back. `infra/ecs/deploy.sh` remains for
+deploying by hand. New SES accounts are in the sandbox (mail
 only to verified addresses) until AWS grants production access.
 
 ## Backend architecture

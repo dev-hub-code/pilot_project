@@ -150,7 +150,7 @@ locals {
     APP_DOCUMENTS_S3_BUCKET        = aws_s3_bucket.documents.bucket
     APP_DOCUMENTS_S3_REGION        = var.region
     BOOTSTRAP_ADMIN_EMAIL          = local.bootstrap_admin ? var.bootstrap_admin_email : ""
-    APP_VERSION                    = var.image_tag
+    APP_VERSION                    = local.image_tag
   } : k => v if v != "" }
 }
 
@@ -169,7 +169,7 @@ resource "aws_ecs_task_definition" "backend" {
   }
   container_definitions = jsonencode([{
     name         = "backend"
-    image        = "${aws_ecr_repository.app["backend"].repository_url}:${var.image_tag}"
+    image        = "${aws_ecr_repository.app["backend"].repository_url}:${local.image_tag}"
     essential    = true
     portMappings = [{ name = "backend", containerPort = 8080, protocol = "tcp" }]
     environment  = [for k, v in local.backend_environment : { name = k, value = v }]
@@ -252,7 +252,7 @@ resource "aws_ecs_task_definition" "frontend" {
   }
   container_definitions = jsonencode([{
     name         = "frontend"
-    image        = "${aws_ecr_repository.app["frontend"].repository_url}:${var.image_tag}"
+    image        = "${aws_ecr_repository.app["frontend"].repository_url}:${local.image_tag}"
     essential    = true
     portMappings = [{ name = "frontend", containerPort = 3000, protocol = "tcp" }]
     environment = [
