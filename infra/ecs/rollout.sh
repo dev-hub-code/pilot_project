@@ -3,7 +3,7 @@
 # definition with the new image, updates the service and waits for it. The API goes first, so the web app never runs
 # against an older API. Fails if ECS rolled a service back (its deployment circuit breaker). On success, records the
 # tag in SSM, where Terraform reads the live tag from.
-#   infra/ecs/rollout.sh <tag>        (used by GitHub Actions; needs AWS credentials)
+#   infra/ecs/rollout.sh <tag>        (run by deploy.sh; on its own it rolls back to an earlier tag)
 set -euo pipefail
 tag=${1:?usage: rollout.sh <image tag>}
 region=${AWS_REGION:-ap-south-1}

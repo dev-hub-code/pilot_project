@@ -80,7 +80,7 @@ cd infra/ecs && terraform init
 # 1. The image registry, the HTTPS certificate and the email identity first.
 terraform apply -target=aws_ecr_repository.app -target=aws_acm_certificate.site -target=aws_sesv2_email_identity.domain
 terraform output godaddy_dns_records   # add these records in GoDaddy (the "www" one can wait until step 3)
-cd ../.. && infra/ecs/deploy.sh --push # 2. build the images and push them to ECR
+cd ../.. && infra/ecs/deploy.sh --push --skip-checks # 2. build the images and push them to ECR
 # 3. Everything else. Waits until GoDaddy serves the certificate records. The bootstrap variables create the first
 #    super-admin; leave them out of later applies.
 TF_VAR_bootstrap_admin_email=you@example.com TF_VAR_bootstrap_admin_password='…' \
@@ -90,21 +90,25 @@ TF_VAR_bootstrap_admin_email=you@example.com TF_VAR_bootstrap_admin_password='�
 Then point `www` at the load balancer (the CNAME in `godaddy_dns_records`) and forward the bare domain to
 `https://www.sealease.in`.
 
-### CI/CD
+### Deploying
 
-`.github/workflows/ci-cd.yml` runs the backend tests (`./mvnw verify`, with Testcontainers) and the frontend
-typecheck, lint, build and production-dependency audit on every pull request and push to `main`. Every push to `main`
-that passes is deployed: the images are built, pushed to ECR tagged with the commit, and `infra/ecs/rollout.sh` rolls
-the API and then the web app onto them, failing the run if ECS rolls a service back.
+There is no CI/CD (GitHub Actions is off for this repository): production is deployed by hand from `main`.
 
-GitHub signs in to AWS through OpenID Connect (the `sealease-github-deploy` role, no stored keys), and only from the
-repository's `production` environment. One-time setup on GitHub: Settings > Environments > New environment
-`production`, add the variable `AWS_DEPLOY_ROLE_ARN` = `terraform -chdir=infra/ecs output -raw github_deploy_role_arn`,
-and optionally required reviewers (to approve each deployment) and a `main`-only deployment branch rule.
+```bash
+git switch main && git pull --ff-only
+infra/ecs/deploy.sh                  # checks, build, push, roll out
+```
 
-Every deployment records the live tag in SSM (`/sealease/image-tag`), and Terraform runs that tag unless
-`-var image_tag=…` is given, so infrastructure changes never roll the app back. `infra/ecs/deploy.sh` remains for
-deploying by hand. New SES accounts are in the sandbox (mail
+`deploy.sh` refuses to run unless the checkout is clean and exactly `origin/main` (`--any-branch` overrides, for
+hotfixes). It runs the checks CI would: `./mvnw verify` (Testcontainers, so Docker must be running) and the frontend
+typecheck, lint, build and production-dependency audit (`--skip-checks` skips them, e.g. when re-deploying a commit
+already checked). It then builds the images, pushes them to ECR tagged with the commit, and `infra/ecs/rollout.sh`
+rolls the API and then the web app onto them, failing if ECS rolls a service back. A deployment takes about 10
+minutes plus the checks.
+
+Every deployment records the live tag in SSM (`/sealease/image-tag`); `deploy.sh` prints the previous one. To roll
+back, run `infra/ecs/rollout.sh <previous tag>` (its images are still in ECR: the last 20 are kept). Terraform runs the
+recorded tag unless `-var image_tag=…` is given, so infrastructure applies never roll the app back. New SES accounts are in the sandbox (mail
 only to verified addresses) until AWS grants production access.
 
 ## Backend architecture

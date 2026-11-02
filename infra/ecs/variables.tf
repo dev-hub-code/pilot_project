@@ -11,15 +11,9 @@ variable "domain" {
 }
 
 variable "image_tag" {
-  description = "Tag of the backend and frontend images in ECR to run. Blank (the default) keeps the one live now, recorded in SSM by every deployment (CI/CD and infra/ecs/deploy.sh), so a plain terraform apply never rolls the app back."
+  description = "Tag of the backend and frontend images in ECR to run. Blank (the default) keeps the one live now, recorded in SSM by every deployment (infra/ecs/deploy.sh), so a plain terraform apply never rolls the app back."
   type        = string
   default     = ""
-}
-
-variable "github_repository" {
-  description = "GitHub repository (owner/name) whose main-branch deployments may push images and roll out the services."
-  type        = string
-  default     = "dev-hub-code/pilot_project"
 }
 
 variable "az_count" {
