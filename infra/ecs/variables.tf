@@ -11,9 +11,9 @@ variable "domain" {
 }
 
 variable "image_tag" {
-  description = "Tag of the backend and frontend images in ECR to run (infra/ecs/deploy.sh sets it to the git commit)."
+  description = "Tag of the backend and frontend images in ECR to run. Blank (the default) keeps the one live now, recorded in SSM by every deployment (infra/ecs/deploy.sh), so a plain terraform apply never rolls the app back."
   type        = string
-  default     = "latest"
+  default     = ""
 }
 
 variable "az_count" {
