@@ -50,3 +50,12 @@ output "database_endpoint" {
 output "region" {
   value = var.region
 }
+
+output "documents_bucket" {
+  value = aws_s3_bucket.documents.bucket
+}
+
+output "availability_zones" {
+  description = "The zones every tier is spread over."
+  value       = local.azs
+}

@@ -14,7 +14,8 @@ resource "random_bytes" "fingerprint_key" {
 }
 
 locals {
-  data_key_id = "k1"
+  data_key_id     = "k1"
+  bootstrap_admin = var.bootstrap_admin_email != "" && var.bootstrap_admin_password != ""
 }
 
 resource "aws_secretsmanager_secret" "backend" {
@@ -24,7 +25,7 @@ resource "aws_secretsmanager_secret" "backend" {
 
 resource "aws_secretsmanager_secret_version" "backend" {
   secret_id = aws_secretsmanager_secret.backend.id
-  secret_string = jsonencode({
+  secret_string = jsonencode(merge({
     DB_PASSWORD                = random_password.db.result
     JWT_PRIVATE_KEY_LOCATION   = "base64:${base64encode(tls_private_key.jwt.private_key_pem_pkcs8)}"
     JWT_PUBLIC_KEY_LOCATION    = "base64:${base64encode(tls_private_key.jwt.public_key_pem)}"
@@ -33,5 +34,5 @@ resource "aws_secretsmanager_secret_version" "backend" {
     APP_CRYPTO_FINGERPRINT_KEY = random_bytes.fingerprint_key.base64
     MAIL_USERNAME              = aws_iam_access_key.ses_smtp.id
     MAIL_PASSWORD              = aws_iam_access_key.ses_smtp.ses_smtp_password_v4
-  })
+  }, local.bootstrap_admin ? { BOOTSTRAP_ADMIN_PASSWORD = var.bootstrap_admin_password } : {}))
 }
