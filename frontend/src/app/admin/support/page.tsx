@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -28,6 +29,8 @@ const VIEWS = [
 ] as const;
 
 export default async function AdminSupportPage({ searchParams }: PageProps<"/admin/support">) {
+  const denied = await deniedUnlessInMenu("/admin/support");
+  if (denied) return denied;
   const session = await requireStaff();
   // Finance sees only the tickets support hands it (the API filters them), so "With finance" is support's view.
   const financeOnly = !hasPermission(session.permissions, Permission.SUPPORT_TICKET_VIEW);

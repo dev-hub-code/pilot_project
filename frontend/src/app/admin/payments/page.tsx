@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -27,6 +28,8 @@ const FILTERS: readonly [Filter, ...Filter[]] = [
 ];
 
 export default async function PaymentsPage({ searchParams }: PageProps<"/admin/payments">) {
+  const denied = await deniedUnlessInMenu("/admin/payments");
+  if (denied) return denied;
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
   // Without finance view (finance itself), only the payments waiting for confirmation are shown, and they are decided here.

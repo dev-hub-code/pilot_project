@@ -12,5 +12,6 @@ import java.util.Set;
 public record UpdateRoleRequest(
 		@NotBlank @Size(max = 255) String description,
 		@NotNull Set<@NotBlank String> permissions,
-		@NotNull Long version) {
+		@NotNull Long version,
+		java.util.UUID departmentId) {
 }

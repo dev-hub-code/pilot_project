@@ -1,3 +1,4 @@
+import { deniedUnless } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -17,6 +18,8 @@ import { formatMoney } from "@/utils/money";
 export const metadata: Metadata = { title: "Withdrawal files" };
 
 export default async function BatchesPage({ searchParams }: PageProps<"/admin/withdrawals/batches">) {
+  const denied = await deniedUnless(Permission.WITHDRAWAL_VIEW);
+  if (denied) return denied;
   const session = await requireStaff();
   const page = Math.max(0, Number.parseInt(String((await searchParams).page ?? "0"), 10) || 0);
   const batches = await authFetch<PageResponse<PayoutBatch>>(`/api/v1/admin/withdrawal-batches?page=${page}&size=25`);

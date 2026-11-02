@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
-import type { LedgerAccount } from "@/types/earning";
 import { adjustmentSchema } from "@/validators/earning";
 import { type FormState, firstErrors } from "@/validators/form-state";
 import { idempotencyKeySchema } from "@/validators/order";
@@ -23,18 +22,16 @@ export async function adjustBalanceAction(idempotencyKey: string, _p: FormState,
   const input = values(formData);
   const parsed = adjustmentSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
-  let account: LedgerAccount;
   try {
-    account = await authFetch<LedgerAccount>("/api/v1/admin/ledger/adjustments", {
+    await authFetch("/api/v1/admin/approvals", {
       method: "POST",
-      json: parsed.data,
-      idempotencyKey,
+      json: { type: "LEDGER_ADJUSTMENT", reason: parsed.data.reason, adjustment: parsed.data },
     });
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/ledger", "layout");
-  redirect(`/admin/ledger/${account.id}`);
+  revalidatePath("/admin/approvals");
+  redirect("/admin/approvals");
 }
 
 /** Credits every day of rent that has ended now, instead of waiting for the next automatic run. */

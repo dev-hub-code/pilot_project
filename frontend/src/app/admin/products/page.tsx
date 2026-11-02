@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -19,6 +20,8 @@ export const metadata: Metadata = { title: "Investment plans" };
 const STATUSES: ProductStatus[] = ["DRAFT", "OPEN", "CLOSED", "CANCELLED"];
 
 export default async function ProductsPage({ searchParams }: PageProps<"/admin/products">) {
+  const denied = await deniedUnlessInMenu("/admin/products");
+  if (denied) return denied;
   const session = await requireStaff();
   const params = await searchParams;
   const status = STATUSES.find((s) => s === params.status);

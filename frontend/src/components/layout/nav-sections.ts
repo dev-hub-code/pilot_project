@@ -1,5 +1,5 @@
 import type { MenuSection } from "@/components/layout/account-menu";
-import { adminNavLinks } from "@/components/layout/admin-nav";
+import { adminNavSections } from "@/components/layout/admin-nav";
 import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 
 /** The site menu for a viewer: an account is either an investor or staff; staff only see their profile and the admin area. */
@@ -19,10 +19,10 @@ export function navSections(permissions: readonly string[]): MenuSection[] {
     ] }];
   }
   return [
-    ...(hasStaffAccess(permissions) ? [{ label: "Administration", links: adminNavLinks(permissions) }] : []),
+    ...(hasStaffAccess(permissions) ? adminNavSections(permissions) : []),
     { label: "Account", links: [
-      { href: "/profile", label: "Profile" },
-      { href: "/settings", label: "Settings" },
+      { href: "/profile", label: "Profile", icon: "user" },
+      { href: "/settings", label: "Settings", icon: "settings" },
     ] },
   ];
 }

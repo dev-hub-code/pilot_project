@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -26,6 +27,8 @@ const VIEWS: readonly { status: LeaseRentStatus; label: string }[] = [
 ];
 
 export default async function PayoutsPage({ searchParams }: PageProps<"/admin/payouts">) {
+  const denied = await deniedUnlessInMenu("/admin/payouts");
+  if (denied) return denied;
   const session = await requireStaff();
   const params = await searchParams;
   const view = VIEWS.find((v) => v.status === params.status) ?? VIEWS[0]!;

@@ -36,14 +36,14 @@ public final class BrandedEmail {
 	private static final Resource LOGO = new ClassPathResource("mail/logo.png");
 
 	// The site's palette (frontend/src/app/globals.css, light theme).
-	private static final String CANVAS = "#f6f5f2";
+	private static final String CANVAS = "#f4f7fc";
 	private static final String SURFACE = "#ffffff";
-	private static final String INK = "#121212";
-	private static final String MUTED = "#66625b";
-	private static final String BORDER = "#e3e1dc";
-	private static final String GOLD = "#c9a24c";
-	private static final String ON_GOLD = "#17130b";
-	private static final String GOLD_TEXT = "#876521";
+	private static final String INK = "#0f1f38";
+	private static final String MUTED = "#51607a";
+	private static final String BORDER = "#d8e1ee";
+	private static final String GOLD = "#1f62c9";
+	private static final String ON_GOLD = "#ffffff";
+	private static final String GOLD_TEXT = "#1a55ad";
 	private static final String FONT = "'Inter','Segoe UI',Helvetica,Arial,sans-serif";
 	private static final String MONO = "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
 

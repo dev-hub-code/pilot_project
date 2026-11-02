@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/layout/app-header";
 import { BackButton } from "@/components/layout/back-button";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { navSections } from "@/components/layout/nav-sections";
 import { SideNav } from "@/components/layout/side-nav";
 import type { Session } from "@/lib/server/auth/session";
@@ -19,6 +20,7 @@ export function AppShell({ session, home, mainClassName = "", children }: {
         <SideNav sections={navSections(session.permissions)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <BackButton home={home} />
+          {home === "/admin" && <Breadcrumbs sections={navSections(session.permissions)} />}
           <main className={`mx-auto w-full max-w-7xl flex-1 px-4 pt-3 pb-10 sm:px-6 ${mainClassName}`}>{children}</main>
         </div>
       </div>

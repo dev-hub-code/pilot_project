@@ -14,4 +14,6 @@ public interface PermissionRepository extends JpaRepository<Permission, UUID> {
 
 	List<Permission> findAll(Sort sort);
 
+	List<Permission> findByReservedTrue();
+
 }

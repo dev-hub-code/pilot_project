@@ -62,13 +62,15 @@ export async function recordRefundAction(paymentId: string, _p: FormState, formD
   const parsed = refundSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
-    await authFetch(`/api/v1/admin/payments/${id(paymentId)}/refund`, { method: "POST", json: parsed.data });
+    await authFetch("/api/v1/admin/approvals", {
+      method: "POST",
+      json: { type: "PAYMENT_REFUND", reason: parsed.data.reason, paymentId, refund: parsed.data },
+    });
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/orders", "layout");
-  return { success: "Refund recorded." };
+  revalidatePath("/admin/approvals");
+  return { success: "Sent for approval: a second person must approve this refund." };
 }
 
 // ---------------------------------------------------------------- company bank accounts

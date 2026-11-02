@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -11,6 +12,8 @@ import { formatDateTime } from "@/utils/format";
 export const metadata: Metadata = { title: "Terms & conditions" };
 
 export default async function AdminTermsPage() {
+  const denied = await deniedUnlessInMenu("/admin/terms");
+  if (denied) return denied;
   await requireStaff();
   const view = await authFetch<TermsView>("/api/v1/admin/terms");
   const current = view.current;

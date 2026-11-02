@@ -26,6 +26,13 @@ public class Permission {
 	@Column(name = "description", nullable = false)
 	private String description;
 
+	@Column(name = "sensitive", nullable = false)
+	private boolean sensitive;
+
+	/** Listed for future use: no endpoint checks it yet, so granting it changes nothing. */
+	@Column(name = "reserved", nullable = false)
+	private boolean reserved;
+
 	protected Permission() {
 	}
 
@@ -39,6 +46,14 @@ public class Permission {
 
 	public String getCategory() {
 		return category;
+	}
+
+	public boolean isSensitive() {
+		return sensitive;
+	}
+
+	public boolean isReserved() {
+		return reserved;
 	}
 
 	public String getDescription() {

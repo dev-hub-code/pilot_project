@@ -7,6 +7,7 @@ import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.permission.PermissionCode;
 import com.sealease.backend.permission.entity.Permission;
+import com.sealease.backend.permission.repository.PermissionRepository;
 import com.sealease.backend.role.dto.UserAuthorities;
 import com.sealease.backend.role.entity.Role;
 import com.sealease.backend.role.entity.UserRole;
@@ -41,15 +42,17 @@ public class UserRoleService implements AuthorityGuard {
 	private final UserAccountService accounts;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
+	private final PermissionRepository permissions;
 	private final Clock clock;
 
 	public UserRoleService(UserRoleRepository userRoles, RoleRepository roles, UserAccountService accounts,
-			AuditService audit, ApplicationEventPublisher events, Clock clock) {
+			AuditService audit, ApplicationEventPublisher events, PermissionRepository permissions, Clock clock) {
 		this.userRoles = userRoles;
 		this.roles = roles;
 		this.accounts = accounts;
 		this.audit = audit;
 		this.events = events;
+		this.permissions = permissions;
 		this.clock = clock;
 	}
 
@@ -136,6 +139,7 @@ public class UserRoleService implements AuthorityGuard {
 			return authoritiesOf(targetUserId);
 		}
 		requireActorHoldsPermissionsOf(actorId, changed);
+		requireProtectedRoleKeepsAHolder(current, requested.keySet());
 
 		Instant now = clock.instant();
 		current.stream().filter(g -> !requested.containsKey(g.getRole().getName())).forEach(userRoles::delete);
@@ -151,6 +155,18 @@ public class UserRoleService implements AuthorityGuard {
 		return authoritiesOf(targetUserId);
 	}
 
+	/** The last holder of a protected role cannot lose it: someone must always be able to recover the platform. */
+	private void requireProtectedRoleKeepsAHolder(List<UserRole> current, Set<String> requestedNames) {
+		for (UserRole grant : current) {
+			Role role = grant.getRole();
+			if (role.isProtectedRole() && !requestedNames.contains(role.getName())
+					&& userRoles.findUserIdsByRoleId(role.getId()).size() <= 1) {
+				throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+						"This is the last holder of " + role.getName());
+			}
+		}
+	}
+
 	/** An actor may only act on accounts whose permissions are a subset of their own. */
 	@Override
 	@Transactional(readOnly = true)
@@ -163,11 +179,17 @@ public class UserRoleService implements AuthorityGuard {
 		Set<String> actorPermissions = authoritiesOf(actorId).permissions();
 		Set<String> missing = new TreeSet<>(permissionCodes);
 		missing.removeIf(code -> !PermissionCode.isAdministrative(code));
+		// Reserved permissions gate nothing yet, so nobody needs to hold them to pass them on.
+		missing.removeAll(reservedCodes());
 		missing.removeAll(actorPermissions);
 		if (!missing.isEmpty()) {
 			throw new BusinessException(ErrorCode.FORBIDDEN,
 					"You cannot grant or revoke permissions you do not hold: " + missing);
 		}
+	}
+
+	private Set<String> reservedCodes() {
+		return permissions.findByReservedTrue().stream().map(Permission::getCode).collect(Collectors.toSet());
 	}
 
 	private void requireActorHoldsPermissionsOf(UUID actorId, Set<Role> changedRoles) {

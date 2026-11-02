@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -19,6 +20,8 @@ export const metadata: Metadata = { title: "Withdrawals" };
 const FILTERS: readonly WithdrawalStatus[] = ["FAILED", "APPROVED", "BATCHED", "PROCESSING", "PAID", "RETURNED", "REJECTED"];
 
 export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"/admin/withdrawals">) {
+  const denied = await deniedUnlessInMenu("/admin/withdrawals");
+  if (denied) return denied;
   await requireStaff();
   const params = await searchParams;
   // Failed payments first: they wait on finance.

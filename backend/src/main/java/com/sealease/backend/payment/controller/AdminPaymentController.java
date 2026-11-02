@@ -1,5 +1,7 @@
 package com.sealease.backend.payment.controller;
 
+import com.sealease.backend.approval.entity.ApprovalType;
+import com.sealease.backend.approval.service.ApprovalService;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.common.api.ReasonRequest;
 import com.sealease.backend.order.service.OrderService;
@@ -32,14 +34,16 @@ import java.util.UUID;
 public class AdminPaymentController {
 
 	private final PaymentService payments;
+	private final ApprovalService approvals;
 
 	private final OrderService orders;
 	private final UserAccountService accounts;
 
-	public AdminPaymentController(PaymentService payments, OrderService orders, UserAccountService accounts) {
+	public AdminPaymentController(ApprovalService approvals, PaymentService payments, OrderService orders, UserAccountService accounts) {
 		this.orders = orders;
 		this.accounts = accounts;
 		this.payments = payments;
+		this.approvals = approvals;
 	}
 
 	/**
@@ -89,7 +93,7 @@ public class AdminPaymentController {
 	}
 
 	@PostMapping("/api/v1/admin/payments/{paymentId}/reject")
-	@PreAuthorize("hasAuthority('PAYMENT_CONFIRM')")
+	@PreAuthorize("hasAnyAuthority('PAYMENT_CONFIRM', 'PAYMENT_REJECT')")
 	public PaymentResponse reject(AuthenticatedUser actor, @PathVariable UUID paymentId,
 			@Valid @RequestBody ReasonRequest request) {
 		return payments.rejectBankPayment(actor.userId(), paymentId, request.reason());
@@ -99,6 +103,7 @@ public class AdminPaymentController {
 	@PreAuthorize("hasAuthority('FINANCE_ADJUST')")
 	public PaymentResponse refund(AuthenticatedUser actor, @PathVariable UUID paymentId,
 			@Valid @RequestBody RefundRequest request) {
+		approvals.requireDirectAllowed(ApprovalType.PAYMENT_REFUND);
 		return payments.recordRefund(actor.userId(), paymentId, request);
 	}
 

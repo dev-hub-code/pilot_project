@@ -137,6 +137,9 @@ springdoc:
     enabled: false
 
 app:
+  approvals:
+    # Operations that need a second person. Changed per deployment, never from the admin panel.
+    required: ${APP_APPROVALS_REQUIRED:LEDGER_ADJUSTMENT,PAYMENT_REFUND}
   version: ${APP_VERSION:dev}
   auth:
     default-role: ${APP_AUTH_DEFAULT_ROLE:INVESTOR}

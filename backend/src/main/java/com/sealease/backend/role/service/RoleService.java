@@ -11,17 +11,21 @@ import com.sealease.backend.permission.entity.Permission;
 import com.sealease.backend.permission.service.PermissionService;
 import com.sealease.backend.role.dto.CreateRoleRequest;
 import com.sealease.backend.role.dto.RoleResponse;
+import com.sealease.backend.role.dto.RoleRevisionResponse;
 import com.sealease.backend.role.dto.UpdateRoleRequest;
 import com.sealease.backend.role.entity.Role;
 import com.sealease.backend.role.event.UserAuthoritiesChangedEvent;
 import com.sealease.backend.role.repository.RoleRepository;
 import com.sealease.backend.role.repository.UserRoleRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.Clock;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,25 +44,47 @@ public class RoleService {
 	private final UserRoleService userRoleService;
 	private final AuditService audit;
 	private final ApplicationEventPublisher events;
+	private final JdbcTemplate jdbc;
+	private final Clock clock;
 
 	public RoleService(RoleRepository roles, UserRoleRepository userRoles, PermissionService permissions,
-			UserRoleService userRoleService, AuditService audit, ApplicationEventPublisher events) {
+			UserRoleService userRoleService, AuditService audit, ApplicationEventPublisher events, JdbcTemplate jdbc,
+			Clock clock) {
 		this.roles = roles;
 		this.userRoles = userRoles;
 		this.permissions = permissions;
 		this.userRoleService = userRoleService;
 		this.audit = audit;
 		this.events = events;
+		this.jdbc = jdbc;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
 	public Page<RoleResponse> list(Pageable pageable) {
-		return roles.findAllBy(pageable).map(RoleResponse::from);
+		Map<UUID, Long> employees = new java.util.HashMap<>();
+		jdbc.query("SELECT role_id, count(*) AS n FROM user_roles GROUP BY role_id",
+				rs -> { employees.put(rs.getObject("role_id", UUID.class), rs.getLong("n")); });
+		return roles.findAllBy(pageable).map(r -> RoleResponse.from(r, employees.getOrDefault(r.getId(), 0L)));
 	}
 
 	@Transactional(readOnly = true)
 	public RoleResponse get(UUID id) {
-		return RoleResponse.from(load(id));
+		return response(load(id));
+	}
+
+	/** Every saved version of a role, newest first. */
+	@Transactional(readOnly = true)
+	public List<RoleRevisionResponse> revisions(UUID id) {
+		load(id);
+		return jdbc.query("""
+				SELECT rr.revision, rr.description, rr.permissions, rr.changed_at,
+				       trim(u.first_name || ' ' || u.last_name) AS changed_by
+				FROM role_revisions rr LEFT JOIN users u ON u.id = rr.changed_by
+				WHERE rr.role_id = ? ORDER BY rr.revision DESC""",
+				(rs, n) -> new RoleRevisionResponse(rs.getLong("revision"), rs.getString("description"),
+						rs.getString("permissions").isEmpty() ? List.of() : List.of(rs.getString("permissions").split(",")),
+						rs.getString("changed_by"), rs.getTimestamp("changed_at").toInstant()), id);
 	}
 
 	@Transactional
@@ -71,14 +97,18 @@ public class RoleService {
 		userRoleService.requireActorHolds(actorId, codes(granted));
 
 		Role role = roles.saveAndFlush(new Role(request.name(), request.description().strip(), granted));
+		role.setDepartmentId(request.departmentId());
+		roles.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.ROLE_CREATED, ENTITY, role.getId())
 			.withNewValue(snapshot(role)));
-		return RoleResponse.from(role);
+		saveRevision(actorId, role);
+		return response(role);
 	}
 
 	@Transactional
 	public RoleResponse update(UUID actorId, UUID roleId, UpdateRoleRequest request) {
 		Role role = load(roleId);
+		requireNotProtected(role);
 		if (role.getVersion() != request.version()) {
 			throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
 					"The role was modified concurrently; reload and retry");
@@ -97,7 +127,9 @@ public class RoleService {
 
 		Map<String, Object> oldSnapshot = snapshot(role);
 		role.update(request.description().strip(), newPermissions);
+		role.setDepartmentId(request.departmentId());
 		roles.flush();
+		saveRevision(actorId, role);
 
 		audit.record(AuditRecord.of(actorId, AuditAction.ROLE_UPDATED, ENTITY, role.getId())
 			.withOldValue(oldSnapshot)
@@ -105,12 +137,13 @@ public class RoleService {
 		if (!changedCodes.isEmpty()) {
 			events.publishEvent(new UserAuthoritiesChangedEvent(Set.copyOf(userRoles.findUserIdsByRoleId(roleId))));
 		}
-		return RoleResponse.from(role);
+		return response(role);
 	}
 
 	@Transactional
 	public void delete(UUID actorId, UUID roleId) {
 		Role role = load(roleId);
+		requireNotProtected(role);
 		if (role.isSystem()) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "System roles cannot be deleted");
 		}
@@ -122,6 +155,25 @@ public class RoleService {
 		audit.record(AuditRecord.of(actorId, AuditAction.ROLE_DELETED, ENTITY, role.getId())
 			.withOldValue(snapshot(role)));
 		roles.delete(role);
+	}
+
+	private void requireNotProtected(Role role) {
+		if (role.isProtectedRole()) {
+			throw new BusinessException(ErrorCode.FORBIDDEN, "This role is protected and cannot be changed");
+		}
+	}
+
+	private RoleResponse response(Role role) {
+		return RoleResponse.from(role, userRoles.findUserIdsByRoleId(role.getId()).size());
+	}
+
+	private void saveRevision(UUID actorId, Role role) {
+		jdbc.update("""
+				INSERT INTO role_revisions (role_id, revision, description, permissions, changed_by, changed_at)
+				VALUES (?, (SELECT coalesce(max(revision), 0) + 1 FROM role_revisions WHERE role_id = ?), ?, ?, ?, ?)""",
+				role.getId(), role.getId(), role.getDescription(),
+				String.join(",", codes(role.getPermissions()).stream().sorted().toList()), actorId,
+				Timestamp.from(clock.instant()));
 	}
 
 	private Role load(UUID id) {

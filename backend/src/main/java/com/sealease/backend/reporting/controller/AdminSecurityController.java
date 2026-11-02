@@ -34,7 +34,7 @@ import java.util.UUID;
 
 /** The security dashboard and the audit log, for staff with AUDIT_VIEW. */
 @RestController
-@PreAuthorize("hasAuthority('AUDIT_VIEW')")
+@PreAuthorize("hasAnyAuthority('AUDIT_VIEW', 'SECURITY_VIEW')")
 public class AdminSecurityController {
 
 	private static final MediaType CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);

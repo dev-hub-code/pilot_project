@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -18,6 +19,8 @@ export const metadata: Metadata = { title: "Orders" };
 const STATUSES = Object.keys(ORDER_STATUS_LABEL) as OrderStatus[];
 
 export default async function AdminOrdersPage({ searchParams }: PageProps<"/admin/orders">) {
+  const denied = await deniedUnlessInMenu("/admin/orders");
+  if (denied) return denied;
   const session = await requireStaff();
   // Without browsing (support), orders are found only by a whole order number or the investor's ID or email.
   const searchOnly = !hasPermission(session.permissions, Permission.RECORD_BROWSE);

@@ -8,6 +8,8 @@ import { EmailText } from "@/components/ui/email-text";
 export interface MenuLink {
   href: string;
   label: string;
+  /** A name from the side panel's icon set. */
+  icon?: string;
 }
 
 /** A group of links in the menu; the heading is shown when the menu has more than one group. */
@@ -63,7 +65,7 @@ export function AccountMenu({ sections, name, email, userCode, demo = false }: {
     <div ref={root} className="relative">
       <button ref={button} type="button" onClick={() => setOpen((o) => !o)}
         aria-expanded={open} aria-controls={menuId} aria-label={`Menu for ${name}`}
-        className={`flex size-10 items-center justify-center rounded-full bg-gold text-sm font-semibold text-ink transition-shadow hover:ring-2 hover:ring-gold/40 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${demo ? "border-[3px] border-ink dark:border-foreground" : "border border-border"}`}>
+        className={`flex size-10 items-center justify-center rounded-full bg-gold text-sm font-semibold text-on-gold transition-shadow hover:ring-2 hover:ring-gold/40 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none ${demo ? "border-[3px] border-ink dark:border-foreground" : "border border-border"}`}>
         {initials(name)}
       </button>
       {open && (

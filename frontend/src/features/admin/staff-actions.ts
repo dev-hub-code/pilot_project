@@ -21,7 +21,7 @@ export async function createStaffAction(_p: CredentialsState, formData: FormData
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
     const credentials = await authFetch<StaffCredentials>("/api/v1/admin/staff", { method: "POST", json: parsed.data });
-    revalidatePath("/admin/users", "layout");
+    revalidatePath("/admin/staff", "layout");
     return {
       success: credentials.emailed ? "Employee account created and sign-in details emailed." : "Employee account created.",
       credentials,

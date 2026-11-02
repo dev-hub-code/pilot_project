@@ -1,3 +1,4 @@
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Cell, DataTable } from "@/components/ui/data-table";
@@ -19,6 +20,8 @@ import { formatPhone } from "@/lib/phone";
 export const metadata: Metadata = { title: "Leads" };
 
 export default async function LeadsPage({ searchParams }: PageProps<"/admin/leads">) {
+  const denied = await deniedUnlessInMenu("/admin/leads");
+  if (denied) return denied;
   const session = await requireStaff();
   const can = (p: string) => hasPermission(session.permissions, p);
   const params = await searchParams;
