@@ -16,6 +16,7 @@ const ACTION: Record<string, string> = {
   TICKET_ASSIGNED: "Open ticket",
   TICKET_REOPENED: "Open ticket",
   TICKET_HANDED_TO_FINANCE: "Open ticket",
+  ANNOUNCEMENT: "Learn more",
 };
 
 /** The call to action shown on a notification, by where it leads; null when it has no link. */

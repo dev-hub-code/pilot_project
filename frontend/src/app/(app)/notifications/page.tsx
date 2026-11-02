@@ -33,7 +33,10 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/no
                   <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-gold"}`} />
                   <span className="min-w-0 flex-1">
                     <span className={`block text-sm ${n.read ? "text-muted" : "font-medium"}`}>{n.title}</span>
-                    {n.body && <span className="block truncate text-xs text-muted">{n.body}</span>}
+                    {n.body && (
+                      // Announcements are read here in full; other notifications are a one-line summary.
+                      <span className={`block text-xs text-muted ${n.type === "ANNOUNCEMENT" ? "whitespace-pre-line" : "truncate"}`}>{n.body}</span>
+                    )}
                     {notificationAction(n) && (
                       <span className="mt-1 block text-xs font-medium text-gold-text">{notificationAction(n)} →</span>
                     )}

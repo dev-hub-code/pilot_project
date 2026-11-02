@@ -75,6 +75,8 @@ public enum AuditAction {
 	AGREEMENT_TEMPLATE_UPDATED,
 	/** A super administrator saved a new version of the terms and conditions. */
 	TERMS_UPDATED,
+	/** An administrator sent an announcement to every user, every investor or all staff. */
+	ANNOUNCEMENT_PUBLISHED,
 	LEASE_AGREEMENT_ISSUED,
 	LEASE_AGREEMENT_ACCEPTED,
 	AGREEMENT_REVIEW_ASSIGNED,
