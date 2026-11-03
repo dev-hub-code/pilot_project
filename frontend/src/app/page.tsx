@@ -309,26 +309,31 @@ const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoN
  */
 /**
  * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
- * section's text must not present them as partners. Logos are the public-domain files on Wikimedia Commons, served
- * from public/images/lines.
+ * section's text must not present them as partners. Logos are the public-domain files on Wikimedia Commons, loaded
+ * from Wikimedia's CDN (upload.wikimedia.org): each path is the file's place there.
  */
-/** `small`: a solid or very bold logo, drawn a little smaller so it does not outweigh the others. */
-const SHIPPING_LINES: { name: string; logo: string; small?: boolean }[] = [
-  { name: "MSC", logo: "msc.svg" },
-  { name: "Maersk", logo: "maersk.svg" },
-  { name: "CMA CGM", logo: "cma-cgm.svg" },
-  { name: "COSCO Shipping", logo: "cosco.svg" },
-  { name: "Hapag-Lloyd", logo: "hapag-lloyd.svg" },
-  { name: "Ocean Network Express", logo: "one.svg" },
-  { name: "Evergreen Line", logo: "evergreen.svg" },
-  { name: "HMM", logo: "hmm.svg", small: true },
-  { name: "ZIM", logo: "zim.svg" },
-  { name: "PIL", logo: "pil.png", small: true },
-  { name: "SITC", logo: "sitc.svg", small: true },
-  { name: "NYK Line", logo: "nyk.svg" },
-  { name: "Mitsui O.S.K. Lines", logo: "mol.svg" },
-  { name: "K Line", logo: "k-line.png" },
-  { name: "Crowley", logo: "crowley.svg" },
+const COMMONS_FILES = "https://upload.wikimedia.org/wikipedia/commons";
+
+/**
+ * `small`: a solid or very bold logo, drawn a little smaller so it does not outweigh the others.
+ * `crop`: the file has wide empty margins; the logo is cut to this aspect ratio around its centre.
+ */
+const SHIPPING_LINES: { name: string; logo: string; small?: boolean; crop?: string }[] = [
+  { name: "MSC", logo: "b/b3/Mediterranean_Shipping_Company_logo.svg" },
+  { name: "Maersk", logo: "e/e6/Maersk_Group_Logo.svg" },
+  { name: "CMA CGM", logo: "d/d1/CMA_CGM_logo.svg" },
+  { name: "COSCO Shipping", logo: "f/f6/COSCOCS-ver1.svg" },
+  { name: "Hapag-Lloyd", logo: "6/6a/Hapag-Lloyd.svg" },
+  { name: "Ocean Network Express", logo: "4/45/Ocean_Network_Express_logo.svg" },
+  { name: "Evergreen Line", logo: "c/c9/Evergreen_Line_Logo.svg" },
+  { name: "HMM", logo: "5/56/HMM_Logo_Basic_Form.svg", small: true },
+  { name: "ZIM", logo: "6/69/ZIM_Logo.svg" },
+  { name: "PIL", logo: "3/30/PIL_logo.png", small: true, crop: "aspect-[360/105]" },
+  { name: "SITC", logo: "4/43/SITC_logo.svg", small: true },
+  { name: "NYK Line", logo: "c/c6/Nippon_Yusen_text_logo.svg" },
+  { name: "Mitsui O.S.K. Lines", logo: "2/22/Mitsui_O.S.K._Lines_logo.svg" },
+  { name: "K Line", logo: "thumb/6/6d/Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png/500px-Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png" },
+  { name: "Crowley", logo: "f/f6/Crowley_Maritime_logo.svg" },
 ];
 
 const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
@@ -556,8 +561,8 @@ export default async function Home() {
               // Always a white tile: the logos are drawn for a light background, in dark mode too.
               <li key={line.name} className="group flex h-24 items-center justify-center bg-white px-5 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
                 {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
-                <img src={`/images/lines/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
-                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
+                <img src={`${COMMONS_FILES}/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
+                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.crop ? `${line.crop} h-7 object-cover sm:h-9` : line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
               </li>
             ))}
           </ul>
