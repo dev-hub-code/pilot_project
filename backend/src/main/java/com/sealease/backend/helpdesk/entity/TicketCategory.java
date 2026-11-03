@@ -1,12 +1,15 @@
 package com.sealease.backend.helpdesk.entity;
 
-/** What the ticket is about, chosen by the investor. */
+/** What the ticket is about (top level); configurable subcategories sit below each (support_categories). */
 public enum TicketCategory {
 	ACCOUNT,
 	INVESTMENT,
 	PAYMENT,
 	EARNINGS,
 	WITHDRAWAL,
+	KYC,
 	REFERRAL,
+	CONTAINER,
+	TECHNICAL,
 	OTHER
 }

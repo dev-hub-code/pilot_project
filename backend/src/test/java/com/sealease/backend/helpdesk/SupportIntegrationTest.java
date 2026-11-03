@@ -70,8 +70,9 @@ class SupportIntegrationTest {
 
 		String ticketId = JsonPath.read(open(investor, "Payment not showing", "ORDER", orderId, png("receipt.png"))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.ticket.reference").value(matchesPattern("TK-\\d{6}")))
-			.andExpect(jsonPath("$.ticket.status").value("OPEN"))
+			// References are SUP-<year>-<6 digits>; a new ticket starts NEW until staff or the customer act on it.
+			.andExpect(jsonPath("$.ticket.reference").value(matchesPattern("SUP-\\d{4}-\\d{6}")))
+			.andExpect(jsonPath("$.ticket.status").value("NEW"))
 			.andExpect(jsonPath("$.ticket.priority").value("NORMAL"))
 			.andExpect(jsonPath("$.ticket.relatedLabel").value(matchesPattern("ORD-\\d+")))
 			.andExpect(jsonPath("$.ticket.assigneeId").doesNotExist())

@@ -4,6 +4,7 @@ import com.sealease.backend.helpdesk.entity.RelatedType;
 import com.sealease.backend.helpdesk.entity.SupportTeam;
 import com.sealease.backend.helpdesk.entity.SupportTicket;
 import com.sealease.backend.helpdesk.entity.TicketCategory;
+import com.sealease.backend.helpdesk.entity.TicketChannel;
 import com.sealease.backend.helpdesk.entity.TicketPriority;
 import com.sealease.backend.helpdesk.entity.TicketStatus;
 
@@ -11,18 +12,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A ticket. Staff views name the requester and assignee and the team it is with; investor views leave those
- * {@code null}.
+ * A ticket in a list or at the top of its page. Customers never receive staff-only fields (assignee, team, SLA
+ * targets, escalation, channel): those are null for them.
  *
- * @param overdue no staff reply yet and the first-response target has passed
- * @param reopenableUntil for a resolved or closed ticket still within the reopen window, until when its customer can
- *                        reopen it
+ * @param slaState for staff: the ticket's worst SLA state (BREACHED, AT_RISK, PAUSED, ON_TRACK, MET, NONE)
  */
 public record TicketResponse(
 		UUID id,
 		String reference,
 		String subject,
 		TicketCategory category,
+		UUID subcategoryId,
+		String subcategoryName,
 		RelatedType relatedType,
 		UUID relatedId,
 		String relatedLabel,
@@ -33,32 +34,38 @@ public record TicketResponse(
 		UUID assigneeId,
 		String assigneeName,
 		SupportTeam team,
+		TicketChannel channel,
 		Instant firstResponseDueAt,
 		Instant firstRespondedAt,
+		Instant nextResponseDueAt,
+		Instant resolutionDueAt,
+		String slaState,
+		Integer escalationLevel,
+		Integer reopenCount,
 		boolean overdue,
 		Instant lastMessageAt,
 		Instant createdAt,
 		Instant resolvedAt,
 		Instant closedAt,
-		Instant reopenableUntil) {
+		Instant reopenableUntil,
+		boolean feedbackRequested) {
 
-	public static TicketResponse forStaff(SupportTicket t, String requesterName, String assigneeName, Instant now,
-			Instant reopenableUntil) {
-		return of(t, requesterName, assigneeName, now, true, reopenableUntil);
+	public static TicketResponse forStaff(SupportTicket t, String requesterName, String assigneeName, String subcategoryName,
+			String slaState, Instant now, Instant reopenableUntil) {
+		return new TicketResponse(t.getId(), t.getReference(), t.getSubject(), t.getCategory(), t.getSubcategoryId(),
+				subcategoryName, t.getRelatedType(), t.getRelatedId(), t.getRelatedLabel(), t.getStatus(), t.getPriority(),
+				t.getUserId(), requesterName, t.getAssigneeId(), assigneeName, t.getTeam(), t.getChannel(),
+				t.getFirstResponseDueAt(), t.getFirstRespondedAt(), t.getNextResponseDueAt(), t.getResolutionDueAt(), slaState,
+				t.getEscalationLevel(), t.getReopenCount(), t.isOverdueAt(now), t.getLastMessageAt(), t.getCreatedAt(),
+				t.getResolvedAt(), t.getClosedAt(), reopenableUntil, t.getFeedbackRequestedAt() != null);
 	}
 
-	public static TicketResponse forCustomer(SupportTicket t, Instant now, Instant reopenableUntil) {
-		return of(t, null, null, now, false, reopenableUntil);
-	}
-
-	private static TicketResponse of(SupportTicket t, String requesterName, String assigneeName, Instant now, boolean staff,
-			Instant reopenableUntil) {
-		return new TicketResponse(t.getId(), t.getReference(), t.getSubject(), t.getCategory(), t.getRelatedType(),
-				t.getRelatedId(), t.getRelatedLabel(), t.getStatus(), t.getPriority(), staff ? t.getUserId() : null,
-				requesterName, staff ? t.getAssigneeId() : null, assigneeName, staff ? t.getTeam() : null,
-				staff ? t.getFirstResponseDueAt() : null,
-				t.getFirstRespondedAt(), staff && t.isOverdueAt(now), t.getLastMessageAt(), t.getCreatedAt(),
-				t.getResolvedAt(), t.getClosedAt(), reopenableUntil);
+	public static TicketResponse forCustomer(SupportTicket t, String subcategoryName, Instant reopenableUntil) {
+		return new TicketResponse(t.getId(), t.getReference(), t.getSubject(), t.getCategory(), t.getSubcategoryId(),
+				subcategoryName, t.getRelatedType(), t.getRelatedId(), t.getRelatedLabel(), t.getStatus(), t.getPriority(),
+				null, null, null, null, null, null, null, t.getFirstRespondedAt(), null, null, null, null, null, false,
+				t.getLastMessageAt(), t.getCreatedAt(), t.getResolvedAt(), t.getClosedAt(), reopenableUntil,
+				t.getFeedbackRequestedAt() != null);
 	}
 
 }
