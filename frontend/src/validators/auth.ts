@@ -8,6 +8,14 @@ export const PASSWORD_MAX = 18;
 const LOGIN_PASSWORD_MAX = 128;
 export const PASSWORD_RULES = `${PASSWORD_MIN} to ${PASSWORD_MAX} characters, with at least one uppercase letter, one number and one special character (e.g. ! @ # $ -)`;
 
+/** The new-password rules, one per line, for the live checklist under the field. Same tests as newPassword below. */
+export const PASSWORD_CHECKS: readonly { label: string; met: (password: string) => boolean }[] = [
+  { label: `${PASSWORD_MIN} to ${PASSWORD_MAX} characters`, met: (p) => p.length >= PASSWORD_MIN && p.length <= PASSWORD_MAX },
+  { label: "One uppercase letter", met: (p) => /\p{Lu}/u.test(p) },
+  { label: "One number", met: (p) => /\p{Nd}/u.test(p) },
+  { label: "One special character (! @ # $ -)", met: (p) => /[^\p{L}\p{N}\s]/u.test(p) },
+];
+
 /** A new password: length, letters and numbers (an uppercase letter, a digit) and a special character (anything but a letter, digit or space). */
 const newPassword = z
   .string()
@@ -56,6 +64,23 @@ export const registerSchema = z
     referralCode: z.string().trim()
       .regex(/^[^a-z]*$/, "Referral codes are in capital letters")
       .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 capital letters and digits"),
+    acceptTerms: z.literal("on", { message: "Accept the terms and conditions to create an account" }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match",
+  })
+  .superRefine(validPhone(true));
+
+/** Opening the network investor account a client was invited to: the email address is the invitation's. */
+export const acceptInvitationSchema = z
+  .object({
+    firstName: z.string().trim().min(1, "Enter your first name").max(100),
+    lastName: z.string().trim().min(1, "Enter your last name").max(100),
+    phone: z.string().trim().min(1, "Enter your mobile number").max(30),
+    phoneCountry,
+    password: newPassword,
+    confirmPassword: z.string(),
     acceptTerms: z.literal("on", { message: "Accept the terms and conditions to create an account" }),
   })
   .refine((data) => data.password === data.confirmPassword, {

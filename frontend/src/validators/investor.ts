@@ -13,3 +13,11 @@ export const investorSchema = z.object({
     .regex(/^([2-9A-HJ-NP-Z]{8})?$/, "Referral codes are 8 capital letters and digits"),
   signupsJoinNetwork: z.boolean(),
 }).superRefine(validPhone(true));
+
+/** An invitation any employee sends a client, to open their own network investor account. */
+export const inviteInvestorSchema = z.object({
+  email: z.email("Enter a valid email address").max(254),
+  firstName: z.string().trim().min(1, "Enter their first name").max(100),
+  lastName: z.string().trim().min(1, "Enter their last name").max(100),
+  signupsJoinNetwork: z.boolean(),
+});

@@ -18,6 +18,7 @@ const P = Permission;
 export const ADMIN_NAV: readonly NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/admin", icon: "dashboard", category: "Overview", requires: [] },
 
+  { id: "invite-investor", label: "Invite Investor", href: "/admin/invite-investor", icon: "mail", category: "Business Operations", requires: [] },
   { id: "investors", label: "Investor Management", href: "/admin/users", icon: "users", category: "Business Operations", requires: [P.USER_VIEW] },
   { id: "products", label: "Investment Products", href: "/admin/products", icon: "package", category: "Business Operations", requires: [P.INVESTMENT_VIEW] },
   { id: "orders", label: "Orders & Agreements", href: "/admin/orders", icon: "file", category: "Business Operations", requires: [P.ORDER_VIEW] },

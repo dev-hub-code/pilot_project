@@ -10,7 +10,7 @@ interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   ref?: Ref<HTMLInputElement>;
 }
 
-export function TextField({ label, name, error, id, type, ...props }: TextFieldProps) {
+export function TextField({ label, name, error, id, type, "aria-describedby": describedBy, ...props }: TextFieldProps) {
   const inputId = id ?? name;
   const errorId = `${inputId}-error`;
   const isPassword = type === "password";
@@ -26,7 +26,7 @@ export function TextField({ label, name, error, id, type, ...props }: TextFieldP
           name={name}
           type={isPassword && revealed ? "text" : type}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
+          aria-describedby={[error ? errorId : null, describedBy].filter(Boolean).join(" ") || undefined}
           className={`h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600 read-only:bg-background read-only:text-muted${isPassword ? " pr-11" : ""}`}
           {...props}
         />

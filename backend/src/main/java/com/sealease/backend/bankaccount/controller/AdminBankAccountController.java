@@ -47,7 +47,7 @@ public class AdminBankAccountController {
 		return bankAccounts.adminListFor(userId);
 	}
 
-	/** The account's bank statement or cancelled cheque, for its verifier. Every view is audited. */
+	/** The account's bank statement, cancelled cheque or passbook, for its verifier. Every view is audited. */
 	@GetMapping("/api/v1/admin/bank-accounts/{accountId}/proof")
 	@PreAuthorize("hasAuthority('BANK_ACCOUNT_VERIFY')")
 	public ResponseEntity<byte[]> proof(AuthenticatedUser reviewer, @PathVariable UUID accountId) {

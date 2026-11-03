@@ -4,6 +4,7 @@ import { humanize } from "@/utils/format";
 export const KYC_DOCUMENT_LABEL: Record<DocumentPurpose, string> = {
   KYC_AADHAAR_CARD: "Aadhaar card",
   KYC_PAN_CARD: "PAN card",
+  KYC_SIGNATURE: "Signature",
   KYC_AADHAAR_FRONT: "Aadhaar card, front",
   KYC_AADHAAR_BACK: "Aadhaar card, back",
   KYC_IDENTITY_FRONT: "Identity document, front",

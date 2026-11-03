@@ -65,7 +65,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
   ];
   const minimum = formatMoney({ amount: String(policy.minimumAmount), currency: CURRENCY });
   const paidInCash = referralMode.mode === "OFFICE_CASH";
-  const bankTo = primary ? `${primary.bankName ?? "Account"} ${primary.accountNumberMasked}` : null;
+  const bankTo = primary ? `${primary.bankName ?? "Account"} ${primary.accountNumber}` : null;
   const online = referrals.scheme === "ONLINE";
   // A wallet can be requested with a withdrawal from it not already open, once it reaches the minimum, if it can be paid.
   const openBalances = new Set(history.content.filter((w) => OPEN.includes(w.status)).map((w) => w.balance));

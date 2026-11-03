@@ -9,9 +9,8 @@ import java.util.UUID;
  * by other users - a fraud signal to investigate before verifying. {@code replaces} is the account a change
  * request would retire, so the reviewer sees both. {@code assignee} is the reviewer the verification is assigned to.
  *
- * @param accountNumber         the full account number, for the reviewer to check against the proof: only while the
- *                              account awaits verification, {@code null} otherwise
- * @param replacesAccountNumber the full number of the account it replaces, on the same terms
+ * @param accountNumber         the full account number, unmasked, for the reviewer to check against the proof
+ * @param replacesAccountNumber the full number of the account it replaces; {@code null} when it replaces none
  */
 public record AdminBankAccountResponse(UUID userId, BankAccountResponse account, UUID reviewedBy,
 		long otherUsersWithSameAccount, BankAccountResponse replaces, Assignee assignee, Ifsc ifsc, String accountNumber,

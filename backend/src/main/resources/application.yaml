@@ -86,9 +86,9 @@ spring:
 
   servlet:
     multipart:
-      # KYC evidence: up to 4 files of app.documents.max-file-size each.
-      max-file-size: 5MB
-      max-request-size: 22MB
+      # At most 3 files per request (Aadhaar, PAN and signature, or support attachments) of app.documents.max-file-size.
+      max-file-size: 2MB
+      max-request-size: 8MB
 
 server:
   port: ${SERVER_PORT:8080}
@@ -190,7 +190,7 @@ app:
     active-key-id: ${APP_CRYPTO_ACTIVE_KEY_ID}
     fingerprint-key: ${APP_CRYPTO_FINGERPRINT_KEY}
   documents:
-    max-file-size: 5MB
+    max-file-size: 2MB
     s3:
       # New documents' encrypted bytes go to this bucket (credentials: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
       # Blank keeps them in the database, as in local development and the tests.

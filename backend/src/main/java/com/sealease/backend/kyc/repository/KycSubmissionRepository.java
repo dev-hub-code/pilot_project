@@ -39,7 +39,7 @@ public interface KycSubmissionRepository extends JpaRepository<KycSubmission, UU
 	@Query("select s from KycSubmission s where s.aadhaarNumberEncrypted is not null and s.aadhaarFingerprint is null")
 	List<KycSubmission> findUnfingerprinted();
 
-	/** The investor's draft (one of Aadhaar and PAN uploaded, the other still to come), locked. */
+	/** The investor's draft (some of Aadhaar, PAN and signature uploaded, the rest still to come), locked. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select s from KycSubmission s where s.userId = :userId and s.status = com.sealease.backend.kyc.entity.KycSubmissionStatus.DRAFT")
 	Optional<KycSubmission> findDraftForUpdate(@Param("userId") UUID userId);

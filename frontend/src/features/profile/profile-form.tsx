@@ -48,17 +48,24 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
           readOnly error={e.firstName} autoComplete="given-name" />
         <TextField label="Last name" name="lastName" defaultValue={v("lastName", profile.lastName)}
           readOnly error={e.lastName} autoComplete="family-name" />
-        <DateField label="Date of birth" name="dateOfBirth" autoComplete="bday" max={latestBirthDate()}
-          defaultValue={v("dateOfBirth", formatDayMonthYear(profile.dateOfBirth))} error={e.dateOfBirth} />
-        <SelectField label="Nationality" name="nationality" options={COUNTRY_OPTIONS} placeholder="Select…"
-          defaultValue={v("nationality", profile.nationality ?? DEFAULT_COUNTRY)} error={e.nationality} />
+        {/* Given once, then fixed: disabled fields are not submitted, so the saved value stands. */}
+        {profile.dateOfBirth
+          ? <TextField label="Date of birth" name="dateOfBirth" value={formatDayMonthYear(profile.dateOfBirth)} readOnly disabled />
+          : <DateField label="Date of birth" name="dateOfBirth" autoComplete="bday" max={latestBirthDate()}
+            defaultValue={v("dateOfBirth", null)} error={e.dateOfBirth} />}
+        {profile.nationality
+          ? <TextField label="Nationality" name="nationality" value={COUNTRY_OPTIONS.find((c) => c.value === profile.nationality)?.label ?? profile.nationality}
+            readOnly disabled />
+          : <SelectField label="Nationality" name="nationality" options={COUNTRY_OPTIONS} placeholder="Select…"
+            defaultValue={v("nationality", DEFAULT_COUNTRY)} error={e.nationality} />}
         <PhoneField label="Mobile phone" countries={countries} placeholder="98765 43210"
           defaultNumber={state.values?.phone ?? phone.national} defaultCountry={state.values?.phoneCountry || phone.country}
           error={e.phone ?? e.phoneCountry} />
         <TextField label="Email" name="email" value={profile.email} readOnly disabled />
       </fieldset>
       <p className="-mt-3 text-xs text-muted">
-        Your name is as given at registration and cannot be changed. Contact support if it needs correcting.
+        Your name is as given at registration, and your date of birth and nationality cannot be changed once saved.
+        Contact support if any of them needs correcting.
       </p>
 
       <fieldset className="grid gap-4 sm:grid-cols-2">

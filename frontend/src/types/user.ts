@@ -36,10 +36,10 @@ export interface Profile {
 }
 
 export type IdentityDocumentType = "PASSPORT" | "NATIONAL_ID" | "DRIVING_LICENSE";
-/** DRAFT while only one of Aadhaar and PAN is uploaded; PENDING (under review) once both are in. */
+/** DRAFT until the Aadhaar, the PAN and the signature are all uploaded; PENDING (under review) once they are. */
 export type KycSubmissionStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
 export type DocumentPurpose =
-  | "KYC_AADHAAR_CARD" | "KYC_PAN_CARD"
+  | "KYC_AADHAAR_CARD" | "KYC_PAN_CARD" | "KYC_SIGNATURE"
   // Earlier submissions: Aadhaar as two files, or one identity document with selfie and proof of address.
   | "KYC_AADHAAR_FRONT" | "KYC_AADHAAR_BACK"
   | "KYC_IDENTITY_FRONT" | "KYC_IDENTITY_BACK" | "KYC_SELFIE" | "KYC_PROOF_OF_ADDRESS";
@@ -88,11 +88,13 @@ export interface UserAccount {
 export interface KycReviewDetail {
   submission: KycSubmission;
   account: UserAccount;
+  /** The investor's address as their profile holds it now; null when they have none. */
+  address: Profile["address"] | null;
 }
 
 export type BankAccountStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "REMOVED";
 
-export type BankProofType = "BANK_STATEMENT" | "CANCELLED_CHEQUE";
+export type BankProofType = "BANK_STATEMENT" | "CANCELLED_CHEQUE" | "PASSBOOK";
 
 export interface BankAccount {
   id: string;
@@ -101,6 +103,9 @@ export interface BankAccount {
   bankName: string | null;
   country: string;
   currency: string;
+  /** The full account number, unmasked. */
+  accountNumber: string;
+  ifsc: string;
   accountNumberMasked: string;
   status: BankAccountStatus;
   primary: boolean;

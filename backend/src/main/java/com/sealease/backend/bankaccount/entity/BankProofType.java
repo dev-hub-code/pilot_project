@@ -5,7 +5,9 @@ import com.sealease.backend.document.entity.DocumentPurpose;
 /** What the investor uploaded to prove the bank account is theirs. */
 public enum BankProofType {
 	BANK_STATEMENT(DocumentPurpose.BANK_STATEMENT),
-	CANCELLED_CHEQUE(DocumentPurpose.CANCELLED_CHEQUE);
+	CANCELLED_CHEQUE(DocumentPurpose.CANCELLED_CHEQUE),
+	/** The bank passbook's first page, showing the holder, the account number and the IFSC. */
+	PASSBOOK(DocumentPurpose.BANK_PASSBOOK);
 
 	private final DocumentPurpose purpose;
 

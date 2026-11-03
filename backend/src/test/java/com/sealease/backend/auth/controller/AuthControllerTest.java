@@ -3,6 +3,7 @@ package com.sealease.backend.auth.controller;
 import com.sealease.backend.auth.dto.AuthTokensResponse;
 import com.sealease.backend.auth.dto.CurrentUserResponse;
 import com.sealease.backend.auth.service.AuthService;
+import com.sealease.backend.auth.service.InvestorInvitationService;
 import com.sealease.backend.auth.service.PasswordResetService;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
@@ -48,6 +49,9 @@ class AuthControllerTest {
 
 	@MockitoBean
 	private PasswordResetService passwordResetService;
+
+	@MockitoBean
+	private InvestorInvitationService invitations;
 
 	@Test
 	void registrationIsPublicAndReturnsTokens() throws Exception {

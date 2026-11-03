@@ -5,12 +5,19 @@ import { PageHeader } from "@/components/ui/page-header";
 import { authFetch } from "@/lib/server/auth/session";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import type { EarningsSummary } from "@/types/earning";
+import type { ReferralOverview } from "@/types/referral";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Earnings" };
 
 export default async function EarningsPage() {
-  const [summary, rentCredit] = await Promise.all([authFetch<EarningsSummary>("/api/v1/earnings/summary"), getRentCredit()]);
+  const [summary, rentCredit, referrals] = await Promise.all([
+    authFetch<EarningsSummary>("/api/v1/earnings/summary"),
+    getRentCredit(),
+    authFetch<ReferralOverview>("/api/v1/referrals/me").catch(() => null),
+  ]);
+  // Only online investors request withdrawals; network investors are paid when our team makes one.
+  const canWithdraw = referrals?.scheme === "ONLINE";
   const credit = creditLabel(rentCredit);
   // Plans pay rent only; capital shows only for containers bought before that.
   const hasCapital = summary.capitalReturned.length > 0 || summary.leases.some((l) => Number(l.capitalTotal.amount) > 0);
@@ -25,7 +32,7 @@ export default async function EarningsPage() {
         <div className="space-y-2 bg-surface p-6">
           <p className="text-sm text-muted">Wallet balance</p>
           <p className="font-display text-3xl font-semibold tabular-nums">{totals(summary.balances)}</p>
-          <Link href="/withdrawals" className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Withdraw →</Link>
+          {canWithdraw && <Link href="/withdrawals" className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">Withdraw →</Link>}
         </div>
         <div className="space-y-2 bg-surface p-6">
           <p className="text-sm text-muted">Returns received</p>

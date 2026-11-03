@@ -90,8 +90,12 @@ public class UserProfileService {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					"Your name cannot be changed after registration; contact support if it needs correcting");
 		}
-		if (request.dateOfBirth() != null
-				&& request.dateOfBirth().isAfter(LocalDate.now(clock.withZone(ZoneOffset.UTC)).minusYears(MINIMUM_AGE))) {
+		// Date of birth and nationality, like the name, are given once and then fixed: identity verification is checked
+		// against them. Leaving them out (or sending them unchanged) keeps them.
+		LocalDate dateOfBirth = fixedOnceGiven(profile.getDateOfBirth(), request.dateOfBirth(), "date of birth");
+		String nationality = fixedOnceGiven(profile.getNationality(), request.nationality(), "nationality");
+		if (profile.getDateOfBirth() == null && dateOfBirth != null
+				&& dateOfBirth.isAfter(LocalDate.now(clock.withZone(ZoneOffset.UTC)).minusYears(MINIMUM_AGE))) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "You must be at least " + MINIMUM_AGE + " years old");
 		}
 
@@ -104,7 +108,7 @@ public class UserProfileService {
 			throw phoneTaken();
 		}
 
-		profile.updatePersonal(phone, request.dateOfBirth(), orIndia(request.nationality()));
+		profile.updatePersonal(phone, dateOfBirth, orIndia(nationality));
 		profile.updateAddress(trim(address.line1()), trim(address.line2()), trim(address.city()),
 				trim(address.stateRegion()), trim(address.postalCode()), orIndia(address.country()));
 		try {
@@ -132,6 +136,18 @@ public class UserProfileService {
 				.withNewValue(Map.of("changed", changed)));
 		}
 		return after;
+	}
+
+	/** The value to keep: the stored one once given (a different one is refused), otherwise the one sent. */
+	private static <T> T fixedOnceGiven(T stored, T sent, String field) {
+		if (stored == null) {
+			return sent;
+		}
+		if (sent != null && !stored.equals(sent)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Your " + field + " cannot be changed once saved; contact support if it needs correcting");
+		}
+		return stored;
 	}
 
 	/** Whether the user wants notifications by email; accounts without a profile (staff) get them. */

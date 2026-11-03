@@ -30,10 +30,25 @@ public class AgreementRenderer {
 
 	/** @param subtitle e.g. the agreement number and the day it was issued */
 	public byte[] pdf(String title, String subtitle, String body, String footnote) {
+		return pdf(title, subtitle, body, footnote, null);
+	}
+
+	/** The investor's signature, shown at the end of the agreement they accepted. */
+	public record Signature(byte[] image, String signedBy, String signedOn) {
+	}
+
+	/** @param signature null for an agreement not (yet) signed */
+	public byte[] pdf(String title, String subtitle, String body, String footnote, Signature signature) {
 		Map<String, Object> parameters = new HashMap<>();
 		parameters.put("title", title);
 		parameters.put("subtitle", subtitle);
 		parameters.put("footnote", footnote);
+		if (signature != null) {
+			// Bytes, not a stream: the image is drawn on every page, so it is read more than once.
+			parameters.put("signature", signature.image());
+			parameters.put("signedBy", signature.signedBy());
+			parameters.put("signedOn", signature.signedOn());
+		}
 		try {
 			JasperPrint print = JasperFillManager.fillReport(template(), parameters, new JRMapCollectionDataSource(paragraphs(body)));
 			return JasperExportManager.exportReportToPdf(print);

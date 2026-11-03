@@ -26,7 +26,8 @@ import java.util.UUID;
 
 /**
  * Encrypted document storage. File type is decided from the file's magic bytes, never from the
- * client-supplied name or Content-Type, and only PDF, JPEG and PNG are accepted. Each file is
+ * client-supplied name or Content-Type, and only JPEG and PNG images are accepted for new uploads (PDFs stored
+ * earlier still load). Each file is
  * encrypted with a context bound to its owner and purpose, and its SHA-256 is checked on read.
  * The encrypted bytes go to the S3 bucket when one is configured ({@code app.documents.s3.bucket}),
  * otherwise into the database; documents stored either way stay readable.
@@ -35,6 +36,8 @@ import java.util.UUID;
 @EnableConfigurationProperties(DocumentProperties.class)
 public class DocumentService {
 
+	/** What a new upload may be; PDFs stored before this rule still load. */
+	private static final java.util.Set<String> UPLOADABLE_TYPES = java.util.Set.of("image/jpeg", "image/png");
 	private static final byte[] PDF = { '%', 'P', 'D', 'F', '-' };
 	private static final byte[] JPEG = { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF };
 	private static final byte[] PNG = { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
@@ -83,8 +86,9 @@ public class DocumentService {
 			throw invalid(purpose, "exceeds the maximum size of " + properties.maxFileSize().toMegabytes() + " MB");
 		}
 		String contentType = detectContentType(bytes);
-		if (contentType == null) {
-			throw invalid(purpose, "must be a PDF, JPEG or PNG file");
+		// Set.of rejects null lookups, so an unrecognised file is checked first.
+		if (contentType == null || !UPLOADABLE_TYPES.contains(contentType)) {
+			throw invalid(purpose, "must be a JPG or PNG image");
 		}
 		byte[] encrypted = encryptor.encryptBytes(bytes, context(ownerUserId, purpose));
 		String key = null;

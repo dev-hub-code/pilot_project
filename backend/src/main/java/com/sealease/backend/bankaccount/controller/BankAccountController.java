@@ -43,7 +43,7 @@ public class BankAccountController {
 	}
 
 	/**
-	 * Multipart: a JSON part {@code account}, the {@code proofType} (BANK_STATEMENT or CANCELLED_CHEQUE) and the
+	 * Multipart: a JSON part {@code account}, the {@code proofType} (BANK_STATEMENT, CANCELLED_CHEQUE or PASSBOOK) and the
 	 * {@code proof} file.
 	 */
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

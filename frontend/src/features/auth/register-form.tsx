@@ -8,8 +8,9 @@ import { PhoneField } from "@/components/ui/phone-field";
 import { TextField } from "@/components/ui/text-field";
 import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
 import type { Country } from "@/types/location";
-import { type FormState, PASSWORD_MAX, PASSWORD_MIN, PASSWORD_RULES } from "@/validators/auth";
+import type { FormState } from "@/validators/auth";
 import { registerAction } from "./actions";
+import { NewPasswordFields } from "./new-password-fields";
 
 /** @param countries the country codes the mobile number can be in */
 export function RegisterForm({ referralCode, countries }: { referralCode?: string; countries: Country[] }) {
@@ -55,27 +56,7 @@ export function RegisterForm({ referralCode, countries }: { referralCode?: strin
         defaultCountry={state.values?.phoneCountry || DEFAULT_PHONE_COUNTRY}
         error={errors.phone ?? errors.phoneCountry}
       />
-      <TextField
-        label="Password"
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        minLength={PASSWORD_MIN}
-        maxLength={PASSWORD_MAX}
-        required
-        error={errors.password}
-      />
-      <TextField
-        label="Confirm password"
-        name="confirmPassword"
-        type="password"
-        autoComplete="new-password"
-        required
-        error={errors.confirmPassword}
-      />
-      <p className="text-xs text-muted">
-        Use {PASSWORD_RULES}.
-      </p>
+      <NewPasswordFields errors={errors} />
       <TextField
         label="Referral code (optional)"
         name="referralCode"

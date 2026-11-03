@@ -142,7 +142,7 @@ export default async function UserDetailPage({ params, searchParams }: PageProps
                     <li key={account.id} className="space-y-3 border border-border p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="font-medium">
-                          {account.bankName} <span className={accountNumber ? "font-mono text-base font-bold tracking-wide" : "font-mono"}>{accountNumber ?? account.accountNumberMasked}</span> ·{" "}
+                          {account.bankName} <span className="font-mono text-base font-bold tracking-wide">{accountNumber ?? account.accountNumberMasked}</span> ·{" "}
                           {account.accountHolderName}
                         </span>
                         <span className="flex gap-2">

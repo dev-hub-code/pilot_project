@@ -9,7 +9,7 @@ import { missingPersonalDetails } from "@/features/profile/kyc-labels";
 import type { IfscLookup, KycSubmission, Profile } from "@/types/user";
 import { failureState } from "@/lib/server/action-errors";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { bankAccountSchema, kycNumberSchema, MAX_FILE_BYTES, profileSchema } from "@/validators/profile";
+import { bankAccountSchema, fileProblem, kycNumberSchema, profileSchema } from "@/validators/profile";
 
 function text(formData: FormData, ...names: string[]): Record<string, string> {
   return Object.fromEntries(names.map((name) => [name, String(formData.get(name) ?? "")]));
@@ -31,7 +31,8 @@ export async function updateProfileAction(_previous: FormState, formData: FormDa
         phone: p.phone ?? null,
         phoneCountry: p.phoneCountry,
         dateOfBirth: p.dateOfBirth ?? null,
-        nationality: p.nationality,
+        // Once saved, nationality is not on the form: send nothing so the saved one is kept, not the default.
+        nationality: formData.has("nationality") ? p.nationality : null,
         address: {
           line1: p.line1,
           line2: p.line2 ?? null,
@@ -83,28 +84,36 @@ async function continueSetup(finished: "personal" | "identity"): Promise<Onboard
   return next;
 }
 
-/** Aadhaar or PAN: its number field and file field, as the KYC endpoint takes them. */
+/** Aadhaar, PAN or signature: its number field (the signature has none) and file field, as the KYC endpoint takes them. */
 const KYC_DOCUMENT = {
-  AADHAAR: { number: "aadhaarNumber", file: "aadhaarCard", missingFile: "Upload your Aadhaar card" },
-  PAN: { number: "panNumber", file: "panCard", missingFile: "Upload your PAN card" },
+  AADHAAR: { label: "Aadhaar", number: "aadhaarNumber", file: "aadhaarCard", missingFile: "Upload your Aadhaar card" },
+  PAN: { label: "PAN", number: "panNumber", file: "panCard", missingFile: "Upload your PAN card" },
+  SIGNATURE: { label: "Signature", number: null, file: "signature", missingFile: "Upload a photo of your signature" },
 } as const;
 
+export type KycDocument = keyof typeof KYC_DOCUMENT;
+
 /**
- * Uploads one identity document with its number. Aadhaar and PAN may come at different times; the backend sends them
- * for review once both are in.
+ * Uploads one identity document (with its number) or the signature. They may come at different times; the backend
+ * sends them for review once all three are in.
  */
-export async function submitKycDocumentAction(document: "AADHAAR" | "PAN", _previous: FormState, formData: FormData): Promise<FormState> {
+export async function submitKycDocumentAction(document: KycDocument, _previous: FormState, formData: FormData): Promise<FormState> {
   // Identity numbers are never echoed back into the form.
   const values = {};
   const fields = KYC_DOCUMENT[document];
-  const parsed = kycNumberSchema[document].safeParse(formData.get(fields.number) ?? "");
-  if (!parsed.success) return { fieldErrors: { [fields.number]: parsed.error.issues[0]?.message ?? "Check the number" }, values };
+  let number: string | null = null;
+  if (fields.number) {
+    const parsed = kycNumberSchema[fields.number === "aadhaarNumber" ? "AADHAAR" : "PAN"].safeParse(formData.get(fields.number) ?? "");
+    if (!parsed.success) return { fieldErrors: { [fields.number]: parsed.error.issues[0]?.message ?? "Check the number" }, values };
+    number = parsed.data;
+  }
   const file = formData.get(fields.file);
   if (!(file instanceof File) || file.size === 0) return { fieldErrors: { [fields.file]: fields.missingFile }, values };
-  if (file.size > MAX_FILE_BYTES) return { fieldErrors: { [fields.file]: "Files must be 5 MB or smaller" }, values };
+  const problem = fileProblem(file);
+  if (problem) return { fieldErrors: { [fields.file]: problem }, values };
 
   const upload = new FormData();
-  upload.append("submission", new Blob([JSON.stringify({ [fields.number]: parsed.data })], { type: "application/json" }));
+  upload.append("submission", new Blob([JSON.stringify(fields.number ? { [fields.number]: number } : {})], { type: "application/json" }));
   upload.append(fields.file, file, file.name);
   let result: KycSubmission;
   try {
@@ -114,11 +123,14 @@ export async function submitKycDocumentAction(document: "AADHAAR" | "PAN", _prev
   }
   revalidatePath("/profile", "layout");
   if (result.status === "PENDING") await continueSetup("identity");
-  return {
-    success: result.status === "PENDING"
-      ? "Thank you. Both documents are in and were sent for review."
-      : `${document === "AADHAAR" ? "Aadhaar" : "PAN"} saved. Upload your ${document === "AADHAAR" ? "PAN" : "Aadhaar"} too: we review them once both are in.`,
-  };
+  if (result.status === "PENDING") return { success: "Thank you. Your Aadhaar, PAN and signature are in and were sent for review." };
+  const has = new Set(result.documents.map((d) => d.purpose));
+  const still = [
+    !has.has("KYC_AADHAAR_CARD") && "Aadhaar",
+    !has.has("KYC_PAN_CARD") && "PAN",
+    !has.has("KYC_SIGNATURE") && "signature",
+  ].filter(Boolean).join(" and ");
+  return { success: `${fields.label} saved. Upload your ${still} too: we review them once all are in.` };
 }
 
 /** The account details, the proof type and the proof file, as the bank account endpoints take them. */
@@ -127,14 +139,15 @@ function bankAccountUpload(formData: FormData): { upload: FormData } | { state: 
   const parsed = bankAccountSchema.safeParse({ ...values, accountNumber: formData.get("accountNumber") ?? "" });
   if (!parsed.success) return { state: { fieldErrors: firstErrors(parsed.error), values } };
   const proofType = values.proofType;
-  if (proofType !== "BANK_STATEMENT" && proofType !== "CANCELLED_CHEQUE") {
-    return { state: { fieldErrors: { proofType: "Choose a bank statement or a cancelled cheque" }, values } };
+  if (proofType !== "BANK_STATEMENT" && proofType !== "CANCELLED_CHEQUE" && proofType !== "PASSBOOK") {
+    return { state: { fieldErrors: { proofType: "Choose a bank statement, a cancelled cheque or a passbook" }, values } };
   }
   const proof = formData.get("proof");
   if (!(proof instanceof File) || proof.size === 0) {
-    return { state: { fieldErrors: { proof: "Upload your bank statement or cancelled cheque" }, values } };
+    return { state: { fieldErrors: { proof: "Upload your bank statement, cancelled cheque or passbook" }, values } };
   }
-  if (proof.size > MAX_FILE_BYTES) return { state: { fieldErrors: { proof: "Files must be 5 MB or smaller" }, values } };
+  const proofProblem = fileProblem(proof);
+  if (proofProblem) return { state: { fieldErrors: { proof: proofProblem }, values } };
   const upload = new FormData();
   upload.append("account", new Blob([JSON.stringify(parsed.data)], { type: "application/json" }));
   upload.append("proofType", proofType);

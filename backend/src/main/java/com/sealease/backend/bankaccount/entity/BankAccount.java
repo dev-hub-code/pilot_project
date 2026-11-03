@@ -98,7 +98,7 @@ public class BankAccount extends BaseEntity {
 		this.status = BankAccountStatus.PENDING_VERIFICATION;
 	}
 
-	/** The bank statement or cancelled cheque proving the account; before it is first saved. */
+	/** The bank statement, cancelled cheque or passbook proving the account; before it is first saved. */
 	public void provedBy(BankProofType type, UUID documentId) {
 		this.proofType = type;
 		this.proofDocumentId = documentId;

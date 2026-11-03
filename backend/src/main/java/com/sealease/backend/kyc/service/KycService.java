@@ -91,14 +91,15 @@ public class KycService {
 		this.audit = audit;
 		this.notifications = notifications;
 		this.clock = clock;
-		this.submissionsPerUser = new FixedWindowRateLimiter(5, Duration.ofDays(1), clock);
+		// Three documents, often uploaded one at a time, with room to replace each once or twice.
+		this.submissionsPerUser = new FixedWindowRateLimiter(8, Duration.ofDays(1), clock);
 		this.transactions = transactions;
 		this.followUps = followUps;
 	}
 
 	/**
-	 * Uploads the Aadhaar card, the PAN card, or both, each with its number. They may come at different times: the
-	 * first starts a draft, and the submission goes for review once it holds both. While a draft, a document uploaded
+	 * Uploads the Aadhaar card and the PAN card, each with its number, and the signature, in any combination. They may
+	 * come at different times: the first starts a draft, and the submission goes for review once it holds all three. While a draft, a document uploaded
 	 * again replaces the earlier one.
 	 */
 	@Transactional
@@ -114,8 +115,9 @@ public class KycService {
 		}
 		boolean withAadhaar = given(request.aadhaarNumber(), files.aadhaarCard(), "Aadhaar number", "Aadhaar card");
 		boolean withPan = given(request.panNumber(), files.panCard(), "PAN", "PAN card");
-		if (!withAadhaar && !withPan) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Upload your Aadhaar card or your PAN card");
+		boolean withSignature = present(files.signature());
+		if (!withAadhaar && !withPan && !withSignature) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Upload your Aadhaar card, your PAN card or your signature");
 		}
 		// Name (as registered), date of birth and nationality come from the profile, recorded with the submission.
 		ProfileResponse profile = profiles.getProfile(userId);
@@ -166,6 +168,9 @@ public class KycService {
 			submission.setPan(encryptor.encrypt(pan, PAN_NUMBER_CONTEXT), FieldEncryptor.lastChars(pan, 4), panFingerprint(pan));
 			uploaded.put(DocumentPurpose.KYC_PAN_CARD, files.panCard());
 		}
+		if (withSignature) {
+			uploaded.put(DocumentPurpose.KYC_SIGNATURE, files.signature());
+		}
 		submissions.saveAndFlush(submission);
 		uploaded.forEach((purpose, file) -> {
 			kycDocuments.deleteFromSubmission(submission.getId(), purpose);
@@ -175,7 +180,9 @@ public class KycService {
 		audit.record(AuditRecord.of(userId, AuditAction.KYC_DOCUMENT_UPLOADED, "KYC_SUBMISSION", submission.getId())
 			.withNewValue(Map.of("documents", uploaded.keySet())));
 
-		if (submission.hasAadhaar() && submission.hasPan()) {
+		boolean hasSignature = kycDocuments.findByIdSubmissionId(submission.getId()).stream()
+			.anyMatch(d -> d.getPurpose() == DocumentPurpose.KYC_SIGNATURE);
+		if (submission.hasAadhaar() && submission.hasPan() && hasSignature) {
 			submission.submitForReview(clock.instant());
 			try {
 				submissions.flush();
@@ -188,7 +195,8 @@ public class KycService {
 			profiles.markKycStatus(userId, KycStatus.PENDING);
 			followUps.documentsSubmitted(userId);
 			audit.record(AuditRecord.of(userId, AuditAction.KYC_SUBMITTED, "KYC_SUBMISSION", submission.getId())
-				.withNewValue(Map.of("documents", List.of(DocumentPurpose.KYC_AADHAAR_CARD, DocumentPurpose.KYC_PAN_CARD))));
+				.withNewValue(Map.of("documents", List.of(DocumentPurpose.KYC_AADHAAR_CARD, DocumentPurpose.KYC_PAN_CARD,
+						DocumentPurpose.KYC_SIGNATURE))));
 		}
 		submissions.flush();
 		return response(submission).forOwner();
@@ -203,6 +211,20 @@ public class KycService {
 					: "Enter your " + numberLabel + " with the " + fileLabel);
 		}
 		return hasNumber;
+	}
+
+	/**
+	 * The signature from the investor's most recent approved identity verification, as an image, for documents they
+	 * sign such as their investment agreements; empty for investors verified before signatures were collected.
+	 */
+	@Transactional(readOnly = true)
+	public Optional<byte[]> verifiedSignature(UUID userId) {
+		return submissions.findByUserIdOrderBySubmittedAtDesc(userId).stream()
+			.filter(s -> s.getStatus() == KycSubmissionStatus.APPROVED)
+			.flatMap(s -> kycDocuments.findByIdSubmissionId(s.getId()).stream())
+			.filter(d -> d.getPurpose() == DocumentPurpose.KYC_SIGNATURE)
+			.findFirst()
+			.map(d -> documents.load(d.getId().documentId()).bytes());
 	}
 
 	@Transactional(readOnly = true)
@@ -225,7 +247,8 @@ public class KycService {
 	public KycReviewDetail detail(UUID reviewerId, UUID submissionId) {
 		KycSubmission submission = load(submissionId);
 		audit.record(AuditRecord.of(reviewerId, AuditAction.KYC_SUBMISSION_VIEWED, "KYC_SUBMISSION", submissionId));
-		return new KycReviewDetail(response(submission), accounts.getAccount(submission.getUserId()));
+		return new KycReviewDetail(response(submission), accounts.getAccount(submission.getUserId()),
+				profiles.getProfile(submission.getUserId()).address());
 	}
 
 	/** Decrypts one piece of evidence for a reviewer. Every access is audited. */
