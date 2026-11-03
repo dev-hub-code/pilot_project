@@ -16,6 +16,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { verifyAccessToken } from "@/lib/server/auth/tokens";
 import { getOnboarding } from "@/lib/server/onboarding";
 import {
+  acceptInvitationSchema,
   changePasswordSchema,
   type FormState,
   firstErrors,
@@ -100,6 +101,64 @@ export async function registerAction(_previous: FormState, formData: FormData): 
   }
   // No session yet: the account is activated by the link emailed to the user.
   if (verifyEmail) redirect(`/verify-email?email=${encodeURIComponent(verifyEmail)}`);
+  redirect("/dashboard");
+}
+
+/** What the sign-up page shows for an invitation link, or why the link no longer works. */
+export type InvitationLookup =
+  | { ok: true; email: string; firstName: string; lastName: string; invitedBy: string; expiresAt: string }
+  | { ok: false; message: string };
+
+export async function lookupInvitation(token: string): Promise<InvitationLookup> {
+  try {
+    const details = await backendFetch<Omit<Extract<InvitationLookup, { ok: true }>, "ok">>(
+      "/api/v1/auth/invitations/lookup", { method: "POST", json: { token } });
+    return { ok: true, ...details };
+  } catch (error) {
+    if (error instanceof BackendError && error.status === 400) {
+      return { ok: false, message: "This invitation link is invalid, has expired or has already been used. Ask SeaLease for a new one." };
+    }
+    return { ok: false, message: describe(error) };
+  }
+}
+
+/** Opens the network investor account the client was invited to, and signs them in. */
+export async function acceptInvitationAction(token: string, _previous: FormState, formData: FormData): Promise<FormState> {
+  const input = Object.fromEntries(
+    ["firstName", "lastName", "phone", "phoneCountry", "password", "confirmPassword", "acceptTerms"]
+      .map((k) => [k, formData.get(k) ?? ""]),
+  );
+  const values = {
+    firstName: String(input.firstName),
+    lastName: String(input.lastName),
+    phone: String(input.phone),
+    phoneCountry: String(input.phoneCountry),
+    acceptTerms: String(input.acceptTerms),
+  };
+  const parsed = acceptInvitationSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
+
+  const { firstName, lastName, phone, phoneCountry, password } = parsed.data;
+  try {
+    const tokens = await backendFetch<AuthTokens>("/api/v1/auth/invitations/accept", {
+      method: "POST",
+      json: { token, firstName, lastName, phone, phoneCountry, password, acceptTerms: true },
+      headers: forwardedClientHeaders(await headers()),
+    });
+    writeSessionCookies(await cookies(), tokens);
+  } catch (error) {
+    if (error instanceof BackendError && error.apiError?.fieldErrors?.length) {
+      const fieldErrors = Object.fromEntries(error.apiError.fieldErrors.map((f) => [f.field, f.message]));
+      return { fieldErrors, values };
+    }
+    if (error instanceof BackendError && error.apiError?.message?.includes("mobile number is already registered")) {
+      return { fieldErrors: { phone: error.apiError.message }, values };
+    }
+    if (error instanceof BackendError && error.apiError?.code === "INVALID_VERIFICATION_TOKEN") {
+      return { error: error.apiError.message, values };
+    }
+    return { error: describe(error), values };
+  }
   redirect("/dashboard");
 }
 

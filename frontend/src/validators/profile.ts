@@ -48,7 +48,7 @@ export const bankAccountSchema = z.object({
     .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Enter the IFSC code: 4 letters, a zero, then 6 letters or digits (e.g. HDFC0001234)"),
 });
 
-/** Aadhaar and PAN are uploaded separately, each with its number. */
+/** Aadhaar and PAN are uploaded separately, each with its number (the signature has none). */
 export const kycNumberSchema = {
   AADHAAR: z.string().transform((v) => v.replace(/[\s-]/g, ""))
     .pipe(z.string().regex(/^\d{12}$/, "An Aadhaar number has exactly 12 digits")),
@@ -61,5 +61,15 @@ export const reasonSchema = z.object({
 });
 
 /** Must match the backend's app.documents.max-file-size. */
-export const MAX_FILE_BYTES = 5 * 1024 * 1024;
-export const ACCEPTED_FILE_TYPES = "application/pdf,image/jpeg,image/png";
+export const MAX_FILE_BYTES = 2 * 1024 * 1024;
+/** Every upload is a JPG or PNG image; the backend checks the file's contents, not its name. */
+export const ACCEPTED_FILE_TYPES = "image/jpeg,image/png";
+/** The rule as shown under upload fields. */
+export const FILE_RULES = "JPG or PNG image, up to 2 MB";
+
+/** Why a chosen file cannot be uploaded, or null when it can. */
+export function fileProblem(file: File): string | null {
+  if (!["image/jpeg", "image/png"].includes(file.type)) return "Upload a JPG or PNG image";
+  if (file.size > MAX_FILE_BYTES) return "Files must be 2 MB or smaller";
+  return null;
+}

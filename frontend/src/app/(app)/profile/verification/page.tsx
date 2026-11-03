@@ -9,7 +9,8 @@ import { KycDocumentForm } from "@/features/profile/kyc-form";
 import { authFetch } from "@/lib/server/auth/session";
 import { requireEmailVerified } from "@/lib/server/onboarding";
 import type { KycSubmission, Profile } from "@/types/user";
-import { formatAadhaar, kycNumbers, missingPersonalDetails } from "@/features/profile/kyc-labels";
+import { formatAadhaar, KYC_DOCUMENT_LABEL, kycNumbers, missingPersonalDetails } from "@/features/profile/kyc-labels";
+import { COUNTRY_OPTIONS } from "@/lib/countries";
 import { formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Identity verification" };
@@ -23,28 +24,60 @@ export default async function VerificationPage({ searchParams }: PageProps<"/pro
     authFetch<Profile>("/api/v1/users/me"),
   ]);
   const latest = submitted ?? null;
-  // A draft holds whichever of Aadhaar and PAN is uploaded so far; nothing is reviewed until both are in.
+  // A draft holds whichever of Aadhaar, PAN and signature is uploaded so far; nothing is reviewed until all three are in.
   const draft = latest?.status === "DRAFT" ? latest : null;
   const reviewed = latest && latest.status !== "DRAFT" ? latest : null;
   const canUpload = !latest || latest.status === "REJECTED" || draft !== null;
+  const hasSignature = Boolean(draft?.documents.some((d) => d.purpose === "KYC_SIGNATURE"));
+  const stillNeeded = [
+    !draft?.aadhaarNumber && "Aadhaar",
+    !draft?.panNumber && "PAN",
+    !hasSignature && "signature",
+  ].filter((item): item is string => Boolean(item));
   const missing = missingPersonalDetails(profile);
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         {fromPersonal && (
-          <Notice tone="success">Personal details saved. Next, verify your identity with your Aadhaar and PAN.</Notice>
+          <Notice tone="success">Personal details saved. Next, verify your identity with your Aadhaar, PAN and signature.</Notice>
         )}
         {reviewed && (
-          <Card title="Latest submission" actions={<StatusBadge tone={toneFor(reviewed.status)}>{humanize(reviewed.status)}</StatusBadge>}>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <Item label="Submitted">{formatDateTime(reviewed.submittedAt)}</Item>
-              <Item label="Legal name">{reviewed.legalFirstName} {reviewed.legalLastName}</Item>
-              <Item label="Documents">{kycNumbers(reviewed)}</Item>
+          <Card title={reviewed.status === "APPROVED" ? "Verified identity" : "Latest submission"}
+            actions={<StatusBadge tone={toneFor(reviewed.status)}>{reviewed.status === "APPROVED" ? "Verified" : humanize(reviewed.status)}</StatusBadge>}>
+            <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+              <Item label="Full name">{reviewed.legalFirstName} {reviewed.legalLastName}</Item>
+              <Item label="Date of birth">{formatDayMonthYear(reviewed.dateOfBirth)}</Item>
+              <Item label="Nationality">
+                {COUNTRY_OPTIONS.find((c) => c.value === reviewed.nationality)?.label ?? reviewed.nationality}
+              </Item>
+              {reviewed.aadhaarNumber || reviewed.panNumber ? (
+                <>
+                  <Item label="Aadhaar number">
+                    <span className="font-mono text-base font-bold tracking-wide">
+                      {reviewed.aadhaarNumber ? formatAadhaar(reviewed.aadhaarNumber) : "—"}
+                    </span>
+                  </Item>
+                  <Item label="PAN">
+                    <span className="font-mono text-base font-bold tracking-wide">{reviewed.panNumber ?? "—"}</span>
+                  </Item>
+                </>
+              ) : (
+                <Item label="Identity document">{kycNumbers(reviewed)}</Item>
+              )}
+              <Item label="Documents submitted">
+                {reviewed.documents.length > 0
+                  ? reviewed.documents.map((d) => KYC_DOCUMENT_LABEL[d.purpose]).join(", ")
+                  : "—"}
+              </Item>
+              <Item label="Submitted on">{formatDateTime(reviewed.submittedAt)}</Item>
+              {reviewed.reviewedAt && (
+                <Item label={reviewed.status === "APPROVED" ? "Verified on" : "Reviewed on"}>{formatDateTime(reviewed.reviewedAt)}</Item>
+              )}
             </dl>
             <div className="mt-4">
               {reviewed.status === "PENDING" && (
-                <Notice>We are reviewing your Aadhaar and PAN. This usually takes one to two business days.</Notice>
+                <Notice>We are reviewing your Aadhaar, PAN and signature. This usually takes one to two business days.</Notice>
               )}
               {reviewed.status === "APPROVED" && <Notice tone="success">Your identity is verified.</Notice>}
               {reviewed.status === "REJECTED" && (
@@ -57,7 +90,7 @@ export default async function VerificationPage({ searchParams }: PageProps<"/pro
         )}
         {canUpload && (
           <Card title={reviewed ? "Upload again" : "Verify your identity"}
-            description="Required by regulation before you can invest or withdraw. Upload your Aadhaar and PAN together or one at a time: we review them once both are in.">
+            description="Required by regulation before you can invest or withdraw. Upload your Aadhaar, PAN and signature together or one at a time: we review them once all three are in.">
             {missing.length > 0 ? (
               <div className="space-y-4">
                 <Notice tone="warning">
@@ -71,22 +104,22 @@ export default async function VerificationPage({ searchParams }: PageProps<"/pro
                   Submitted with your profile details: {profile.firstName} {profile.lastName}, born{" "}
                   {formatDayMonthYear(profile.dateOfBirth)}, nationality {profile.nationality}.
                 </p>
-                {draft && (
-                  <Notice>
-                    {draft.aadhaarNumber ? "Your Aadhaar is uploaded. Upload your PAN" : "Your PAN is uploaded. Upload your Aadhaar"}{" "}
-                    to send them for review.
-                  </Notice>
+                {draft && stillNeeded.length > 0 && (
+                  <Notice>Upload your {stillNeeded.join(" and ")} to send your documents for review.</Notice>
                 )}
-                <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-2">
+                <div className="grid gap-px overflow-hidden rounded-xl border border-border bg-border">
                   <DocumentSlot title="Aadhaar card" uploaded={draft?.aadhaarNumber ? `Aadhaar ${formatAadhaar(draft.aadhaarNumber)}` : null}>
                     <KycDocumentForm document="AADHAAR" replacing={Boolean(draft?.aadhaarNumber)} />
                   </DocumentSlot>
                   <DocumentSlot title="PAN card" uploaded={draft?.panNumber ? `PAN ${draft.panNumber}` : null}>
                     <KycDocumentForm document="PAN" replacing={Boolean(draft?.panNumber)} />
                   </DocumentSlot>
+                  <DocumentSlot title="Signature" uploaded={hasSignature ? "Signature image" : null}>
+                    <KycDocumentForm document="SIGNATURE" replacing={hasSignature} />
+                  </DocumentSlot>
                 </div>
                 <p className="text-xs text-muted">
-                  Your Aadhaar and PAN numbers and documents are stored encrypted and only visible to our verification
+                  Your Aadhaar and PAN numbers, documents and signature are stored encrypted and only visible to our verification
                   team. Every access is logged.
                 </p>
               </div>
@@ -100,17 +133,18 @@ export default async function VerificationPage({ searchParams }: PageProps<"/pro
             Your personal details completed in your <Link href="/profile" className="underline">profile</Link>: mobile
             phone, date of birth, nationality and address. Your name, date of birth and nationality are taken from there.
           </li>
-          <li>Your 12-digit Aadhaar number and your Aadhaar card as one file showing both sides, e.g. your e-Aadhaar PDF</li>
+          <li>Your 12-digit Aadhaar number and your Aadhaar card as one image showing both sides</li>
           <li>Your PAN, e.g. ABCDE1234F, and your PAN card</li>
-          <li>Files as PDF, JPEG or PNG, up to 5 MB each, clear and readable</li>
-          <li>You can upload them at different times; we review them once both are in</li>
+          <li>Your signature, signed on plain white paper and photographed or scanned</li>
+          <li>Each file a JPG or PNG image, up to 2 MB, clear and readable</li>
+          <li>You can upload them at different times; we review them once all three are in</li>
         </ul>
       </Card>
     </div>
   );
 }
 
-/** One document: uploaded (and replaceable while the other is still to come) or still to upload. */
+/** One document: uploaded (and replaceable while the others are still to come) or still to upload. */
 function DocumentSlot({ title, uploaded, children }: { title: string; uploaded: string | null; children: React.ReactNode }) {
   return (
     <section className="space-y-4 bg-surface p-5" aria-label={title}>

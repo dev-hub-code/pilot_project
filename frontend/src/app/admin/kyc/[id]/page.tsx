@@ -12,7 +12,8 @@ import { ReviewAssignment } from "@/features/admin/review-assignment";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { Permission, hasPermission } from "@/lib/permissions";
-import type { AdminBankAccount, Assignee, KycReviewDetail } from "@/types/user";
+import type { Address, AdminBankAccount, Assignee, KycReviewDetail } from "@/types/user";
+import { COUNTRY_OPTIONS } from "@/lib/countries";
 import { formatAadhaar, KYC_DOCUMENT_LABEL, kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDate, formatDateTime, formatDayMonthYear, humanize } from "@/utils/format";
 import { EmailText } from "@/components/ui/email-text";
@@ -33,7 +34,7 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
     if (error instanceof BackendError && error.status === 404) notFound();
     throw error;
   }
-  const { submission: s, account } = detail;
+  const { submission: s, account, address } = detail;
   const nameMismatch =
     s.legalFirstName.toLowerCase() !== account.firstName.toLowerCase() ||
     s.legalLastName.toLowerCase() !== account.lastName.toLowerCase();
@@ -75,6 +76,9 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
               )}
               <Item label="Date of birth">{formatDayMonthYear(s.dateOfBirth)}</Item>
               <Item label="Nationality">{s.nationality}</Item>
+              <Item label="Address (from profile)" className="sm:col-span-2">
+                {address?.line1 ? <AddressLines address={address} /> : <span className="text-muted">Not given</span>}
+              </Item>
               <Item label="Submitted">{formatDateTime(s.submittedAt)}</Item>
               <Item label="Account">
                 <Link className="text-brand hover:underline" href={`/admin/users/${account.id}`}>
@@ -152,11 +156,23 @@ export default async function KycReviewPage({ params }: PageProps<"/admin/kyc/[i
   );
 }
 
-function Item({ label, children }: { label: string; children: React.ReactNode }) {
+function Item({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div>
+    <div className={className}>
       <dt className="text-muted">{label}</dt>
       <dd className="mt-0.5 font-medium">{children}</dd>
     </div>
   );
+}
+
+/** The address as it would be written on an envelope, the country by name. */
+function AddressLines({ address }: { address: Address }) {
+  const country = COUNTRY_OPTIONS.find((c) => c.value === address.country)?.label ?? address.country;
+  const lines = [
+    address.line1,
+    address.line2,
+    [address.city, address.stateRegion, address.postalCode].filter(Boolean).join(", "),
+    country,
+  ].filter(Boolean);
+  return <span className="block">{lines.map((line) => <span key={line} className="block">{line}</span>)}</span>;
 }

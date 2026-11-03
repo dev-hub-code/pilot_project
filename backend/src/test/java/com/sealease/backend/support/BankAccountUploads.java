@@ -12,7 +12,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 public final class BankAccountUploads {
 
 	/** A minimal file the document store accepts as a PDF. */
-	public static final byte[] STATEMENT_PDF = "%PDF-1.4 bank statement".getBytes(StandardCharsets.US_ASCII);
+	/** A PNG (only JPG and PNG images are accepted): its signature, then a marker. */
+	public static final byte[] STATEMENT_IMAGE = "\u0089PNG\r\n\u001a\nbank statement".getBytes(StandardCharsets.ISO_8859_1);
 
 	private BankAccountUploads() {
 	}
@@ -26,7 +27,7 @@ public final class BankAccountUploads {
 			String accountJson) {
 		request.file(new MockMultipartFile("account", "", MediaType.APPLICATION_JSON_VALUE,
 				accountJson.getBytes(StandardCharsets.UTF_8)));
-		request.file(new MockMultipartFile("proof", "statement.pdf", MediaType.APPLICATION_PDF_VALUE, STATEMENT_PDF));
+		request.file(new MockMultipartFile("proof", "statement.png", MediaType.IMAGE_PNG_VALUE, STATEMENT_IMAGE));
 		request.param("proofType", "BANK_STATEMENT");
 		return request;
 	}

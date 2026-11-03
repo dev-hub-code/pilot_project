@@ -18,6 +18,7 @@ import com.sealease.backend.common.exception.ResourceNotFoundException;
 import com.sealease.backend.common.time.DisplayTimeZone;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.invoice.service.InvoiceProperties;
+import com.sealease.backend.kyc.service.KycService;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.service.UserProfileService;
 import org.springframework.beans.factory.ObjectProvider;
@@ -68,12 +69,13 @@ public class LeaseAgreementService {
 	private final DisplayTimeZone display;
 	private final AuditService audit;
 	private final ObjectProvider<AgreementFactsSource> factsSource;
+	private final ObjectProvider<KycService> kyc;
 	private final Clock clock;
 
 	public LeaseAgreementService(LeaseAgreementRepository agreements, AgreementAcceptanceRepository acceptances,
 			AgreementTemplateRepository templates, AgreementTemplateService wording, AgreementRenderer renderer,
 			UserProfileService profiles, InvoiceProperties company, DisplayTimeZone display, AuditService audit,
-			ObjectProvider<AgreementFactsSource> factsSource, Clock clock) {
+			ObjectProvider<AgreementFactsSource> factsSource, ObjectProvider<KycService> kyc, Clock clock) {
 		this.agreements = agreements;
 		this.acceptances = acceptances;
 		this.templates = templates;
@@ -85,6 +87,8 @@ public class LeaseAgreementService {
 		this.audit = audit;
 		// Looked up when needed: the source (orders) itself depends on this service to issue agreements.
 		this.factsSource = factsSource;
+		// Looked up when needed, like the facts source, so the KYC module's own dependencies stay out of this one.
+		this.kyc = kyc;
 		this.clock = clock;
 	}
 
@@ -188,7 +192,16 @@ public class LeaseAgreementService {
 		return new AgreementPdf("agreement-" + a.getAgreementNumber(), renderer.pdf(w.title(),
 				a.getAgreementNumber() + " · issued " + DATE.format(LocalDate.ofInstant(a.getGeneratedAt(), display.zone()))
 						+ (a.isAcceptanceRequired() && acceptance == null ? " · awaiting acceptance" : ""),
-				body, "Issued electronically by SeaLease · " + a.getAgreementNumber() + " · wording version " + version));
+				body, "Issued electronically by SeaLease · " + a.getAgreementNumber() + " · wording version " + version,
+				acceptance == null ? null : signature(a, acceptance)));
+	}
+
+	/** The accepting investor's signature from their identity verification, with their name and when they accepted. */
+	private AgreementRenderer.Signature signature(LeaseAgreement a, AgreementAcceptance acceptance) {
+		ProfileResponse investor = profiles.getProfile(a.getUserId());
+		return new AgreementRenderer.Signature(kyc.getObject().verifiedSignature(a.getUserId()).orElse(null),
+				investor.firstName() + " " + investor.lastName(),
+				"Accepted on " + STAMP.format(acceptance.getAcceptedAt().atZone(display.zone())));
 	}
 
 	private LeaseAgreement owned(UUID holdingId, UUID ownerId) {

@@ -34,16 +34,17 @@ public class KycController {
 	}
 
 	/**
-	 * Multipart: a JSON part {@code submission} plus file parts {@code aadhaarCard} (both sides in one file) and
-	 * {@code panCard}.
+	 * Multipart: a JSON part {@code submission} plus file parts {@code aadhaarCard} (both sides in one file),
+	 * {@code panCard} and {@code signature}.
 	 */
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
 	public KycSubmissionResponse submit(AuthenticatedUser user,
 			@Valid @RequestPart("submission") KycSubmissionRequest submission,
 			@RequestPart(value = "aadhaarCard", required = false) MultipartFile aadhaarCard,
-			@RequestPart(value = "panCard", required = false) MultipartFile panCard) {
-		return kyc.submit(user.userId(), submission, new KycFiles(aadhaarCard, panCard));
+			@RequestPart(value = "panCard", required = false) MultipartFile panCard,
+			@RequestPart(value = "signature", required = false) MultipartFile signature) {
+		return kyc.submit(user.userId(), submission, new KycFiles(aadhaarCard, panCard, signature));
 	}
 
 }

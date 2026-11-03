@@ -20,6 +20,7 @@ const IFSC_SHAPE = "Check this code: 4 letters, then the number 0 (not the lette
 const PROOF_TYPES = [
   { value: "BANK_STATEMENT", label: "Bank statement" },
   { value: "CANCELLED_CHEQUE", label: "Cancelled cheque" },
+  { value: "PASSBOOK", label: "Passbook" },
 ];
 
 /**
@@ -87,8 +88,8 @@ export function BankAccountForm({ holderName }: { holderName: string }) {
         <SelectField label="Proof of account" name="proofType" placeholder="Select…" options={PROOF_TYPES}
           defaultValue={v("proofType")} error={e.proofType} />
         <div className="sm:col-span-2 lg:col-span-3">
-          <FileField label="Bank statement or cancelled cheque" name="proof" accept={ACCEPTED_FILE_TYPES} required
-            hint="Showing your name, the account number and the IFSC. PDF, JPEG or PNG, up to 5 MB (re-select after an error)"
+          <FileField label="Bank statement, cancelled cheque or passbook" name="proof" accept={ACCEPTED_FILE_TYPES} required
+            hint="Showing your name, the account number and the IFSC (for a passbook, its first page). JPG or PNG image, up to 2 MB (re-select after an error)"
             error={e.proof} />
         </div>
       </div>

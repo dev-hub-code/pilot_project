@@ -123,6 +123,10 @@ public enum AuditAction {
 	/** An investor joined the network referral scheme: made by an administrator, or through a network investor's code. */
 	REFERRAL_NETWORK_JOINED,
 	INVESTOR_ACCOUNT_CREATED,
+	/** An employee emailed a client a link to open a network investor account. */
+	INVESTOR_INVITATION_SENT,
+	/** A client opened their network investor account from an invitation link. */
+	INVESTOR_INVITATION_ACCEPTED,
 	/** A super administrator moved a member (and their downline) to another referrer. */
 	REFERRAL_MOVED,
 	/** A super administrator marked or unmarked a demo account, or changed its dummy orders or downline. */

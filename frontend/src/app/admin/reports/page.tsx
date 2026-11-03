@@ -1,95 +1,139 @@
-import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Notice } from "@/components/ui/notice";
+import { BarList } from "@/components/charts/bar-list";
+import { ColumnChart, type ColumnDatum } from "@/components/charts/column-chart";
+import { deniedUnlessInMenu } from "@/components/layout/page-access";
+import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { TextField } from "@/components/ui/text-field";
-import { Button } from "@/components/ui/button";
+import { loadCatalog } from "@/features/analytics/catalog";
+import { ReportsShell } from "@/features/analytics/reports-shell";
 import { PeriodForm } from "@/features/reports/period-form";
-import { ReportPreview, thisMonth } from "@/features/reports/report-preview";
-import { Permission, hasPermission } from "@/lib/permissions";
-import { BackendError } from "@/lib/server/backend-client";
-import { authFetch, requireStaff } from "@/lib/server/auth/session";
-import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { ReportDocument } from "@/types/report";
-import { EmailText } from "@/components/ui/email-text";
+import { thisMonth } from "@/features/reports/report-preview";
+import { authFetch } from "@/lib/server/auth/session";
+import type { Kpi, Overview } from "@/types/analytics";
+import { formatDate, formatDateTime, humanize } from "@/utils/format";
+import { formatMoney } from "@/utils/money";
 
-export const metadata: Metadata = { title: "Reports" };
+export const metadata: Metadata = { title: "Reports & Analytics" };
 
-const REPORTS = [
-  { key: "financial-summary", label: "Financial summary", description: "Returns, fees, commissions, withdrawals and balances owed, per currency." },
-  { key: "offerings", label: "Plans & payouts", description: "Investments per plan, and payouts due and not yet paid." },
-  { key: "statement", label: "Investor statement", description: "One investor's account activity, holdings and withdrawals." },
-] as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TRENDS = [
+  { key: "investedCapital", label: "Capital invested" },
+  { key: "returnsCredited", label: "Returns credited" },
+  { key: "capitalReturned", label: "Capital returned" },
+  { key: "withdrawalsPaid", label: "Withdrawals paid" },
+  { key: "referralCommission", label: "Referral commission" },
+] as const;
+/** Container statuses in their lifecycle order (not by count), so the list reads the same every time. */
+const CONTAINER_ORDER = ["AVAILABLE", "RESERVED", "ON_LEASE", "MAINTENANCE", "RETIRED"];
+const shortMonth = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
+const longMonth = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
-export default async function ReportsPage({ searchParams }: PageProps<"/admin/reports">) {
+function value(kpi: Kpi, currency: string, v = kpi.value): string {
+  if (v === null) return "—";
+  if (kpi.kind === "MONEY") return formatMoney({ amount: String(v), currency });
+  if (kpi.kind === "PERCENT") return `${v}%`;
+  return new Intl.NumberFormat("en-IN").format(Number(v));
+}
+
+function Change({ kpi, currency }: { kpi: Kpi; currency: string }) {
+  if (kpi.previous === null) return null;
+  const change = kpi.change === null ? null : Number(kpi.change);
+  const direction = change === null ? null : change > 0 ? "up" : change < 0 ? "down" : "flat";
+  return (
+    <p className="text-xs text-muted">
+      {direction === null ? "Nothing in the previous period"
+        : <>
+          {direction === "flat" ? "Unchanged" : <><span aria-hidden>{direction === "up" ? "▲" : "▼"}</span> {direction === "up" ? "Up" : "Down"} {Math.abs(change!).toFixed(1)}%</>}
+          {" "}· previously {value(kpi, currency, kpi.previous)}
+        </>}
+    </p>
+  );
+}
+
+function KpiCard({ kpi, currency, href }: { kpi: Kpi; currency: string; href: string | null }) {
+  const body = (
+    <>
+      <p className="text-sm text-muted">{kpi.label}</p>
+      <p className="font-display text-2xl font-semibold tracking-tight tabular-nums">{value(kpi, currency)}</p>
+      <Change kpi={kpi} currency={currency} />
+      {kpi.hint && <p className="text-xs text-muted">{kpi.hint}</p>}
+    </>
+  );
+  const box = "block space-y-1.5 rounded-xl border border-border bg-surface p-4 shadow-sm";
+  return href
+    ? <Link href={href} className={`${box} hover:border-foreground/40`} title={`Open the report behind ${kpi.label.toLowerCase()}`}>{body}</Link>
+    : <div className={box}>{body}</div>;
+}
+
+export default async function ReportsOverviewPage({ searchParams }: PageProps<"/admin/reports">) {
   const denied = await deniedUnlessInMenu("/admin/reports");
   if (denied) return denied;
-  const session = await requireStaff();
-  const canDownload = hasPermission(session.permissions, Permission.REPORT_GENERATE);
   const params = await searchParams;
-  const report = REPORTS.find((r) => r.key === params.report) ?? REPORTS[0];
   const preset = thisMonth();
   const from = typeof params.from === "string" && DATE.test(params.from) ? params.from : preset.from;
   const to = typeof params.to === "string" && DATE.test(params.to) ? params.to : preset.to;
-  const userId = typeof params.userId === "string" && isUuid(params.userId) ? params.userId : null;
-
-  const query = new URLSearchParams(report.key === "offerings" ? {} : { from, to });
-  if (report.key === "statement" && userId) query.set("userId", userId);
-  const ready = report.key !== "statement" || userId !== null;
-  let document: ReportDocument | null = null;
-  let problem: string | null = null;
-  if (ready) {
-    try {
-      document = await authFetch<ReportDocument>(`/api/v1/admin/reports/${report.key}?${query}`);
-    } catch (error) {
-      if (error instanceof BackendError && (error.status === 400 || error.status === 404)) {
-        problem = error.apiError?.message ?? "Check the report's parameters.";
-      } else throw error;
-    }
-  }
-  const download = (format: "pdf" | "csv") => `/admin/reports/download?${new URLSearchParams({ report: report.key, format, ...Object.fromEntries(query) })}`;
+  const [overview, catalog] = await Promise.all([
+    authFetch<Overview>(`/api/v1/admin/analytics/overview?${new URLSearchParams({ from, to })}`),
+    loadCatalog(),
+  ]);
+  const open = new Map(catalog.flatMap((c) => c.reports.map((r) => [r.key, r] as const)));
+  const link = (kpi: Kpi, withPeriod: boolean) => {
+    const report = open.get(kpi.report);
+    if (!report) return null;
+    return `/admin/reports/${report.key}${withPeriod && report.usesPeriod ? `?${new URLSearchParams({ from, to })}` : ""}`;
+  };
+  const currency = overview.currency;
+  const columns = (key: string): ColumnDatum[] => overview.trends.map((point) => {
+    const date = new Date(`${point.month}-01T00:00:00Z`);
+    // Geometry only: the chart scales bars by these numbers; amounts shown come from the decimal strings.
+    return { label: date.getUTCMonth() === 0 ? `${shortMonth.format(date)} ${date.getUTCFullYear()}` : shortMonth.format(date),
+      title: longMonth.format(date), values: { [key]: Number(point.values[key] ?? 0) } };
+  });
+  const containers = CONTAINER_ORDER.map((status) => ({
+    label: humanize(status), value: overview.containers.find((s) => s.key === status)?.count ?? 0,
+  }));
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Reports" description={report.description}
-        actions={document && canDownload ? (
-          <div className="flex gap-3 text-sm">
-            <a href={download("pdf")} className="rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface">Download PDF</a>
-            <a href={download("csv")} className="rounded-full border border-border px-4 py-1.5 text-muted hover:text-foreground">CSV</a>
-          </div>
-        ) : undefined} />
-      <nav aria-label="Report" className="flex flex-wrap gap-2 text-sm">
-        {REPORTS.map((r) => (
-          <Link key={r.key} href={`/admin/reports?report=${r.key}`} aria-current={r === report ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${r === report ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {r.label}
-          </Link>
-        ))}
-      </nav>
-      {report.key === "statement" && (
-        <form action="/admin/reports" className="flex flex-wrap items-end gap-3">
-          <input type="hidden" name="report" value="statement" />
-          <input type="hidden" name="from" value={from} />
-          <input type="hidden" name="to" value={to} />
-          <div className="w-full sm:w-96"><TextField label="Investor user id" name="userId" defaultValue={userId ?? ""} autoComplete="off" /></div>
-          <Button type="submit" variant="secondary">Load</Button>
-        </form>
-      )}
-      {report.key !== "offerings" && (
-        <PeriodForm action="/admin/reports" from={from} to={to}
-          hidden={{ report: report.key, ...(userId ? { userId } : {}) }} />
-      )}
-      {!canDownload && <p className="text-xs text-muted">Downloading PDF or CSV needs the REPORT_GENERATE permission.</p>}
-      {!ready && <Notice>Enter an investor&apos;s user id (from their page under Users).</Notice>}
-      {problem && <Notice tone="warning">{problem}</Notice>}
-      {document && (
-        <>
-          <p className="text-sm text-muted"><EmailText>{document.subtitle}</EmailText></p>
-          <ReportPreview report={document} />
-        </>
-      )}
-    </div>
+    <ReportsShell active="overview">
+      <PageHeader title="Reports & Analytics"
+        description="Investments, earnings, payments, withdrawals, referrals, containers, operations and compliance: live from the platform's records and the ledger." />
+      <PeriodForm action="/admin/reports" from={from} to={to} />
+
+      <section aria-labelledby="period-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="period-heading" className="text-lg font-semibold tracking-tight">{formatDate(from)} – {formatDate(to)}</h2>
+          <p className="text-xs text-muted">Compared with {formatDate(overview.previousFrom)} – {formatDate(overview.previousTo)}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {overview.period.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} currency={currency} href={link(kpi, true)} />)}
+        </div>
+      </section>
+
+      <section aria-labelledby="now-heading" className="space-y-3">
+        <h2 id="now-heading" className="text-lg font-semibold tracking-tight">As things stand</h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {overview.now.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} currency={currency} href={link(kpi, false)} />)}
+        </div>
+      </section>
+
+      <section aria-labelledby="trends-heading" className="space-y-3">
+        <h2 id="trends-heading" className="text-lg font-semibold tracking-tight">Last 12 months</h2>
+        <p className="text-sm text-muted">One chart per figure, each on its own scale: capital invested is client money, not revenue.</p>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {TRENDS.map((trend) => (
+            <Card key={trend.key} title={trend.label}>
+              <ColumnChart label={`${trend.label} by month`} currency={currency} currentIndex={overview.trends.length - 1}
+                series={[{ key: trend.key, label: trend.label, fill: "fill-chart-1", swatch: "bg-chart-1" }]}
+                data={columns(trend.key)} />
+            </Card>
+          ))}
+          <Card title="Containers by status" description="The whole fleet, as it stands">
+            <BarList label="Containers by status" items={containers} />
+          </Card>
+        </div>
+      </section>
+      <p className="text-xs text-muted">Figures as of {formatDateTime(overview.generatedAt)}. Select a figure to open the rows behind it.</p>
+    </ReportsShell>
   );
 }

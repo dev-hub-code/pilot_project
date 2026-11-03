@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BankAccountDetails } from "@/features/profile/bank-account-details";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
@@ -39,7 +40,7 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
       <div className="space-y-4">
         {fromIdentity && (
           <Notice tone="success">
-            Your Aadhaar and PAN were sent for review. Last step: add the bank account you want payouts paid into.
+            Your Aadhaar, PAN and signature were sent for review. Last step: add the bank account you want payouts paid into.
           </Notice>
         )}
         {identitySubmitted && profile.kycStatus !== "APPROVED" && (
@@ -62,17 +63,14 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
               return (
                 <li key={account.id} className="rounded-xl border border-border bg-surface p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">
-                        {account.bankName} <span className="font-mono text-sm">{account.accountNumberMasked}</span>
-                      </p>
-                      <p className="text-sm text-muted">
-                        {account.accountHolderName} · {account.country}
-                        {account.proofType && ` · ${BANK_PROOF_LABEL[account.proofType]} uploaded`}
-                      </p>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <BankAccountDetails account={account} ifsc={account.ifsc} />
+                      {account.proofType && (
+                        <p className="text-sm text-muted">{BANK_PROOF_LABEL[account.proofType]} uploaded</p>
+                      )}
                       {isPendingChange && replaces && (
                         <p className="mt-1 text-sm text-muted">
-                          New details for {replaces.bankName} {replaces.accountNumberMasked}. Once verified, this account
+                          New details for {replaces.bankName} {replaces.accountNumber}. Once verified, this account
                           replaces it.
                         </p>
                       )}
@@ -86,7 +84,7 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
                   {pendingChange && (
                     <div className="mt-4">
                       <Notice>
-                        Change to {pendingChange.bankName} {pendingChange.accountNumberMasked} is waiting for verification.
+                        Change to {pendingChange.bankName} {pendingChange.accountNumber} is waiting for verification.
                         Payouts keep going to this account until then.
                       </Notice>
                     </div>
@@ -104,8 +102,8 @@ export default async function BankAccountsPage({ searchParams }: PageProps<"/pro
                       <form action={removeBankAccountAction.bind(null, account.id)}>
                         <SubmitButton variant="quiet" pendingLabel="Removing…"
                           confirm={isPendingChange
-                            ? `Cancel the change to ${account.bankName ?? "Account"} ${account.accountNumberMasked}? Your current account stays as it is.`
-                            : `Remove ${account.bankName ?? "Account"} ${account.accountNumberMasked}?`}>
+                            ? `Cancel the change to ${account.bankName ?? "Account"} ${account.accountNumber}? Your current account stays as it is.`
+                            : `Remove ${account.bankName ?? "Account"} ${account.accountNumber}?`}>
                           {isPendingChange ? "Cancel change" : "Remove"}
                         </SubmitButton>
                       </form>

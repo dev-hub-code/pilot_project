@@ -9,7 +9,7 @@ import org.springframework.util.unit.DataSize;
  * @param s3 where new documents are stored; without a bucket, in the database
  */
 @ConfigurationProperties(prefix = "app.documents")
-public record DocumentProperties(@DefaultValue("5MB") DataSize maxFileSize, @DefaultValue S3 s3) {
+public record DocumentProperties(@DefaultValue("2MB") DataSize maxFileSize, @DefaultValue S3 s3) {
 
 	/**
 	 * @param bucket the S3 bucket, or blank to keep documents in the database

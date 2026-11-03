@@ -86,6 +86,23 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("cannot be changed after registration")));
 
+		// Date of birth and nationality are fixed once saved: a different one is refused, leaving them out keeps them.
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content(profileBody("Test", phone, "1991-05-02")))
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("date of birth cannot be changed")));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(profileBody("Test", phone, "1990-04-01").replace("\"nationality\":\"GB\"", "\"nationality\":\"IN\"")))
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("nationality cannot be changed")));
+		mvc.perform(put("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(profileBody("Test", phone, null).replace("\"nationality\":\"GB\"", "\"nationality\":null")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.dateOfBirth").value("1990-04-01"))
+			.andExpect(jsonPath("$.nationality").value("GB"));
+
 		// Notification preferences are settings of their own; saving the profile leaves them alone.
 		mvc.perform(put("/api/v1/users/me/notification-preferences").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"emailNotifications\":false,\"smsNotifications\":true}"))
@@ -352,13 +369,13 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.message").value("Upload your Aadhaar card with the Aadhaar number"));
 		submitKyc(investor, null, null, Map.of())
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("Upload your Aadhaar card or your PAN card"));
+			.andExpect(jsonPath("$.message").value("Upload your Aadhaar card, your PAN card or your signature"));
 
 		var html = new MockMultipartFile("panCard", "pan.png", "image/png",
 				"<html><script>alert(1)</script></html>".getBytes(StandardCharsets.UTF_8));
 		submitKyc(investor, Map.of("aadhaarCard", png(), "panCard", html))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("Document KYC_PAN_CARD must be a PDF, JPEG or PNG file"));
+			.andExpect(jsonPath("$.message").value("Document KYC_PAN_CARD must be a JPG or PNG image"));
 
 		// Numbers are checked: 12 digits for Aadhaar, and the PAN format.
 		submitKyc(investor, "2345 6789 012", IndianIdFixtures.pan(), validKycFiles())
@@ -401,13 +418,19 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.panNumber").value(pan))
 			.andExpect(jsonPath("$.documents.length()").value(1));
 
-		// The Aadhaar later: now it holds both and goes for review, as one submission.
+		// The Aadhaar later: still a draft, as the signature is not in yet.
 		submitKyc(investor, IndianIdFixtures.aadhaar(), null, Map.of("aadhaarCard", png()))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").value(draft))
+			.andExpect(jsonPath("$.status").value("DRAFT"));
+
+		// The signature last, on its own: now it holds all three and goes for review, as one submission.
+		submitKyc(investor, null, null, Map.of("signature", png()))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.id").value(draft))
 			.andExpect(jsonPath("$.status").value("PENDING"))
 			.andExpect(jsonPath("$.documents[*].purpose",
-					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD")));
+					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD", "KYC_SIGNATURE")));
 		mvc.perform(get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.kycStatus").value("PENDING"));
 		mvc.perform(get("/api/v1/admin/kyc").param("size", "200").header(HttpHeaders.AUTHORIZATION, reviewer.bearer()))
@@ -422,6 +445,36 @@ class UserManagementIntegrationTest {
 		submitKyc(investor, null, IndianIdFixtures.pan(), Map.of("panCard", jpeg()))
 			.andExpect(jsonPath("$.status").value("DRAFT"))
 			.andExpect(jsonPath("$.id", org.hamcrest.Matchers.not(draft)));
+	}
+
+	@Test
+	void uploadsAreJpgOrPngImagesOfAtMostTwoMegabytes() throws Exception {
+		Account investor = api.register();
+		completePersonalDetails(investor);
+
+		// A genuine PDF is refused, like anything that is not a JPG or PNG image.
+		var pdf = new MockMultipartFile("panCard", "pan.pdf", "application/pdf",
+				"%PDF-1.4 e-PAN".getBytes(StandardCharsets.US_ASCII));
+		submitKyc(investor, Map.of("aadhaarCard", png(), "panCard", pdf))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("Document KYC_PAN_CARD must be a JPG or PNG image"));
+
+		// Over 2 MB is refused.
+		byte[] large = new byte[2 * 1024 * 1024 + 1];
+		System.arraycopy(PNG_HEADER, 0, large, 0, PNG_HEADER.length);
+		submitKyc(investor, Map.of("aadhaarCard", png(), "panCard", jpeg(),
+				"signature", new MockMultipartFile("signature", "sign.png", "image/png", large)))
+			.andExpect(status().is4xxClientError());
+
+		// Nothing was kept from either attempt.
+		mvc.perform(get("/api/v1/users/me/kyc").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isNoContent());
+
+		// The signature may come first, before either identity number.
+		submitKyc(investor, null, null, Map.of("signature", png()))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.status").value("DRAFT"))
+			.andExpect(jsonPath("$.documents[*].purpose").value(org.hamcrest.Matchers.contains("KYC_SIGNATURE")));
 	}
 
 	@Test
@@ -442,7 +495,7 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.documentType").doesNotExist())
 			.andExpect(jsonPath("$.reviewedBy").doesNotExist())
 			.andExpect(jsonPath("$.documents[*].purpose",
-					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD")))
+					org.hamcrest.Matchers.containsInAnyOrder("KYC_AADHAAR_CARD", "KYC_PAN_CARD", "KYC_SIGNATURE")))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
 		// Only one submission under review at a time.
@@ -473,6 +526,10 @@ class UserManagementIntegrationTest {
 			.andExpect(jsonPath("$.account.email").value(investor.email()))
 			.andExpect(jsonPath("$.submission.aadhaarNumber").value(aadhaar))
 			.andExpect(jsonPath("$.submission.panNumber").value(pan))
+			// The investor's address, from their profile, for the reviewer to check.
+			.andExpect(jsonPath("$.address.line1").value("12 Marine Drive"))
+			.andExpect(jsonPath("$.address.city").value("Mumbai"))
+			.andExpect(jsonPath("$.address.postalCode").value("400020"))
 			.andReturn().getResponse().getContentAsString();
 		String frontId = ((List<String>) JsonPath.read(detail,
 				"$.submission.documents[?(@.purpose == 'KYC_AADHAAR_CARD')].id")).getFirst();
@@ -649,6 +706,9 @@ class UserManagementIntegrationTest {
 			.andExpect(status().isCreated())
 			// The holder is the investor's registered name; a different name in the request is ignored.
 			.andExpect(jsonPath("$.accountHolderName").value("Test Investor"))
+			// Its owner sees the full number, unmasked.
+			.andExpect(jsonPath("$.accountNumber").value(VALID_ACCOUNT))
+			.andExpect(jsonPath("$.ifsc").value("HDFC0000001"))
 			.andExpect(jsonPath("$.accountNumberMasked").value("•••• 5432"))
 			.andExpect(jsonPath("$.primary").value(true))
 			.andExpect(jsonPath("$.status").value("PENDING_VERIFICATION"))
@@ -710,7 +770,17 @@ class UserManagementIntegrationTest {
 						 "accountNumber":"50100012345678","routingCode":"HDFC0001234"}""".getBytes(StandardCharsets.UTF_8)));
 		mvc.perform(withoutProof.param("proofType", "CANCELLED_CHEQUE").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.message").value("Upload a bank statement or a cancelled cheque for this account"));
+			.andExpect(jsonPath("$.message").value("Upload a bank statement, a cancelled cheque or a passbook for this account"));
+
+		// A passbook proves an account too.
+		var passbook = BankAccountUploads.addAccount("""
+				{"accountHolderName":"Test Investor","country":"IN","currency":"INR",
+				 "accountNumber":"50100099990001","routingCode":"HDFC0001234"}""");
+		// Replaces the helper's BANK_STATEMENT rather than adding a second value.
+		passbook.with(request -> { request.setParameter("proofType", "PASSBOOK"); return request; });
+		mvc.perform(passbook.header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.proofType").value("PASSBOOK"));
 
 		String accountId = JsonPath.read(addBank(investor, "50100012345678", "HDFC0001234")
 			.andExpect(status().isCreated())
@@ -724,7 +794,7 @@ class UserManagementIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsByteArray();
-		assertThat(proof).isEqualTo(BankAccountUploads.STATEMENT_PDF);
+		assertThat(proof).isEqualTo(BankAccountUploads.STATEMENT_IMAGE);
 		assertThat(api.auditCount("BANK_ACCOUNT_PROOF_VIEWED", accountId)).isEqualTo(1);
 
 		// An account without proof (added before proofs were required) cannot be verified.
@@ -734,16 +804,16 @@ class UserManagementIntegrationTest {
 		api.assignReview("bank-accounts", older, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", older).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isUnprocessableContent())
-			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no bank statement or cancelled cheque")));
-		// While it awaits verification the reviewer sees the full number, to check against the statement; once
-		// verified, only the last four digits.
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no bank statement, cancelled cheque or passbook")));
+		// The reviewer sees the full number, unmasked, to check against the statement: before and after verifying.
 		mvc.perform(get("/api/v1/admin/users/{id}/bank-accounts", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(jsonPath("$[?(@.account.id == '%s')].accountNumber".formatted(accountId)).value(org.hamcrest.Matchers.contains("50100012345678")));
 		api.assignReview("bank-accounts", accountId, finance);
 		mvc.perform(post("/api/v1/admin/bank-accounts/{id}/verify", accountId).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.accountNumber").doesNotExist())
-			.andExpect(jsonPath("$.account.accountNumberMasked").value("•••• 5678"));
+			.andExpect(jsonPath("$.accountNumber").value("50100012345678"));
+		mvc.perform(get("/api/v1/admin/users/{id}/bank-accounts", investor.id()).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(jsonPath("$[?(@.account.id == '%s')].accountNumber".formatted(accountId)).value(org.hamcrest.Matchers.contains("50100012345678")));
 	}
 
 	@Test
@@ -1025,7 +1095,7 @@ class UserManagementIntegrationTest {
 	}
 
 	private static Map<String, MockMultipartFile> validKycFiles() {
-		return Map.of("aadhaarCard", png(), "panCard", jpeg());
+		return Map.of("aadhaarCard", png(), "panCard", jpeg(), "signature", png());
 	}
 
 	private ResultActions submitKyc(Account investor, Map<String, MockMultipartFile> files) throws Exception {

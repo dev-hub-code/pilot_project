@@ -4,6 +4,7 @@ import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
 import com.sealease.backend.auth.config.AuthProperties;
+import com.sealease.backend.auth.dto.AcceptInvitationRequest;
 import com.sealease.backend.auth.dto.AuthTokensResponse;
 import com.sealease.backend.auth.dto.ChangePasswordRequest;
 import com.sealease.backend.auth.dto.CurrentUserResponse;
@@ -61,6 +62,7 @@ public class AuthService {
 	private final AuditService audit;
 	private final AuthProperties properties;
 	private final TransactionTemplate tx;
+	private final InvestorInvitationService invitations;
 
 	private final FixedWindowRateLimiter loginPerIp;
 	private final FixedWindowRateLimiter loginPerEmail;
@@ -71,7 +73,7 @@ public class AuthService {
 	public AuthService(UserAccountService accounts, EmailVerificationService emailVerification, UserRoleService userRoles,
 			ReferralService referrals, SessionService sessions, AccessTokenService accessTokens, AuditService audit,
 			AuthProperties properties, PlatformTransactionManager transactionManager, DemoAccountService demos, TermsService terms,
-			Clock clock) {
+			InvestorInvitationService invitations, Clock clock) {
 		this.demos = demos;
 		this.terms = terms;
 		this.accounts = accounts;
@@ -83,6 +85,7 @@ public class AuthService {
 		this.audit = audit;
 		this.properties = properties;
 		this.tx = new TransactionTemplate(transactionManager);
+		this.invitations = invitations;
 
 		AuthProperties.RateLimits limits = Objects.requireNonNull(properties.rateLimit(), "app.auth.rate-limit");
 		this.loginPerIp = limiter(limits.loginPerIp(), clock);
@@ -116,6 +119,15 @@ public class AuthService {
 			}
 			return openSession(account.id(), client, 0);
 		});
+	}
+
+	/**
+	 * Opens the network investor account a client was invited to, and signs them in: the address is the invitation's
+	 * and is confirmed by their having followed the emailed link.
+	 */
+	public AuthTokensResponse acceptInvitation(AcceptInvitationRequest request, ClientInfo client) {
+		registerPerIp.acquire(keyOf(client));
+		return tx.execute(status -> openSession(invitations.accept(request), client, 0));
 	}
 
 	public void verifyEmail(String token) {

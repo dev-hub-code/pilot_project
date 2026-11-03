@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
+import { BankAccountDetails } from "@/features/profile/bank-account-details";
 import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import type { AdminBankAccount } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
@@ -38,13 +39,9 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
-        <div>
-          <p className="font-medium">
-            <span className="font-mono text-base font-bold tracking-wide">{accountNumber ?? account.accountNumberMasked}</span>
-          </p>
-          <p className="text-muted">
-            {account.accountHolderName} · {account.country} · added {formatDateTime(account.createdAt)}
-          </p>
+        <div className="min-w-0 flex-1 space-y-3">
+          <BankAccountDetails account={account} accountNumber={accountNumber} ifsc={ifsc.code} />
+          <p className="text-muted">Added {formatDateTime(account.createdAt)}</p>
           <Link href={`/admin/users/${userId}?from=bank-verification`} className="text-brand hover:underline">View account owner</Link>
         </div>
         <div className="flex items-center gap-2">
@@ -52,7 +49,6 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
           <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
         </div>
       </div>
-      <p className="text-sm"><span className="text-muted">IFSC</span> <span className="font-mono text-base font-bold tracking-wide">{ifsc.code}</span></p>
       {replaces && (
         <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
           Replaces{" "}
@@ -69,7 +65,7 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
           </a>
         ) : (
           <span className="font-medium text-rose-600 dark:text-rose-400">
-            No bank statement or cancelled cheque: reject so the investor can add the account again with one.
+            No bank statement, cancelled cheque or passbook: reject so the investor can add the account again with one.
           </span>
         )}
       </p>

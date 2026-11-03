@@ -1,6 +1,9 @@
 package com.sealease.backend.auth.controller;
 
+import com.sealease.backend.auth.dto.AcceptInvitationRequest;
 import com.sealease.backend.auth.dto.AuthTokensResponse;
+import com.sealease.backend.auth.dto.InvitationDetails;
+import com.sealease.backend.auth.dto.InvitationTokenRequest;
 import com.sealease.backend.auth.dto.ChangePasswordRequest;
 import com.sealease.backend.auth.dto.ForgotPasswordRequest;
 import com.sealease.backend.auth.dto.CurrentUserResponse;
@@ -13,6 +16,7 @@ import com.sealease.backend.auth.dto.ResetPasswordRequest;
 import com.sealease.backend.auth.dto.VerifyEmailCodeRequest;
 import com.sealease.backend.auth.dto.VerifyEmailRequest;
 import com.sealease.backend.auth.service.AuthService;
+import com.sealease.backend.auth.service.InvestorInvitationService;
 import com.sealease.backend.auth.service.PasswordResetService;
 import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.security.AuthenticatedUser;
@@ -33,10 +37,13 @@ public class AuthController {
 
 	private final AuthService authService;
 	private final PasswordResetService passwordReset;
+	private final InvestorInvitationService invitations;
 
-	public AuthController(AuthService authService, PasswordResetService passwordReset) {
+	public AuthController(AuthService authService, PasswordResetService passwordReset,
+			InvestorInvitationService invitations) {
 		this.authService = authService;
 		this.passwordReset = passwordReset;
+		this.invitations = invitations;
 	}
 
 	/** 201 with tokens, or 202 with {@link RegistrationResponse} when the email address must be confirmed first. */
@@ -45,6 +52,20 @@ public class AuthController {
 		Object result = authService.register(request, ClientInfo.from(http));
 		return ResponseEntity.status(result instanceof RegistrationResponse ? HttpStatus.ACCEPTED : HttpStatus.CREATED)
 			.body(result);
+	}
+
+	/** The invited address and name for an invitation link; 400 when the link no longer works. */
+	@PostMapping("/invitations/lookup")
+	public InvitationDetails invitation(@Valid @RequestBody InvitationTokenRequest request) {
+		return invitations.details(request.token());
+	}
+
+	/** Opens the invited network investor account and signs the client in. */
+	@PostMapping("/invitations/accept")
+	@ResponseStatus(HttpStatus.CREATED)
+	public AuthTokensResponse acceptInvitation(@Valid @RequestBody AcceptInvitationRequest request,
+			HttpServletRequest http) {
+		return authService.acceptInvitation(request, ClientInfo.from(http));
 	}
 
 	@PostMapping("/verify-email")

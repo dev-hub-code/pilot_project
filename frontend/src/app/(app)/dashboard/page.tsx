@@ -25,7 +25,7 @@ import type { CurrentUser } from "@/types/auth";
 import type { EarningsSummary, PayoutMonth } from "@/types/earning";
 import type { Money } from "@/types/plan";
 import type { Portfolio } from "@/types/order";
-import type { ReferralMonth } from "@/types/referral";
+import type { ReferralMonth, ReferralOverview } from "@/types/referral";
 import type { Profile } from "@/types/user";
 import { humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
@@ -63,15 +63,18 @@ export default async function DashboardPage() {
   // The email reminder pops up once per sign-in; onboarding keeps asking after that.
   const emailPromptShown = (await cookies()).get(cookieNames().emailPrompt)?.value === (await requireSession()).sessionId;
   const investor = hasPermission(me.permissions, Permission.INVESTOR_PORTAL);
-  const [portfolio, earnings, payoutMonths, referralMonths] = investor
+  const [portfolio, earnings, payoutMonths, referralMonths, referrals] = investor
     ? await Promise.all([
       authFetch<Portfolio>("/api/v1/portfolio"),
       authFetch<EarningsSummary>("/api/v1/earnings/summary"),
       // The charts are a convenience: a failure there must not break the dashboard.
       authFetch<PayoutMonth[]>(`/api/v1/earnings/monthly?from=${monthKey(PAST)}&to=${monthKey(AHEAD)}`).catch(() => null),
       authFetch<ReferralMonth[]>("/api/v1/referrals/monthly").catch(() => null),
+      authFetch<ReferralOverview>("/api/v1/referrals/me").catch(() => null),
     ])
-    : [null, null, null, null];
+    : [null, null, null, null, null];
+  // Only online investors request withdrawals; network investors are paid when our team makes one.
+  const canWithdraw = referrals?.scheme === "ONLINE";
   const list = (amounts: Money[] | undefined) => (amounts && amounts.length > 0
     ? amounts.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—");
@@ -98,7 +101,7 @@ export default async function DashboardPage() {
       <PageHeader title={`Welcome back, ${me.firstName}`} description="Your investments and returns at a glance."
         actions={!needsVerification && (
           <div className="flex flex-wrap gap-2">
-            <LinkButton href="/withdrawals" variant="secondary">Withdraw</LinkButton>
+            {canWithdraw && <LinkButton href="/withdrawals" variant="secondary">Withdraw</LinkButton>}
             <LinkButton href="/invest">Invest</LinkButton>
           </div>
         )} />

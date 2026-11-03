@@ -1,6 +1,6 @@
 package com.sealease.backend.kyc.entity;
 
-/** DRAFT while the investor has uploaded only one of Aadhaar and PAN; PENDING (under review) once both are in. */
+/** DRAFT until the investor has uploaded the Aadhaar, the PAN and the signature; PENDING (under review) once all are in. */
 public enum KycSubmissionStatus {
 	DRAFT,
 	PENDING,

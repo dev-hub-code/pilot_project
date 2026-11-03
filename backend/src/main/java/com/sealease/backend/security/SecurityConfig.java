@@ -44,7 +44,8 @@ public class SecurityConfig {
 	private static final String[] PUBLIC_AUTH = { "/api/v1/auth/register", "/api/v1/auth/login",
 			"/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/jwks", "/api/v1/auth/verify-email",
 			"/api/v1/auth/verify-email/resend", "/api/v1/auth/verify-email/code", "/api/v1/auth/password-reset/request",
-			"/api/v1/auth/password-reset/confirm" };
+			"/api/v1/auth/password-reset/confirm", "/api/v1/auth/invitations/lookup",
+			"/api/v1/auth/invitations/accept" };
 	private static final String PUBLIC_LEADS = "/api/v1/public/leads";
 	/** The website's public read-only data: the track record, the open plans, and countries, states and cities. */
 	private static final String[] PUBLIC_WEBSITE = { "/api/v1/public/stats", "/api/v1/public/plans",

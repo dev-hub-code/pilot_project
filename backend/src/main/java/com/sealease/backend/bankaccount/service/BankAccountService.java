@@ -85,7 +85,7 @@ public class BankAccountService {
 	@Transactional(readOnly = true)
 	public List<BankAccountResponse> listFor(UUID userId) {
 		return accounts.findByUserIdAndStatusInOrderByCreatedAtAsc(userId, IN_USE).stream()
-			.map(BankAccountResponse::from)
+			.map(this::view)
 			.toList();
 	}
 
@@ -101,16 +101,16 @@ public class BankAccountService {
 		audit.record(AuditRecord.of(userId, AuditAction.BANK_ACCOUNT_ADDED, "BANK_ACCOUNT", account.getId())
 			.withNewValue(Map.of("country", account.getCountry(),
 					"currency", account.getCurrency(), "accountNumberLast4", account.getAccountNumberLast4())));
-		return BankAccountResponse.from(account);
+		return view(account);
 	}
 
-	/** A bank statement or cancelled cheque is required with every new account; stored encrypted. */
+	/** A bank statement, cancelled cheque or passbook is required with every new account; stored encrypted. */
 	private void attachProof(UUID userId, BankAccount account, BankProofType proofType, MultipartFile proof) {
 		if (proofType == null) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose whether you are uploading a bank statement or a cancelled cheque");
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose whether you are uploading a bank statement, a cancelled cheque or a passbook");
 		}
 		if (proof == null || proof.isEmpty()) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Upload a bank statement or a cancelled cheque for this account");
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Upload a bank statement, a cancelled cheque or a passbook for this account");
 		}
 		account.provedBy(proofType, documents.store(userId, proofType.purpose(), proof));
 	}
@@ -246,8 +246,8 @@ public class BankAccountService {
 					"The owner's identity must be verified (KYC approved) before their bank account");
 		}
 		if (account.getProofDocumentId() == null) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This account has no bank statement or cancelled "
-					+ "cheque; reject it so the investor can add it again with one");
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This account has no bank statement, cancelled "
+					+ "cheque or passbook; reject it so the investor can add it again with one");
 		}
 		account.verify(reviewerId, clock.instant());
 		audit.record(AuditRecord.of(reviewerId, AuditAction.BANK_ACCOUNT_VERIFIED, "BANK_ACCOUNT", accountId)
@@ -325,7 +325,7 @@ public class BankAccountService {
 		return accounts.findByUserIdAndStatusNotOrderByCreatedAtAsc(userId, BankAccountStatus.REMOVED).stream()
 			.filter(a -> a.isPrimary() && a.getStatus() == BankAccountStatus.VERIFIED)
 			.findFirst()
-			.map(BankAccountResponse::from);
+			.map(this::view);
 	}
 
 	/** For the withdrawal module: an account's payout eligibility and display details (nothing secret). */
@@ -382,16 +382,20 @@ public class BankAccountService {
 	private AdminBankAccountResponse adminView(BankAccount account) {
 		BankAccount replaced = account.getReplacesAccountId() == null ? null
 				: accounts.findById(account.getReplacesAccountId()).orElse(null);
-		// The full numbers are for checking against the proof: shown only while the account awaits verification.
-		boolean reviewing = account.getStatus() == BankAccountStatus.PENDING_VERIFICATION;
-		return new AdminBankAccountResponse(account.getUserId(), BankAccountResponse.from(account),
+		// Reviewers see the full numbers, unmasked, whatever the account's status.
+		return new AdminBankAccountResponse(account.getUserId(), view(account),
 				account.getVerifiedBy(),
 				accounts.countOtherUsersWithFingerprint(account.getAccountFingerprint(), account.getUserId()),
-				replaced == null ? null : BankAccountResponse.from(replaced),
+				replaced == null ? null : view(replaced),
 				assignee(account), new AdminBankAccountResponse.Ifsc(
 						encryptor.decrypt(account.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT)),
-				reviewing ? accountNumber(account) : null,
-				reviewing && replaced != null ? accountNumber(replaced) : null);
+				accountNumber(account),
+				replaced == null ? null : accountNumber(replaced));
+	}
+
+	private BankAccountResponse view(BankAccount account) {
+		return BankAccountResponse.from(account, accountNumber(account),
+				encryptor.decrypt(account.getRoutingCodeEncrypted(), ROUTING_CODE_CONTEXT));
 	}
 
 	private String accountNumber(BankAccount account) {

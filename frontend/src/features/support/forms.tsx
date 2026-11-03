@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { ACCEPTED_FILE_TYPES } from "@/validators/profile";
 import { FileField } from "@/components/ui/file-field";
 import { FormFeedback } from "@/components/ui/form-feedback";
 import { SelectField } from "@/components/ui/select-field";
@@ -26,8 +27,8 @@ function MessageBox({ id, label, defaultValue, error }: { id: string; label: str
 
 function Files({ error }: { error?: string }) {
   return (
-    <FileField label="Attachments" name="files" multiple accept="application/pdf,image/jpeg,image/png" error={error}
-      hint={`Up to ${MAX_ATTACHMENTS} PDF, JPEG or PNG files, 5 MB each`} />
+    <FileField label="Attachments" name="files" multiple accept={ACCEPTED_FILE_TYPES} error={error}
+      hint={`Up to ${MAX_ATTACHMENTS} JPG or PNG images, 2 MB each`} />
   );
 }
 

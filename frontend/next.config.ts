@@ -12,8 +12,8 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
-/** Four KYC files of up to 5 MB each plus multipart overhead; matches the backend's limits. */
-const UPLOAD_LIMIT = "22mb";
+/** Three files of up to 2 MB each (KYC documents or support attachments) plus multipart overhead; matches the backend. */
+const UPLOAD_LIMIT = "8mb";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
