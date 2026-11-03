@@ -14,6 +14,8 @@ import java.util.UUID;
  * @param deposit      how the investor says they paid a bank payment, once submitted
  * @param officeCash   how to pay, while a payment in cash at the office is pending
  * @param receiptNumber the receipt number the investor gave for cash paid at the office, once submitted
+ * @param checkout     how to open the gateway's checkout, while a gateway payment is pending
+ * @param virtualAccount where to pay, while a virtual-account payment is pending
  */
 public record PaymentResponse(
 		UUID id,
@@ -37,21 +39,25 @@ public record PaymentResponse(
 		OfficeCashInstructions officeCash,
 		String receiptNumber,
 		Instant receiptSubmittedAt,
+		CheckoutInstructions checkout,
+		VirtualAccountInstructions virtualAccount,
 		Assignee assignee) {
 
 	public static PaymentResponse from(Payment p, String orderNumber, BankTransferInstructions bankTransfer,
-			DepositDetails deposit, OfficeCashInstructions officeCash) {
+			DepositDetails deposit, OfficeCashInstructions officeCash, CheckoutInstructions checkout,
+			VirtualAccountInstructions virtualAccount) {
 		return new PaymentResponse(p.getId(), p.getOrderId(), orderNumber, p.getUserId(), p.getMethod(), p.getProvider(),
 				p.getProviderReference(), MoneyResponse.from(p.amount()), p.getStatus(), p.getFailureReason(),
 				p.getExternalReference(), p.getSettledAt(), p.getRefundedAt(), p.getRefundReference(), p.getRefundReason(),
-				p.getCreatedAt(), bankTransfer, deposit, officeCash, p.getReceiptNumber(), p.getReceiptSubmittedAt(), null);
+				p.getCreatedAt(), bankTransfer, deposit, officeCash, p.getReceiptNumber(), p.getReceiptSubmittedAt(), checkout,
+				virtualAccount, null);
 	}
 
 	/** Staff views say which finance member is confirming the payment; investors' views do not. */
 	public PaymentResponse withAssignee(Assignee assignee) {
 		return new PaymentResponse(id, orderId, orderNumber, userId, method, provider, providerReference, amount, status,
 				failureReason, externalReference, settledAt, refundedAt, refundReference, refundReason, createdAt,
-				bankTransfer, deposit, officeCash, receiptNumber, receiptSubmittedAt, assignee);
+				bankTransfer, deposit, officeCash, receiptNumber, receiptSubmittedAt, checkout, virtualAccount, assignee);
 	}
 
 }

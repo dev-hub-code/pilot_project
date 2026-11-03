@@ -20,6 +20,7 @@ import com.sealease.backend.common.web.ClientInfo;
 import com.sealease.backend.invoice.service.InvoiceProperties;
 import com.sealease.backend.user.dto.ProfileResponse;
 import com.sealease.backend.user.service.UserProfileService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,8 +46,10 @@ import java.util.stream.Stream;
  * Issues each holding's investment agreement when its order is confirmed: the wording in force, filled in with the
  * investment's facts, numbered ({@code AGR-2026-000042}) and stored word for word. The investor then accepts it, which
  * starts the lease. Until then the lease dates are not known, so the stored wording keeps their placeholders and they
- * read "the day this Agreement is accepted"; once accepted, the dates of the lease it started are shown. Agreements
- * and acceptances are immutable; the PDF is rendered from them whenever it is downloaded.
+ * read "the day this Agreement is accepted"; once accepted, the dates of the lease it started are shown. Until the
+ * investor accepts, the agreement is shown in the wording now in force (its number and issue date unchanged), so a
+ * change to the wording reaches agreements still waiting; the wording accepted is recorded with the acceptance and
+ * stays as it was. Agreements and acceptances are immutable; the PDF is rendered from them whenever it is downloaded.
  */
 @Service
 public class LeaseAgreementService {
@@ -64,11 +67,13 @@ public class LeaseAgreementService {
 	private final InvoiceProperties company;
 	private final DisplayTimeZone display;
 	private final AuditService audit;
+	private final ObjectProvider<AgreementFactsSource> factsSource;
 	private final Clock clock;
 
 	public LeaseAgreementService(LeaseAgreementRepository agreements, AgreementAcceptanceRepository acceptances,
 			AgreementTemplateRepository templates, AgreementTemplateService wording, AgreementRenderer renderer,
-			UserProfileService profiles, InvoiceProperties company, DisplayTimeZone display, AuditService audit, Clock clock) {
+			UserProfileService profiles, InvoiceProperties company, DisplayTimeZone display, AuditService audit,
+			ObjectProvider<AgreementFactsSource> factsSource, Clock clock) {
 		this.agreements = agreements;
 		this.acceptances = acceptances;
 		this.templates = templates;
@@ -78,6 +83,8 @@ public class LeaseAgreementService {
 		this.company = company;
 		this.display = display;
 		this.audit = audit;
+		// Looked up when needed: the source (orders) itself depends on this service to issue agreements.
+		this.factsSource = factsSource;
 		this.clock = clock;
 	}
 
@@ -98,6 +105,7 @@ public class LeaseAgreementService {
 		AgreementTemplate template = wording.current();
 		String number = "AGR-%d-%06d".formatted(now.atZone(ZoneOffset.UTC).getYear(), agreements.nextNumber());
 		Map<Placeholder, String> values = values(facts, number, LocalDate.ofInstant(now, display.zone()));
+		values.put(Placeholder.AGREEMENT_VERSION, String.valueOf(template.getVersion()));
 		LeaseAgreement agreement = agreements.saveAndFlush(new LeaseAgreement(number, facts.holdingId(), facts.orderId(),
 				facts.userId(), template.getId(), Placeholder.fill(template.getTitle(), values),
 				Placeholder.fill(template.getBody(), values), facts.awaitsAcceptance(), actorId, now));
@@ -123,12 +131,15 @@ public class LeaseAgreementService {
 		if (acceptances.existsById(agreement.getId())) {
 			throw new BusinessException(ErrorCode.CONFLICT, "This investment agreement has already been accepted");
 		}
+		// What the investor accepts is the wording they were shown: the one now in force.
+		Wording accepted = pendingWording(agreement);
 		ClientInfo client = ClientInfo.current();
 		AgreementAcceptance acceptance = acceptances.saveAndFlush(new AgreementAcceptance(agreement.getId(), userId,
-				clock.instant(), leaseStartsOn, leaseEndsOn, client.ipAddress(), client.userAgent()));
+				clock.instant(), leaseStartsOn, leaseEndsOn, client.ipAddress(), client.userAgent(),
+				accepted.templateId(), accepted.title(), accepted.body()));
 		audit.record(AuditRecord.of(userId, AuditAction.LEASE_AGREEMENT_ACCEPTED, ENTITY, agreement.getId())
 			.withNewValue(Map.of("agreementNumber", agreement.getAgreementNumber(), "holdingId", holdingId.toString(),
-					"leaseStartsOn", leaseStartsOn.toString())));
+					"leaseStartsOn", leaseStartsOn.toString(), "templateVersion", accepted.version())));
 		return LeaseAgreementResponse.from(agreement, acceptance);
 	}
 
@@ -152,7 +163,9 @@ public class LeaseAgreementService {
 	public LeaseAgreementDocument document(UUID holdingId, UUID ownerId) {
 		LeaseAgreement a = owned(holdingId, ownerId);
 		AgreementAcceptance acceptance = acceptances.findById(a.getId()).orElse(null);
-		return new LeaseAgreementDocument(LeaseAgreementResponse.from(a, acceptance), wording(a, acceptance));
+		Wording w = wording(a, acceptance);
+		return new LeaseAgreementDocument(LeaseAgreementResponse.from(a, acceptance, w.title()),
+				fillAcceptance(w.body(), a, acceptance));
 	}
 
 	/** A holding's agreement as a PDF; with {@code ownerId}, only if that user owns it. */
@@ -160,8 +173,9 @@ public class LeaseAgreementService {
 	public AgreementPdf pdf(UUID holdingId, UUID ownerId) {
 		LeaseAgreement a = owned(holdingId, ownerId);
 		AgreementAcceptance acceptance = acceptances.findById(a.getId()).orElse(null);
-		int version = templates.findById(a.getTemplateId()).map(AgreementTemplate::getVersion).orElse(0);
-		String body = wording(a, acceptance);
+		Wording w = wording(a, acceptance);
+		int version = w.version();
+		String body = fillAcceptance(w.body(), a, acceptance);
 		if (a.isAcceptanceRequired()) {
 			body += "\n\n# Acceptance\n" + (acceptance == null
 					? "Not yet accepted. The term and returns start when the Investor accepts this Agreement in their SeaLease account."
@@ -171,7 +185,7 @@ public class LeaseAgreementService {
 							+ ". The term runs from " + DATE.format(acceptance.getLeaseStartsOn()) + " to "
 							+ DATE.format(acceptance.getLeaseEndsOn().minusDays(1)) + ".");
 		}
-		return new AgreementPdf("agreement-" + a.getAgreementNumber(), renderer.pdf(a.getTitle(),
+		return new AgreementPdf("agreement-" + a.getAgreementNumber(), renderer.pdf(w.title(),
 				a.getAgreementNumber() + " · issued " + DATE.format(LocalDate.ofInstant(a.getGeneratedAt(), display.zone()))
 						+ (a.isAcceptanceRequired() && acceptance == null ? " · awaiting acceptance" : ""),
 				body, "Issued electronically by SeaLease · " + a.getAgreementNumber() + " · wording version " + version));
@@ -193,21 +207,75 @@ public class LeaseAgreementService {
 		return found.stream().map(a -> LeaseAgreementResponse.from(a, accepted.get(a.getId()))).toList();
 	}
 
+	/** An agreement's title and wording before the lease dates and acceptance details are filled in. */
+	private record Wording(UUID templateId, int version, String title, String body) {
+	}
+
 	/**
-	 * The wording as issued, with the lease dates filled in: the dates of the lease once accepted, otherwise words
-	 * saying the lease starts on acceptance. Agreements issued with their dates have no placeholders left.
+	 * The wording to show: once accepted, the wording accepted; while waiting, the wording now in force; otherwise (no
+	 * acceptance needed, or accepted before accepted wording was recorded) the wording issued.
 	 */
-	private static String wording(LeaseAgreement a, AgreementAcceptance acceptance) {
-		Map<Placeholder, String> dates = new EnumMap<>(Placeholder.class);
+	private Wording wording(LeaseAgreement a, AgreementAcceptance acceptance) {
+		if (acceptance != null && acceptance.getBody() != null) {
+			return new Wording(acceptance.getTemplateId(), versionOf(acceptance.getTemplateId()), acceptance.getTitle(),
+					acceptance.getBody());
+		}
+		if (acceptance == null && a.isAcceptanceRequired()) {
+			return pendingWording(a);
+		}
+		return issued(a);
+	}
+
+	/** An agreement awaiting acceptance in the wording now in force, filled in with its investment's facts. */
+	private Wording pendingWording(LeaseAgreement a) {
+		AgreementTemplate current = wording.current();
+		if (current.getId().equals(a.getTemplateId())) {
+			return issued(a);
+		}
+		AgreementFacts facts = factsSource.getObject().pendingFacts(a.getHoldingId(), a.getUserId());
+		// The agreement keeps the number and date it was issued with.
+		Map<Placeholder, String> values = values(facts, a.getAgreementNumber(),
+				LocalDate.ofInstant(a.getGeneratedAt(), display.zone()));
+		values.put(Placeholder.AGREEMENT_VERSION, String.valueOf(current.getVersion()));
+		return new Wording(current.getId(), current.getVersion(), Placeholder.fill(current.getTitle(), values),
+				Placeholder.fill(current.getBody(), values));
+	}
+
+	private Wording issued(LeaseAgreement a) {
+		return new Wording(a.getTemplateId(), versionOf(a.getTemplateId()), a.getTitle(), a.getBody());
+	}
+
+	private int versionOf(UUID templateId) {
+		return templates.findById(templateId).map(AgreementTemplate::getVersion).orElse(0);
+	}
+
+	/**
+	 * The wording with the lease dates and acceptance details filled in: those of the acceptance once accepted,
+	 * otherwise words saying the lease starts on acceptance. Agreements issued with their dates have no placeholders
+	 * left.
+	 */
+	private String fillAcceptance(String body, LeaseAgreement a, AgreementAcceptance acceptance) {
+		Map<Placeholder, String> values = new EnumMap<>(Placeholder.class);
 		if (acceptance != null) {
-			dates.put(Placeholder.LEASE_START_DATE, DATE.format(acceptance.getLeaseStartsOn()));
-			dates.put(Placeholder.LEASE_END_DATE, DATE.format(acceptance.getLeaseEndsOn().minusDays(1)));
+			values.put(Placeholder.LEASE_START_DATE, DATE.format(acceptance.getLeaseStartsOn()));
+			values.put(Placeholder.LEASE_END_DATE, DATE.format(acceptance.getLeaseEndsOn().minusDays(1)));
+			values.put(Placeholder.ACCEPTANCE_STATUS, "Accepted");
+			values.put(Placeholder.ACCEPTED_AT, STAMP.format(acceptance.getAcceptedAt().atZone(display.zone())));
+			values.put(Placeholder.ACCEPTANCE_REFERENCE, acceptanceReference(a.getAgreementNumber()));
 		}
 		else {
-			dates.put(Placeholder.LEASE_START_DATE, "the day this Agreement is accepted");
-			dates.put(Placeholder.LEASE_END_DATE, "the day before the same date at the end of the term");
+			values.put(Placeholder.LEASE_START_DATE, "the day this Agreement is accepted");
+			values.put(Placeholder.LEASE_END_DATE, "the day before the same date at the end of the term");
+			values.put(Placeholder.ACCEPTANCE_STATUS, "Awaiting acceptance");
+			values.put(Placeholder.ACCEPTED_AT, "Not yet accepted");
+			values.put(Placeholder.ACCEPTANCE_REFERENCE, "Pending");
 		}
-		return Placeholder.fill(a.getBody(), dates);
+		return Placeholder.fill(body, values);
+	}
+
+	/** One acceptance per agreement, so its reference follows the agreement's number: AGR-2026-000042 → ACC-2026-000042. */
+	private static String acceptanceReference(String agreementNumber) {
+		return agreementNumber.replaceFirst("^AGR-", "ACC-");
 	}
 
 	private Map<Placeholder, String> values(AgreementFacts f, String number, LocalDate today) {
@@ -215,6 +283,7 @@ public class LeaseAgreementService {
 		Map<Placeholder, String> v = new EnumMap<>(Placeholder.class);
 		v.put(Placeholder.AGREEMENT_NUMBER, number);
 		v.put(Placeholder.AGREEMENT_DATE, DATE.format(today));
+		v.put(Placeholder.CURRENT_YEAR, String.valueOf(today.getYear()));
 		v.put(Placeholder.COMPANY_NAME, company.issuerName());
 		v.put(Placeholder.COMPANY_ADDRESS, company.issuerAddress());
 		v.put(Placeholder.INVESTOR_NAME, (investor.firstName() + " " + investor.lastName()).strip());
@@ -236,6 +305,10 @@ public class LeaseAgreementService {
 		if (!f.awaitsAcceptance()) {
 			v.put(Placeholder.LEASE_START_DATE, DATE.format(f.leaseStartsOn()));
 			v.put(Placeholder.LEASE_END_DATE, DATE.format(f.leaseEndsOn().minusDays(1)));
+			// Issued with its dates, the agreement is never accepted.
+			v.put(Placeholder.ACCEPTANCE_STATUS, "Not required");
+			v.put(Placeholder.ACCEPTED_AT, "Not applicable");
+			v.put(Placeholder.ACCEPTANCE_REFERENCE, "Not applicable");
 		}
 		return v;
 	}

@@ -32,11 +32,18 @@ import com.sealease.backend.payment.entity.DepositMode;
 import com.sealease.backend.payment.entity.Payment;
 import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
+import com.sealease.backend.payment.dto.CheckoutInstructions;
+import com.sealease.backend.payment.dto.VirtualAccountInstructions;
+import com.sealease.backend.payment.gateway.Paise;
+import com.sealease.backend.payment.gateway.RazorpayClient.RazorpayException;
+import com.sealease.backend.payment.gateway.RazorpayProperties;
 import com.sealease.backend.payment.provider.BankTransferProperties;
 import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
 import com.sealease.backend.payment.repository.PaymentRepository;
 import jakarta.persistence.criteria.Predicate;
+import com.sealease.backend.referral.dto.ReferralScheme;
+import com.sealease.backend.referral.service.ReferralSchemeService;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import org.slf4j.Logger;
@@ -48,6 +55,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -85,11 +94,14 @@ public class PaymentService {
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final UserAccountService users;
+	private final RazorpayProperties razorpay;
+	private final ReferralSchemeService schemes;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
-			OutboxPublisher outbox, AuditService audit, UserAccountService users, Clock clock) {
+			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
+			ReferralSchemeService schemes, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -103,15 +115,33 @@ public class PaymentService {
 		this.outbox = outbox;
 		this.audit = audit;
 		this.users = users;
+		this.razorpay = razorpay;
+		this.schemes = schemes;
 		this.clock = clock;
 	}
 
 	// --------------------------------------------------------------------------- investor
 
 	/**
-	 * Starts paying an order by bank or in cash at the office. Idempotent per key; asking again while a
-	 * payment of the same method is in flight resumes it, and one of another method still in flight is
-	 * cancelled. Paying at the office holds the order for the office window, as the investor has to come in.
+	 * How this investor pays. Online investors pay through the gateway (its checkout, or a virtual account for a bank
+	 * transfer), confirmed automatically; network investors pay by bank transfer or in cash at the office, confirmed by
+	 * finance. Online investors never pay in cash: until the gateway is set up, they pay by bank transfer only.
+	 */
+	@Transactional(readOnly = true)
+	public List<PaymentMethod> methodsFor(UUID userId) {
+		if (schemes.schemeOf(userId) == ReferralScheme.ONLINE) {
+			return razorpay.enabled()
+					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT)
+					: List.of(PaymentMethod.BANK_TRANSFER);
+		}
+		return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.OFFICE_CASH);
+	}
+
+	/**
+	 * Starts paying an order in one of the investor's {@link #methodsFor ways to pay}. Idempotent per key; asking again
+	 * while a payment of the same method is in flight resumes it, and one of another method still in flight is
+	 * cancelled. Paying at the office, through the gateway's checkout or into a virtual account holds the order for that
+	 * method's window, as the investor needs the time to pay.
 	 */
 	@Transactional
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
@@ -137,7 +167,29 @@ public class PaymentService {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					"Card payments are not accepted; please pay by bank or at our office");
 		}
-		if (provider == null || (method == PaymentMethod.BANK_TRANSFER && !companyAccounts.anyActive())) {
+		List<PaymentMethod> allowed = methodsFor(userId);
+		boolean cashAllowed = allowed.contains(PaymentMethod.OFFICE_CASH);
+		if (!allowed.contains(method)) {
+			String reason;
+			if (allowed.contains(PaymentMethod.GATEWAY)) {
+				reason = "Please pay online, through the checkout or by bank transfer to your payment's own account";
+			}
+			else if (method == PaymentMethod.OFFICE_CASH) {
+				reason = "Cash payment is not available for your account; please pay by bank transfer";
+			}
+			else {
+				reason = "Online payment is not available for your account; please pay by bank transfer"
+						+ (cashAllowed ? " or at our office" : "");
+			}
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, reason);
+		}
+		if (method == PaymentMethod.BANK_TRANSFER && !companyAccounts.anyActive()) {
+			// Finance has not added an account to pay into yet (Admin → Company Bank Accounts).
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, cashAllowed
+					? "Bank payment is not set up yet. Please pay in cash at our office, or contact support."
+					: "Bank payment is not set up yet. Please contact support.");
+		}
+		if (provider == null) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					humanize(method) + " payments are not available");
 		}
@@ -151,16 +203,34 @@ public class PaymentService {
 			if (inFlight.getMethod() == method) {
 				return view(inFlight, order.orderNumber());
 			}
-			inFlight.cancel(method == PaymentMethod.OFFICE_CASH ? "Replaced by a cash payment at the office"
+			cancelPending(inFlight, method == PaymentMethod.OFFICE_CASH ? "Replaced by a cash payment at the office"
 					: "Replaced by a " + humanize(method).toLowerCase(Locale.ROOT) + " payment");
 		}
 		payments.flush();
 
 		Money due = order.total();
-		Payment payment = payments.saveAndFlush(new Payment(orderId, userId, method, provider.name(),
-				provider.open(order.orderNumber(), due), due, key));
-		if (method == PaymentMethod.OFFICE_CASH) {
-			order = orders.holdForVerification(orderId, clock.instant().plus(office.holdWindow()));
+		Instant now = clock.instant();
+		Instant holdUntil = switch (method) {
+			case OFFICE_CASH -> now.plus(office.holdWindow());
+			case GATEWAY -> now.plus(razorpay.checkoutWindow());
+			case VIRTUAL_ACCOUNT -> now.plus(razorpay.virtualAccountWindow());
+			default -> null;
+		};
+		PaymentProvider.Opened opened;
+		try {
+			opened = provider.open(new PaymentProvider.OpenRequest(order.orderNumber(), due,
+					holdUntil != null ? holdUntil : order.expiresAt()));
+		}
+		catch (RazorpayException e) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, e.getMessage());
+		}
+		Payment created = new Payment(orderId, userId, method, provider.name(), opened.reference(), due, key);
+		if (opened.virtualAccount() != null) {
+			created.recordVirtualAccount(opened.virtualAccount());
+		}
+		Payment payment = payments.saveAndFlush(created);
+		if (holdUntil != null) {
+			order = orders.holdForVerification(orderId, holdUntil);
 		}
 		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
 			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", due.toString(),
@@ -235,6 +305,67 @@ public class PaymentService {
 		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_DETAILS_SUBMITTED, ENTITY, paymentId)
 			.withNewValue(Map.of("receiptNumber", receiptNumber, "orderExpiresAt", order.expiresAt().toString())));
 		return view(locked, order.orderNumber());
+	}
+
+	/**
+	 * A gateway payment of the investor's own, still awaiting the money; the checkout's result is checked against it.
+	 */
+	@Transactional(readOnly = true)
+	public Payment ownPendingCheckout(UUID userId, UUID paymentId) {
+		Payment payment = load(paymentId);
+		if (!payment.getUserId().equals(userId)) {
+			throw new ResourceNotFoundException("Payment", paymentId);
+		}
+		if (payment.getMethod() != PaymentMethod.GATEWAY) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only online payments are paid at the checkout");
+		}
+		return payment;
+	}
+
+	/**
+	 * The gateway took money: {@code gatewayPaymentId} for {@code received}, against the payment it knows as
+	 * {@code providerReference} (a checkout order or a virtual account). Confirms the order when it can; otherwise the
+	 * money is flagged for refund, never silently kept. Recording the same gateway payment again (a repeated webhook, or
+	 * the webhook and the checkout both reporting it) changes nothing. More money into a payment already settled (a
+	 * second transfer into the same virtual account) is recorded as a payment of its own: it pays the order if the order
+	 * is still waiting, otherwise it is refunded.
+	 *
+	 * @return the payment that records the money, or empty if the reference is not one of ours
+	 */
+	@Transactional
+	public Optional<PaymentResponse> recordGatewayPayment(String provider, String providerReference,
+			String gatewayPaymentId, Money received) {
+		Optional<Payment> found = payments.findByProviderAndProviderReference(provider, providerReference);
+		if (found.isEmpty()) {
+			log.warn("{} reported payment {} for {}, which is not one of ours", provider, gatewayPaymentId, providerReference);
+			return Optional.empty();
+		}
+		PayableOrder order = orders.lockForPayment(found.get().getOrderId());
+		Payment locked = lockPayment(found.get().getId());
+		Optional<Payment> recorded = payments.findByProviderAndExternalReference(provider, gatewayPaymentId);
+		if (recorded.isPresent()) {
+			return Optional.of(view(recorded.get(), order.orderNumber()));
+		}
+		if (!locked.getStatus().isSettled()) {
+			settle(locked, order, received, gatewayPaymentId, null);
+			if (locked.getStatus() == PaymentStatus.SUCCEEDED) {
+				closeAtProviderAfterCommit(locked);
+			}
+			return Optional.of(view(locked, order.orderNumber()));
+		}
+		if (order.status() == OrderStatus.PENDING_PAYMENT) {
+			for (Payment pending : payments.findByOrderIdAndStatus(order.id(), PaymentStatus.PENDING)) {
+				cancelPending(pending, "Order paid by another payment");
+			}
+			payments.flush();
+		}
+		Payment extra = payments.saveAndFlush(new Payment(order.id(), locked.getUserId(), locked.getMethod(), provider,
+				gatewayPaymentId, received, "gateway:" + gatewayPaymentId));
+		settle(extra, order, received, gatewayPaymentId, null);
+		if (extra.getStatus() == PaymentStatus.SUCCEEDED) {
+			closeAtProviderAfterCommit(locked); // The virtual account the money came into, not the new record.
+		}
+		return Optional.of(view(extra, order.orderNumber()));
 	}
 
 	@Transactional(readOnly = true)
@@ -417,7 +548,7 @@ public class PaymentService {
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void onOrderClosed(OrderClosedEvent event) {
 		for (Payment payment : payments.findByOrderIdAndStatus(event.orderId(), PaymentStatus.PENDING)) {
-			payment.cancel("Order " + event.status().name().toLowerCase(Locale.ROOT));
+			cancelPending(payment, "Order " + event.status().name().toLowerCase(Locale.ROOT));
 		}
 		payments.flush();
 	}
@@ -440,7 +571,7 @@ public class PaymentService {
 		if (accepted) {
 			for (Payment other : payments.findByOrderIdAndStatus(order.id(), PaymentStatus.PENDING)) {
 				if (!other.getId().equals(payment.getId())) {
-					other.cancel("Order paid by another payment");
+					cancelPending(other, "Order paid by another payment");
 				}
 			}
 		}
@@ -467,6 +598,27 @@ public class PaymentService {
 						"currency", payment.amount().currency().getCurrencyCode(), "refundRequired", !accepted)));
 	}
 
+	/** Cancels a payment still in flight; a virtual account stops taking money once this commits. */
+	private void cancelPending(Payment payment, String reason) {
+		payment.cancel(reason);
+		closeAtProviderAfterCommit(payment);
+	}
+
+	/** Once this transaction commits, the provider stops taking money for the payment (a virtual account is closed). */
+	private void closeAtProviderAfterCommit(Payment payment) {
+		if (payment.getMethod() != PaymentMethod.VIRTUAL_ACCOUNT || !TransactionSynchronizationManager.isSynchronizationActive()) {
+			return;
+		}
+		PaymentProvider provider = providersByMethod.get(payment.getMethod());
+		String reference = payment.getProviderReference();
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				provider.close(reference);
+			}
+		});
+	}
+
 	private PaymentResponse view(Payment payment, String orderNumber) {
 		Map<UUID, CompanyBankAccount> accounts = companyAccounts.byId(depositAccountIds(List.of(payment)));
 		return view(payment, orderNumber, accounts, companyAccounts.active());
@@ -491,11 +643,30 @@ public class PaymentService {
 					payment.getDepositSubmittedAt(), payment.getCompanyBankAccountId(),
 					account == null ? null : account.getBankName(), account == null ? null : account.getAccountNumber());
 		}
-		return PaymentResponse.from(payment, orderNumber, instructions, deposit, officeCash);
+		boolean pending = payment.getStatus() == PaymentStatus.PENDING;
+		CheckoutInstructions checkout = null;
+		if (pending && payment.getMethod() == PaymentMethod.GATEWAY) {
+			UserAccount investor = users.getAccount(payment.getUserId());
+			checkout = new CheckoutInstructions(razorpay.keyId(), payment.getProviderReference(),
+					Paise.of(payment.amount()), payment.amount().currency().getCurrencyCode(), razorpay.merchantName(),
+					"Order " + orderNumber, (investor.firstName() + " " + investor.lastName()).strip(), investor.email());
+		}
+		VirtualAccountInstructions virtualAccount = null;
+		if (pending && payment.virtualAccount() != null) {
+			PaymentProvider.VirtualAccountDetails va = payment.virtualAccount();
+			virtualAccount = new VirtualAccountInstructions(MoneyResponse.from(payment.amount()), va.accountNumber(),
+					va.ifsc(), va.accountName(), va.bankName(), va.upiId(),
+					payment.getCreatedAt().plus(razorpay.virtualAccountWindow()));
+		}
+		return PaymentResponse.from(payment, orderNumber, instructions, deposit, officeCash, checkout, virtualAccount);
 	}
 
 	private static List<UUID> depositAccountIds(List<Payment> found) {
 		return found.stream().map(Payment::getCompanyBankAccountId).filter(Objects::nonNull).distinct().toList();
+	}
+
+	private static boolean isGateway(PaymentMethod method) {
+		return method == PaymentMethod.GATEWAY || method == PaymentMethod.VIRTUAL_ACCOUNT;
 	}
 
 	/** Payments finance confirms or rejects by hand: bank transfers and cash at the office. */
@@ -516,6 +687,8 @@ public class PaymentService {
 			case CARD -> "Card";
 			case BANK_TRANSFER -> "Bank";
 			case OFFICE_CASH -> "Cash";
+			case GATEWAY -> "Online";
+			case VIRTUAL_ACCOUNT -> "Bank transfer";
 		};
 	}
 

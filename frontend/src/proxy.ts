@@ -131,9 +131,10 @@ function contentSecurityPolicy(nonce: string): string {
     default-src 'self';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""};
     style-src 'self' ${isDev ? "'unsafe-inline'" : `'nonce-${nonce}'`};
-    img-src 'self' blob: data:;
+    img-src 'self' blob: data: https://cdn.razorpay.com;
     font-src 'self';
-    connect-src 'self';
+    connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com;
+    frame-src https://api.razorpay.com https://checkout.razorpay.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';

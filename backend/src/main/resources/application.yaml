@@ -266,6 +266,17 @@ app:
       # Once an investor has submitted their payment details, the order waits this long for
       # finance to verify the money (a cheque takes days to clear) instead of lapsing at checkout.
       verification-window: ${APP_BANK_PAYMENT_VERIFICATION_WINDOW:7d}
+    # Online investors pay through Razorpay (checkout, or a virtual account for a bank transfer) once the keys are set;
+    # until then they pay by bank or at the office, as network investors do. Webhook: POST /api/v1/webhooks/razorpay
+    # with the events payment.authorized, payment.captured and virtual_account.credited.
+    razorpay:
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+      merchant-name: ${RAZORPAY_MERCHANT_NAME:SeaLease}
+      # How long an order stays reserved once the investor opens the checkout, or asks for a virtual account.
+      checkout-window: ${RAZORPAY_CHECKOUT_WINDOW:30m}
+      virtual-account-window: ${RAZORPAY_VIRTUAL_ACCOUNT_WINDOW:3d}
   notifications:
     email:
       # Also email each notification to users who keep email notifications on (Settings).

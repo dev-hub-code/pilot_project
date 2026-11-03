@@ -401,9 +401,24 @@ class CheckoutIntegrationTest {
 	// ------------------------------------------------------------------------- office cash
 
 	@Test
-	void anOrderCanBePaidInCashAtTheOfficeWithinThreeDays() throws Exception {
-		UUID product = offerings.plan();
+	void onlineInvestorsCannotPayInCash() throws Exception {
 		Account investor = approvedInvestor();
+		String orderId = placeOrder(investor, offerings.plan(), 1);
+
+		// Without the gateway set up, online investors pay by bank transfer only.
+		mvc.perform(get("/api/v1/payments/methods").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.methods", contains("BANK_TRANSFER")));
+		startPayment(investor, orderId, "OFFICE_CASH").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message", containsString("Cash payment is not available")));
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid", Integer.class, orderId))
+			.isZero();
+	}
+
+	@Test
+	void anOrderCanBePaidInCashAtTheOfficeWithinThreeDays() throws Exception {
+		UUID product = offerings.networkPlan();
+		Account investor = networkInvestor();
 		String orderId = placeOrder(investor, product, 1);
 
 		String paymentId = JsonPath.read(startPayment(investor, orderId, "OFFICE_CASH")
@@ -459,8 +474,8 @@ class CheckoutIntegrationTest {
 	@Test
 	void cashPaidAtTheOfficeIsThePriceAndEarnsThePlansRent() throws Exception {
 		// ₹50,000 a container; the plan pays 2% rent a month.
-		UUID product = offerings.plan();
-		Account investor = approvedInvestor();
+		UUID product = offerings.networkPlan();
+		Account investor = networkInvestor();
 		String orderId = placeOrder(investor, product, 1);
 
 		// By bank and at the office the investor pays the same price.
@@ -487,8 +502,8 @@ class CheckoutIntegrationTest {
 
 	@Test
 	void cashAtTheOfficeOnceChosenStaysAndThePaymentItReplacedIsNotConfirmed() throws Exception {
-		UUID product = offerings.plan();
-		Account investor = approvedInvestor();
+		UUID product = offerings.networkPlan();
+		Account investor = networkInvestor();
 		String orderId = placeOrder(investor, product, 1);
 		String bank = JsonPath.read(startPayment(investor, orderId, "BANK_TRANSFER")
 			.andReturn().getResponse().getContentAsString(), "$.id");
@@ -526,6 +541,13 @@ class CheckoutIntegrationTest {
 		Account investor = api.register();
 		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
 		new InvestorFixtures(mvc, jdbc, api).ensureVerifiedBankAccount(investor);
+		return investor;
+	}
+
+	/** Approved and on the network scheme: network investors may pay in cash at the office; online investors may not. */
+	private Account networkInvestor() throws Exception {
+		Account investor = approvedInvestor();
+		new InvestorFixtures(mvc, jdbc, api).enrolInNetwork(investor);
 		return investor;
 	}
 

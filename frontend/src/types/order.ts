@@ -36,9 +36,35 @@ export interface Order {
 }
 
 /**
- * Bank payment, or cash at the office. CARD appears on payments made before card payments were withdrawn.
+ * Online investors pay through the gateway: its checkout (GATEWAY) or a virtual account for a bank transfer
+ * (VIRTUAL_ACCOUNT), confirmed automatically. Network investors pay by bank (BANK_TRANSFER) or cash at the office
+ * (OFFICE_CASH), confirmed by finance. CARD appears on payments made before card payments were withdrawn.
  */
-export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD";
+export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD" | "GATEWAY" | "VIRTUAL_ACCOUNT";
+
+/** What the gateway's checkout needs, while a gateway payment is pending. */
+export interface CheckoutInstructions {
+  keyId: string;
+  /** The gateway's order for this payment. */
+  orderId: string;
+  amountPaise: number;
+  currency: string;
+  merchantName: string;
+  description: string;
+  prefillName: string | null;
+  prefillEmail: string | null;
+}
+
+/** Where to pay a pending virtual-account payment: confirmed automatically when the exact amount lands. */
+export interface VirtualAccountInstructions {
+  amount: Money;
+  accountNumber: string;
+  ifsc: string;
+  accountName: string | null;
+  bankName: string | null;
+  upiId: string | null;
+  payBy: string;
+}
 
 /** How to pay an order in cash at the office, while that payment is pending. */
 export interface OfficeCashInstructions {
@@ -109,6 +135,8 @@ export interface Payment {
   /** The receipt number the investor gave for cash paid at the office, once submitted. */
   receiptNumber: string | null;
   receiptSubmittedAt: string | null;
+  checkout: CheckoutInstructions | null;
+  virtualAccount: VirtualAccountInstructions | null;
   /** Staff views: the finance member confirming it, who alone may confirm or reject it. */
   assignee?: Assignee | null;
 }

@@ -28,6 +28,8 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   BANK_TRANSFER: "Bank payment",
   OFFICE_CASH: "Cash",
   CARD: "Card",
+  GATEWAY: "Online payment",
+  VIRTUAL_ACCOUNT: "Bank transfer",
 };
 
 export const DEPOSIT_MODE_LABEL: Record<DepositMode, string> = {

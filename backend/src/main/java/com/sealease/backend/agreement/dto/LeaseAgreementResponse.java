@@ -16,8 +16,13 @@ public record LeaseAgreementResponse(UUID id, String agreementNumber, UUID holdi
 		String title, Instant generatedAt, boolean acceptanceRequired, Instant acceptedAt) {
 
 	public static LeaseAgreementResponse from(LeaseAgreement a, AgreementAcceptance acceptance) {
+		return from(a, acceptance, a.getTitle());
+	}
+
+	/** @param title the title as shown, which for an agreement awaiting acceptance follows the wording in force */
+	public static LeaseAgreementResponse from(LeaseAgreement a, AgreementAcceptance acceptance, String title) {
 		return new LeaseAgreementResponse(a.getId(), a.getAgreementNumber(), a.getHoldingId(), a.getOrderId(),
-				a.getTitle(), a.getGeneratedAt(), a.isAcceptanceRequired(),
+				title, a.getGeneratedAt(), a.isAcceptanceRequired(),
 				acceptance == null ? null : acceptance.getAcceptedAt());
 	}
 

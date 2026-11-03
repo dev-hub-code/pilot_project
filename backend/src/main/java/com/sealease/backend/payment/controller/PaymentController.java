@@ -2,10 +2,13 @@ package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.demo.service.DemoViewService;
+import com.sealease.backend.payment.dto.PaymentMethodsResponse;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.StartPaymentRequest;
 import com.sealease.backend.payment.dto.SubmitDepositRequest;
 import com.sealease.backend.payment.dto.SubmitReceiptRequest;
+import com.sealease.backend.payment.dto.VerifyCheckoutRequest;
+import com.sealease.backend.payment.gateway.GatewayPayments;
 import com.sealease.backend.payment.service.PaymentService;
 import com.sealease.backend.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -27,11 +30,26 @@ import java.util.UUID;
 public class PaymentController {
 
 	private final PaymentService payments;
+	private final GatewayPayments gateway;
 	private final DemoViewService demo;
 
-	public PaymentController(PaymentService payments, DemoViewService demo) {
+	public PaymentController(PaymentService payments, GatewayPayments gateway, DemoViewService demo) {
 		this.payments = payments;
+		this.gateway = gateway;
 		this.demo = demo;
+	}
+
+	/** How this investor pays: online investors through the gateway, network investors by bank or at the office. */
+	@GetMapping("/api/v1/payments/methods")
+	public PaymentMethodsResponse methods(AuthenticatedUser investor) {
+		return new PaymentMethodsResponse(payments.methodsFor(investor.userId()));
+	}
+
+	/** The gateway's checkout finished: its signed result, checked with the gateway before the order is confirmed. */
+	@PostMapping("/api/v1/payments/{paymentId}/checkout")
+	public PaymentResponse verifyCheckout(AuthenticatedUser investor, @PathVariable UUID paymentId,
+			@Valid @RequestBody VerifyCheckoutRequest request) {
+		return gateway.verifyCheckout(investor.userId(), paymentId, request);
 	}
 
 	@GetMapping("/api/v1/orders/{orderId}/payments")

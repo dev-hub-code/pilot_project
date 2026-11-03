@@ -2,6 +2,7 @@ package com.sealease.backend.payment.entity;
 
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.persistence.BaseEntity;
+import com.sealease.backend.payment.provider.PaymentProvider;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -97,6 +98,22 @@ public class Payment extends BaseEntity {
 	@Column(name = "task_assigned_at")
 	private Instant taskAssignedAt;
 
+	/** Where to pay a virtual-account payment (set once, when it is opened). */
+	@Column(name = "virtual_account_number", updatable = false, length = 40)
+	private String virtualAccountNumber;
+
+	@Column(name = "virtual_account_ifsc", updatable = false, length = 11)
+	private String virtualAccountIfsc;
+
+	@Column(name = "virtual_account_name", updatable = false, length = 120)
+	private String virtualAccountName;
+
+	@Column(name = "virtual_account_bank", updatable = false, length = 120)
+	private String virtualAccountBank;
+
+	@Column(name = "virtual_upi_id", updatable = false, length = 100)
+	private String virtualUpiId;
+
 	protected Payment() {
 	}
 
@@ -111,6 +128,24 @@ public class Payment extends BaseEntity {
 		this.currency = amount.currency().getCurrencyCode();
 		this.status = PaymentStatus.PENDING;
 		this.idempotencyKey = idempotencyKey;
+	}
+
+	/** Where the investor pays a virtual-account payment, as the provider opened it. */
+	public void recordVirtualAccount(PaymentProvider.VirtualAccountDetails details) {
+		if (method != PaymentMethod.VIRTUAL_ACCOUNT) {
+			throw new IllegalStateException("Only virtual-account payments have a virtual account");
+		}
+		this.virtualAccountNumber = details.accountNumber();
+		this.virtualAccountIfsc = details.ifsc();
+		this.virtualAccountName = details.accountName();
+		this.virtualAccountBank = details.bankName();
+		this.virtualUpiId = details.upiId();
+	}
+
+	/** Where to pay, for a virtual-account payment; otherwise null. */
+	public PaymentProvider.VirtualAccountDetails virtualAccount() {
+		return virtualAccountNumber == null ? null : new PaymentProvider.VirtualAccountDetails(virtualAccountNumber,
+				virtualAccountIfsc, virtualAccountName, virtualAccountBank, virtualUpiId);
 	}
 
 	/**
