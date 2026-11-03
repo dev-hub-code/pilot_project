@@ -5,15 +5,15 @@ import { Card } from "@/components/ui/card";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
-import { closeTicketAction, reopenTicketAction, replyTicketAction } from "@/features/support/actions";
-import { ReopenForm, ReplyForm } from "@/features/support/forms";
-import { CATEGORY_LABEL, TICKET_STATUS_LABEL, TICKET_TONE } from "@/features/support/labels";
+import { closeTicketAction, rateTicketAction, reopenTicketAction, replyTicketAction } from "@/features/support/actions";
+import { RatingForm, ReopenForm, ReplyForm } from "@/features/support/forms";
+import { CATEGORY_LABEL, CUSTOMER_TONE, TICKET_STATUS_LABEL } from "@/features/support/labels";
 import { LiveRefresh } from "@/features/support/live-refresh";
 import { Thread } from "@/features/support/thread";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Ticket, TicketDetail } from "@/types/support";
+import type { Ticket, TicketDetail, TicketFeedback } from "@/types/support";
 import { formatDateTime } from "@/utils/format";
 
 export const metadata: Metadata = { title: "Support request" };
@@ -29,6 +29,9 @@ export default async function TicketPage({ params }: PageProps<"/support/[id]">)
     throw error;
   }
   const t = detail.ticket;
+  const finished = t.status === "RESOLVED" || t.status === "CLOSED";
+  // 204 (no body) until the customer rates it.
+  const feedback = finished ? await authFetch<TicketFeedback | null>(`/api/v1/support/tickets/${id}/feedback`) : null;
   // Only sent while the request can still be reopened.
   const canReopen = t.reopenableUntil !== null;
   const agent = detail.events.findLast((e) => e.type === "ASSIGNED")?.agentName ?? null;
@@ -39,9 +42,9 @@ export default async function TicketPage({ params }: PageProps<"/support/[id]">)
         <div className="space-y-1">
           <Link href="/support" className="text-sm text-muted hover:underline">Support</Link>
           <h1 className="text-3xl font-semibold tracking-tight">{t.subject}</h1>
-          <p className="text-sm text-muted"><span className="font-mono">{t.reference}</span> · {CATEGORY_LABEL[t.category]}{t.relatedLabel ? ` · ${t.relatedLabel}` : ""}</p>
+          <p className="text-sm text-muted"><span className="font-mono">{t.reference}</span> · {CATEGORY_LABEL[t.category]}{t.subcategoryName ? ` · ${t.subcategoryName}` : ""}{t.relatedLabel ? ` · ${t.relatedLabel}` : ""}</p>
         </div>
-        <StatusBadge tone={TICKET_TONE[t.status]}>{TICKET_STATUS_LABEL[t.status]}</StatusBadge>
+        <StatusBadge tone={CUSTOMER_TONE[t.status]}>{TICKET_STATUS_LABEL[t.status]}</StatusBadge>
       </div>
 
       <StatusTracker ticket={t} agent={agent} canReopen={canReopen} />
@@ -53,7 +56,15 @@ export default async function TicketPage({ params }: PageProps<"/support/[id]">)
         {t.status !== "CLOSED" && <LiveRefresh />}
       </section>
 
-      {t.status === "RESOLVED" || t.status === "CLOSED" ? (
+      {finished && (feedback ? (
+        <Notice tone="info">You rated this request {feedback.rating}/5. Thank you.</Notice>
+      ) : (
+        <Card title="How did we do?" description="Your rating helps us improve our support.">
+          <RatingForm action={rateTicketAction.bind(null, t.id)} />
+        </Card>
+      ))}
+
+      {finished ? (
         canReopen ? (
           <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
             <Card title="Still need help?"
@@ -90,9 +101,15 @@ const STEPS = ["Received", "In progress", "Resolved", "Closed"] as const;
 /** Where the request stands, step by step, and what happens next. */
 function StatusTracker({ ticket: t, agent, canReopen }: { ticket: Ticket; agent: string | null; canReopen: boolean }) {
   const current = t.status === "CLOSED" ? 3 : t.status === "RESOLVED" ? 2
-    : t.status === "WAITING_ON_CUSTOMER" || t.firstRespondedAt || agent ? 1 : 0;
+    : t.status !== "NEW" || t.firstRespondedAt || agent ? 1 : 0;
+  const working = agent ? `${agent} is looking into it and will reply here.` : "Our support team has your request and will reply here.";
   const next: Record<Ticket["status"], string> = {
-    OPEN: agent ? `${agent} is looking into it and will reply here.` : "Our support team has your request and will reply here.",
+    NEW: "We have received your request. Our support team will reply here.",
+    OPEN: working,
+    IN_PROGRESS: working,
+    WAITING_ON_INTERNAL: `${working} We are checking a few details with another team.`,
+    ESCALATED: "A senior member of our team is looking into this and will reply here.",
+    REOPENED: working,
     WAITING_ON_CUSTOMER: "We replied and are waiting for you. Reply below to continue.",
     RESOLVED: canReopen
       ? `We think this is sorted. If not, reopen it below before ${formatDateTime(t.reopenableUntil)}, when it closes automatically.`

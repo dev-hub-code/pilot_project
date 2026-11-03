@@ -3,7 +3,24 @@ package com.sealease.backend.helpdesk.controller;
 import com.sealease.backend.common.api.PageResponse;
 import com.sealease.backend.document.web.DocumentResponses;
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.helpdesk.analytics.SupportAnalyticsService;
+import com.sealease.backend.helpdesk.config.SupportConfigService;
 import com.sealease.backend.helpdesk.dto.Agent;
+import com.sealease.backend.helpdesk.dto.BulkAssignRequest;
+import com.sealease.backend.helpdesk.dto.CategoryRequest;
+import com.sealease.backend.helpdesk.dto.EscalateRequest;
+import com.sealease.backend.helpdesk.dto.StaffTicketRequest;
+import com.sealease.backend.helpdesk.entity.TicketCategory;
+import com.sealease.backend.helpdesk.entity.TicketChannel;
+import com.sealease.backend.helpdesk.escalation.EscalationService;
+import com.sealease.backend.helpdesk.service.AssignmentService;
+import com.sealease.backend.helpdesk.service.FeedbackService;
+import com.sealease.backend.helpdesk.service.SupportWorkspaceService;
+import com.sealease.backend.user.service.UserAccountService;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import java.time.LocalDate;
 import com.sealease.backend.helpdesk.dto.AssignTicketRequest;
 import com.sealease.backend.helpdesk.dto.PriorityRequest;
 import com.sealease.backend.helpdesk.dto.StatusRequest;
@@ -52,9 +69,25 @@ public class AdminSupportController {
 	}
 
 	private final SupportService support;
+	private final SupportWorkspaceService workspace;
+	private final AssignmentService assignment;
+	private final EscalationService escalations;
+	private final FeedbackService feedback;
+	private final SupportAnalyticsService analytics;
+	private final SupportConfigService config;
+	private final UserAccountService accounts;
 
-	public AdminSupportController(SupportService support) {
+	public AdminSupportController(SupportService support, SupportWorkspaceService workspace, AssignmentService assignment,
+			EscalationService escalations, FeedbackService feedback, SupportAnalyticsService analytics,
+			SupportConfigService config, UserAccountService accounts) {
 		this.support = support;
+		this.workspace = workspace;
+		this.assignment = assignment;
+		this.escalations = escalations;
+		this.feedback = feedback;
+		this.analytics = analytics;
+		this.config = config;
+		this.accounts = accounts;
 	}
 
 	@GetMapping("/tickets")
@@ -62,10 +95,109 @@ public class AdminSupportController {
 	public PageResponse<TicketResponse> search(AuthenticatedUser viewer, @RequestParam(required = false) @Size(max = 100) String q,
 			@RequestParam(required = false) TicketStatus status, @RequestParam(required = false) TicketPriority priority,
 			@RequestParam(required = false) String assignee, @RequestParam(defaultValue = "false") boolean overdue,
-			@RequestParam(required = false) SupportTeam team,
+			@RequestParam(required = false) SupportTeam team, @RequestParam(required = false) TicketCategory category,
+			@RequestParam(required = false) UUID subcategoryId, @RequestParam(required = false) TicketChannel channel,
+			@RequestParam(required = false) @Size(max = 20) String view, @RequestParam(required = false) UUID customerId,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
 			@PageableDefault(sort = "lastMessageAt", direction = Sort.Direction.DESC) Pageable pageable) {
 		return PageResponse.from(support.search(viewer.userId(), financeOnly(viewer, "SUPPORT_TICKET_VIEW"),
-				new TicketSearchCriteria(q, status, priority, assignee, overdue, team), pageable));
+				new TicketSearchCriteria(q, status, priority, assignee, overdue, team, category, subcategoryId, channel, view,
+						customerId, from, to), pageable));
+	}
+
+	/** Opens a ticket for a customer (phone call, email); the message is public. */
+	@PostMapping("/tickets")
+	@ResponseStatus(HttpStatus.CREATED)
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'SUPPORT_CREATE')")
+	public TicketDetail create(AuthenticatedUser agent, @Valid @RequestBody StaffTicketRequest request) {
+		return support.openForCustomer(agent.userId(), request);
+	}
+
+	/** Customers to open a ticket for, by name, email or customer code. */
+	@GetMapping("/customers")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'SUPPORT_CREATE')")
+	public List<CustomerOption> customers(AuthenticatedUser agent, @RequestParam @NotBlank @Size(min = 2, max = 100) String q) {
+		boolean contact = agent.hasPermission("INVESTOR_CONTACT_VIEW") || agent.hasPermission("USER_VIEW");
+		return accounts.getAccounts(accounts.searchIds(q.strip(), 20)).values().stream()
+			.filter(a -> !a.id().equals(agent.userId()))
+			.map(a -> new CustomerOption(a.id(), a.firstName() + " " + a.lastName(), a.userCode(), contact ? a.email() : null))
+			.sorted(java.util.Comparator.comparing(CustomerOption::name))
+			.toList();
+	}
+
+	public record CustomerOption(UUID id, String name, String userCode, String email) {
+	}
+
+	/** Workspace side panel: SLA, escalations, feedback and the customer's context (as far as the viewer may see). */
+	@GetMapping("/tickets/{ticketId}/context")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'FINANCE_TICKET_HANDLE')")
+	public SupportWorkspaceService.Context context(AuthenticatedUser viewer, @PathVariable UUID ticketId) {
+		return workspace.context(ticketId, financeOnly(viewer, "SUPPORT_TICKET_VIEW"), viewer::hasPermission);
+	}
+
+	@PostMapping("/tickets/{ticketId}/category")
+	@PreAuthorize("hasAuthority('SUPPORT_TICKET_MANAGE')")
+	public TicketDetail category(AuthenticatedUser agent, @PathVariable UUID ticketId, @Valid @RequestBody CategoryRequest request) {
+		return support.setCategory(agent.userId(), ticketId, request.category(), request.subcategoryId());
+	}
+
+	@PostMapping("/tickets/{ticketId}/escalate")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'SUPPORT_ESCALATE')")
+	public TicketDetail escalate(AuthenticatedUser agent, @PathVariable UUID ticketId, @Valid @RequestBody EscalateRequest request) {
+		return support.escalate(agent.userId(), false, ticketId, request.level(), request.reason(), request.ownerId());
+	}
+
+	@PostMapping("/tickets/bulk-assign")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_MANAGE', 'SUPPORT_ASSIGN')")
+	public List<BulkAssignRequest.Result> bulkAssign(AuthenticatedUser agent, @Valid @RequestBody BulkAssignRequest request) {
+		return support.bulkAssign(agent.userId(), request);
+	}
+
+	@GetMapping("/workload")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'SUPPORT_ANALYTICS_VIEW')")
+	public List<AssignmentService.Workload> workload() {
+		return assignment.workload();
+	}
+
+	@GetMapping("/escalations")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'SUPPORT_ANALYTICS_VIEW')")
+	public List<EscalationService.Escalation> escalations(@RequestParam(defaultValue = "true") boolean openOnly,
+			@RequestParam(defaultValue = "100") int limit) {
+		return escalations.recent(openOnly, limit);
+	}
+
+	@GetMapping("/escalation-levels")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'SUPPORT_CONFIG_MANAGE', 'SYSTEM_SETTINGS_MANAGE')")
+	public List<EscalationService.Level> escalationLevels() {
+		return escalations.levels();
+	}
+
+	@GetMapping("/dashboard")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'SUPPORT_ANALYTICS_VIEW', 'REPORT_VIEW')")
+	public SupportAnalyticsService.Dashboard dashboard(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+		return analytics.dashboard(from, to);
+	}
+
+	@GetMapping("/feedback")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'SUPPORT_ANALYTICS_VIEW', 'REPORT_VIEW')")
+	public List<FeedbackService.FeedbackRow> feedback(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+			@RequestParam(required = false) Integer maxRating, @RequestParam(defaultValue = "200") int limit) {
+		var zone = java.time.ZoneId.of(analytics.dashboardZone());
+		java.time.Instant start = from == null ? java.time.Instant.EPOCH : from.atStartOfDay(zone).toInstant();
+		java.time.Instant end = to == null ? java.time.Instant.now().plusSeconds(86400) : to.plusDays(1).atStartOfDay(zone).toInstant();
+		return feedback.list(start, end, maxRating, limit);
+	}
+
+	/** Active categories and subcategories, for the ticket forms. */
+	@GetMapping("/categories")
+	@PreAuthorize("hasAnyAuthority('SUPPORT_TICKET_VIEW', 'FINANCE_TICKET_HANDLE')")
+	public List<SupportConfigService.Category> categories() {
+		return config.categories(true);
 	}
 
 	@GetMapping("/tickets/{ticketId}")

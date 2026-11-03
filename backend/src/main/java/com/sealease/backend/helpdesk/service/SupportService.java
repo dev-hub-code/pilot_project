@@ -14,7 +14,21 @@ import com.sealease.backend.notification.service.NotificationService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.permission.PermissionCode;
 import com.sealease.backend.role.service.UserRoleService;
+import com.sealease.backend.common.time.DisplayTimeZone;
+import com.sealease.backend.helpdesk.automation.AutomationEngine;
 import com.sealease.backend.helpdesk.dto.Agent;
+import com.sealease.backend.helpdesk.dto.BulkAssignRequest;
+import com.sealease.backend.helpdesk.dto.StaffTicketRequest;
+import com.sealease.backend.helpdesk.entity.AssignmentStrategy;
+import com.sealease.backend.helpdesk.entity.AutomationTrigger;
+import com.sealease.backend.helpdesk.entity.EscalationTrigger;
+import com.sealease.backend.helpdesk.entity.SlaPolicy;
+import com.sealease.backend.helpdesk.entity.SupportCategory;
+import com.sealease.backend.helpdesk.entity.TicketChannel;
+import com.sealease.backend.helpdesk.escalation.EscalationService;
+import com.sealease.backend.helpdesk.repository.SlaPolicyRepository;
+import com.sealease.backend.helpdesk.repository.SupportCategoryRepository;
+import com.sealease.backend.helpdesk.sla.SlaService;
 import com.sealease.backend.helpdesk.dto.OpenTicketRequest;
 import com.sealease.backend.helpdesk.dto.TicketDetail;
 import com.sealease.backend.helpdesk.dto.TicketResponse;
@@ -37,6 +51,7 @@ import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.service.UserAccountService;
 import com.sealease.backend.withdrawal.service.WithdrawalService;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -50,6 +65,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -89,14 +105,32 @@ public class SupportService {
 	private final AuditService audit;
 	private final SupportProperties properties;
 	private final TransactionTemplate transactions;
+	private final SlaService sla;
+	private final SlaPolicyRepository slaPolicies;
+	private final AssignmentService assignment;
+	private final EscalationService escalations;
+	private final AutomationEngine automation;
+	private final SupportCategoryRepository categories;
+	private final JdbcTemplate jdbc;
+	private final DisplayTimeZone display;
 	private final Clock clock;
 
 	public SupportService(SupportTicketRepository tickets, TicketMessageRepository messages,
 			TicketAttachmentRepository attachments, TicketEventRepository events, DocumentService documents, NotificationService notifications,
 			OrderService orders, WithdrawalService withdrawals, HoldingService holdings, UserAccountService accounts,
 			UserRoleService roles, AuditService audit, SupportProperties properties, TransactionTemplate transactions,
+			SlaService sla, SlaPolicyRepository slaPolicies, AssignmentService assignment, EscalationService escalations,
+			AutomationEngine automation, SupportCategoryRepository categories, JdbcTemplate jdbc, DisplayTimeZone display,
 			Clock clock) {
 		this.transactions = transactions;
+		this.sla = sla;
+		this.slaPolicies = slaPolicies;
+		this.assignment = assignment;
+		this.escalations = escalations;
+		this.automation = automation;
+		this.categories = categories;
+		this.jdbc = jdbc;
+		this.display = display;
 		this.tickets = tickets;
 		this.messages = messages;
 		this.attachments = attachments;
@@ -128,18 +162,92 @@ public class SupportService {
 						"The linked record was not found among yours"));
 		}
 		Instant now = clock.instant();
-		TicketPriority priority = TicketPriority.NORMAL;
-		SupportTicket ticket = tickets.saveAndFlush(new SupportTicket("TK-" + String.format("%06d", tickets.nextNumber()),
-				userId, request.subject().strip(), request.category(), request.relatedType(), request.relatedId(),
-				relatedLabel, priority, now.plus(properties.responseTargets().of(priority)), now));
+		SupportTicket ticket = create(userId, request.subject().strip(), request.category(), request.subcategoryId(),
+				request.relatedType(), request.relatedId(), relatedLabel, null, TicketChannel.PORTAL, null, now);
 		post(ticket, userId, false, false, request.message(), files, now);
-		event(ticket, userId, false, TicketEventType.OPENED, null, TicketStatus.OPEN, null, now);
+		event(ticket, userId, false, TicketEventType.OPENED, null, TicketStatus.NEW, null, now);
 		audit.record(AuditRecord.of(userId, AuditAction.TICKET_OPENED, ENTITY, ticket.getId())
 			.withNewValue(Map.of("reference", ticket.getReference(), "category", ticket.getCategory())));
+		created(ticket);
 		return customerDetail(userId, ticket.getId());
 	}
 
-	/** The customer writes; a resolved ticket reopens. A closed ticket must be reopened first. */
+	/**
+	 * A ticket staff open for a customer (phone call, email). The message is public and the customer is told.
+	 */
+	@Transactional
+	public TicketDetail openForCustomer(UUID actorId, StaffTicketRequest request) {
+		UserAccount customer = accounts.getAccounts(Set.of(request.customerId())).get(request.customerId());
+		if (customer == null) {
+			throw new ResourceNotFoundException("User", request.customerId());
+		}
+		if (request.customerId().equals(actorId)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "You cannot open a ticket for yourself here");
+		}
+		Instant now = clock.instant();
+		SupportTicket ticket = create(request.customerId(), request.subject().strip(), request.category(),
+				request.subcategoryId(), null, null, null, request.priority(), TicketChannel.STAFF, actorId, now);
+		post(ticket, actorId, true, false, request.message(), List.of(), now);
+		event(ticket, actorId, true, TicketEventType.OPENED, null, ticket.getStatus(), null, now);
+		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_OPENED, ENTITY, ticket.getId())
+			.withNewValue(Map.of("reference", ticket.getReference(), "category", ticket.getCategory(),
+					"onBehalfOf", request.customerId().toString(), "channel", TicketChannel.STAFF)));
+		notifications.notify(request.customerId(), "TICKET_REPLY", ticket.getSubject(),
+				"We opened " + ticket.getReference() + " for you.", "/support/" + ticket.getId());
+		if (request.assigneeId() != null) {
+			assignInternal(ticket, actorId, request.assigneeId(), now);
+		}
+		created(ticket);
+		return staffDetail(ticket.getId());
+	}
+
+	/** A new ticket with its reference, category defaults and SLA targets. */
+	private SupportTicket create(UUID customerId, String subject, TicketCategory category, UUID subcategoryId,
+			RelatedType relatedType, UUID relatedId, String relatedLabel, TicketPriority requested, TicketChannel channel,
+			UUID createdBy, Instant now) {
+		SupportCategory sub = subcategoryId == null ? null : categories.findById(subcategoryId)
+			.filter(c -> !c.isTopLevel() && c.isActive() && c.getCategory() == category)
+			.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose a subcategory of " + category));
+		SupportCategory top = categories.findByParentIdIsNullAndCategory(category).orElse(null);
+		TicketPriority priority = requested != null ? requested
+				: sub != null && sub.getDefaultPriority() != null ? sub.getDefaultPriority()
+				: top != null && top.getDefaultPriority() != null ? top.getDefaultPriority()
+				: TicketPriority.NORMAL;
+		SupportTeam team = sub != null && sub.getDefaultTeam() != null ? sub.getDefaultTeam()
+				: top != null ? top.getDefaultTeam() : null;
+		SupportTicket ticket = new SupportTicket(nextReference(now), customerId, subject, category, relatedType, relatedId,
+				relatedLabel, priority, now.plus(properties.responseTargets().of(priority)), now);
+		ticket.origin(channel, createdBy, subcategoryId, team);
+		sla.applyTargets(ticket, now);
+		return tickets.saveAndFlush(ticket);
+	}
+
+	/** After a ticket is created: automatic assignment by its category, then the TICKET_CREATED rules. */
+	private void created(SupportTicket ticket) {
+		if (ticket.getAssigneeId() == null) {
+			assignment.autoAssign(ticket, AssignmentStrategy.MANUAL);
+			tickets.flush();
+		}
+		automation.fire(AutomationTrigger.TICKET_CREATED, ticket.getId(), "created");
+	}
+
+	/**
+	 * SUP-yyyy-nnnnnn, numbered per year (display time zone). The counter row is updated atomically, so concurrent
+	 * tickets never share a number.
+	 */
+	private String nextReference(Instant now) {
+		int year = now.atZone(display.zone()).getYear();
+		Long number = jdbc.queryForObject("""
+				INSERT INTO support_ticket_counters (year, last_number) VALUES (?, 1)
+				ON CONFLICT (year) DO UPDATE SET last_number = support_ticket_counters.last_number + 1
+				RETURNING last_number""", Long.class, year);
+		return "SUP-%d-%06d".formatted(year, number);
+	}
+
+	/**
+	 * The customer writes. A resolved ticket reopens; a ticket waiting on them goes back in the queue (and its
+	 * resolution clock restarts); staff then owe a next response. A closed ticket must be reopened first.
+	 */
 	@Transactional
 	public TicketDetail customerReply(UUID userId, UUID ticketId, String body, List<MultipartFile> files) {
 		requireFileCount(files);
@@ -148,13 +256,17 @@ public class SupportService {
 		Instant now = clock.instant();
 		TicketStatus previous = ticket.getStatus();
 		post(ticket, userId, false, false, body, files, now);
-		ticket.customerReplied(now);
+		ticket.customerReplied(now, sla.nextResponseDue(ticket, now));
+		slaClock(ticket, previous, now);
 		tickets.flush();
 		if (previous == TicketStatus.RESOLVED) {
 			event(ticket, userId, false, TicketEventType.REOPENED, previous, TicketStatus.OPEN, null, now);
+			audit.record(AuditRecord.of(userId, AuditAction.TICKET_REOPENED, ENTITY, ticketId)
+				.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", TicketStatus.OPEN, "byReply", true)));
+			automation.fire(AutomationTrigger.CUSTOMER_REPLIED_RESOLVED, ticketId, "reply:" + now.toEpochMilli());
 		}
-		else if (previous != TicketStatus.OPEN) {
-			event(ticket, userId, false, TicketEventType.STATUS_CHANGED, previous, TicketStatus.OPEN, null, now);
+		else if (previous != ticket.getStatus()) {
+			event(ticket, userId, false, TicketEventType.STATUS_CHANGED, previous, ticket.getStatus(), null, now);
 		}
 		if (ticket.getAssigneeId() != null) {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_CUSTOMER_REPLY", "New reply on " + ticket.getReference(),
@@ -174,6 +286,7 @@ public class SupportService {
 		event(ticket, userId, false, TicketEventType.STATUS_CHANGED, previous, TicketStatus.CLOSED, null, now);
 		audit.record(AuditRecord.of(userId, AuditAction.TICKET_STATUS_CHANGED, ENTITY, ticketId)
 			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", TicketStatus.CLOSED)));
+		automation.fire(AutomationTrigger.TICKET_CLOSED, ticketId, "closed");
 		return customerDetail(userId, ticketId);
 	}
 
@@ -191,7 +304,7 @@ public class SupportService {
 		}
 		Instant now = clock.instant();
 		post(ticket, userId, false, false, reason, List.of(), now);
-		ticket.reopen(now);
+		ticket.reopen(now, sla.nextResponseDue(ticket, now));
 		tickets.flush();
 		event(ticket, userId, false, TicketEventType.REOPENED, previous, TicketStatus.OPEN, null, now);
 		audit.record(AuditRecord.of(userId, AuditAction.TICKET_REOPENED, ENTITY, ticketId)
@@ -200,20 +313,24 @@ public class SupportService {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_REOPENED", ticket.getReference() + " was reopened",
 					ticket.getSubject(), "/admin/support/" + ticket.getId());
 		}
+		automation.fire(AutomationTrigger.TICKET_REOPENED, ticketId, "reopen:" + ticket.getReopenCount());
 		return customerDetail(userId, ticketId);
 	}
 
 	@Transactional(readOnly = true)
 	public Page<TicketResponse> mine(UUID userId, Pageable pageable) {
 		Instant now = clock.instant();
-		return tickets.findByUserIdOrderByLastMessageAtDesc(userId, pageable).map(t -> TicketResponse.forCustomer(t, now, reopenableUntil(t)));
+		Map<UUID, String> subcategories = subcategoryNames();
+		return tickets.findByUserIdOrderByLastMessageAtDesc(userId, pageable)
+			.map(t -> TicketResponse.forCustomer(t, subcategories.get(t.getSubcategoryId()), reopenableUntil(t, now)));
 	}
 
 	@Transactional(readOnly = true)
 	public TicketDetail customerDetail(UUID userId, UUID ticketId) {
 		SupportTicket ticket = tickets.findById(ticketId).filter(t -> t.getUserId().equals(userId))
 			.orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
-		return detail(ticket, TicketResponse.forCustomer(ticket, clock.instant(), reopenableUntil(ticket)), false);
+		return detail(ticket, TicketResponse.forCustomer(ticket, subcategoryNames().get(ticket.getSubcategoryId()),
+				reopenableUntil(ticket)), false);
 	}
 
 	/** An attachment the customer may see: on their own ticket and not on an internal note. */
@@ -242,11 +359,10 @@ public class SupportService {
 	public UUID openOnBehalf(UUID actorId, UUID customerId, TicketCategory category, RelatedType relatedType,
 			UUID relatedId, String relatedLabel, String subject, String message, TicketPriority priority, UUID assigneeId) {
 		Instant now = clock.instant();
-		SupportTicket ticket = tickets.saveAndFlush(new SupportTicket("TK-" + String.format("%06d", tickets.nextNumber()),
-				customerId, subject, category, relatedType, relatedId, relatedLabel, priority,
-				now.plus(properties.responseTargets().of(priority)), now));
+		SupportTicket ticket = create(customerId, subject, category, null, relatedType, relatedId, relatedLabel, priority,
+				TicketChannel.SYSTEM, actorId, now);
 		post(ticket, actorId, true, false, message, List.of(), now);
-		event(ticket, actorId, true, TicketEventType.OPENED, null, TicketStatus.OPEN, null, now);
+		event(ticket, actorId, true, TicketEventType.OPENED, null, ticket.getStatus(), null, now);
 		if (assigneeId != null && !assigneeId.equals(customerId)
 				&& roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name()).contains(assigneeId)) {
 			ticket.assignTo(assigneeId);
@@ -257,6 +373,7 @@ public class SupportService {
 			.withNewValue(Map.of("reference", ticket.getReference(), "category", category, "onBehalfOf", customerId.toString())));
 		notifications.notify(customerId, "TICKET_REPLY", subject, "We opened " + ticket.getReference() + " to sort this out.",
 				"/support/" + ticket.getId());
+		created(ticket);
 		return ticket.getId();
 	}
 
@@ -275,7 +392,9 @@ public class SupportService {
 		TicketStatus previous = ticket.getStatus();
 		if (previous != TicketStatus.RESOLVED) {
 			ticket.resolve(now);
+			slaClock(ticket, previous, now);
 			event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, TicketStatus.RESOLVED, null, now);
+			automation.fire(AutomationTrigger.TICKET_RESOLVED, ticketId, "resolved:" + now.toEpochMilli());
 		}
 		tickets.flush();
 		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was resolved", note,
@@ -298,6 +417,7 @@ public class SupportService {
 		post(ticket, actorId, true, internal, body, files, now);
 		if (!internal) {
 			ticket.staffReplied(now);
+			slaClock(ticket, previous, now);
 			if (previous != TicketStatus.WAITING_ON_CUSTOMER) {
 				event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, TicketStatus.WAITING_ON_CUSTOMER, null, now);
 			}
@@ -305,13 +425,21 @@ public class SupportService {
 					ticket.getSubject(), "/support/" + ticket.getId());
 		}
 		tickets.flush();
+		audit.record(AuditRecord.of(actorId, internal ? AuditAction.TICKET_NOTE_ADDED : AuditAction.TICKET_REPLIED, ENTITY, ticketId)
+			.withNewValue(Map.of("attachments", files == null ? 0 : files.stream().filter(f -> f != null && !f.isEmpty()).count())));
 		return staffDetail(ticketId);
 	}
 
+	/**
+	 * Moves a ticket along its lifecycle. Staff set IN_PROGRESS, WAITING_ON_CUSTOMER, WAITING_ON_INTERNAL, RESOLVED or
+	 * CLOSED, following the allowed transitions ({@link TicketStatus#staffMayMoveTo}); NEW, OPEN, ESCALATED and
+	 * REOPENED follow from replies, escalation and reopening.
+	 */
 	@Transactional
 	public TicketDetail setStatus(UUID actorId, boolean financeOnly, UUID ticketId, TicketStatus target) {
-		if (target != TicketStatus.RESOLVED && target != TicketStatus.CLOSED) {
-			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Tickets are resolved or closed by our support team; replies reopen them");
+		if (!TicketStatus.STAFF_SETTABLE.contains(target)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"Staff can set In progress, Waiting on customer, Waiting on internal team, Resolved or Closed; replies reopen tickets");
 		}
 		SupportTicket ticket = lock(ticketId);
 		requireWorkingOn(ticket, actorId, financeOnly);
@@ -320,20 +448,33 @@ public class SupportService {
 		if (previous == target) {
 			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already " + target);
 		}
+		if (!previous.staffMayMoveTo(target)) {
+			throw new BusinessException(ErrorCode.CONFLICT, "A " + previous + " ticket cannot move to " + target);
+		}
 		Instant now = clock.instant();
-		if (target == TicketStatus.RESOLVED) {
-			ticket.resolve(now);
-		}
-		else {
-			ticket.close(now);
-		}
+		ticket.moveTo(target, now);
+		slaClock(ticket, previous, now);
 		tickets.flush();
 		event(ticket, actorId, true, TicketEventType.STATUS_CHANGED, previous, target, null, now);
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_STATUS_CHANGED, ENTITY, ticketId)
 			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", target)));
-		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was "
-				+ target.name().toLowerCase(Locale.ROOT), ticket.getSubject(), "/support/" + ticket.getId());
+		if (target == TicketStatus.RESOLVED || target == TicketStatus.CLOSED) {
+			notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was "
+					+ target.name().toLowerCase(Locale.ROOT), ticket.getSubject(), "/support/" + ticket.getId());
+		}
+		if (target == TicketStatus.RESOLVED) {
+			automation.fire(AutomationTrigger.TICKET_RESOLVED, ticketId, "resolved:" + now.toEpochMilli());
+		}
+		else if (target == TicketStatus.CLOSED) {
+			automation.fire(AutomationTrigger.TICKET_CLOSED, ticketId, "closed");
+		}
 		return staffDetail(ticketId);
+	}
+
+	/** Stops or restarts the resolution clock after a status change, recording it in the (staff-only) history. */
+	private void slaClock(SupportTicket ticket, TicketStatus previous, Instant now) {
+		sla.statusChanged(ticket, previous, now).ifPresent(change ->
+				event(ticket, null, true, TicketEventType.valueOf(change), null, null, null, now));
 	}
 
 	/** Changing priority moves the first-response target, unless staff have already responded. */
@@ -345,8 +486,8 @@ public class SupportService {
 		if (previous == priority) {
 			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already " + priority);
 		}
-		ticket.reprioritise(priority, ticket.getFirstRespondedAt() != null ? ticket.getFirstResponseDueAt()
-				: ticket.getCreatedAt().plus(properties.responseTargets().of(priority)));
+		ticket.reprioritise(priority, ticket.getFirstResponseDueAt());
+		sla.applyTargets(ticket, ticket.getCreatedAt());
 		tickets.flush();
 		event(ticket, actorId, true, TicketEventType.PRIORITY_CHANGED, previous, priority, null, clock.instant());
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_PRIORITY_CHANGED, ENTITY, ticketId)
@@ -383,10 +524,14 @@ public class SupportService {
 				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "A ticket cannot be assigned to its requester");
 			}
 		}
+		Instant now = clock.instant();
 		ticket.assignTo(assigneeId);
+		if (assigneeId != null) {
+			ticket.acknowledge(now);
+		}
 		tickets.flush();
 		event(ticket, actorId, true, assigneeId == null ? TicketEventType.UNASSIGNED : TicketEventType.ASSIGNED, null, null,
-				assigneeId, clock.instant());
+				assigneeId, now);
 		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_ASSIGNED, ENTITY, ticketId)
 			.withNewValue(assigneeId == null ? null : Map.of("assigneeId", assigneeId.toString())));
 		if (assigneeId != null && !assigneeId.equals(actorId)) {
@@ -396,17 +541,149 @@ public class SupportService {
 		return staffDetail(ticketId);
 	}
 
+	/** Assigns a locked ticket to an agent who can handle it (used when staff open a ticket and in bulk). */
+	private void assignInternal(SupportTicket ticket, UUID actorId, UUID assigneeId, Instant now) {
+		if (!assignment.handlers(ticket.getTeam()).contains(assigneeId)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "That user cannot handle tickets");
+		}
+		if (assigneeId.equals(ticket.getUserId())) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "A ticket cannot be assigned to its requester");
+		}
+		ticket.assignTo(assigneeId);
+		ticket.acknowledge(now);
+		tickets.flush();
+		event(ticket, actorId, true, TicketEventType.ASSIGNED, null, null, assigneeId, now);
+		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_ASSIGNED, ENTITY, ticket.getId())
+			.withNewValue(Map.of("assigneeId", assigneeId.toString())));
+		if (!assigneeId.equals(actorId)) {
+			notifications.notify(assigneeId, "TICKET_ASSIGNED", ticket.getReference() + " was assigned to you",
+					ticket.getSubject(), "/admin/support/" + ticket.getId());
+		}
+	}
+
+	/**
+	 * Assigns several tickets to one agent, or spreads them by round-robin or least-loaded. Each ticket is assigned in
+	 * its own transaction, so one that cannot be (closed, the requester) does not stop the others.
+	 */
+	public List<BulkAssignRequest.Result> bulkAssign(UUID actorId, BulkAssignRequest request) {
+		AssignmentStrategy strategy = null;
+		if (request.strategy() != null && !request.strategy().isBlank()) {
+			try {
+				strategy = AssignmentStrategy.valueOf(request.strategy());
+			}
+			catch (IllegalArgumentException ex) {
+				strategy = AssignmentStrategy.MANUAL;
+			}
+			if (strategy == AssignmentStrategy.MANUAL) {
+				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "strategy must be ROUND_ROBIN or LEAST_LOADED");
+			}
+		}
+		else if (request.assigneeId() == null) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose an agent or an assignment strategy");
+		}
+		AssignmentStrategy chosen = strategy;
+		List<BulkAssignRequest.Result> results = new ArrayList<>();
+		for (UUID id : new java.util.LinkedHashSet<>(request.ticketIds())) {
+			try {
+				results.add(transactions.execute(s -> {
+					SupportTicket ticket = lock(id);
+					requireNotClosed(ticket);
+					Instant now = clock.instant();
+					if (chosen != null) {
+						if (ticket.getAssigneeId() != null) {
+							ticket.assignTo(null);
+							tickets.flush();
+						}
+						UUID picked = assignment.pick(ticket, chosen)
+							.orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "No agent is available"));
+						jdbc.update("UPDATE support_assignment_rules SET last_assignee_id = ? WHERE category = ?", picked,
+								ticket.getCategory().name());
+						assignInternal(ticket, actorId, picked, now);
+					}
+					else if (!request.assigneeId().equals(ticket.getAssigneeId())) {
+						assignInternal(ticket, actorId, request.assigneeId(), now);
+					}
+					return new BulkAssignRequest.Result(id, ticket.getReference(), true, ticket.getAssigneeId(), null);
+				}));
+			}
+			catch (BusinessException ex) {
+				results.add(new BulkAssignRequest.Result(id, null, false, null, ex.getMessage()));
+			}
+		}
+		return results;
+	}
+
+	/** Moves a ticket to another category or subcategory; SLA targets follow the new category. */
+	@Transactional
+	public TicketDetail setCategory(UUID actorId, UUID ticketId, TicketCategory category, UUID subcategoryId) {
+		SupportTicket ticket = lock(ticketId);
+		requireNotClosed(ticket);
+		if (subcategoryId != null) {
+			categories.findById(subcategoryId).filter(c -> !c.isTopLevel() && c.isActive() && c.getCategory() == category)
+				.orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose a subcategory of " + category));
+		}
+		TicketCategory previous = ticket.getCategory();
+		UUID previousSub = ticket.getSubcategoryId();
+		if (previous == category && Objects.equals(previousSub, subcategoryId)) {
+			throw new BusinessException(ErrorCode.CONFLICT, "The ticket is already in that category");
+		}
+		Instant now = clock.instant();
+		ticket.recategorise(category, subcategoryId);
+		sla.applyTargets(ticket, ticket.getCreatedAt());
+		tickets.flush();
+		event(ticket, actorId, true, TicketEventType.CATEGORY_CHANGED, previous, category, null, now);
+		Map<String, Object> before = new java.util.HashMap<>();
+		before.put("category", previous);
+		before.put("subcategoryId", previousSub == null ? null : previousSub.toString());
+		Map<String, Object> after = new java.util.HashMap<>();
+		after.put("category", category);
+		after.put("subcategoryId", subcategoryId == null ? null : subcategoryId.toString());
+		audit.record(AuditRecord.of(actorId, AuditAction.TICKET_CATEGORY_CHANGED, ENTITY, ticketId)
+			.withOldValue(before).withNewValue(after));
+		return staffDetail(ticketId);
+	}
+
+	/** Escalates by hand, one level or to a chosen level, with a reason. */
+	@Transactional
+	public TicketDetail escalate(UUID actorId, boolean financeOnly, UUID ticketId, Integer level, String reason, UUID ownerId) {
+		SupportTicket ticket = lock(ticketId);
+		requireVisible(ticket, financeOnly);
+		if (ownerId != null && !assignment.handlers(ticket.getTeam()).contains(ownerId)
+				&& !escalations.contactIds(level == null ? ticket.getEscalationLevel() + 1 : level).contains(ownerId)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "The owner must handle tickets or be a contact for that level");
+		}
+		escalations.escalate(ticket, level, EscalationTrigger.MANUAL, reason, actorId, ownerId);
+		tickets.flush();
+		return staffDetail(ticketId);
+	}
+
 	@Transactional(readOnly = true)
 	public Page<TicketResponse> search(UUID viewerId, boolean financeOnly, TicketSearchCriteria criteria, Pageable pageable) {
 		Instant now = clock.instant();
 		if (financeOnly) {
-			criteria = new TicketSearchCriteria(criteria.q(), criteria.status(), criteria.priority(), criteria.assignee(),
-					criteria.overdue(), SupportTeam.FINANCE);
+			criteria = criteria.withTeam(SupportTeam.FINANCE);
 		}
-		Page<SupportTicket> page = tickets.findAll(matching(viewerId, criteria, now), pageable);
+		List<UUID> customers = criteria.q() == null || criteria.q().isBlank() ? List.of()
+				: accounts.searchIds(criteria.q().strip(), 200);
+		Page<SupportTicket> page = tickets.findAll(matching(viewerId, criteria, now, customers, display), pageable);
 		Map<UUID, String> names = names(page.stream().flatMap(t -> Stream.of(t.getUserId(), t.getAssigneeId())));
-		return page.map(t -> TicketResponse.forStaff(t, names.get(t.getUserId()), names.get(t.getAssigneeId()), now,
-				reopenableUntil(t)));
+		return page.map(t -> staffView(t, names, now));
+	}
+
+	private TicketResponse staffView(SupportTicket t, Map<UUID, String> names, Instant now) {
+		Map<UUID, SlaPolicy> policies = policies();
+		String state = sla.view(t, Optional.ofNullable(t.getSlaPolicyId()).map(policies::get), now).overall().name();
+		return TicketResponse.forStaff(t, names.get(t.getUserId()), names.get(t.getAssigneeId()),
+				subcategoryNames().get(t.getSubcategoryId()), state, now, reopenableUntil(t, now));
+	}
+
+	private Map<UUID, SlaPolicy> policies() {
+		return slaPolicies.findAll().stream().collect(Collectors.toMap(SlaPolicy::getId, p -> p));
+	}
+
+	private Map<UUID, String> subcategoryNames() {
+		return categories.findAll().stream().filter(c -> !c.isTopLevel())
+			.collect(Collectors.toMap(SupportCategory::getId, SupportCategory::getName));
 	}
 
 	/** A ticket for staff; finance only sees the tickets handed to it. */
@@ -421,8 +698,7 @@ public class SupportService {
 	public TicketDetail staffDetail(UUID ticketId) {
 		SupportTicket ticket = tickets.findById(ticketId).orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
 		Map<UUID, String> names = names(Stream.of(ticket.getUserId(), ticket.getAssigneeId()));
-		return detail(ticket, TicketResponse.forStaff(ticket, names.get(ticket.getUserId()),
-				names.get(ticket.getAssigneeId()), clock.instant(), reopenableUntil(ticket)), true);
+		return detail(ticket, staffView(ticket, names, clock.instant()), true);
 	}
 
 	/** Staff downloads are audited: attachments can hold personal financial documents. */
@@ -469,17 +745,12 @@ public class SupportService {
 		return staffDetail(ticketId);
 	}
 
-	/** Who may be assigned a ticket with this team: support agents, and finance members for tickets handed to finance. */
 	private Set<UUID> handlers(SupportTeam team) {
-		Set<UUID> ids = new HashSet<>(roles.usersWithPermission(PermissionCode.SUPPORT_TICKET_MANAGE.name()));
-		if (team == SupportTeam.FINANCE) {
-			ids.addAll(roles.usersWithPermission(PermissionCode.FINANCE_TICKET_HANDLE.name()));
-		}
-		return ids;
+		return assignment.handlers(team);
 	}
 
 	/** Finance only sees the tickets handed to it; anything else is not found, as if it did not exist. */
-	private static void requireVisible(SupportTicket ticket, boolean financeOnly) {
+	static void requireVisible(SupportTicket ticket, boolean financeOnly) {
 		if (financeOnly && ticket.getTeam() != SupportTeam.FINANCE) {
 			throw new ResourceNotFoundException("Ticket", ticket.getId());
 		}
@@ -578,14 +849,17 @@ public class SupportService {
 				to == null ? null : to.name(), subjectUserId, now));
 	}
 
-	/** Until when the customer can reopen a resolved or closed ticket; null when it is in progress or past the window. */
 	/** For a resolved ticket, until when its customer can reopen it (when it closes by itself); otherwise null. */
 	private Instant reopenableUntil(SupportTicket ticket) {
+		return reopenableUntil(ticket, clock.instant());
+	}
+
+	private Instant reopenableUntil(SupportTicket ticket, Instant now) {
 		if (ticket.getStatus() != TicketStatus.RESOLVED || ticket.getResolvedAt() == null) {
 			return null;
 		}
 		Instant until = ticket.getResolvedAt().plus(properties.autoCloseAfter());
-		return clock.instant().isAfter(until) ? null : until;
+		return now.isAfter(until) ? null : until;
 	}
 
 	/**
@@ -631,6 +905,7 @@ public class SupportService {
 			.withNewValue(Map.of("status", TicketStatus.CLOSED, "automatic", true)));
 		notifications.notify(ticket.getUserId(), "TICKET_STATUS", ticket.getReference() + " was closed", ticket.getSubject(),
 				"/support/" + ticket.getId());
+		automation.fire(AutomationTrigger.TICKET_CLOSED, ticketId, "closed");
 		return true;
 	}
 
@@ -651,7 +926,7 @@ public class SupportService {
 			.orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
 	}
 
-	private SupportTicket lock(UUID ticketId) {
+	SupportTicket lock(UUID ticketId) {
 		return tickets.findByIdForUpdate(ticketId).orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
 	}
 
@@ -686,7 +961,8 @@ public class SupportService {
 		return name.length() > 200 ? name.substring(name.length() - 200) : name;
 	}
 
-	private static Specification<SupportTicket> matching(UUID viewerId, TicketSearchCriteria c, Instant now) {
+	private static Specification<SupportTicket> matching(UUID viewerId, TicketSearchCriteria c, Instant now, List<UUID> customers,
+			DisplayTimeZone display) {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
 			if (c.team() != null) {
@@ -697,6 +973,24 @@ public class SupportService {
 			}
 			if (c.priority() != null) {
 				predicates.add(cb.equal(root.get("priority"), c.priority()));
+			}
+			if (c.category() != null) {
+				predicates.add(cb.equal(root.get("category"), c.category()));
+			}
+			if (c.subcategoryId() != null) {
+				predicates.add(cb.equal(root.get("subcategoryId"), c.subcategoryId()));
+			}
+			if (c.channel() != null) {
+				predicates.add(cb.equal(root.get("channel"), c.channel()));
+			}
+			if (c.customerId() != null) {
+				predicates.add(cb.equal(root.get("userId"), c.customerId()));
+			}
+			if (c.from() != null) {
+				predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), c.from().atStartOfDay(display.zone()).toInstant()));
+			}
+			if (c.to() != null) {
+				predicates.add(cb.lessThan(root.get("createdAt"), c.to().plusDays(1).atStartOfDay(display.zone()).toInstant()));
 			}
 			if ("me".equals(c.assignee())) {
 				predicates.add(cb.equal(root.get("assigneeId"), viewerId));
@@ -715,13 +1009,41 @@ public class SupportService {
 			if (c.overdue()) {
 				predicates.add(cb.isNull(root.get("firstRespondedAt")));
 				predicates.add(cb.notEqual(root.get("status"), TicketStatus.CLOSED));
+				predicates.add(cb.notEqual(root.get("status"), TicketStatus.RESOLVED));
 				predicates.add(cb.lessThan(root.get("firstResponseDueAt"), now));
+			}
+			if (c.view() != null && !c.view().isBlank()) {
+				Predicate open = root.get("status").in(TicketStatus.openStatuses());
+				Predicate pastFirst = cb.and(cb.isNull(root.get("firstRespondedAt")), cb.lessThan(root.get("firstResponseDueAt"), now));
+				Predicate pastNext = cb.lessThan(root.get("nextResponseDueAt"), now);
+				Predicate pastResolution = cb.and(cb.isNull(root.get("slaPausedAt")), cb.lessThan(root.get("resolutionDueAt"), now));
+				Predicate breached = cb.or(pastFirst, pastNext, pastResolution, cb.isNotNull(root.get("firstResponseBreachedAt")),
+						cb.isNotNull(root.get("nextResponseBreachedAt")), cb.isNotNull(root.get("resolutionBreachedAt")));
+				Instant soon = now.plus(Duration.ofHours(2));
+				switch (c.view()) {
+					case "open" -> predicates.add(open);
+					case "breached" -> predicates.add(cb.and(open, breached));
+					case "at-risk" -> predicates.add(cb.and(open, cb.not(breached), cb.or(
+							cb.and(cb.isNull(root.get("firstRespondedAt")), cb.lessThan(root.get("firstResponseDueAt"), soon)),
+							cb.lessThan(root.get("nextResponseDueAt"), soon),
+							cb.and(cb.isNull(root.get("slaPausedAt")), cb.lessThan(root.get("resolutionDueAt"), soon)))));
+					case "escalated" -> predicates.add(cb.and(open, cb.greaterThan(root.get("escalationLevel"), (short) 0)));
+					case "waiting" -> predicates.add(root.get("status").in(TicketStatus.WAITING_ON_CUSTOMER, TicketStatus.WAITING_ON_INTERNAL));
+					case "unassigned" -> predicates.add(cb.and(open, cb.isNull(root.get("assigneeId"))));
+					default -> throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+							"view must be open, breached, at-risk, escalated, waiting or unassigned");
+				}
 			}
 			if (c.q() != null && !c.q().isBlank()) {
 				String like = "%" + c.q().strip().toLowerCase(Locale.ROOT)
 					.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-				predicates.add(cb.or(cb.like(cb.lower(root.get("reference")), like, '\\'),
-						cb.like(cb.lower(root.get("subject")), like, '\\')));
+				List<Predicate> any = new ArrayList<>(List.of(cb.like(cb.lower(root.get("reference")), like, '\\'),
+						cb.like(cb.lower(root.get("subject")), like, '\\'),
+						cb.like(cb.lower(root.get("relatedLabel")), like, '\\')));
+				if (!customers.isEmpty()) {
+					any.add(root.get("userId").in(customers));
+				}
+				predicates.add(cb.or(any.toArray(Predicate[]::new)));
 			}
 			return cb.and(predicates.toArray(Predicate[]::new));
 		};

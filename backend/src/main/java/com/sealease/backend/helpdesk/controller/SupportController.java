@@ -7,6 +7,9 @@ import com.sealease.backend.helpdesk.dto.OpenTicketRequest;
 import com.sealease.backend.helpdesk.dto.ReopenRequest;
 import com.sealease.backend.helpdesk.dto.TicketDetail;
 import com.sealease.backend.helpdesk.dto.TicketResponse;
+import com.sealease.backend.helpdesk.config.SupportConfigService;
+import com.sealease.backend.helpdesk.dto.FeedbackRequest;
+import com.sealease.backend.helpdesk.service.FeedbackService;
 import com.sealease.backend.helpdesk.service.SupportService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -41,9 +44,13 @@ import java.util.UUID;
 public class SupportController {
 
 	private final SupportService support;
+	private final FeedbackService feedback;
+	private final SupportConfigService config;
 
-	public SupportController(SupportService support) {
+	public SupportController(SupportService support, FeedbackService feedback, SupportConfigService config) {
 		this.support = support;
+		this.feedback = feedback;
+		this.config = config;
 	}
 
 	@GetMapping
@@ -80,6 +87,25 @@ public class SupportController {
 	public TicketDetail reopen(AuthenticatedUser investor, @PathVariable UUID ticketId,
 			@Valid @RequestBody ReopenRequest request) {
 		return support.reopen(investor.userId(), ticketId, request.reason());
+	}
+
+	/** The customer's rating of their resolved ticket, if they gave one (204 otherwise). */
+	@GetMapping("/{ticketId}/feedback")
+	public ResponseEntity<FeedbackService.Feedback> feedback(AuthenticatedUser investor, @PathVariable UUID ticketId) {
+		return feedback.mine(investor.userId(), ticketId).map(ResponseEntity::ok).orElse(ResponseEntity.noContent().build());
+	}
+
+	@PostMapping("/{ticketId}/feedback")
+	@ResponseStatus(HttpStatus.CREATED)
+	public FeedbackService.Feedback giveFeedback(AuthenticatedUser investor, @PathVariable UUID ticketId,
+			@Valid @RequestBody FeedbackRequest request) {
+		return feedback.give(investor.userId(), ticketId, request.rating(), request.comment());
+	}
+
+	/** Active categories and subcategories for the new-ticket form. */
+	@GetMapping("/categories")
+	public List<SupportConfigService.Category> categories() {
+		return config.categories(true);
 	}
 
 	@GetMapping("/{ticketId}/attachments/{attachmentId}")

@@ -71,7 +71,7 @@ public class ReportCatalog {
 	private static final String[] ORDERS = { "OPERATIONAL_REPORT_VIEW", "ORDER_VIEW" };
 	private static final String[] AGREEMENTS = { "OPERATIONAL_REPORT_VIEW", "AGREEMENT_VIEW", "ORDER_VIEW" };
 	private static final String[] LEADS = { "OPERATIONAL_REPORT_VIEW", "LEAD_VIEW" };
-	private static final String[] TICKETS = { "OPERATIONAL_REPORT_VIEW", "SUPPORT_TICKET_VIEW", "SUPPORT_VIEW" };
+	private static final String[] TICKETS = { "OPERATIONAL_REPORT_VIEW", "SUPPORT_TICKET_VIEW", "SUPPORT_VIEW", "SUPPORT_ANALYTICS_VIEW" };
 	private static final String[] KYC = { "KYC_VIEW", "KYC_REVIEW", "AUDIT_VIEW", "COMPLIANCE_CASE_VIEW" };
 	private static final String[] AUDIT = { "AUDIT_VIEW" };
 
@@ -1253,7 +1253,7 @@ public class ReportCatalog {
 			.columns(
 					status("category", "Category", "t.category"),
 					number("tickets", "Tickets", "count(*)").summed(),
-					number("open", "Open", "count(*) FILTER (WHERE t.status IN ('OPEN', 'WAITING_ON_CUSTOMER'))").summed(),
+					number("open", "Open", "count(*) FILTER (WHERE t.status NOT IN ('RESOLVED', 'CLOSED'))").summed(),
 					number("resolved", "Resolved", "count(*) FILTER (WHERE t.resolved_at IS NOT NULL)").summed(),
 					percent("slaMet", "SLA met %", """
 							round(100.0 * count(*) FILTER (WHERE t.first_responded_at IS NOT NULL
@@ -1268,6 +1268,178 @@ public class ReportCatalog {
 			.choice("priority", "Priority", "t.priority", names(TicketPriority.values()))
 			.sort("tickets", true)
 			.note("SLA met: first responses on time as a share of tickets responded to or past their due time."));
+
+		String resolutionSla = """
+				CASE WHEN t.resolution_due_at IS NULL THEN 'NONE'
+				     WHEN coalesce(t.resolved_at, t.closed_at) IS NULL AND t.resolution_due_at < :now AND t.sla_paused_at IS NULL THEN 'BREACHED'
+				     WHEN coalesce(t.resolved_at, t.closed_at) IS NULL THEN 'PENDING'
+				     WHEN coalesce(t.resolved_at, t.closed_at) <= t.resolution_due_at THEN 'MET'
+				     ELSE 'BREACHED' END""";
+		add(report("ticket-agent-performance", ReportCategory.HELPDESK, "Agent performance")
+			.describe("Per agent: tickets handled, resolved, SLA breaches, reopens, response and resolution times, and customer rating.")
+			.requires(TICKETS)
+			.from("support_tickets t JOIN users a ON a.id = t.assignee_id LEFT JOIN support_feedback f ON f.ticket_id = t.id")
+			.groupBy("a.id, a.first_name, a.last_name")
+			.columns(
+					text("agent", "Agent", name("a")),
+					number("tickets", "Tickets", "count(*)").summed(),
+					number("open", "Open", "count(*) FILTER (WHERE t.status NOT IN ('RESOLVED', 'CLOSED'))").summed(),
+					number("resolved", "Resolved", "count(*) FILTER (WHERE t.resolved_at IS NOT NULL)").summed(),
+					number("breaches", "SLA breaches", """
+							count(*) FILTER (WHERE t.first_response_breached_at IS NOT NULL OR t.next_response_breached_at IS NOT NULL
+							      OR t.resolution_breached_at IS NOT NULL)""").summed(),
+					number("reopened", "Reopened", "count(*) FILTER (WHERE t.reopen_count > 0)").summed(),
+					number("escalated", "Escalated", "count(*) FILTER (WHERE t.escalation_level > 0)").summed(),
+					number("responseHours", "Avg first response (h)",
+							"round((avg(extract(epoch FROM (t.first_responded_at - t.created_at))) / 3600)::numeric, 1)").notSummed(),
+					number("resolutionHours", "Avg resolution (h)",
+							"round((avg(extract(epoch FROM (t.resolved_at - t.created_at))) / 3600)::numeric, 1)").notSummed(),
+					number("rating", "Avg rating (1-5)", "round(avg(f.rating)::numeric, 2)").notSummed(),
+					number("ratings", "Ratings", "count(f.id)").summed())
+			.period("t.created_at", "Opened")
+			.choice("team", "Team", "t.team", names(SupportTeam.values()))
+			.choice("priority", "Priority", "t.priority", names(TicketPriority.values()))
+			.choice("category", "Category", "t.category", names(TicketCategory.values()))
+			.sort("tickets", true)
+			.note("Tickets assigned to each agent now, opened in the period."));
+
+		add(report("ticket-team-performance", ReportCategory.HELPDESK, "Team performance")
+			.describe("Per team and priority: tickets, resolution SLA met, breaches, escalations and times.")
+			.requires(TICKETS)
+			.from("support_tickets t")
+			.groupBy("t.team, t.priority")
+			.columns(
+					status("team", "Team", "t.team"),
+					status("priority", "Priority", "t.priority"),
+					number("tickets", "Tickets", "count(*)").summed(),
+					number("resolved", "Resolved", "count(*) FILTER (WHERE t.resolved_at IS NOT NULL)").summed(),
+					percent("resolutionMet", "Resolution SLA met %", """
+							round(100.0 * count(*) FILTER (WHERE t.resolution_due_at IS NOT NULL AND coalesce(t.resolved_at, t.closed_at) <= t.resolution_due_at)
+							      / NULLIF(count(*) FILTER (WHERE t.resolution_due_at IS NOT NULL
+							          AND (coalesce(t.resolved_at, t.closed_at) IS NOT NULL OR t.resolution_due_at < :now)), 0), 1)"""),
+					number("breaches", "SLA breaches", """
+							count(*) FILTER (WHERE t.first_response_breached_at IS NOT NULL OR t.next_response_breached_at IS NOT NULL
+							      OR t.resolution_breached_at IS NOT NULL)""").summed(),
+					number("escalated", "Escalated", "count(*) FILTER (WHERE t.escalation_level > 0)").summed(),
+					number("resolutionHours", "Avg resolution (h)",
+							"round((avg(extract(epoch FROM (t.resolved_at - t.created_at))) / 3600)::numeric, 1)").notSummed())
+			.period("t.created_at", "Opened")
+			.choice("category", "Category", "t.category", names(TicketCategory.values()))
+			.sort("tickets", true));
+
+		add(report("ticket-escalations", ReportCategory.HELPDESK, "Escalations")
+			.describe("Every escalation: ticket, level reached, why, who escalated it and the ticket's status now.")
+			.requires(TICKETS)
+			.from("support_escalations e JOIN support_tickets t ON t.id = e.ticket_id LEFT JOIN users b ON b.id = e.escalated_by")
+			.columns(
+					text("reference", "Ticket", "t.reference"),
+					text("subject", "Subject", "t.subject"),
+					number("level", "Level", "e.level").notSummed(),
+					number("previousLevel", "From level", "e.previous_level").notSummed(),
+					status("trigger", "Trigger", "e.trigger"),
+					text("reason", "Reason", "e.reason"),
+					text("escalatedBy", "Escalated by", "coalesce(" + name("b") + ", 'Automatic')"),
+					status("priority", "Priority", "t.priority"),
+					status("status", "Status now", "t.status"),
+					dateTime("escalatedAt", "Escalated", "e.created_at"))
+			.period("e.created_at", "Escalated")
+			.choice("trigger", "Trigger", "e.trigger", List.of("MANUAL", "FIRST_RESPONSE_AT_RISK", "FIRST_RESPONSE_BREACHED",
+					"RESOLUTION_BREACHED", "CRITICAL_UNACKNOWLEDGED", "REPEATED_FOLLOW_UPS", "REPEATED_REOPENS", "AUTOMATION"))
+			.choice("priority", "Priority", "t.priority", names(TicketPriority.values()))
+			.search("t.reference", "t.subject", "e.reason")
+			.sort("escalatedAt", true));
+
+		add(report("ticket-aging", ReportCategory.HELPDESK, "Open ticket aging")
+			.describe("Tickets not yet resolved: how long they have been open, their SLA state and who has them.")
+			.requires(TICKETS)
+			.from("support_tickets t LEFT JOIN users u ON u.id = t.user_id LEFT JOIN users a ON a.id = t.assignee_id")
+			.where("t.status NOT IN ('RESOLVED', 'CLOSED')")
+			.columns(
+					text("reference", "Ticket", "t.reference"),
+					text("subject", "Subject", "t.subject"),
+					status("status", "Status", "t.status"),
+					status("priority", "Priority", "t.priority"),
+					status("category", "Category", "t.category"),
+					text("customer", "Customer", code("u")).linkTo("user", "userId"),
+					id("userId", "u.id"),
+					text("assignee", "Assignee", "coalesce(" + name("a") + ", 'Unassigned')"),
+					number("ageDays", "Age (days)", "round((extract(epoch FROM (CAST(:now AS timestamptz) - t.created_at)) / 86400)::numeric, 1)").notSummed(),
+					status("ageBand", "Age band", """
+							CASE WHEN t.created_at > CAST(:now AS timestamptz) - interval '1 day' THEN 'UNDER_1_DAY'
+							     WHEN t.created_at > CAST(:now AS timestamptz) - interval '3 days' THEN '1_TO_3_DAYS'
+							     WHEN t.created_at > CAST(:now AS timestamptz) - interval '7 days' THEN '3_TO_7_DAYS'
+							     ELSE 'OVER_7_DAYS' END"""),
+					status("resolutionSla", "Resolution SLA", resolutionSla),
+					number("escalationLevel", "Escalation level", "t.escalation_level").notSummed(),
+					dateTime("createdAt", "Opened", "t.created_at"))
+			.period("t.created_at", "Opened")
+			.choice("priority", "Priority", "t.priority", names(TicketPriority.values()))
+			.choice("category", "Category", "t.category", names(TicketCategory.values()))
+			.choice("team", "Team", "t.team", names(SupportTeam.values()))
+			.search("t.reference", "t.subject", code("u"), name("a"))
+			.sort("ageDays", true));
+
+		add(report("ticket-reopened", ReportCategory.HELPDESK, "Reopened tickets")
+			.describe("Tickets customers reopened after they were resolved, with how often.")
+			.requires(TICKETS)
+			.from("support_tickets t LEFT JOIN users u ON u.id = t.user_id LEFT JOIN users a ON a.id = t.assignee_id")
+			.where("t.reopen_count > 0")
+			.columns(
+					text("reference", "Ticket", "t.reference"),
+					text("subject", "Subject", "t.subject"),
+					status("category", "Category", "t.category"),
+					status("status", "Status", "t.status"),
+					number("reopens", "Reopens", "t.reopen_count").summed(),
+					text("customer", "Customer", code("u")).linkTo("user", "userId"),
+					id("userId", "u.id"),
+					text("assignee", "Assignee", "coalesce(" + name("a") + ", 'Unassigned')"),
+					dateTime("createdAt", "Opened", "t.created_at"),
+					dateTime("lastMessageAt", "Last message", "t.last_message_at"))
+			.period("t.created_at", "Opened")
+			.choice("category", "Category", "t.category", names(TicketCategory.values()))
+			.search("t.reference", "t.subject", code("u"), name("a"))
+			.sort("reopens", true));
+
+		add(report("ticket-feedback", ReportCategory.HELPDESK, "Customer satisfaction")
+			.describe("Ratings customers gave resolved tickets (1-5), with their comments.")
+			.requires(TICKETS)
+			.from("support_feedback f JOIN support_tickets t ON t.id = f.ticket_id LEFT JOIN users u ON u.id = t.user_id"
+					+ " LEFT JOIN users a ON a.id = t.assignee_id")
+			.columns(
+					text("reference", "Ticket", "t.reference"),
+					text("subject", "Subject", "t.subject"),
+					status("category", "Category", "t.category"),
+					number("rating", "Rating", "f.rating").notSummed(),
+					text("comment", "Comment", "coalesce(f.comment, '')"),
+					text("customer", "Customer", code("u")).linkTo("user", "userId"),
+					id("userId", "u.id"),
+					text("assignee", "Agent", "coalesce(" + name("a") + ", 'Unassigned')"),
+					dateTime("ratedAt", "Rated", "f.created_at"))
+			.period("f.created_at", "Rated")
+			.choice("rating", "Rating", "CAST(f.rating AS varchar)", List.of("1", "2", "3", "4", "5"))
+			.choice("category", "Category", "t.category", names(TicketCategory.values()))
+			.search("t.reference", "t.subject", "f.comment", name("a"))
+			.sort("ratedAt", true));
+
+		add(report("ticket-category-performance", ReportCategory.HELPDESK, "Category performance")
+			.describe("Per category and subcategory: volume, resolution SLA, reopens and customer rating.")
+			.requires(AGGREGATE)
+			.from("support_tickets t LEFT JOIN support_categories s ON s.id = t.subcategory_id LEFT JOIN support_feedback f ON f.ticket_id = t.id")
+			.groupBy("t.category, s.name")
+			.columns(
+					status("category", "Category", "t.category"),
+					text("subcategory", "Subcategory", "coalesce(s.name, '(none)')"),
+					number("tickets", "Tickets", "count(*)").summed(),
+					number("resolved", "Resolved", "count(*) FILTER (WHERE t.resolved_at IS NOT NULL)").summed(),
+					percent("resolutionMet", "Resolution SLA met %", """
+							round(100.0 * count(*) FILTER (WHERE t.resolution_due_at IS NOT NULL AND coalesce(t.resolved_at, t.closed_at) <= t.resolution_due_at)
+							      / NULLIF(count(*) FILTER (WHERE t.resolution_due_at IS NOT NULL
+							          AND (coalesce(t.resolved_at, t.closed_at) IS NOT NULL OR t.resolution_due_at < :now)), 0), 1)"""),
+					number("reopened", "Reopened", "count(*) FILTER (WHERE t.reopen_count > 0)").summed(),
+					number("rating", "Avg rating (1-5)", "round(avg(f.rating)::numeric, 2)").notSummed())
+			.period("t.created_at", "Opened")
+			.choice("team", "Team", "t.team", names(SupportTeam.values()))
+			.sort("tickets", true));
 	}
 
 	// ------------------------------------------------------------------------ compliance
