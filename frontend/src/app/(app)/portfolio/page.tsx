@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatGrid } from "@/components/ui/stat-grid";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { AgreementPrompt } from "@/features/agreement/agreement-prompt";
 import { formatPeriod, leasePercent, nextCreditNote } from "@/features/earnings/labels";
 import { yearsLabel } from "@/features/orders/lease-years";
 import { CURRENCY } from "@/lib/currency";
@@ -44,8 +45,6 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
     authFetch<LeaseAgreement[]>("/api/v1/agreements"),
   ]);
   const agreements = new Map(agreementList.map((a) => [a.holdingId, a]));
-  const toAccept = portfolio.holdings.filter((h) => h.status === "AWAITING_ACCEPTANCE");
-  const firstToAccept = toAccept[0];
   const leases = new Map(earnings.leases.map((l) => [l.holdingId, l]));
   const rent = earnings.wallet.filter((w) => w.balance !== "REFERRAL").map((w) => w.amount);
   const rentWallet = rent.length === 0 ? "—"
@@ -60,13 +59,7 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
           is credited to your wallet {credit} from then on. You can download the agreement from the container below.
         </Notice>
       )}
-      {firstToAccept && (
-        <Notice tone="warning">
-          <strong>{toAccept.length === 1 ? "An investment agreement is" : `${toAccept.length} investment agreements are`} waiting for you.</strong>{" "}
-          Your returns start once you accept the
-          agreement: <Link href={`/portfolio/${firstToAccept.id}/agreement`} className="font-medium underline">review and accept</Link>.
-        </Notice>
-      )}
+      <AgreementPrompt holdings={portfolio.holdings} />
       <StatGrid label="Portfolio summary" stats={[
         { label: "Total invested", value: portfolio.totalsByCurrency.length === 0 ? "—" : portfolio.totalsByCurrency.map((m) => formatMoney(m)).join(" · ") },
         { label: "Investments", value: containersOwned(portfolio.holdings), note: holdingBreakdown(portfolio.holdings) || "None yet" },

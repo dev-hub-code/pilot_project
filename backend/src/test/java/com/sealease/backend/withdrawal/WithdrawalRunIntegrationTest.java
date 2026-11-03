@@ -274,8 +274,10 @@ class WithdrawalRunIntegrationTest {
 
 	@Test
 	void rentOnAContainerPaidAtTheOfficeGoesToTheCashBalance() throws Exception {
+		// Only network investors pay at the office.
 		Account investor = investors.approvedInvestor();
-		String orderId = investors.placeOrder(investor, new OfferingFixtures(mvc, api.admin()).plan(), 1);
+		investors.enrolInNetwork(investor);
+		String orderId = investors.placeOrder(investor, new OfferingFixtures(mvc, api.admin()).networkPlan(), 1);
 		String paymentId = JsonPath.read(mvc.perform(post("/api/v1/orders/{id}/payments", orderId)
 				.header(HttpHeaders.AUTHORIZATION, investor.bearer()).header("Idempotency-Key", key())
 				.contentType(MediaType.APPLICATION_JSON).content("{\"method\":\"OFFICE_CASH\"}"))

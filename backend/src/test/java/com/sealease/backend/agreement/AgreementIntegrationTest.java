@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -73,9 +74,12 @@ class AgreementIntegrationTest {
 
 		String marker = "Clause-" + UUID.randomUUID();
 		save("Lease {{agreementNumber}}", marker + " for {{investorEmail}}: container {{planCode}}, "
-				+ "{{tenureMonths}} months at {{monthlyReturns}}.\n\n# Signed\nBy SeaLease")
+				+ "{{tenureMonths}} months at {{monthlyReturns}}.\n\n# Signed\nBy SeaLease\n\n"
+				+ "Wording v{{agreementVersion}}, {{currentYear}}. Acceptance: {{acceptanceStatus}} / {{acceptedAt}} / "
+				+ "{{acceptanceReference}}.")
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.version").isNumber());
+		int version = jdbc.queryForObject("SELECT max(version) FROM agreement_templates", Integer.class);
 		mvc.perform(get("/api/v1/admin/agreement-template/sample").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(content().contentType(MediaType.APPLICATION_PDF));
@@ -93,7 +97,9 @@ class AgreementIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.agreement.acceptanceRequired").value(true))
 			.andExpect(jsonPath("$.agreement.acceptedAt").doesNotExist())
-			.andExpect(jsonPath("$.body").value(startsWith(marker)));
+			.andExpect(jsonPath("$.body").value(startsWith(marker)))
+			.andExpect(jsonPath("$.body").value(containsString("Wording v" + version + ", " + java.time.Year.now().getValue()
+					+ ". Acceptance: Awaiting acceptance / Not yet accepted / Pending.")));
 		Account stranger = investors.approvedInvestor();
 		mvc.perform(post("/api/v1/agreements/{id}/accept", holdingId).header(HttpHeaders.AUTHORIZATION, stranger.bearer()))
 			.andExpect(status().isNotFound());
@@ -105,6 +111,11 @@ class AgreementIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT status FROM holdings WHERE id = ?::uuid", String.class, holdingId))
 			.isEqualTo("ACTIVE");
 		assertThat(accruals(holdingId)).isOne();
+		String number = jdbc.queryForObject("SELECT agreement_number FROM lease_agreements WHERE holding_id = ?::uuid",
+				String.class, holdingId);
+		mvc.perform(get("/api/v1/agreements/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.body").value(matchesPattern("(?s).*Acceptance: Accepted / \\d{1,2} \\w+ \\d{4}, \\d{2}:\\d{2} \\S+ / "
+					+ number.replace("AGR-", "ACC-") + "\\..*")));
 		mvc.perform(post("/api/v1/agreements/{id}/accept", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isConflict());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM lease_agreement_acceptances a JOIN lease_agreements l "
@@ -137,6 +148,39 @@ class AgreementIntegrationTest {
 		save("Lease v-next", "New wording {{planCode}}").andExpect(status().isOk());
 		assertThat(jdbc.queryForObject("SELECT body FROM lease_agreements WHERE holding_id = ?::uuid", String.class, holdingId))
 			.isEqualTo(stored.get("body"));
+	}
+
+	@Test
+	void anAgreementAwaitingAcceptanceFollowsTheWordingInForceAndTheAcceptedWordingStays() throws Exception {
+		save("Lease {{agreementNumber}}", "Old wording for {{planCode}}.").andExpect(status().isOk());
+		Account investor = investors.approvedInvestor();
+		UUID plan = new OfferingFixtures(mvc, admin).plan();
+		String orderId = investors.paidOrder(investor, plan, 1);
+		String holdingId = jdbc.queryForObject("SELECT id::text FROM holdings WHERE order_id = ?::uuid", String.class, orderId);
+		String number = jdbc.queryForObject("SELECT agreement_number FROM lease_agreements WHERE holding_id = ?::uuid",
+				String.class, holdingId);
+		String container = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
+
+		// New wording reaches the agreement still waiting, under its own number.
+		save("Agreement {{agreementNumber}}", "New wording v{{agreementVersion}} for {{planCode}}, from {{startDate}}.")
+			.andExpect(status().isOk());
+		int version = jdbc.queryForObject("SELECT max(version) FROM agreement_templates", Integer.class);
+		mvc.perform(get("/api/v1/agreements/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.agreement.title").value("Agreement " + number))
+			.andExpect(jsonPath("$.body").value("New wording v" + version + " for " + container
+					+ ", from the day this Agreement is accepted."));
+
+		// What is accepted is that wording, and later changes leave it as accepted.
+		mvc.perform(post("/api/v1/agreements/{id}/accept", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk());
+		save("Lease later", "Later wording {{planCode}}").andExpect(status().isOk());
+		mvc.perform(get("/api/v1/agreements/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(jsonPath("$.agreement.title").value("Agreement " + number))
+			.andExpect(jsonPath("$.body").value(startsWith("New wording v" + version + " for " + container + ", from ")))
+			.andExpect(jsonPath("$.body").value(org.hamcrest.Matchers.not(containsString("accepted"))));
+		mvc.perform(get("/api/v1/agreements/{id}/pdf", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
+			.andExpect(status().isOk());
 	}
 
 	private long accruals(String holdingId) {

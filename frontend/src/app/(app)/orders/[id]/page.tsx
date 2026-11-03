@@ -10,13 +10,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
 import { DepositForm } from "@/features/orders/deposit-form";
+import { RazorpayCheckout } from "@/features/orders/razorpay-checkout";
 import { ReceiptForm } from "@/features/orders/receipt-form";
 import { DEPOSIT_MODE_LABEL, DEPOSIT_REFERENCE_LABEL, METHOD_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, PAYMENT_TONE } from "@/features/orders/labels";
 import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { isDemoAccount } from "@/lib/server/demo";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Order, Payment } from "@/types/order";
+import type { Order, Payment, PaymentMethod } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
@@ -28,11 +29,13 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   let order: Order;
   let payments: Payment[];
   let demo: boolean;
+  let methods: PaymentMethod[];
   try {
-    [order, payments, demo] = await Promise.all([
+    [order, payments, demo, { methods }] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
       isDemoAccount(),
+      authFetch<{ methods: PaymentMethod[] }>("/api/v1/payments/methods"),
     ]);
   } catch (error) {
     if (error instanceof BackendError && error.status === 404) notFound();
@@ -43,6 +46,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const rejected = payments.find((p) => p.method === "BANK_TRANSFER" && p.status === "FAILED" && p.deposit);
   const refunds = payments.filter((p) => p.status === "REFUND_REQUIRED" || p.status === "REFUNDED");
   const paid = payments.find((p) => p.status === "SUCCEEDED");
+  // Online investors pay through the gateway; network investors by bank or at the office.
+  const online = methods.includes("GATEWAY");
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -184,14 +189,73 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
               <p className="mt-2 text-sm text-muted">
                 {awaitingVerification
                   ? `Payment being verified. Reserved until ${formatDateTime(order.expiresAt)}.`
-                  : pending?.officeCash
+                  : pending?.virtualAccount
+                    ? `Transfer by ${formatDateTime(order.expiresAt)}, or the order lapses.`
+                    : pending?.officeCash
                     ? `Pay at our office by ${formatDateTime(order.expiresAt)}, or the order lapses.`
                     : `Pay by ${formatDateTime(order.expiresAt)}, or the order lapses.`}
               </p>
             )}
           </Card>
 
-          {order.status === "PENDING_PAYMENT" && (
+          {order.status === "PENDING_PAYMENT" && online && (
+            <Card title="Pay">
+              <div className="space-y-6">
+                {pending?.checkout && (
+                  <RazorpayCheckout key={pending.id} orderId={order.id} paymentId={pending.id} checkout={pending.checkout} />
+                )}
+                {pending?.virtualAccount && (
+                  <div className="space-y-3 text-sm">
+                    <p className="font-medium">Pay by bank transfer</p>
+                    <p className="text-xs text-muted">
+                      This account is for this order only. Pay by NEFT, RTGS, IMPS or UPI from your own bank.
+                    </p>
+                    <dl className="space-y-2">
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Amount, exactly</dt>
+                        <dd className="font-display text-xl font-semibold tabular-nums">{formatMoney(pending.virtualAccount.amount)}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Account number</dt>
+                        <dd className="font-mono text-base break-all">{pending.virtualAccount.accountNumber}</dd></div>
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">IFSC</dt>
+                        <dd className="font-mono text-base">{pending.virtualAccount.ifsc}</dd></div>
+                      {pending.virtualAccount.accountName && (
+                        <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Account name</dt>
+                          <dd>{pending.virtualAccount.accountName}</dd></div>
+                      )}
+                      {pending.virtualAccount.bankName && (
+                        <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Bank</dt>
+                          <dd>{pending.virtualAccount.bankName}</dd></div>
+                      )}
+                      {pending.virtualAccount.upiId && (
+                        <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Or UPI ID</dt>
+                          <dd className="font-mono text-base break-all">{pending.virtualAccount.upiId}</dd></div>
+                      )}
+                      <div><dt className="text-xs text-muted uppercase tracking-[0.08em]">Pay by</dt>
+                        <dd>{formatDateTime(pending.virtualAccount.payBy)}</dd></div>
+                    </dl>
+                    <p className="text-xs text-muted">
+                      Your order is confirmed automatically when the money arrives: within minutes by IMPS or UPI, the same
+                      day by NEFT or RTGS. Reload this page to see it. A different amount is refunded to you.
+                    </p>
+                  </div>
+                )}
+                {pending?.method !== "GATEWAY" && (
+                  <ActionButton action={startPaymentAction.bind(null, order.id, "GATEWAY", key())}
+                    label="Pay online (UPI, net banking or card)" pendingLabel="Preparing payment…" className="w-full" />
+                )}
+                {pending?.method !== "VIRTUAL_ACCOUNT" && (
+                  <ActionButton action={startPaymentAction.bind(null, order.id, "VIRTUAL_ACCOUNT", key())}
+                    label="Pay by bank transfer (NEFT, RTGS, IMPS)" pendingLabel="Opening an account…"
+                    variant="secondary" className="w-full" />
+                )}
+                <div className="border-t border-border pt-4">
+                  <ActionButton action={cancelOrderAction.bind(null, order.id)} label="Cancel order" variant="quiet"
+                    confirm={`Cancel ${order.orderNumber}? Money that still arrives for it is refunded.`} className="w-full" />
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {order.status === "PENDING_PAYMENT" && !online && (
             <Card title="Pay">
               <div className="space-y-6">
                 {pending?.bankTransfer && <DepositForm key={pending.id} orderId={order.id} payment={pending} />}
@@ -220,7 +284,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                   <ActionButton action={startPaymentAction.bind(null, order.id, "BANK_TRANSFER", key())}
                     label="Pay now" className="w-full" />
                 )}
-                {pending?.method !== "OFFICE_CASH" && (
+                {methods.includes("OFFICE_CASH") && pending?.method !== "OFFICE_CASH" && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "OFFICE_CASH", key())}
                     label="Pay in cash" variant="secondary" className="w-full" />
                 )}

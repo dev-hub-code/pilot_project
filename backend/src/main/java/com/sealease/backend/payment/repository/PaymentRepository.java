@@ -24,6 +24,9 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID>, JpaSpec
 
 	Optional<Payment> findByOrderIdAndIdempotencyKey(UUID orderId, String idempotencyKey);
 
+	/** The payment recording a payment at the provider (its id, kept as the external reference), if recorded. */
+	Optional<Payment> findByProviderAndExternalReference(String provider, String externalReference);
+
 	List<Payment> findByOrderIdOrderByCreatedAtDesc(UUID orderId);
 
 	List<Payment> findByOrderIdAndStatus(UUID orderId, PaymentStatus status);

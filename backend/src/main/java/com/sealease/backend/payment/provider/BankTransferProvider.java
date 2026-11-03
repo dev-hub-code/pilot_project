@@ -1,6 +1,5 @@
 package com.sealease.backend.payment.provider;
 
-import com.sealease.backend.common.money.Money;
 import com.sealease.backend.payment.entity.PaymentMethod;
 import org.springframework.stereotype.Component;
 
@@ -31,12 +30,12 @@ public class BankTransferProvider implements PaymentProvider {
 	}
 
 	@Override
-	public String open(String orderNumber, Money amount) {
+	public Opened open(OpenRequest request) {
 		StringBuilder reference = new StringBuilder("SL-");
 		for (int i = 0; i < 10; i++) {
 			reference.append(ALPHABET[random.nextInt(ALPHABET.length)]);
 		}
-		return reference.toString();
+		return Opened.of(reference.toString());
 	}
 
 }

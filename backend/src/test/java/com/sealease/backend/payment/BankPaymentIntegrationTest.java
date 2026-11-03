@@ -145,9 +145,9 @@ class BankPaymentIntegrationTest {
 
 	@Test
 	void investorsGiveTheOfficeCashReceiptNumberAndFinanceConfirms() throws Exception {
-		Account investor = approvedInvestor();
+		Account investor = networkInvestor();
 		Account finance = api.staff("ADMIN", "FINANCE");
-		String orderId = placeOrder(investor, offerings.plan());
+		String orderId = placeOrder(investor, offerings.networkPlan());
 		String payment = paymentId(startPayment(investor, orderId, "OFFICE_CASH"));
 
 		submitReceipt(approvedInvestor(), payment, "RC-1042").andExpect(status().isNotFound());
@@ -170,7 +170,7 @@ class BankPaymentIntegrationTest {
 		submitReceipt(investor, payment, "RC-1044").andExpect(status().isConflict());
 
 		// Bank payments take deposit details, not a receipt number.
-		String other = placeOrder(investor, offerings.plan());
+		String other = placeOrder(investor, offerings.networkPlan());
 		submitReceipt(investor, paymentId(startBankPayment(investor, other)), "RC-1045").andExpect(status().isUnprocessableContent());
 	}
 
@@ -207,6 +207,13 @@ class BankPaymentIntegrationTest {
 		Account investor = api.register();
 		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
 		new InvestorFixtures(mvc, jdbc, api).ensureVerifiedBankAccount(investor);
+		return investor;
+	}
+
+	/** Approved and on the network scheme: network investors may pay in cash at the office; online investors may not. */
+	private Account networkInvestor() throws Exception {
+		Account investor = approvedInvestor();
+		new InvestorFixtures(mvc, jdbc, api).enrolInNetwork(investor);
 		return investor;
 	}
 

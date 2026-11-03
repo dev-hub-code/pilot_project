@@ -18,7 +18,8 @@ correctness, auditability and idempotency as first-class concerns.
 ```text
 backend/    Spring Boot API (com.sealease.backend)
 frontend/   Next.js app — investor portal + admin console
-infra/ecs/   Terraform: the production high-availability cluster on AWS
+infra/lightsail/   Terraform + Compose: the low-cost development server (what runs now)
+infra/ecs/   Terraform: the high-availability production cluster (kept for later; not deployed)
 docker-compose.yml   Local PostgreSQL + Kafka + Mailpit (email)
 .env.example         Local configuration template
 ```
@@ -54,9 +55,39 @@ cd backend && ./mvnw test            # integration tests need a running Docker d
 cd frontend && npm run typecheck && npm run lint
 ```
 
-## Production (AWS, high availability)
+## Development server (AWS Lightsail, low cost)
 
-`infra/ecs` runs production in one AWS region (Mumbai, `ap-south-1`), with every tier spread over two availability
+During development the site runs on Lightsail in Mumbai (`infra/lightsail`): one 8 GB, 2 vCPU server with Caddy
+(HTTPS from Let's Encrypt), the web app, the API and Kafka in Docker Compose, and a managed Lightsail PostgreSQL 18
+(2 GB RAM, 80 GB).
+It costs about $74 a month: $44 for the server, $30 for the database (2 GB RAM, 80 GB), cents for S3 and SES. An AWS
+budget emails `budget_email` at 80% of $80 (actual) and when the month's forecast passes $80. There is no redundancy: if the server fails, the site is down until a new one is
+built and redeployed; the server keeps no data of its own. The database has automatic daily backups (7 days, with
+point-in-time restore), uploaded documents are in S3, and every night at 02:00 IST the database is also dumped to an
+S3 bucket that keeps 14 days.
+
+First time (AWS credentials configured, Docker running, `~/.ssh/sealease_lightsail` key pair present):
+
+```bash
+terraform -chdir=infra/lightsail init
+terraform -chdir=infra/lightsail apply        # the server, its static IP, the database, S3 buckets, SES
+infra/lightsail/env.sh                        # .secrets/lightsail.env: new keys + AWS credentials. BACK IT UP.
+# Online payments: add RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET to .secrets/lightsail.env
+# (env.sh keeps them), and on the Razorpay dashboard add the webhook https://www.sealease.in/api/v1/webhooks/razorpay
+terraform -chdir=infra/lightsail output       # point GoDaddy's @ and www A records at static_ip; add email_dns_records
+infra/lightsail/deploy.sh
+```
+
+Every later deployment is `infra/lightsail/deploy.sh` from the commit to run. It builds the images locally, copies
+them over SSH (no registry), and restarts the containers. SSH in with the command in `terraform output ssh`; logs:
+`cd /opt/sealease && docker compose logs -f backend`.
+
+To stop all charges: `terraform -chdir=infra/lightsail destroy` (empty the two buckets first; it keeps a final database
+snapshot, which is billed until you delete it).
+
+## Production (AWS, high availability; not deployed now)
+
+`infra/ecs` is the production setup for later: it runs production in one AWS region (Mumbai, `ap-south-1`), with every tier spread over two availability
 zones, so it keeps serving if a task, a server or a whole zone fails. The defaults are the leanest setup that still
 does that; each line below names the variable that buys more headroom.
 
@@ -351,8 +382,18 @@ units of a plan ──▶ order PENDING_PAYMENT ──payment succeeded──▶
 - **Placing an order** (`{productId, units, acceptTerms}`) needs an `Idempotency-Key` header: a retry returns the original
   order, even when both arrive together, and reusing the key for a different request is a 409. The investor must accept the
   plan's terms. There is one `order_items` row per order, with the terms frozen (units, unit price, amount, return %, tenure).
-- **Payments.** Bank payment is the only method; card payments are not accepted (earlier card
-  payments, if any, remain readable as `CARD`). One attempt in flight per order, and money is taken
+- **Online investors pay through Razorpay** (`payment/gateway`), once `RAZORPAY_KEY_ID`,
+  `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` are set; until then they pay as network investors do.
+  - `GATEWAY`: Razorpay's checkout (UPI or net banking; cards off). The order is reserved for 30 minutes and
+    confirmed when the checkout's signed result has been checked with Razorpay's API.
+  - `VIRTUAL_ACCOUNT`: a Smart Collect account number, IFSC and UPI ID for this one payment, paid by NEFT, RTGS, IMPS
+    or UPI. The order is reserved for 3 days and confirmed when the money lands; the account then closes.
+  - The webhook `POST /api/v1/webhooks/razorpay` (events `payment.authorized`, `payment.captured`,
+    `virtual_account.credited`; signed with the webhook secret) confirms payments even if the browser closes.
+    Reporting a payment twice changes nothing. A wrong amount, or money for an order already paid or closed, becomes
+    `REFUND_REQUIRED`: finance refunds it on the Razorpay dashboard and records the refund.
+- **Network investors pay by bank or at the office**, confirmed by finance (below). Card payments are not accepted
+  (earlier card payments, if any, remain readable as `CARD`). One attempt in flight per order, and money is taken
   at most once (partial unique indexes). Finance maintains the company
   bank accounts investors may pay into (account number, IFSC, optional UPI ID;
   `COMPANY_BANK_ACCOUNT_MANAGE`, deactivated rather than deleted). The investor chooses one of the

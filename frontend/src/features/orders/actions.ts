@@ -60,6 +60,23 @@ export async function startPaymentAction(orderId: string, method: PaymentMethod,
   return {};
 }
 
+/**
+ * The gateway's checkout finished: its signed result goes to the API, which checks it with the gateway before the
+ * order is confirmed.
+ */
+export async function verifyCheckoutAction(orderId: string, paymentId: string, result: {
+  gatewayOrderId: string; gatewayPaymentId: string; signature: string;
+}): Promise<FormState> {
+  try {
+    await authFetch<Payment>(`/api/v1/payments/${id(paymentId)}/checkout`, { method: "POST", json: result });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  return { success: "Payment received. Your investment is confirmed." };
+}
+
 /** The investor tells us how they paid a bank payment, for finance to verify. */
 export async function submitDepositAction(orderId: string, paymentId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const input = {

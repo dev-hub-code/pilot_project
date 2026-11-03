@@ -12,6 +12,7 @@ import { monthColumns, monthKey } from "@/features/dashboard/months";
 import { ReturnsBreakdown } from "@/features/dashboard/returns-breakdown";
 import { TermProgress } from "@/features/dashboard/term-progress";
 import { UpcomingReturns } from "@/features/dashboard/upcoming-returns";
+import { AgreementPrompt } from "@/features/agreement/agreement-prompt";
 import { VerifyEmailDialog } from "@/features/auth/verify-email-dialog";
 import { nextCreditNote } from "@/features/earnings/labels";
 import { CURRENCY } from "@/lib/currency";
@@ -110,6 +111,8 @@ export default async function DashboardPage() {
           </LinkButton>
         </section>
       )}
+
+      {portfolio && <AgreementPrompt holdings={portfolio.holdings} />}
 
       <StatGrid stats={stats} label="Portfolio summary" />
 

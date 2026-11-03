@@ -39,11 +39,23 @@ public class AgreementAcceptance {
 	@Column(name = "user_agent", length = 512)
 	private String userAgent;
 
+	/** The wording version accepted; {@code null} on acceptances recorded before the wording was kept here. */
+	@Column(name = "template_id")
+	private UUID templateId;
+
+	/** The title accepted, as shown to the investor; {@code null} with {@code templateId}. */
+	@Column(name = "title", length = 200)
+	private String title;
+
+	/** The wording accepted, as shown to the investor; {@code null} with {@code templateId}. */
+	@Column(name = "body")
+	private String body;
+
 	protected AgreementAcceptance() {
 	}
 
 	public AgreementAcceptance(UUID agreementId, UUID userId, Instant acceptedAt, LocalDate leaseStartsOn,
-			LocalDate leaseEndsOn, String ipAddress, String userAgent) {
+			LocalDate leaseEndsOn, String ipAddress, String userAgent, UUID templateId, String title, String body) {
 		this.agreementId = agreementId;
 		this.userId = userId;
 		this.acceptedAt = acceptedAt;
@@ -51,6 +63,21 @@ public class AgreementAcceptance {
 		this.leaseEndsOn = leaseEndsOn;
 		this.ipAddress = ipAddress;
 		this.userAgent = userAgent;
+		this.templateId = templateId;
+		this.title = title;
+		this.body = body;
+	}
+
+	public UUID getTemplateId() {
+		return templateId;
+	}
+
+	public String getTitle() {
+		return title;
+	}
+
+	public String getBody() {
+		return body;
 	}
 
 	public UUID getAgreementId() {
