@@ -61,6 +61,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Currency;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -602,6 +603,15 @@ class FinancialConcurrencyIntegrationTest {
 				       <> coalesce((SELECT sum(amount) FROM ledger_entries e
 				                    WHERE e.account_id = a.id AND e.direction = d.direction), 0))""", Integer.class))
 			.as("accounts whose totals differ from their entries").isZero();
+	}
+
+	@Test
+	void aLedgerTransactionWithoutEntriesIsRefusedAtCommit() {
+		// Finding L-1: the balance check runs per entry, so a transaction with none is checked on its own.
+		assertThatThrownBy(() -> transactions.executeWithoutResult(s -> jdbc.update("""
+				INSERT INTO ledger_transactions (id, transaction_type, reference, currency, description, created_at)
+				VALUES (?, 'ADJUSTMENT', ?, 'INR', 'No entries', now())""", UUID.randomUUID(), "empty:" + suffix())))
+			.hasMessageContaining("has no entries");
 	}
 
 	@Test

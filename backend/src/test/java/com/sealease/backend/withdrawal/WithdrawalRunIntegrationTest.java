@@ -277,6 +277,34 @@ class WithdrawalRunIntegrationTest {
 	}
 
 	@Test
+	void twoClicksOnGenerateMakeOneRun() throws Exception {
+		Account investor = withBank("Nina Network");
+		investors.enrolInNetwork(investor);
+		credit(investor, "1000", "RENT_BANK");
+		Integer before = jdbc.queryForObject("SELECT count(*) FROM withdrawal_runs", Integer.class);
+
+		// Finding L-4: the runs take turns; the second finds nothing left and is not recorded.
+		var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+		try {
+			List<java.util.concurrent.Future<String>> answers = new java.util.ArrayList<>();
+			for (int i = 0; i < 2; i++) {
+				answers.add(pool.submit(() -> run(finance, "RENT").andExpect(status().isCreated()).andReturn().getResponse()
+					.getContentAsString()));
+			}
+			List<Object> ids = new java.util.ArrayList<>();
+			for (var answer : answers) {
+				ids.add(JsonPath.read(answer.get(), "$.id"));
+			}
+			assertThat(ids).filteredOn(java.util.Objects::nonNull).hasSize(1);
+		}
+		finally {
+			pool.shutdown();
+		}
+		assertThat(withdrawalCount(investor)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM withdrawal_runs", Integer.class)).isEqualTo(before + 1);
+	}
+
+	@Test
 	void rentOnAUnitPaidAtTheOfficeGoesToTheCashBalance() throws Exception {
 		// Only network investors pay at the office.
 		Account investor = investors.approvedInvestor();

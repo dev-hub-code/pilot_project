@@ -349,6 +349,29 @@ class CheckoutIntegrationTest {
 	// ------------------------------------------------------------------------------- outbox
 
 	@Test
+	void oneOutboxRelayAtATime() throws Exception {
+		placeOrder(approvedInvestor(), offerings.plan(), 1);
+		// Finding L-3: while another instance relays (holds the relay lock), this one skips its turn.
+		java.util.concurrent.CountDownLatch held = new java.util.concurrent.CountDownLatch(1);
+		java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+		Thread other = Thread.ofVirtual().start(() -> transactions.executeWithoutResult(s -> {
+			jdbc.queryForObject("SELECT pg_try_advisory_xact_lock(hashtext('outbox_relay'))", Boolean.class);
+			held.countDown();
+			try {
+				done.await(10, java.util.concurrent.TimeUnit.SECONDS);
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}));
+		assertThat(held.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+		assertThat(relay.publishPending()).isZero();
+		done.countDown();
+		other.join();
+		assertThat(relay.publishPending()).isPositive();
+	}
+
+	@Test
 	void outboxRelayPublishesCommittedEventsToKafka() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();

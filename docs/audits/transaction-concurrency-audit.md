@@ -21,7 +21,7 @@ The money paths are well built. The platform uses a double-entry ledger whose ro
 | H-3 | Bank references (UTR / receipt numbers) are not unique for manually confirmed deposits or for withdrawal payouts | One bank reference can confirm several deposits or mark several withdrawals paid. A single finance user can confirm an investment for money that never arrived. |
 | H-4 | A Razorpay or payout webhook for a reference that isn't ours is only logged | Money received this way leaves no record to reconcile or refund |
 
-There are also 8 MEDIUM findings (lock contention, an external call made while holding a lock, the single scheduler thread, no lock timeouts) and 5 LOW findings. **All 8 MEDIUM findings are fixed** (branch `fix-medium-concurrency-issues`); see "Done" under each.
+There are also 8 MEDIUM findings (lock contention, an external call made while holding a lock, the single scheduler thread, no lock timeouts) and 5 LOW findings. **All 8 MEDIUM and all 5 LOW findings are fixed** (branch `fix-medium-concurrency-issues`); see "Done" under each.
 
 > **Status: all four HIGH findings are fixed** (branch `fix-high-concurrency-issues`). The two acceptance tests are enabled and pass. The burst of 100 withdrawal requests now gets no 500s, and all 30 concurrent Razorpay and payout deliveries are answered 200. See "Fix" under each finding below.
 
@@ -279,8 +279,17 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 
 ### LOW
 
-| ID | Finding | Location | Fix |
-|----|---------|----------|-----|
+All five are fixed (branch `fix-low-concurrency-issues`).
+
+| ID | Finding | Location | Fix | Done |
+|----|---------|----------|-----|------|
+| L-1 | The balanced-transaction trigger doesn't catch a ledger transaction with no entries | `ddl/V4__functions_and_triggers.sql:14-38`; the code always posts ≥ 2 lines (`LedgerService.java:93-96`) | Add a deferred trigger on `ledger_transactions` requiring ≥ 2 entries | `ddl/V25`: a deferred constraint trigger refuses, at commit, a transaction with no entries. A single entry was already refused as unbalanced, since amounts are positive. |
+| L-2 | Plan status is read without a lock at checkout, so an order placed as the plan closes is accepted | `investment/service/OfferingQuery.java:44-51` | Acceptable: terms are fixed on the order. Document it | Documented on `OfferingQuery.problems`. Locking every checkout against plan edits would serialise purchases for no benefit. |
+| L-3 | Outbox relays on several instances may publish two events of one aggregate out of order. Kafka is also called inside the claiming transaction | `outbox/OutboxRelay.java:37-44`, `:106` | Only the email consumer is affected. Claim per aggregate key, or publish after commit | One relay at a time across instances (`pg_try_advisory_xact_lock`); an instance that finds another relaying skips its turn. Sending inside the claiming transaction is kept, so a row is marked published only once Kafka acknowledged it. Each send waits at most `send-timeout` (10 s) and is followed by an update, so the session is never idle in the transaction longer than the 60 s limit (M-6). |
+| L-4 | Two clicks on "generate run" record a second, empty run | `WithdrawalRunService.java:188` | Skip the insert when nothing was made, or take an advisory lock per run kind | Both:<br>• runs of one kind take an advisory lock, so they take turns;<br>• a run that withdraws nothing is not recorded. Its answer still lists who was left out, with `id`/`reference` null. The admin screen already shows "No rent to withdraw this time". |
+| L-5 | Concurrency coverage was thin (4 and 5 threads) | `withdrawal/WithdrawalRequestIntegrationTest.java:141`, `order/CheckoutIntegrationTest.java:169` | Done in this PR: `concurrency/FinancialConcurrencyIntegrationTest.java` | Done in PR #16; extended in #17 and #18, and with tests for L-1, L-3 and L-4. |
+
+----|---------|----------|-----|
 | L-1 | The balanced-transaction trigger doesn't catch a ledger transaction with no entries | `ddl/V4__functions_and_triggers.sql:14-38`; the code always posts ≥ 2 lines (`LedgerService.java:93-96`) | Add a deferred trigger on `ledger_transactions` requiring ≥ 2 entries |
 | L-2 | Plan status is read without a lock at checkout, so an order placed as the plan closes is accepted | `investment/service/OfferingQuery.java:44-51` | Acceptable: terms are fixed on the order. Document it |
 | L-3 | Outbox relays on several instances may publish two events of one aggregate out of order. Kafka is also called inside the claiming transaction | `outbox/OutboxRelay.java:37-44`, `:106` | Only the email consumer is affected. Claim per aggregate key, or publish after commit |
