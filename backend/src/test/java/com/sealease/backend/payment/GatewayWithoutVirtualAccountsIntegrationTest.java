@@ -78,6 +78,22 @@ class GatewayWithoutVirtualAccountsIntegrationTest {
 			.isEqualTo(1);
 	}
 
+	@Test
+	void anOrderOverTheCheckoutLimitWithNoOtherWayToPayIsExplained() throws Exception {
+		TestApi api = new TestApi(mvc, jdbc);
+		Account investor = api.register();
+		jdbc.update("UPDATE user_profiles SET kyc_status = 'APPROVED' WHERE user_id = ?", investor.id());
+		InvestorFixtures investors = new InvestorFixtures(mvc, jdbc, api);
+		String orderId = investors.placeOrder(investor, new OfferingFixtures(mvc, api.admin()).plan(), 11); // ₹5,50,000
+
+		start(investor, orderId, "GATEWAY").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value("Online payment is limited to ₹5,00,000.00 per payment, and this order "
+					+ "is ₹5,50,000.00. Please cancel it and place orders of up to ₹5,00,000.00 each."));
+		verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid", Integer.class, orderId))
+			.isZero();
+	}
+
 	private ResultActions start(Account investor, String orderId, String method) throws Exception {
 		return mvc.perform(post("/api/v1/orders/{id}/payments", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer())
 			.header("Idempotency-Key", UUID.randomUUID().toString())

@@ -1,5 +1,6 @@
 package com.sealease.backend.payment.service;
 
+import java.util.Currency;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.common.api.Assignee;
 import com.sealease.backend.audit.AuditRecord;
@@ -151,6 +152,16 @@ public class PaymentService {
 	}
 
 	/**
+	 * The most one checkout payment can be, when this investor pays through the checkout and the gateway has a limit;
+	 * otherwise null. Larger orders are paid another way.
+	 */
+	@Transactional(readOnly = true)
+	public Money checkoutLimit(UUID userId, Currency currency) {
+		return methodsFor(userId).contains(PaymentMethod.GATEWAY) && razorpay.hasCheckoutLimit()
+				? Money.of(razorpay.maxAmount(), currency) : null;
+	}
+
+	/**
 	 * Starts paying an order in one of the investor's {@link #methodsFor ways to pay}. Idempotent per key; asking again
 	 * while a payment of the same method is in flight resumes it, and one of another method still in flight is
 	 * cancelled. Paying at the office, through the gateway's checkout or into a virtual account holds the order for that
@@ -287,6 +298,13 @@ public class PaymentService {
 						+ (cashAllowed ? " or at our office" : "");
 			}
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, reason);
+		}
+		if (method == PaymentMethod.GATEWAY && !razorpay.checkoutAllows(order.total())) {
+			Money limit = Money.of(razorpay.maxAmount(), order.total().currency());
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Online payment is limited to "
+					+ limit.display() + " per payment, and this order is " + order.total().display() + ". "
+					+ (allowed.contains(PaymentMethod.VIRTUAL_ACCOUNT) ? "Please pay by bank transfer instead."
+							: "Please cancel it and place orders of up to " + limit.display() + " each."));
 		}
 		if (method == PaymentMethod.BANK_TRANSFER && !companyAccounts.anyActive()) {
 			// Finance has not added an account to pay into yet (Admin → Company Bank Accounts).

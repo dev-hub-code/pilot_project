@@ -1,5 +1,8 @@
 package com.sealease.backend.payment.controller;
 
+import com.sealease.backend.common.money.MoneyResponse;
+import com.sealease.backend.common.money.MoneyProperties;
+import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.web.IdempotencyKey;
 import com.sealease.backend.demo.service.DemoViewService;
 import com.sealease.backend.payment.dto.PaymentMethodsResponse;
@@ -32,17 +35,22 @@ public class PaymentController {
 	private final PaymentService payments;
 	private final GatewayPayments gateway;
 	private final DemoViewService demo;
+	private final MoneyProperties money;
 
-	public PaymentController(PaymentService payments, GatewayPayments gateway, DemoViewService demo) {
+	public PaymentController(PaymentService payments, GatewayPayments gateway, DemoViewService demo,
+			MoneyProperties money) {
 		this.payments = payments;
 		this.gateway = gateway;
 		this.demo = demo;
+		this.money = money;
 	}
 
 	/** How this investor pays: online investors through the gateway, network investors by bank or at the office. */
 	@GetMapping("/api/v1/payments/methods")
 	public PaymentMethodsResponse methods(AuthenticatedUser investor) {
-		return new PaymentMethodsResponse(payments.methodsFor(investor.userId()));
+		Money limit = payments.checkoutLimit(investor.userId(), money.defaultCurrency());
+		return new PaymentMethodsResponse(payments.methodsFor(investor.userId()),
+				limit == null ? null : MoneyResponse.from(limit));
 	}
 
 	/** The gateway's checkout finished: its signed result, checked with the gateway before the order is confirmed. */

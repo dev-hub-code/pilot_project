@@ -8,6 +8,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
+import { overCheckoutLimit } from "@/features/orders/checkout-limit";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
 import { DepositForm } from "@/features/orders/deposit-form";
 import { RazorpayCheckout } from "@/features/orders/razorpay-checkout";
@@ -17,7 +18,8 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { isDemoAccount } from "@/lib/server/demo";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Order, Payment, PaymentMethod } from "@/types/order";
+import type { Money } from "@/types/plan";
+import type { Order, Payment, PaymentMethod, PaymentMethods } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
@@ -30,12 +32,13 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   let payments: Payment[];
   let demo: boolean;
   let methods: PaymentMethod[];
+  let checkoutLimit: Money | undefined;
   try {
-    [order, payments, demo, { methods }] = await Promise.all([
+    [order, payments, demo, { methods, checkoutLimit }] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
       isDemoAccount(),
-      authFetch<{ methods: PaymentMethod[] }>("/api/v1/payments/methods"),
+      authFetch<PaymentMethods>("/api/v1/payments/methods"),
     ]);
   } catch (error) {
     if (error instanceof BackendError && error.status === 404) notFound();
@@ -48,6 +51,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const paid = payments.find((p) => p.status === "SUCCEEDED");
   // Online investors pay through the gateway; network investors by bank or at the office.
   const online = methods.includes("GATEWAY");
+  // The gateway takes one payment of at most this much; a larger order is paid another way (the backend refuses it).
+  const overLimit = overCheckoutLimit(order.total, checkoutLimit);
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -238,7 +243,15 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     </p>
                   </div>
                 )}
-                {pending?.method !== "GATEWAY" && (
+                {overLimit && checkoutLimit && (
+                  <Notice tone="info">
+                    Online payment is limited to {formatMoney(checkoutLimit)} per payment.{" "}
+                    {methods.includes("VIRTUAL_ACCOUNT")
+                      ? "Please pay this order by bank transfer."
+                      : `Please cancel this order and place orders of up to ${formatMoney(checkoutLimit)} each.`}
+                  </Notice>
+                )}
+                {!overLimit && pending?.method !== "GATEWAY" && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "GATEWAY", key())}
                     label="Pay online (UPI, net banking or card)" pendingLabel="Preparing payment…" className="w-full" />
                 )}

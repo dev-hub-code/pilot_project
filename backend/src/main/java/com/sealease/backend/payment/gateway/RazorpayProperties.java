@@ -1,5 +1,7 @@
 package com.sealease.backend.payment.gateway;
 
+import com.sealease.backend.common.money.Money;
+import java.math.BigDecimal;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -18,6 +20,9 @@ import java.time.Duration;
  * @param virtualAccountWindow  how long an order stays reserved, and its virtual account open, for a bank transfer
  * @param virtualAccounts       whether investors may pay by bank transfer into a virtual account. Needs Razorpay's Smart
  *                              Collect activated on the account; until it is, set this false and the option is hidden
+ * @param maxAmount             the most Razorpay accepts in one checkout payment, in rupees, as set on the account
+ *                              (₹5,00,000 unless Razorpay has raised it); 0 for no limit. Larger orders are paid
+ *                              another way
  */
 @ConfigurationProperties(prefix = "app.payments.razorpay")
 public record RazorpayProperties(
@@ -29,11 +34,21 @@ public record RazorpayProperties(
 		@DefaultValue("30m") Duration checkoutWindow,
 		@DefaultValue("3d") Duration virtualAccountWindow,
 		@DefaultValue("15s") Duration timeout,
-		@DefaultValue("true") boolean virtualAccounts) {
+		@DefaultValue("true") boolean virtualAccounts,
+		@DefaultValue("500000") BigDecimal maxAmount) {
 
 	/** Online investors pay through Razorpay only when the API keys are set. */
 	public boolean enabled() {
 		return !keyId.isBlank() && !keySecret.isBlank();
+	}
+
+	/** Whether one checkout payment may be this large. */
+	public boolean checkoutAllows(Money amount) {
+		return !hasCheckoutLimit() || amount.amount().compareTo(maxAmount) <= 0;
+	}
+
+	public boolean hasCheckoutLimit() {
+		return maxAmount != null && maxAmount.signum() > 0;
 	}
 
 	/** Investors may pay by bank transfer into a virtual account: Razorpay is on, and Smart Collect is too. */

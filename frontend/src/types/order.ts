@@ -42,6 +42,15 @@ export interface Order {
  */
 export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD" | "GATEWAY" | "VIRTUAL_ACCOUNT";
 
+/**
+ * How this investor can pay. `checkoutLimit` is the most one checkout (GATEWAY) payment can be; a larger order is paid
+ * another way.
+ */
+export interface PaymentMethods {
+  methods: PaymentMethod[];
+  checkoutLimit?: Money;
+}
+
 /** What the gateway's checkout needs, while a gateway payment is pending. */
 export interface CheckoutInstructions {
   keyId: string;

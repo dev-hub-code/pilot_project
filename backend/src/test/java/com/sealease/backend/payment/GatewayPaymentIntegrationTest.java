@@ -157,6 +157,24 @@ class GatewayPaymentIntegrationTest {
 	}
 
 	@Test
+	void anOrderOverTheCheckoutLimitIsPaidByBankTransferInstead() throws Exception {
+		Account investor = approvedInvestor();
+		methods(investor).andExpect(jsonPath("$.checkoutLimit.amount").value("500000.00"));
+		String orderId = placeOrder(investor, offerings.plan(), 1100); // ₹5,50,000: over Razorpay's ₹5,00,000
+
+		startPayment(investor, orderId, "GATEWAY").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message").value("Online payment is limited to ₹5,00,000.00 per payment, and this order "
+					+ "is ₹5,50,000.00. Please pay by bank transfer instead."));
+		verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
+
+		when(razorpay.createVirtualAccount(eq(55_000_000L), anyString(), any(Instant.class), anyMap()))
+			.thenReturn(new VirtualAccount("va_" + suffix(),
+					new VirtualAccountDetails("2223330012345679", "RATN0VAAPIS", "SeaLease", "RBL Bank", null)));
+		startPayment(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isCreated())
+			.andExpect(jsonPath("$.virtualAccount.amount.amount").value("550000.00"));
+	}
+
+	@Test
 	void aVirtualAccountTakesABankTransferAndOnlyTheRightAmountPaysTheOrder() throws Exception {
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, offerings.plan());
@@ -286,10 +304,14 @@ class GatewayPaymentIntegrationTest {
 	}
 
 	private String placeOrder(Account investor, UUID product) throws Exception {
+		return placeOrder(investor, product, 100);
+	}
+
+	private String placeOrder(Account investor, UUID product, int units) throws Exception {
 		return JsonPath.read(mvc.perform(post("/api/v1/orders").header(HttpHeaders.AUTHORIZATION, investor.bearer())
 				.header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"productId":"%s","units":100,"acceptTerms":true}""".formatted(product)))
+						{"productId":"%s","units":%d,"acceptTerms":true}""".formatted(product, units)))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 
