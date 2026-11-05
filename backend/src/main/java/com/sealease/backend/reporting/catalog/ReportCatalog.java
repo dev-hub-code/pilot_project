@@ -151,6 +151,8 @@ public class ReportCatalog {
 				+ " WHEN 'WITHDRAWALS_IN_TRANSIT' THEN 'Withdrawals in transit'"
 				+ " WHEN 'PLATFORM_RENT_EXPENSE' THEN 'Returns paid to investors'"
 				+ " WHEN 'PLATFORM_CAPITAL_RETURNS' THEN 'Capital returned to investors'"
+				+ " WHEN 'WITHDRAWAL_FEE_INCOME' THEN 'Withdrawal charges'"
+				+ " WHEN 'TAX_WITHHELD' THEN 'Tax withheld from withdrawals'"
 				+ " ELSE " + typeSql + " END";
 	}
 

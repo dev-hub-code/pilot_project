@@ -1,82 +1,258 @@
 import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  AlertTriangle, BadgeCheck, CircleCheck, Download, FileStack, FileSearch, Hourglass, Inbox, SlidersHorizontal, Timer,
+} from "lucide-react";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { BULK_PAY_FORM, BulkPayBar } from "@/features/admin/withdrawal-bulk-pay";
 import { EARNINGS_BALANCE_LABEL } from "@/features/earnings/labels";
 import { WITHDRAWAL_STATUS_LABEL, WITHDRAWAL_TONE } from "@/features/withdrawals/labels";
+import { MetricCard, STATUS_ICON, age, olderThanDays } from "@/features/withdrawals/ui";
+import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
-import type { Withdrawal, WithdrawalStatus } from "@/types/withdrawal";
+import type { Withdrawal, WithdrawalDashboard, WithdrawalFigure, WithdrawalStatus } from "@/types/withdrawal";
 import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Withdrawals" };
 
-const FILTERS: readonly WithdrawalStatus[] = ["FAILED", "APPROVED", "BATCHED", "PROCESSING", "PAID", "RETURNED", "REJECTED"];
+const STATUSES: readonly WithdrawalStatus[] = [
+  "SUBMITTED", "UNDER_REVIEW", "ON_HOLD", "PENDING_APPROVAL", "APPROVED", "BATCHED", "PROCESSING", "FAILED",
+  "PAID", "RETURNED", "REJECTED", "CANCELLED",
+];
+const SORTS = {
+  "createdAt,asc": "Oldest first",
+  "createdAt,desc": "Newest first",
+  "amount,desc": "Largest first",
+  "amount,asc": "Smallest first",
+  "statusChangedAt,asc": "Waiting longest",
+} as const;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const AMOUNT = /^\d{1,13}(\.\d{1,2})?$/;
+const INPUT = "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-gold focus:ring-1 focus:ring-gold";
+
+function one(value: string | string[] | undefined): string {
+  return typeof value === "string" ? value.trim().slice(0, 100) : "";
+}
 
 export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"/admin/withdrawals">) {
   const denied = await deniedUnlessInMenu("/admin/withdrawals");
   if (denied) return denied;
-  await requireStaff();
+  const session = await requireStaff();
   const params = await searchParams;
-  // Failed payments first: they wait on finance.
-  const status = FILTERS.find((f) => f === params.status) ?? "FAILED";
-  // A search (a whole reference, or the investor's ID or email) covers every status, latest first.
-  const q = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
+  // The review queue first: new requests wait on finance.
+  const status = one(params.status) === "ALL" ? "" : (STATUSES.find((s) => s === params.status) ?? (one(params.status) ? "" : "SUBMITTED"));
+  const q = one(params.q);
+  const from = DATE.test(one(params.from)) ? one(params.from) : "";
+  const to = DATE.test(one(params.to)) ? one(params.to) : "";
+  const minAmount = AMOUNT.test(one(params.minAmount)) ? one(params.minAmount) : "";
+  const maxAmount = AMOUNT.test(one(params.maxAmount)) ? one(params.maxAmount) : "";
+  const mine = one(params.mine) === "true";
+  const sort = (Object.keys(SORTS) as (keyof typeof SORTS)[]).find((s) => s === params.sort) ?? "createdAt,asc";
   const page = Math.max(0, Number.parseInt(String(params.page ?? "0"), 10) || 0);
-  // Oldest first: the queue is worked in order of arrival.
-  const withdrawals = await authFetch<PageResponse<Withdrawal>>(`/api/v1/admin/withdrawals?${new URLSearchParams(q
-    ? { q, page: String(page), size: "25", sort: "createdAt,desc" }
-    : { status, page: String(page), size: "25", sort: "createdAt,asc" })}`);
+  const advanced = Boolean(from || to || minAmount || maxAmount || mine || sort !== "createdAt,asc");
+
+  const filters: Record<string, string> = Object.fromEntries(Object.entries({
+    status: status || "ALL", q, from, to, minAmount, maxAmount, mine: mine ? "true" : "", sort,
+  }).filter(([, v]) => v));
+  const query = new URLSearchParams({
+    ...Object.fromEntries(Object.entries(filters).filter(([k]) => k !== "status")),
+    ...(status ? { status } : {}), page: String(page), size: "25",
+  });
+  const [withdrawals, dashboard] = await Promise.all([
+    authFetch<PageResponse<Withdrawal>>(`/api/v1/admin/withdrawals?${query}`),
+    authFetch<WithdrawalDashboard>("/api/v1/admin/withdrawals/dashboard"),
+  ]);
+  const canPay = hasPermission(session.permissions, Permission.WITHDRAWAL_PROCESS);
+  const payable = canPay && status === "APPROVED"
+    ? withdrawals.content.filter((w) => w.origin === "REQUESTED" && w.userId !== session.userId) : [];
+
+  const tabs: { status: WithdrawalStatus | "ALL"; label: string; figure?: WithdrawalFigure }[] = [
+    { status: "SUBMITTED", label: "New", figure: dashboard.submitted },
+    { status: "UNDER_REVIEW", label: "In review", figure: dashboard.underReview },
+    { status: "ON_HOLD", label: "On hold", figure: dashboard.onHold },
+    { status: "PENDING_APPROVAL", label: "2nd approval", figure: dashboard.pendingSecondApproval },
+    { status: "APPROVED", label: "To pay", figure: dashboard.approved },
+    { status: "PROCESSING", label: "With bank", figure: dashboard.inPayment },
+    { status: "FAILED", label: "Failed", figure: dashboard.failed },
+    { status: "PAID", label: "Paid" },
+    { status: "ALL", label: "All" },
+  ];
+  const awaitingDecision = dashboard.submitted.count + dashboard.underReview.count + dashboard.pendingSecondApproval.count;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Withdrawals"
-        description="Withdrawals are made by withdrawal runs (Withdrawal files): each run has a bank sheet, and cash at the office is marked collected by hand."
-        actions={<LinkButton href="/admin/withdrawals/batches" variant="secondary">Withdrawal files</LinkButton>} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
-          {FILTERS.map((f) => (
-            <Link key={f} href={`/admin/withdrawals?status=${f}`} aria-current={!q && f === status ? "page" : undefined}
-              className={`rounded-full border px-3 py-1 ${!q && f === status ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-              {WITHDRAWAL_STATUS_LABEL[f]}
+      <PageHeader title="Withdrawal management"
+        description="Review, approve and pay investors' withdrawal requests. Withdrawal runs pay network investors."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href="/admin/reports/withdrawal-register" variant="secondary"><Download className="size-4" aria-hidden="true" /> Export</LinkButton>
+            <LinkButton href="/admin/withdrawals/batches" variant="secondary"><FileStack className="size-4" aria-hidden="true" /> Withdrawal files</LinkButton>
+          </div>
+        } />
+
+      <section aria-label="At a glance" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={Inbox} label="Awaiting decision" value={awaitingDecision}
+          note={`${formatMoney(sum(dashboard.submitted, dashboard.underReview, dashboard.pendingSecondApproval))} requested`}
+          accent="text-amber-700 bg-amber-500/10 dark:text-amber-400" />
+        <MetricCard icon={BadgeCheck} label="Approved, to pay" value={dashboard.approved.count}
+          note={formatMoney(dashboard.approved.amount)} />
+        <MetricCard icon={CircleCheck} label="Paid this month" value={formatMoney(dashboard.paidThisMonth.amount)}
+          note={`${dashboard.paidThisMonth.count} withdrawals · ${dashboard.paidToday.count} today`}
+          accent="text-emerald-700 bg-emerald-500/10 dark:text-emerald-400" />
+        <MetricCard icon={Timer} label="Average time to pay" value={dashboard.avgHoursToPay == null ? "—" : `${dashboard.avgHoursToPay} h`}
+          note="From request to paid, last 30 days" accent="text-slate-600 bg-slate-500/10 dark:text-slate-300" />
+      </section>
+
+      {(dashboard.failed.count > 0 || dashboard.onHold.count > 0) && (
+        <div className="flex flex-wrap gap-3 text-sm">
+          {dashboard.failed.count > 0 && (
+            <Link href="/admin/withdrawals?status=FAILED" className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-rose-700 hover:bg-rose-500/10 dark:text-rose-400">
+              <AlertTriangle className="size-4" aria-hidden="true" /> {dashboard.failed.count} failed payment{dashboard.failed.count === 1 ? "" : "s"} to resolve
             </Link>
-          ))}
+          )}
+          {dashboard.onHold.count > 0 && (
+            <Link href="/admin/withdrawals?status=ON_HOLD" className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400">
+              <Hourglass className="size-4" aria-hidden="true" /> {dashboard.onHold.count} on hold
+            </Link>
+          )}
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        {/* Pipeline tabs */}
+        <nav aria-label="Queue" className="flex overflow-x-auto border-b border-border">
+          {tabs.map((t) => {
+            const selected = (status || "ALL") === t.status;
+            return (
+              <Link key={t.status} href={`/admin/withdrawals?status=${t.status}`} aria-current={selected ? "page" : undefined}
+                className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm whitespace-nowrap transition-colors ${
+                  selected ? "border-gold font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
+                {t.label}
+                {t.figure && t.figure.count > 0 && (
+                  <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${
+                    t.status === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-400" : selected ? "bg-gold text-on-gold" : "bg-background text-muted"}`}>
+                    {t.figure.count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
-        <form className="flex gap-2" action="/admin/withdrawals" role="search">
-          <input name="q" defaultValue={q} placeholder="Reference, investor ID or email"
-            aria-label="Search withdrawals by reference, or the investor's ID or email"
-            className="h-9 w-72 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-gold" />
+
+        {/* Filters */}
+        <form action="/admin/withdrawals" role="search" className="space-y-3 p-4">
+          <input type="hidden" name="status" value={status || "ALL"} />
+          <div className="flex flex-wrap gap-2">
+            <input name="q" defaultValue={q} placeholder="Search by reference, investor ID or email" aria-label="Search withdrawals"
+              className={`${INPUT} min-w-60 flex-1`} />
+            <button type="submit" className="h-10 rounded-lg bg-gold px-5 text-sm font-medium text-on-gold hover:bg-gold-hover">Search</button>
+          </div>
+          <details open={advanced} className="group">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground">
+              <SlidersHorizontal className="size-3.5" aria-hidden="true" /> More filters{advanced ? " (active)" : ""}
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+              <Field label="Requested from"><input type="date" name="from" defaultValue={from} className={INPUT} /></Field>
+              <Field label="Requested to"><input type="date" name="to" defaultValue={to} className={INPUT} /></Field>
+              <Field label="Amount from (₹)"><input name="minAmount" inputMode="decimal" defaultValue={minAmount} className={INPUT} /></Field>
+              <Field label="Amount to (₹)"><input name="maxAmount" inputMode="decimal" defaultValue={maxAmount} className={INPUT} /></Field>
+              <Field label="Sort">
+                <select name="sort" defaultValue={sort} className={INPUT}>
+                  {Object.entries(SORTS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </Field>
+              <label className="flex items-end gap-2 pb-2.5 text-sm">
+                <input type="checkbox" name="mine" value="true" defaultChecked={mine} className="size-4" /> Reviewing myself
+              </label>
+            </div>
+            {advanced && <Link href={`/admin/withdrawals?status=${status || "ALL"}`} className="mt-2 inline-block text-xs text-gold-text hover:underline">Clear filters</Link>}
+          </details>
         </form>
       </div>
+
+      {payable.length > 0 && <BulkPayBar count={payable.length} />}
+
       {withdrawals.content.length === 0 ? (
-        <EmptyState title={q ? "No withdrawals found" : "Nothing here"}
-          description={q ? `Nothing matches “${q}” exactly.` : status === "FAILED" ? "No failed payments are waiting to be resolved." : undefined} />
+        <EmptyState title={status === "SUBMITTED" ? "No new requests" : "No withdrawals found"}
+          description={status === "SUBMITTED" ? "New requests from investors appear here." : "Nothing matches these filters."} />
       ) : (
-        <DataTable columns={["Made", "Reference", "Amount", "From", "To", "By", "Status"]}>
-          {withdrawals.content.map((w) => (
-            <tr key={w.id} className="hover:bg-background">
-              <Cell className="text-muted">{formatDateTime(w.createdAt)}</Cell>
-              <Cell><Link href={`/admin/withdrawals/${w.id}`} className="card-link font-mono text-gold-text hover:underline">{w.reference}</Link></Cell>
-              <Cell className="tabular-nums">{formatMoney(w.amount)}</Cell>
-              <Cell>{EARNINGS_BALANCE_LABEL[w.balance]}</Cell>
-              <Cell>
-                {w.payoutMethod === "OFFICE_CASH"
-                  ? <>Cash{w.status === "APPROVED" && <span className="block text-xs text-gold-text">To hand over</span>}</>
-                  : <>{w.bankHolderName} <span className="text-xs text-muted">{w.bankName} {w.bankAccountMasked}</span></>}
-              </Cell>
-              <Cell>{w.origin === "SCHEDULED" ? "Withdrawal run" : w.origin === "OFFICE" ? "At the office" : "Investor request"}</Cell>
-              <Cell><StatusBadge tone={WITHDRAWAL_TONE[w.status]}>{WITHDRAWAL_STATUS_LABEL[w.status]}</StatusBadge></Cell>
-            </tr>
-          ))}
+        <DataTable columns={[...(payable.length > 0 ? ["Pay"] : []), "Withdrawal", "Investor", "Amount", "Pays to", "Status", "Waiting"]}>
+          {withdrawals.content.map((w) => {
+            const { icon: Icon, tone } = STATUS_ICON[w.status];
+            const open = !["PAID", "RETURNED", "REJECTED", "CANCELLED"].includes(w.status);
+            const waiting = age(w.statusChangedAt);
+            const late = open && olderThanDays(w.statusChangedAt, 2);
+            return (
+              <tr key={w.id} className="hover:bg-background">
+                {payable.length > 0 && (
+                  <Cell>
+                    {payable.some((p) => p.id === w.id) && (
+                      <input type="checkbox" name="withdrawalId" value={w.id} form={BULK_PAY_FORM} className="size-4"
+                        aria-label={`Pay ${w.reference}`} />
+                    )}
+                  </Cell>
+                )}
+                <Cell>
+                  <div className="flex items-center gap-3">
+                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon className="size-4" aria-hidden="true" /></span>
+                    <div>
+                      <Link href={`/admin/withdrawals/${w.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{w.reference}</Link>
+                      <p className="text-xs text-muted">{formatDateTime(w.createdAt)} · {w.origin === "SCHEDULED" ? "Run" : w.origin === "OFFICE" ? "Office" : "Request"}</p>
+                    </div>
+                  </div>
+                </Cell>
+                <Cell>
+                  <p className="font-medium">{w.investorName || "—"}</p>
+                  <p className="font-mono text-xs text-muted">{w.investorCode}</p>
+                </Cell>
+                <Cell className="tabular-nums">
+                  <p className="font-semibold">{formatMoney(w.amount)}</p>
+                  <p className="text-xs text-muted">pays {formatMoney(w.net)} · {EARNINGS_BALANCE_LABEL[w.balance]}</p>
+                </Cell>
+                <Cell>
+                  {w.payoutMethod === "OFFICE_CASH" ? "Cash at the office" : (
+                    <>
+                      <p>{w.bankName}</p>
+                      <p className="font-mono text-xs text-muted">{w.bankAccountMasked}</p>
+                    </>
+                  )}
+                </Cell>
+                <Cell>
+                  <StatusBadge tone={WITHDRAWAL_TONE[w.status]}>{WITHDRAWAL_STATUS_LABEL[w.status]}</StatusBadge>
+                  {w.requiredApprovals > 1 && open && <p className="mt-1 text-xs text-muted">{w.approvals}/{w.requiredApprovals} approvals</p>}
+                  {w.reviewerId && open && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><FileSearch className="size-3" aria-hidden="true" />{w.reviewerId === session.userId ? "You" : "Assigned"}</p>}
+                </Cell>
+                <Cell className={`tabular-nums ${late ? "font-medium text-rose-700 dark:text-rose-400" : "text-muted"}`}>
+                  {open ? waiting : "—"}
+                </Cell>
+              </tr>
+            );
+          })}
         </DataTable>
       )}
-      <Pagination page={withdrawals} basePath="/admin/withdrawals" params={q ? { q } : { status }} />
+      <Pagination page={withdrawals} basePath="/admin/withdrawals" params={filters} />
     </div>
+  );
+}
+
+function sum(...figures: WithdrawalFigure[]): { amount: string; currency: string } {
+  const currency = figures[0]?.amount.currency ?? "INR";
+  return { amount: figures.reduce((t, f) => t + Number(f.amount.amount), 0).toFixed(2), currency };
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="space-y-1 text-xs text-muted">
+      <span className="block">{label}</span>
+      {children}
+    </label>
   );
 }

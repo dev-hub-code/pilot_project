@@ -54,6 +54,8 @@ app:
   withdrawals:
     minimum-amount: 50
     dual-approval-threshold: 10000
+    # Turns the payout-status webhook on for its tests.
+    payout-webhook-secret: test-payout-webhook-secret
 
 # Tests build the schema with the Flyway scripts (seed data, triggers, locations) and check the entities against it.
 spring:

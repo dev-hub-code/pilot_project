@@ -27,7 +27,11 @@ public enum AccountType {
 	/** Expense: the monthly rent paid to investors on their units. */
 	PLATFORM_RENT_EXPENSE(Direction.DEBIT, false),
 	/** Expense: the monthly part of their capital returned to investors. */
-	PLATFORM_CAPITAL_RETURNS(Direction.DEBIT, false);
+	PLATFORM_CAPITAL_RETURNS(Direction.DEBIT, false),
+	/** Revenue: charges the company keeps from withdrawals, taken when the withdrawal is paid. */
+	WITHDRAWAL_FEE_INCOME(Direction.CREDIT, false),
+	/** Liability: tax withheld from withdrawals, owed to the tax authority. */
+	TAX_WITHHELD(Direction.CREDIT, false);
 
 	private final Direction normalBalance;
 	private final boolean perInvestor;

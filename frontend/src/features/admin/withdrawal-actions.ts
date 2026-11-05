@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { WithdrawalKind, WithdrawalRun } from "@/types/withdrawal";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { financeTaskSchema, referralModeSchema, resolveSchema, withdrawalMinimumSchema } from "@/validators/withdrawal";
+import { financeTaskSchema, referralModeSchema, resolveSchema, withdrawalReasonSchema, withdrawalSettingsSchema } from "@/validators/withdrawal";
 
 const id = (value: string) => encodeURIComponent(value);
 
@@ -103,9 +103,60 @@ export async function setReferralModeAction(userId: string, _p: FormState, formD
   return { success: "Referral payout mode saved for this year." };
 }
 
-/** The minimum an investor's row must come to for a withdrawal run to pay it; applies from the next run. */
-export async function setWithdrawalMinimumAction(_p: FormState, formData: FormData): Promise<FormState> {
-  const parsed = withdrawalMinimumSchema.safeParse({ minimumAmount: formData.get("minimumAmount") ?? "" });
+/** Review steps with no input: take for review, give back, approve, resume from hold. */
+export async function withdrawalReviewAction(withdrawalId: string, step: "review" | "review/release" | "approve" | "resume",
+  _p: FormState): Promise<FormState> {
+  try {
+    await authFetch(`/api/v1/admin/withdrawals/${id(withdrawalId)}/${step}`, { method: "POST" });
+  } catch (error) {
+    return failureState(error);
+  }
+  refresh();
+  return {
+    success: { review: "Taken for review.", "review/release": "Returned to the queue.", approve: "Approval recorded.", resume: "Back under review." }[step],
+  };
+}
+
+/** Decisions that need a reason the investor sees: reject, hold, ask for more information. And an internal note. */
+export async function withdrawalDecisionAction(withdrawalId: string, step: "reject" | "hold" | "request-info" | "notes",
+  _p: FormState, formData: FormData): Promise<FormState> {
+  const parsed = withdrawalReasonSchema.safeParse({ reason: formData.get("reason") ?? "" });
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+  try {
+    await authFetch(`/api/v1/admin/withdrawals/${id(withdrawalId)}/${step}`, { method: "POST", json: parsed.data });
+  } catch (error) {
+    return failureState(error, { reason: parsed.data.reason });
+  }
+  refresh();
+  return {
+    success: { reject: "Rejected. The amount is back in the investor's wallet.", hold: "Put on hold.",
+      "request-info": "The investor has been asked for more information.", notes: "Note added." }[step],
+  };
+}
+
+/** Hands approved requests to the payout provider; they become finance tasks, paid only with the bank's reference. */
+export async function initiatePaymentAction(withdrawalIds: string[], _p: FormState): Promise<FormState> {
+  let result: InitiatePaymentResult;
+  try {
+    result = await authFetch<InitiatePaymentResult>("/api/v1/admin/withdrawals/initiate-payment",
+      { method: "POST", json: { withdrawalIds } });
+  } catch (error) {
+    return failureState(error);
+  }
+  refresh();
+  return { success: `Payment initiated: ${result.batches.map((b) => b.reference).join(", ")}. Mark it paid in Finance tasks with the bank's reference.` };
+}
+
+interface InitiatePaymentResult {
+  provider: string;
+  batches: { id: string; reference: string; items: number }[];
+}
+
+/** Every withdrawal setting: minimum, charges, tax, the second-approval threshold and the processing time shown. */
+export async function saveWithdrawalSettingsAction(_p: FormState, formData: FormData): Promise<FormState> {
+  const parsed = withdrawalSettingsSchema.safeParse(Object.fromEntries(
+    ["minimumAmount", "feeFlat", "feePercent", "taxPercent", "dualApprovalThreshold", "processingDays"]
+      .map((k) => [k, String(formData.get(k) ?? "")])));
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
   try {
     await authFetch("/api/v1/admin/settings/withdrawals", { method: "PUT", json: parsed.data });
@@ -114,5 +165,12 @@ export async function setWithdrawalMinimumAction(_p: FormState, formData: FormDa
   }
   refresh();
   revalidatePath("/withdrawals");
-  return { success: "Minimum withdrawal saved. It applies from the next run." };
+  return { success: "Withdrawal settings saved. New requests use them from now on." };
+}
+
+/** Bulk: the approved requests ticked in the queue, handed to the payout provider together. */
+export async function initiateSelectedAction(_p: FormState, formData: FormData): Promise<FormState> {
+  const ids = formData.getAll("withdrawalId").map(String).filter((v) => /^[0-9a-f-]{36}$/i.test(v));
+  if (ids.length === 0) return { error: "Tick the withdrawals to pay." };
+  return initiatePaymentAction(ids, _p);
 }

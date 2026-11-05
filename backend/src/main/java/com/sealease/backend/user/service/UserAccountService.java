@@ -141,6 +141,44 @@ public class UserAccountService {
 	}
 
 	/**
+	 * Confirms a signed-in user's password before a sensitive action (a withdrawal). A wrong password counts towards the
+	 * same lockout as signing in; it is committed on its own so the count survives the caller's rollback.
+	 *
+	 * @throws BusinessException VALIDATION_FAILED when the password is wrong or the account is locked (not 401: the
+	 *                           session itself is still valid)
+	 */
+	@Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW,
+			noRollbackFor = WrongPassword.class)
+	public void confirmPassword(UUID userId, String rawPassword) {
+		User user = users.findByIdForUpdate(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+		Instant now = clock.instant();
+		if (user.isLockedAt(now)) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"Too many wrong passwords. Try again after " + user.getLockedUntil());
+		}
+		if (rawPassword == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+			boolean nowLocked = user.registerFailedLogin(lockout.maxFailedAttempts(), now.plus(lockout.lockDuration()));
+			audit.record(AuditRecord.of(userId, AuditAction.LOGIN_FAILED, ENTITY, userId)
+				.withNewValue(Map.of("purpose", "transaction confirmation")));
+			if (nowLocked) {
+				audit.record(AuditRecord.of(null, AuditAction.ACCOUNT_LOCKED, ENTITY, userId)
+					.withNewValue(Map.of("lockedUntil", user.getLockedUntil().toString())));
+			}
+			// Committed (REQUIRES_NEW) before the caller sees the error.
+			throw new WrongPassword();
+		}
+	}
+
+	/** A wrong password at confirmation; committed rather than rolled back so the failure is counted. */
+	static final class WrongPassword extends BusinessException {
+
+		WrongPassword() {
+			super(ErrorCode.VALIDATION_FAILED, "The password is incorrect");
+		}
+
+	}
+
+	/**
 	 * Changes the password after re-verifying the current one. The caller is responsible for
 	 * revoking other sessions and auditing within the same transaction.
 	 */

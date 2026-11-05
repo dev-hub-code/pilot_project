@@ -19,6 +19,8 @@ import type { FinanceTask, WithdrawalKind, WithdrawalPayoutMethod } from "@/type
 import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 import { formatPhone } from "@/lib/phone";
+import { Banknote, ClipboardList, Landmark, UserCheck } from "lucide-react";
+import { MetricCard } from "@/features/withdrawals/ui";
 
 export const metadata: Metadata = { title: "Finance tasks" };
 
@@ -68,7 +70,17 @@ export default async function FinanceTasksPage({ searchParams }: PageProps<"/adm
   return (
     <div className="space-y-6">
       <PageHeader title="Finance tasks"
-        description="Every withdrawal a withdrawal run makes is a task here. Assign one to yourself, pay it into the investor's bank account (or hand it over in cash at the office), then mark it paid, or failed with the reason. Paid amounts move to the investor's total withdrawn; failed ones are held and open a support ticket to resolve." />
+        description="Pay each withdrawal from a withdrawal run by bank or in cash at the office, then mark it paid, or failed with the reason. Failed ones are held and open a support ticket." />
+
+      <section aria-label="This page at a glance" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={ClipboardList} label={open ? "Tasks to do" : "Tasks done"} value={tasks.totalElements} note="With these filters" />
+        <MetricCard icon={UserCheck} label="Assigned to you" accent="text-emerald-700 bg-emerald-500/10 dark:text-emerald-400"
+          value={tasks.content.filter((t) => t.assignee?.id === session.userId).length} note="On this page" />
+        <MetricCard icon={Landmark} label="Bank transfers" accent="text-sky-700 bg-sky-500/10 dark:text-sky-400"
+          value={tasks.content.filter((t) => t.payoutMethod === "BANK_TRANSFER").length} note="On this page" />
+        <MetricCard icon={Banknote} label="Cash at the office" accent="text-amber-700 bg-amber-500/10 dark:text-amber-400"
+          value={tasks.content.filter((t) => t.payoutMethod === "OFFICE_CASH").length} note="On this page" />
+      </section>
 
       <form method="get" action="/admin/finance-tasks" role="search" className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="view" value={filters.view} />

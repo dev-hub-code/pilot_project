@@ -43,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -85,12 +86,14 @@ public class PayoutBatchService {
 	private final BatchFileStore files;
 	private final UserAccountService accounts;
 	private final UserProfileService profiles;
+	private final WithdrawalHistory history;
 	private final Clock clock;
 
 	public PayoutBatchService(WithdrawalBatchRepository batches, WithdrawalRepository withdrawals,
 			WithdrawalService withdrawalService, BankAccountService bankAccounts, LedgerService ledger,
 			SupportService support, OutboxPublisher outbox, AuditService audit, BatchFileStore files,
-			UserAccountService accounts, UserProfileService profiles, Clock clock) {
+			UserAccountService accounts, UserProfileService profiles, WithdrawalHistory history, Clock clock) {
+		this.history = history;
 		this.accounts = accounts;
 		this.profiles = profiles;
 		this.batches = batches;
@@ -112,10 +115,16 @@ public class PayoutBatchService {
 	 */
 	WithdrawalBatch createForRun(WithdrawalKind kind, WithdrawalPayoutMethod method, List<Withdrawal> items, String run,
 			UUID actorId) {
-		Money total = items.stream().map(Withdrawal::amount).reduce(Money::plus).orElseThrow();
+		// What the batch pays out: each withdrawal's amount less its charges and tax.
+		Money total = items.stream().map(Withdrawal::net).reduce(Money::plus).orElseThrow();
 		WithdrawalBatch batch = batches.saveAndFlush(WithdrawalBatch.forRun(reference(), total, items.size(), kind, method,
 				actorId));
-		items.forEach(w -> w.addToBatch(batch.getId()));
+		Instant now = clock.instant();
+		for (Withdrawal w : items) {
+			WithdrawalStatus before = w.getStatus();
+			w.addToBatch(batch.getId(), now);
+			history.record(w, before, actorId, batch.getReference(), false, WithdrawalHistory.Notice.PAYMENT_INITIATED);
+		}
 		withdrawals.flush();
 		boolean cash = method == WithdrawalPayoutMethod.OFFICE_CASH;
 		if (!cash) {
@@ -220,7 +229,7 @@ public class PayoutBatchService {
 	}
 
 	private static BigDecimal sum(List<Withdrawal> items, Predicate<Withdrawal> which) {
-		return items.stream().filter(which).map(w -> w.amount().toMinorUnitScale()).reduce(BigDecimal.ZERO, BigDecimal::add);
+		return items.stream().filter(which).map(w -> w.net().toMinorUnitScale()).reduce(BigDecimal.ZERO, BigDecimal::add);
 	}
 
 	private static String defaultFailure(WithdrawalBatch batch) {
@@ -228,21 +237,30 @@ public class PayoutBatchService {
 	}
 
 	private void send(UUID actorId, WithdrawalBatch batch) {
+		Instant now = clock.instant();
 		withdrawals.lockBatchItems(batch.getId()).stream()
 			.filter(w -> w.getStatus() == WithdrawalStatus.BATCHED)
-			.forEach(Withdrawal::markProcessing);
-		batch.markSent(actorId, clock.instant());
+			.forEach(w -> {
+				w.markProcessing(now);
+				history.record(w, WithdrawalStatus.BATCHED, actorId, null, true, null);
+			});
+		batch.markSent(actorId, now);
 		withdrawals.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_BATCH_SENT, ENTITY, batch.getId())
 			.withNewValue(Map.of("reference", batch.getReference())));
 		publishBatch(KafkaTopics.WITHDRAWAL_PROCESSING, "WithdrawalBatchSent", batch);
 	}
 
-	/** One item: the bank paid it. */
+	/**
+	 * One item: the bank paid it. A bank transfer needs the bank's reference (UTR) as evidence; a cash hand-over may
+	 * give the receipt number.
+	 */
 	@Transactional
 	public BatchDetail markPaid(UUID actorId, UUID batchId, UUID withdrawalId, String payoutReference) {
 		WithdrawalBatch batch = lockSent(batchId);
-		pay(actorId, batch, item(batchId, withdrawalId), blankToNull(payoutReference));
+		Withdrawal withdrawal = item(batchId, withdrawalId);
+		requireEvidence(withdrawal, payoutReference);
+		pay(actorId, batch, withdrawal, blankToNull(payoutReference));
 		closeIfDone(batch);
 		return detail(batchId);
 	}
@@ -276,6 +294,7 @@ public class PayoutBatchService {
 		String text = blankToNull(note);
 		String message;
 		if (paid) {
+			requireEvidence(withdrawal, text);
 			pay(actorId, batch, withdrawal, text);
 			message = "Your withdrawal " + withdrawal.getReference() + " of " + withdrawal.amount().display()
 					+ " has now been paid into your bank account" + (text == null ? "." : " (reference " + text + ").");
@@ -284,11 +303,12 @@ public class PayoutBatchService {
 			withdrawal.markReturned(clock.instant());
 			withdrawals.flush();
 			withdrawalService.release(withdrawal, actorId, "returned after a failed payment");
+			history.record(withdrawal, WithdrawalStatus.FAILED, actorId, text, true, WithdrawalHistory.Notice.RETURNED);
 			audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_RETURNED, WithdrawalService.ENTITY, withdrawalId)
 				.withNewValue(Map.of("amount", withdrawal.amount().toString(), "note", text == null ? "" : text)));
 			withdrawalService.publish(KafkaTopics.WITHDRAWAL_FAILED, "WithdrawalReturned", withdrawal, Map.of());
 			message = withdrawal.amount().display() + " from withdrawal " + withdrawal.getReference()
-					+ " is back in your balance and will be paid with your next monthly withdrawal."
+					+ " is back in your wallet, ready to withdraw again."
 					+ (text == null ? "" : " " + text);
 		}
 		if (withdrawal.getTicketId() != null) {
@@ -322,23 +342,70 @@ public class PayoutBatchService {
 
 	// ----------------------------------------------------------------------------- internal
 
+	/**
+	 * Completes a payment: the amount held in transit leaves the client-money account as what was paid, with the
+	 * charges to the company's income and the tax withheld to what is owed to the tax authority. Posted once per
+	 * withdrawal (the ledger refuses a second payout), so a repeated confirmation can never pay twice.
+	 */
 	private void pay(UUID actorId, WithdrawalBatch batch, Withdrawal withdrawal, String payoutReference) {
 		Money amount = withdrawal.amount();
-		withdrawal.markPaid(payoutReference, clock.instant());
+		WithdrawalStatus before = withdrawal.markPaid(payoutReference, clock.instant());
 		withdrawals.flush();
 		ledger.post(TransactionType.WITHDRAWAL_PAYOUT, withdrawal.getId().toString(),
 				"Withdrawal " + withdrawal.getReference() + " paid (" + batch.getReference() + ")", actorId,
 				List.of(Posting.debit(AccountType.WITHDRAWALS_IN_TRANSIT, null, amount),
-						Posting.credit(AccountType.RENTAL_CASH, null, amount)));
+						Posting.credit(AccountType.RENTAL_CASH, null, withdrawal.net()),
+						Posting.credit(AccountType.WITHDRAWAL_FEE_INCOME, null, withdrawal.fee()),
+						Posting.credit(AccountType.TAX_WITHHELD, null, withdrawal.tax())));
 		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_PAID, WithdrawalService.ENTITY, withdrawal.getId())
 			.withNewValue(Map.of("batch", batch.getReference(), "amount", amount.toString(),
+					"net", withdrawal.net().toString(), "fee", withdrawal.fee().toString(), "tax", withdrawal.tax().toString(),
 					"payoutReference", payoutReference == null ? "" : payoutReference)));
+		history.record(withdrawal, before, actorId, payoutReference, true, WithdrawalHistory.Notice.PAID);
 		withdrawalService.publish(KafkaTopics.WITHDRAWAL_COMPLETED, "WithdrawalPaid", withdrawal, Map.of());
+	}
+
+	/** A bank transfer is marked paid only with the bank's reference for it: the evidence it was paid. */
+	private static void requireEvidence(Withdrawal withdrawal, String payoutReference) {
+		if (!withdrawal.isOfficeCash() && (payoutReference == null || payoutReference.isBlank())) {
+			throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+					"Enter the bank's payment reference (UTR) to mark a bank transfer paid");
+		}
+	}
+
+	/**
+	 * Settles one withdrawal from a payout provider's verified confirmation: paid with the provider's reference, or
+	 * failed with its reason. Anything already settled is left alone, so a repeated confirmation changes nothing.
+	 *
+	 * @return whether the withdrawal changed
+	 */
+	@Transactional
+	public boolean settleFromProvider(UUID withdrawalId, boolean paid, String providerReference, String reason) {
+		Withdrawal peek = withdrawals.findById(withdrawalId)
+			.orElseThrow(() -> new ResourceNotFoundException("Withdrawal", withdrawalId));
+		if (peek.getBatchId() == null) {
+			return false;
+		}
+		WithdrawalBatch batch = lock(peek.getBatchId());
+		Withdrawal withdrawal = withdrawals.findByIdForUpdate(withdrawalId).orElseThrow();
+		if (withdrawal.getStatus() != WithdrawalStatus.PROCESSING || batch.getStatus() != BatchStatus.SENT) {
+			return false;
+		}
+		// The member who initiated the payment owns any follow-up (a failed payment's ticket).
+		UUID actor = withdrawal.getPaymentInitiatedBy() != null ? withdrawal.getPaymentInitiatedBy() : batch.getCreatedBy();
+		if (paid) {
+			pay(actor, batch, withdrawal, providerReference);
+		}
+		else {
+			fail(actor, batch, withdrawal, reason == null || reason.isBlank() ? defaultFailure(batch) : reason.strip());
+		}
+		closeIfDone(batch);
+		return true;
 	}
 
 	/** Holds a payment the bank did not make and opens a ticket for it, assigned to the finance user recording it. */
 	private void fail(UUID actorId, WithdrawalBatch batch, Withdrawal withdrawal, String reason) {
-		withdrawal.markFailed(reason);
+		withdrawal.markFailed(reason, clock.instant());
 		withdrawals.flush();
 		UUID ticketId = support.openOnBehalf(actorId, withdrawal.getUserId(), TicketCategory.WITHDRAWAL,
 				RelatedType.WITHDRAWAL, withdrawal.getId(), withdrawal.getReference(),
@@ -353,6 +420,7 @@ public class PayoutBatchService {
 		withdrawals.flush();
 		audit.record(AuditRecord.of(actorId, AuditAction.WITHDRAWAL_FAILED, WithdrawalService.ENTITY, withdrawal.getId())
 			.withNewValue(Map.of("batch", batch.getReference(), "reason", reason, "ticketId", ticketId.toString())));
+		history.record(withdrawal, WithdrawalStatus.PROCESSING, actorId, reason, true, WithdrawalHistory.Notice.FAILED);
 		withdrawalService.publish(KafkaTopics.WITHDRAWAL_FAILED, "WithdrawalFailed", withdrawal, Map.of("reason", reason));
 	}
 

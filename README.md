@@ -559,10 +559,44 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 - **Cash at the office.** On the investor's admin page, finance withdraws a whole rent (cash) or referral balance (if
   the investor chose cash) in front of them, once a month from the withdrawal day, then records the hand-over with the
   receipt number. One not handed over can be cancelled; the money goes back.
-- **Requests by online investors.** At any time, an online investor can withdraw the whole of one wallet once it reaches
-  the minimum, if their account is active, their identity is verified and the wallet has no open withdrawal. It is paid
-  the way that wallet always is, and goes straight to finance as a task (no approval step) in a batch of its own. Runs
-  still include these investors. A failed payment blocks that wallet until finance resolves it.
+- **Requests by online investors (V22).** An online investor withdraws any amount from the minimum up to what one
+  wallet holds, in five steps: wallet, amount (the backend quotes charges, tax, what is paid and what stays), a verified
+  bank account (masked), review, then submit confirmed with their password (a wrong one counts towards the sign-in
+  lockout). Only the amount is taken from the client. The gross amount moves from the wallet to *in transit* in the same
+  transaction as the withdrawal is saved, under a lock on the wallet; one open withdrawal per wallet; the
+  `Idempotency-Key` makes a retry return the same withdrawal. Principal is never withdrawable: the overview shows, per
+  investment, what it has earned (credited to the wallets) and what is locked and why.
+
+```text
+SUBMITTED ──take──▶ UNDER_REVIEW ──approve──▶ APPROVED            (above the threshold: PENDING_APPROVAL, then a
+    │                  │  ▲                       │                 second, different approver)
+    │                  ▼  │ resume / investor answers                ──initiate payment──▶ BATCHED ──▶ PROCESSING
+    └──────────────▶ ON_HOLD (reason; optionally "information needed")                        │
+REJECTED (reason, money back) · CANCELLED by the investor until approved          PAID ◀──────┴──▶ FAILED (held + ticket)
+```
+
+  Brief's names: BATCHED = payment initiated, PROCESSING = payment pending, FAILED = payment failed. The quote plays the
+  part of a draft. Transitions are enforced in `WithdrawalStatus`; nobody reviews, approves or pays their own
+  withdrawal (also a database check).
+- **Charges and tax.** `withdrawal_settings`: flat charge, percentage charge, TDS percentage (all zero by default), the
+  second-approval threshold and the processing days shown. Rounded half-up to the paisa and fixed on each withdrawal.
+  When paid, the ledger posts: debit *in transit* (gross), credit client money (net), credit `WITHDRAWAL_FEE_INCOME`
+  (charges) and `TAX_WITHHELD` (tax). Release on reject/cancel/return gives back the gross amount. Bank sheets, batch
+  totals and finance tasks pay the net amount.
+- **Paid only on evidence.** Payment is initiated by staff through a `PayoutProvider` (`BankSheetPayoutProvider` today:
+  a batch with its Excel sheet, then finance tasks). PAID comes from the reconciled sheet, finance's entry *with the
+  bank's reference (UTR)* (required for bank transfers), or a verified webhook; never from an approval.
+- **Payout webhook.** `POST /api/v1/webhooks/payouts`, header `X-Payout-Signature` = hex HMAC-SHA256 of the raw body with
+  `APP_PAYOUT_WEBHOOK_SECRET` (blank: the endpoint answers 404). Body
+  `{"id","type":"payout.paid|payout.failed|payout.processing","withdrawalReference","providerReference","amount","currency","reason"}`.
+  Each event id is recorded once in `payout_webhook_events` (a redelivery answers `DUPLICATE`). Paid needs the provider
+  reference and exactly the net amount; anything doubtful (`AMOUNT_MISMATCH`, `NEEDS_RECONCILIATION`, unknown types) is
+  recorded and left for finance, never retried automatically.
+- **Timeline, notes, notifications.** Every status change goes in `withdrawal_events` (immutable) with who and why;
+  investors see their steps without staff names. Internal notes (`withdrawal_notes`, immutable) are staff-only.
+  Investors are notified (in-app and email) on submitted, under review, information needed, on hold, approved,
+  rejected, cancelled, payment initiated, paid, failed and returned, once per change. Paid withdrawals have a PDF receipt.
+- **Export.** The admin list links to the *Withdrawal register* report (CSV/PDF).
 - **Events.** `withdrawal.approved`, `.batched` and `.processing` (per batch), `.completed`, and `.failed` (also for
   returns and cancellations, with event types `WithdrawalReturned` and `WithdrawalRejected`).
 
@@ -571,15 +605,25 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 | Method & path                                                           | Access               | Purpose                                        |
 |-------------------------------------------------------------------------|----------------------|------------------------------------------------|
 | `GET /api/v1/withdrawals/policy`, `GET /api/v1/withdrawals`             | `INVESTOR_PORTAL`    | Schedule and office; own withdrawals           |
-| `POST /api/v1/withdrawals` (`Idempotency-Key`)                         | `INVESTOR_PORTAL`    | Online investors: withdraw a whole wallet      |
+| `GET /api/v1/withdrawals/overview`                                     | `INVESTOR_PORTAL`    | Totals, wallets, per-investment earned/locked, verified accounts (masked) |
+| `GET /api/v1/withdrawals/quote?balance=&amount=`                        | `INVESTOR_PORTAL`    | Charges, tax, net and remaining for an amount  |
+| `POST /api/v1/withdrawals` (`Idempotency-Key`)                         | `INVESTOR_PORTAL`    | Online investors: `{balance, amount, bankAccountId?, password}` |
+| `GET /api/v1/withdrawals/{id}`, `/{id}/timeline`, `/{id}/receipt`       | `INVESTOR_PORTAL`    | Own withdrawal, its tracking steps, PDF receipt once paid |
+| `POST /api/v1/withdrawals/{id}/cancel`, `/{id}/respond`                 | `INVESTOR_PORTAL`    | Cancel while under review; answer an information request |
 | `GET`, `PUT /api/v1/withdrawals/referral-mode`                          | `INVESTOR_PORTAL`    | How returns and referral are paid; network investors change it at any time |
-| `GET /api/v1/admin/withdrawals[/{id}]`                                  | `WITHDRAWAL_VIEW`    | Withdrawals by status/currency/user, detail    |
+| `GET /api/v1/admin/withdrawals` (`status`, `q`, `from`, `to`, `minAmount`, `maxAmount`, `origin`, `mine`, `sort`, paged) | `WITHDRAWAL_VIEW` | Search, server-side |
+| `GET /api/v1/admin/withdrawals/dashboard`, `/{id}`, `/{id}/receipt`     | `WITHDRAWAL_VIEW`    | Queue metrics; detail with investor, timeline, notes; receipt |
+| `POST /api/v1/admin/withdrawals/{id}/notes`                             | `WITHDRAWAL_VIEW`    | Internal note                                  |
+| `POST /…/withdrawals/{id}/review` · `/review/release` · `/approve` · `/hold` · `/request-info` · `/resume` | `WITHDRAWAL_APPROVE` | Review and approve (maker-checker) |
+| `POST /api/v1/admin/withdrawals/{id}/reject` (`{reason}`)               | `WITHDRAWAL_REJECT`  | Reject with a reason; money back               |
+| `POST /api/v1/admin/withdrawals/initiate-payment` (`{withdrawalIds}`)   | `WITHDRAWAL_PROCESS` | Hand approved requests to the payout provider  |
+| `POST /api/v1/webhooks/payouts`                                         | signed (HMAC)        | Payout provider status updates                 |
 | `GET`, `POST /api/v1/admin/withdrawals/office`                          | `WITHDRAWAL_PROCESS` | Cash at the office: what is allowed; make one  |
 | `POST /api/v1/admin/withdrawals/{id}/hand-over` · `/reject`             | `WITHDRAWAL_PROCESS` / `WITHDRAWAL_REJECT` | Cash handed over; cancel |
 | `POST /api/v1/admin/withdrawals/{id}/resolve`                           | `WITHDRAWAL_PROCESS` | Failed payment: `PAID` or `RETURNED`           |
 | `GET`, `PUT /api/v1/admin/users/{id}/referral-mode`                     | `WITHDRAWAL_VIEW` / `_PROCESS` | An investor's mode; change on request |
 | `GET`, `POST /api/v1/admin/withdrawal-runs?kind=RENT\|REFERRAL`         | `WITHDRAWAL_VIEW` / `_PROCESS` | Runs for network investors; online investors request their own |
-| `GET`, `PUT /api/v1/admin/settings/withdrawals`                         | `WITHDRAWAL_VIEW` / `SYSTEM_SETTINGS_MANAGE` | Rent and referral withdrawal days |
+| `GET`, `PUT /api/v1/admin/settings/withdrawals`                         | `WITHDRAWAL_VIEW` / `SYSTEM_SETTINGS_MANAGE` | Minimum, charges, tax, second-approval threshold, processing days |
 | `GET`, `PUT /api/v1/admin/settings/rent-credit`                         | `FINANCE_VIEW` / `PAYOUT_PROCESS` | How often rent is credited (`intervalMinutes`) |
 | `GET /api/v1/admin/withdrawal-batches[/{id}]`, `/{id}/files`            | `WITHDRAWAL_VIEW`    | Files with paid/failed/outstanding counts      |
 | `GET /api/v1/admin/withdrawal-batches/{id}/file`, `/files/{fileId}`     | `WITHDRAWAL_PROCESS` | The Excel file, kept uploads (audited)         |

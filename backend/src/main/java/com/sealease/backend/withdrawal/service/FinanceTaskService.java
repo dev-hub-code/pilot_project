@@ -203,7 +203,7 @@ public class FinanceTaskService {
 					person == null ? null : person.userCode(),
 					person == null ? null : (person.firstName() + " " + person.lastName()).strip(),
 					w.isOfficeCash() ? phone.apply(w.getUserId()) : null, w.getBankName(), w.getBankHolderName(),
-					accountNumber, payee == null ? null : payee.routingCode(), MoneyResponse.from(w.amount()), w.getStatus(),
+					accountNumber, payee == null ? null : payee.routingCode(), MoneyResponse.from(w.net()), w.getStatus(),
 					w.getPayoutReference(), w.getFailureReason(), w.getTicketId(), w.getCreatedAt(), w.getClosedAt(),
 					assignee == null ? null : new Assignee(assignee.id(),
 							(assignee.firstName() + " " + assignee.lastName()).strip(), w.getTaskAssignedAt())));

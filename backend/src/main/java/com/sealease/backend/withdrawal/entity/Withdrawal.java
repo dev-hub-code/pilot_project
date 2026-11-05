@@ -1,5 +1,7 @@
 package com.sealease.backend.withdrawal.entity;
 
+import com.sealease.backend.common.exception.BusinessException;
+import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.money.Money;
 import com.sealease.backend.common.persistence.BaseEntity;
 import com.sealease.backend.ledger.service.EarningsBalance;
@@ -7,6 +9,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
@@ -116,6 +119,46 @@ public class Withdrawal extends BaseEntity {
 	@Column(name = "task_done_at")
 	private Instant taskDoneAt;
 
+	/** Charges taken by the company, fixed when the withdrawal is made. */
+	@Column(name = "fee_amount", nullable = false, updatable = false, precision = 19, scale = 4)
+	private BigDecimal feeAmount = BigDecimal.ZERO;
+
+	/** Tax withheld, fixed when the withdrawal is made. */
+	@Column(name = "tax_amount", nullable = false, updatable = false, precision = 19, scale = 4)
+	private BigDecimal taxAmount = BigDecimal.ZERO;
+
+	/** What is paid to the investor: the amount less charges and tax. */
+	@Column(name = "net_amount", nullable = false, updatable = false, precision = 19, scale = 4)
+	private BigDecimal netAmount;
+
+	/** The reviewer who took the request; only they may make the first decision on it. */
+	@Column(name = "review_assignee_id")
+	private UUID reviewAssigneeId;
+
+	@Column(name = "review_assigned_at")
+	private Instant reviewAssignedAt;
+
+	/** Why it is on hold (shown to the investor when {@link #infoRequested}). */
+	@Column(name = "hold_reason", length = 500)
+	private String holdReason;
+
+	/** On hold waiting for the investor to send more information. */
+	@Column(name = "info_requested", nullable = false)
+	private boolean infoRequested;
+
+	@Column(name = "status_changed_at", nullable = false)
+	private Instant statusChangedAt;
+
+	@Column(name = "payment_initiated_by")
+	private UUID paymentInitiatedBy;
+
+	@Column(name = "payment_initiated_at")
+	private Instant paymentInitiatedAt;
+
+	/** The payout provider the payment was handed to, e.g. BANK_SHEET. */
+	@Column(name = "payout_provider", length = 30)
+	private String payoutProvider;
+
 	protected Withdrawal() {
 	}
 
@@ -124,6 +167,7 @@ public class Withdrawal extends BaseEntity {
 		this.reference = reference;
 		this.userId = userId;
 		this.amount = amount.amount();
+		this.netAmount = amount.amount();
 		this.currency = amount.currency().getCurrencyCode();
 		this.idempotencyKey = idempotencyKey;
 		this.bankAccountId = bankAccountId;
@@ -178,23 +222,67 @@ public class Withdrawal extends BaseEntity {
 		return w;
 	}
 
-	/** An investor's own request for a bank payment: goes straight to finance to pay, in a batch of its own. */
-	public static Withdrawal requested(String reference, UUID userId, Money amount, String idempotencyKey,
-			EarningsBalance balance, UUID bankAccountId, String bankHolderName, String bankName, String bankAccountLast4) {
+	/**
+	 * An online investor's own request for a bank payment, SUBMITTED for review. {@code amount} is taken from the
+	 * wallet; {@code fee} and {@code tax} come out of it, and the rest is paid.
+	 */
+	public static Withdrawal requested(String reference, UUID userId, Money amount, Money fee, Money tax,
+			String idempotencyKey, EarningsBalance balance, UUID bankAccountId, String bankHolderName, String bankName,
+			String bankAccountLast4, int requiredApprovals, Instant now) {
 		Withdrawal w = new Withdrawal(reference, userId, amount, idempotencyKey, balance, bankAccountId,
-				bankHolderName, bankName, bankAccountLast4, 1);
+				bankHolderName, bankName, bankAccountLast4, requiredApprovals);
 		w.origin = WithdrawalOrigin.REQUESTED;
-		w.status = WithdrawalStatus.APPROVED;
+		w.status = WithdrawalStatus.SUBMITTED;
+		w.statusChangedAt = now;
+		w.charge(fee, tax);
 		return w;
 	}
 
-	/** An investor's own request to collect cash at the office: goes straight to finance, in a batch of its own. */
-	public static Withdrawal requestedCash(String reference, UUID userId, Money amount, String idempotencyKey,
-			EarningsBalance balance) {
-		Withdrawal w = officeCash(reference, userId, amount, idempotencyKey, balance, 1);
+	/** An online investor's own request to collect cash at the office, SUBMITTED for review. */
+	public static Withdrawal requestedCash(String reference, UUID userId, Money amount, Money fee, Money tax,
+			String idempotencyKey, EarningsBalance balance, int requiredApprovals, Instant now) {
+		Withdrawal w = officeCash(reference, userId, amount, idempotencyKey, balance, requiredApprovals);
 		w.origin = WithdrawalOrigin.REQUESTED;
-		w.status = WithdrawalStatus.APPROVED;
+		w.status = WithdrawalStatus.SUBMITTED;
+		w.statusChangedAt = now;
+		w.charge(fee, tax);
 		return w;
+	}
+
+	private void charge(Money fee, Money tax) {
+		BigDecimal net = amount.subtract(fee.amount()).subtract(tax.amount());
+		if (fee.amount().signum() < 0 || tax.amount().signum() < 0 || net.signum() <= 0) {
+			throw new IllegalArgumentException("Charges must leave something to pay");
+		}
+		this.feeAmount = fee.amount();
+		this.taxAmount = tax.amount();
+		this.netAmount = net;
+	}
+
+	@PrePersist
+	void stampStatus() {
+		if (statusChangedAt == null) {
+			statusChangedAt = Instant.now();
+		}
+	}
+
+	/**
+	 * Moves to {@code next} if the lifecycle allows it from the current status ({@link WithdrawalStatus#canMoveTo}).
+	 *
+	 * @return the status it was in
+	 */
+	private WithdrawalStatus moveTo(WithdrawalStatus next, Instant now) {
+		if (!status.canMoveTo(next)) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Withdrawal " + reference + " is " + status
+					+ " and cannot become " + next);
+		}
+		WithdrawalStatus before = status;
+		status = next;
+		statusChangedAt = now;
+		if (next.isFinal()) {
+			closedAt = now;
+		}
+		return before;
 	}
 
 	/** A withdrawal in cash at the office made by a withdrawal run: goes straight to the run's cash batch. */
@@ -206,8 +294,43 @@ public class Withdrawal extends BaseEntity {
 		return w;
 	}
 
-	/** @return {@code true} when this approval was the last one needed */
-	public boolean approve(UUID approverId, Instant now) {
+	/** A reviewer takes a submitted (or resumed) request: SUBMITTED → UNDER_REVIEW. */
+	public WithdrawalStatus startReview(UUID reviewerId, Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.UNDER_REVIEW, now);
+		reviewAssigneeId = reviewerId;
+		reviewAssignedAt = now;
+		return before;
+	}
+
+	/** Back from hold to the reviewer who holds it: ON_HOLD → UNDER_REVIEW. */
+	public WithdrawalStatus resume(Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.UNDER_REVIEW, now);
+		holdReason = null;
+		infoRequested = false;
+		return before;
+	}
+
+	/** Paused with a reason; {@code infoRequested} when the investor is asked for more information. */
+	public WithdrawalStatus hold(String reason, boolean infoRequested, Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.ON_HOLD, now);
+		this.holdReason = reason;
+		this.infoRequested = infoRequested;
+		return before;
+	}
+
+	/**
+	 * Records an approval: APPROVED when it was the last one needed, otherwise PENDING_APPROVAL for a second, different
+	 * approver.
+	 *
+	 * @return the status it was in
+	 */
+	public WithdrawalStatus approve(UUID approverId, Instant now) {
+		if (wasApprovedBy(approverId)) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "A second approval must come from someone else");
+		}
+		WithdrawalStatus next = approvals() + 1 >= requiredApprovals ? WithdrawalStatus.APPROVED
+				: WithdrawalStatus.PENDING_APPROVAL;
+		WithdrawalStatus before = moveTo(next, now);
 		if (firstApprovedBy == null) {
 			firstApprovedBy = approverId;
 			firstApprovedAt = now;
@@ -216,55 +339,80 @@ public class Withdrawal extends BaseEntity {
 			secondApprovedBy = approverId;
 			secondApprovedAt = now;
 		}
-		if (approvals() >= requiredApprovals) {
-			status = WithdrawalStatus.APPROVED;
-			return true;
-		}
-		return false;
+		return before;
 	}
 
-	public void reject(UUID actorId, String reason, Instant now) {
-		status = WithdrawalStatus.REJECTED;
+	public WithdrawalStatus reject(UUID actorId, String reason, Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.REJECTED, now);
 		rejectedBy = actorId;
 		rejectionReason = reason;
-		closedAt = now;
+		holdReason = null;
+		infoRequested = false;
+		return before;
 	}
 
-	public void cancel(Instant now) {
-		status = WithdrawalStatus.CANCELLED;
-		closedAt = now;
+	public WithdrawalStatus cancel(Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.CANCELLED, now);
+		holdReason = null;
+		infoRequested = false;
+		return before;
 	}
 
-	public void addToBatch(UUID batchId) {
+	/** Payment initiated: handed to the payout provider, which puts it in a batch. */
+	public void initiatePayment(UUID actorId, String provider, Instant now) {
+		if (status != WithdrawalStatus.APPROVED) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Only approved withdrawals are paid; " + reference + " is "
+					+ status);
+		}
+		paymentInitiatedBy = actorId;
+		paymentInitiatedAt = now;
+		payoutProvider = provider;
+	}
+
+	public void addToBatch(UUID batchId, Instant now) {
+		moveTo(WithdrawalStatus.BATCHED, now);
 		this.batchId = batchId;
-		status = WithdrawalStatus.BATCHED;
 	}
 
-	public void removeFromBatch() {
+	public void removeFromBatch(Instant now) {
+		moveTo(WithdrawalStatus.APPROVED, now);
 		this.batchId = null;
-		status = WithdrawalStatus.APPROVED;
 	}
 
-	public void markProcessing() {
-		status = WithdrawalStatus.PROCESSING;
+	public void markProcessing(Instant now) {
+		moveTo(WithdrawalStatus.PROCESSING, now);
 	}
 
-	public void markPaid(String payoutReference, Instant now) {
-		status = WithdrawalStatus.PAID;
+	public WithdrawalStatus markPaid(String payoutReference, Instant now) {
+		WithdrawalStatus before = moveTo(WithdrawalStatus.PAID, now);
 		this.payoutReference = payoutReference;
-		closedAt = now;
+		return before;
 	}
 
 	/** The bank did not pay it: the money stays held until finance resolves it ({@link #markReturned}, or paid by hand). */
-	public void markFailed(String reason) {
-		status = WithdrawalStatus.FAILED;
+	public void markFailed(String reason, Instant now) {
+		moveTo(WithdrawalStatus.FAILED, now);
 		failureReason = reason;
 	}
 
 	/** A failed payment given up: the money goes back to the investor's balance. */
 	public void markReturned(Instant now) {
-		status = WithdrawalStatus.RETURNED;
-		closedAt = now;
+		moveTo(WithdrawalStatus.RETURNED, now);
+	}
+
+	/** A reviewer takes a request already under review but unassigned (back from hold with nobody on it). */
+	public void assignReview(UUID reviewerId, Instant now) {
+		if (status != WithdrawalStatus.UNDER_REVIEW) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Withdrawal " + reference + " is " + status);
+		}
+		reviewAssigneeId = reviewerId;
+		reviewAssignedAt = now;
+	}
+
+	/** The reviewer gives the request back to the queue. */
+	public void releaseReview() {
+		reviewAssigneeId = null;
+		reviewAssignedAt = null;
 	}
 
 	public void linkTicket(UUID ticketId) {
@@ -279,8 +427,54 @@ public class Withdrawal extends BaseEntity {
 		return userId.equals(firstApprovedBy) || userId.equals(secondApprovedBy);
 	}
 
+	/** What is taken from the wallet. */
 	public Money amount() {
 		return Money.of(amount, Currency.getInstance(currency));
+	}
+
+	public Money fee() {
+		return Money.of(feeAmount, Currency.getInstance(currency));
+	}
+
+	public Money tax() {
+		return Money.of(taxAmount, Currency.getInstance(currency));
+	}
+
+	/** What is paid out: the amount less charges and tax. */
+	public Money net() {
+		return Money.of(netAmount, Currency.getInstance(currency));
+	}
+
+	public UUID getReviewAssigneeId() {
+		return reviewAssigneeId;
+	}
+
+	public Instant getReviewAssignedAt() {
+		return reviewAssignedAt;
+	}
+
+	public String getHoldReason() {
+		return holdReason;
+	}
+
+	public boolean isInfoRequested() {
+		return infoRequested;
+	}
+
+	public Instant getStatusChangedAt() {
+		return statusChangedAt;
+	}
+
+	public UUID getPaymentInitiatedBy() {
+		return paymentInitiatedBy;
+	}
+
+	public Instant getPaymentInitiatedAt() {
+		return paymentInitiatedAt;
+	}
+
+	public String getPayoutProvider() {
+		return payoutProvider;
 	}
 
 	public String getReference() {

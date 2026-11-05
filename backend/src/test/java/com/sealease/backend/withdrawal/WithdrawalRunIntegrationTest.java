@@ -241,8 +241,8 @@ class WithdrawalRunIntegrationTest {
 		// The failed transfer is held, with a ticket, until finance resolves it.
 		String beasBank = task(bea, rentBank);
 		mvc.perform(get("/api/v1/admin/withdrawals/{id}", beasBank).header(HttpHeaders.AUTHORIZATION, finance.bearer()))
-			.andExpect(jsonPath("$.status").value("FAILED"))
-			.andExpect(jsonPath("$.ticketId").exists());
+			.andExpect(jsonPath("$.withdrawal.status").value("FAILED"))
+			.andExpect(jsonPath("$.withdrawal.ticketId").exists());
 
 		// Cash: Bob collects his rent and his referral at the office, each task marked collected with its receipt.
 		List<String> rentTasks = jdbc.queryForList("SELECT id::text FROM withdrawals WHERE user_id = ?::uuid AND batch_id = ?::uuid",
@@ -306,7 +306,7 @@ class WithdrawalRunIntegrationTest {
 		assertThat((List<Object>) JsonPath.read(run, "$.skipped[?(@.userId == '" + online.id() + "')]")).isEmpty();
 
 		mvc.perform(post("/api/v1/withdrawals").header(HttpHeaders.AUTHORIZATION, online.bearer())
-				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON).content("{\"balance\":\"RENT_BANK\"}"))
+				.header("Idempotency-Key", key()).contentType(MediaType.APPLICATION_JSON).content("{\"balance\":\"RENT_BANK\",\"amount\":\"1000\",\"password\":\"" + TestApi.PASSWORD + "\"}"))
 			.andExpect(status().isCreated());
 		assertThat(withdrawalCount(online)).isEqualTo(1);
 	}

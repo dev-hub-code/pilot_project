@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Ledger" };
 
 const TYPES: readonly AccountType[] = [
   "RENTAL_CASH", "INVESTOR_EARNINGS", "INVESTOR_CASH_EARNINGS", "INVESTOR_REFERRAL_EARNINGS", "PLATFORM_RENT_EXPENSE", "PLATFORM_CAPITAL_RETURNS", "PLATFORM_ADJUSTMENTS",
-  "PLATFORM_REFERRAL_EXPENSE", "WITHDRAWALS_IN_TRANSIT",
+  "PLATFORM_REFERRAL_EXPENSE", "WITHDRAWALS_IN_TRANSIT", "WITHDRAWAL_FEE_INCOME", "TAX_WITHHELD",
 ];
 
 export default async function LedgerPage({ searchParams }: PageProps<"/admin/ledger">) {
