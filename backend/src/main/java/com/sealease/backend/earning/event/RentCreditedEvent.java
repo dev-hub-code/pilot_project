@@ -11,7 +11,7 @@ import java.util.UUID;
  * investor - so listeners (referral commissions) commit or roll back with it.
  *
  * @param creditId     the rent_credits row: identifies these hours
- * @param invested     what the investor paid for the container
+ * @param invested     what the investor paid for the unit
  * @param monthsBefore lease months elapsed before these hours (see {@code RentAccrual#monthsAt})
  * @param monthsAfter  lease months elapsed after them: commission is owed on the difference
  */

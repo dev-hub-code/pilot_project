@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The finance team: users (view only), payments to confirm, finance tasks to pay, containers to assign, bank accounts to verify, company bank
+ * The finance team: users (view only), payments to confirm, finance tasks to pay, bank accounts to verify, company bank
  * accounts (view only) and the tickets support hands to it. Each is a task a member assigns to themselves first.
  */
 @IntegrationTest

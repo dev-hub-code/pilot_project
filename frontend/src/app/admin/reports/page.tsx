@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarList } from "@/components/charts/bar-list";
 import { ColumnChart, type ColumnDatum } from "@/components/charts/column-chart";
 import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import { Card } from "@/components/ui/card";
@@ -11,7 +10,7 @@ import { PeriodForm } from "@/features/reports/period-form";
 import { thisMonth } from "@/features/reports/report-preview";
 import { authFetch } from "@/lib/server/auth/session";
 import type { Kpi, Overview } from "@/types/analytics";
-import { formatDate, formatDateTime, humanize } from "@/utils/format";
+import { formatDate, formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
 export const metadata: Metadata = { title: "Reports & Analytics" };
@@ -24,8 +23,6 @@ const TRENDS = [
   { key: "withdrawalsPaid", label: "Withdrawals paid" },
   { key: "referralCommission", label: "Referral commission" },
 ] as const;
-/** Container statuses in their lifecycle order (not by count), so the list reads the same every time. */
-const CONTAINER_ORDER = ["AVAILABLE", "RESERVED", "ON_LEASE", "MAINTENANCE", "RETIRED"];
 const shortMonth = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
 const longMonth = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -90,14 +87,11 @@ export default async function ReportsOverviewPage({ searchParams }: PageProps<"/
     return { label: date.getUTCMonth() === 0 ? `${shortMonth.format(date)} ${date.getUTCFullYear()}` : shortMonth.format(date),
       title: longMonth.format(date), values: { [key]: Number(point.values[key] ?? 0) } };
   });
-  const containers = CONTAINER_ORDER.map((status) => ({
-    label: humanize(status), value: overview.containers.find((s) => s.key === status)?.count ?? 0,
-  }));
 
   return (
     <ReportsShell active="overview">
       <PageHeader title="Reports & Analytics"
-        description="Investments, earnings, payments, withdrawals, referrals, containers, operations and compliance: live from the platform's records and the ledger." />
+        description="Investments, earnings, payments, withdrawals, referrals, operations and compliance: live from the platform's records and the ledger." />
       <PeriodForm action="/admin/reports" from={from} to={to} />
 
       <section aria-labelledby="period-heading" className="space-y-3">
@@ -128,9 +122,6 @@ export default async function ReportsOverviewPage({ searchParams }: PageProps<"/
                 data={columns(trend.key)} />
             </Card>
           ))}
-          <Card title="Containers by status" description="The whole fleet, as it stands">
-            <BarList label="Containers by status" items={containers} />
-          </Card>
         </div>
       </section>
       <p className="text-xs text-muted">Figures as of {formatDateTime(overview.generatedAt)}. Select a figure to open the rows behind it.</p>

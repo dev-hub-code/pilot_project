@@ -53,7 +53,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Cart, checkout, container reservation, payment, allocation, invoices and the outbox. */
+/** Cart, checkout, payment, investments, invoices and the outbox. */
 @IntegrationTest
 class CheckoutIntegrationTest {
 
@@ -118,7 +118,7 @@ class CheckoutIntegrationTest {
 	// ----------------------------------------------------------------------------- checkout
 
 	@Test
-	void checkoutReservesNoContainersAndIsIdempotent() throws Exception {
+	void checkoutIsIdempotent() throws Exception {
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 
@@ -135,8 +135,7 @@ class CheckoutIntegrationTest {
 			.andExpect(jsonPath("$.items.length()").value(1))
 			.andReturn().getResponse().getContentAsString(), "$.id");
 
-		assertThat(reservedFor(orderId)).isZero();
-		assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE order_id = ?::uuid AND container_id IS NULL",
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE order_id = ?::uuid",
 				Integer.class, orderId)).isEqualTo(1);
 
 		// A retry (lost response) returns the same order; nothing is placed twice.
@@ -198,14 +197,13 @@ class CheckoutIntegrationTest {
 		mvc.perform(post("/api/v1/orders/{id}/cancel", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("CANCELLED"));
-		assertThat(reservedFor(orderId)).isZero();
 		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isUnprocessableContent());
 	}
 
 	// ---------------------------------------------------------------------- bank payments
 
 	@Test
-	void paidInvestmentsAwaitTheContainersFinanceAssignsWhichStartsTheLeaseAndPayouts() throws Exception {
+	void paidInvestmentsAwaitTheInvestorsAcceptanceWhichStartsTheLeaseAndPayouts() throws Exception {
 		UUID product = offerings.published(OfferingFixtures.TYPE, "2", 2);
 		Account investor = approvedInvestor();
 		Account finance = api.staff("ADMIN", "FINANCE");
@@ -453,7 +451,7 @@ class CheckoutIntegrationTest {
 
 	@Test
 	void theInvestorPaysThePriceAndTheInvoiceListsIt() throws Exception {
-		// ₹50,000 a container; rent is 2% of it.
+		// ₹50,000 a unit; rent is 2% of it.
 		UUID product = offerings.plan();
 		Account investor = approvedInvestor();
 		String orderId = JsonPath.read(checkout(investor, UUID.randomUUID().toString(), purchase(product, 2))
@@ -473,7 +471,7 @@ class CheckoutIntegrationTest {
 
 	@Test
 	void cashPaidAtTheOfficeIsThePriceAndEarnsThePlansRent() throws Exception {
-		// ₹50,000 a container; the plan pays 2% rent a month.
+		// ₹50,000 a unit; the plan pays 2% rent a month.
 		UUID product = offerings.networkPlan();
 		Account investor = networkInvestor();
 		String orderId = placeOrder(investor, product, 1);
@@ -554,12 +552,6 @@ class CheckoutIntegrationTest {
 	private String placeOrder(Account investor, UUID product, int units) throws Exception {
 		return JsonPath.read(checkout(investor, UUID.randomUUID().toString(), purchase(product, units))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
-	}
-
-	/** Containers reserved for the order (only orders placed before manual assignment reserved any). */
-	private int reservedFor(String orderId) {
-		Integer count = jdbc.queryForObject("SELECT count(*) FROM containers WHERE reserved_order_id = ?::uuid", Integer.class, orderId);
-		return count == null ? 0 : count;
 	}
 
 	/** The rent accruals of the order's holdings: their leases. */

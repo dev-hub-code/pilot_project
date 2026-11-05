@@ -273,7 +273,7 @@ class WithdrawalRunIntegrationTest {
 	}
 
 	@Test
-	void rentOnAContainerPaidAtTheOfficeGoesToTheCashBalance() throws Exception {
+	void rentOnAUnitPaidAtTheOfficeGoesToTheCashBalance() throws Exception {
 		// Only network investors pay at the office.
 		Account investor = investors.approvedInvestor();
 		investors.enrolInNetwork(investor);

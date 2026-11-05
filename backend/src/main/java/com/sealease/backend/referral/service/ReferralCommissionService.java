@@ -39,7 +39,7 @@ import java.util.UUID;
 /**
  * Pays referral commissions, by the scheme of whoever earns them. Network investors are paid as a referred investor's
  * rent is credited, in that transaction: for each month of the lease (credited hour by hour), the investment in the
- * container earns network uplines (levels 1-4) the rates in force, which admins set - e.g. at a 2% level-1 rate, ₹1,00,000 earns ₹2,000 a month. The platform
+ * unit earns network uplines (levels 1-4) the rates in force, which admins set - e.g. at a 2% level-1 rate, ₹1,00,000 earns ₹2,000 a month. The platform
  * pays (referral expense); the investor's own earnings are untouched. An upline who is not active
  * or not verified forfeits that level's commission - it is not passed further up.
  *

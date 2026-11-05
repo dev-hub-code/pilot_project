@@ -167,7 +167,7 @@ class AnalyticsIntegrationTest {
 		String body = get(analyst, "/api/v1/admin/analytics/catalog").andExpect(status().isOk()).andReturn().getResponse()
 			.getContentAsString();
 		List<String> keys = JsonPath.read(body, "$[*].reports[*].key");
-		assertThat(keys).contains("trial-balance", "plan-performance", "container-utilisation")
+		assertThat(keys).contains("trial-balance", "plan-performance")
 			.doesNotContain("general-ledger", "investor-master", "audit-trail", "payment-register");
 		get(analyst, "/api/v1/admin/analytics/reports/trial-balance").andExpect(status().isOk());
 		get(analyst, "/api/v1/admin/analytics/reports/general-ledger").andExpect(status().isForbidden());

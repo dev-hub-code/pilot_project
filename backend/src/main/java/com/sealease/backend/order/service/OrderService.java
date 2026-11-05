@@ -68,10 +68,8 @@ import java.util.stream.Collectors;
 /**
  * Orders: buying units of a plan, cancellation, expiry and confirmation once paid.
  *
- * <p>One order line per container. Checkout reserves no stock: when the order is paid, each line becomes a
- * holding with its investment agreement,
- * which starts the lease and payouts. Orders placed before that reserved their containers at checkout; those
- * are leased on payment, or returned to inventory when the order expires or is cancelled. Every transition
+ * <p>One order line per unit. Checkout reserves no stock: when the order is paid, each line becomes a
+ * holding with its investment agreement, which the investor accepts to start the lease and payouts. Every transition
  * locks the order row, so payment settlement, cancellation and the expiry sweep can never act on the same
  * order concurrently.
  */

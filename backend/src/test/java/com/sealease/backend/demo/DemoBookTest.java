@@ -28,7 +28,7 @@ class DemoBookTest {
 	private static final UUID DEEP = UUID.randomUUID();
 
 	/**
-	 * Frame January to June 2026, today 10 April. The investor's own order: 2 containers of ₹50,000 at 2% (₹2,000 a
+	 * Frame January to June 2026, today 10 April. The investor's own order: 2 units of ₹50,000 at 2% (₹2,000 a
 	 * month) from 1 January. Asha (level 1) invests ₹1,00,000 from 1 February: 2% = ₹2,000 a month. Bo (level 2)
 	 * invests ₹50,000 from 15 February: 1% = ₹500 a lease month. Deep is five levels down and earns nothing.
 	 */
@@ -45,8 +45,8 @@ class DemoBookTest {
 		return new DemoBook(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), today, INR, orders, members, RATES);
 	}
 
-	private static DemoBook.Order order(UUID member, int containers, String price, LocalDate startsOn) {
-		return new DemoBook.Order(UUID.randomUUID(), member, "ORD-1", UUID.randomUUID(), "LST-1", "Plan", containers,
+	private static DemoBook.Order order(UUID member, int units, String price, LocalDate startsOn) {
+		return new DemoBook.Order(UUID.randomUUID(), member, "ORD-1", UUID.randomUUID(), "LST-1", "Plan", units,
 				Money.of(new BigDecimal(price), INR), new BigDecimal("2"), 12, startsOn);
 	}
 

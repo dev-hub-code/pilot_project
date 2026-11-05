@@ -31,7 +31,7 @@ public record DemoAccountView(UUID userId, String userCode, String name, String 
 	 */
 	public record Order(UUID id, UUID memberId, String memberName, String orderNumber, UUID productId, String planCode,
 			String planTitle,
-			int containers, MoneyResponse pricePerContainer, MoneyResponse amount,
+			int units, MoneyResponse pricePerUnit, MoneyResponse amount,
 			BigDecimal rentPercent, MoneyResponse monthlyRent, int tenureMonths, LocalDate startsOn, LocalDate endsOn,
 			MoneyResponse earned) {
 	}

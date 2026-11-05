@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * The lease agreement issued for one holding when its container was assigned: the template in force then, filled in
+ * The lease agreement issued for one holding: the template in force then, filled in
  * with the investment's facts and kept word for word. Immutable, so later template changes never alter it.
  */
 @Entity
@@ -34,9 +34,6 @@ public class LeaseAgreement {
 
 	@Column(name = "user_id", nullable = false)
 	private UUID userId;
-
-	@Column(name = "container_number", nullable = false, length = 20)
-	private String containerNumber;
 
 	@Column(name = "template_id", nullable = false)
 	private UUID templateId;
@@ -92,10 +89,6 @@ public class LeaseAgreement {
 
 	public UUID getUserId() {
 		return userId;
-	}
-
-	public String getContainerNumber() {
-		return containerNumber;
 	}
 
 	public UUID getTemplateId() {

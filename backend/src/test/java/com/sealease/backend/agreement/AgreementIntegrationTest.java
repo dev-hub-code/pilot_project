@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Admins write the lease agreement's wording; assigning a container issues the agreement in that wording, and the
+ * Admins write the lease agreement's wording; a paid investment is issued the agreement in that wording, and the
  * investor's acceptance starts the lease and the rent.
  */
 @IntegrationTest
@@ -53,7 +53,7 @@ class AgreementIntegrationTest {
 	}
 
 	@Test
-	void assigningAContainerIssuesTheAgreementInTheWordingInForce() throws Exception {
+	void aPaidInvestmentIsIssuedTheAgreementInTheWordingInForce() throws Exception {
 		// Only those who may manage the wording see it.
 		Account finance = api.staff("FINANCE");
 		mvc.perform(get("/api/v1/admin/agreement-template").header(HttpHeaders.AUTHORIZATION, finance.bearer()))
@@ -68,12 +68,12 @@ class AgreementIntegrationTest {
 			.andExpect(jsonPath("$.message").value(containsString("{{investorNmae}}")));
 		mvc.perform(post("/api/v1/admin/agreement-template/preview").header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"title\":\"Lease\",\"body\":\"Container {{planCode}}\"}"))
+				.content("{\"title\":\"Lease\",\"body\":\"Plan {{planCode}}\"}"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.body").value("Container LST-10001"));
+			.andExpect(jsonPath("$.body").value("Plan LST-10001"));
 
 		String marker = "Clause-" + UUID.randomUUID();
-		save("Lease {{agreementNumber}}", marker + " for {{investorEmail}}: container {{planCode}}, "
+		save("Lease {{agreementNumber}}", marker + " for {{investorEmail}}: plan {{planCode}}, "
 				+ "{{tenureMonths}} months at {{monthlyReturns}}.\n\n# Signed\nBy SeaLease\n\n"
 				+ "Wording v{{agreementVersion}}, {{currentYear}}. Acceptance: {{acceptanceStatus}} / {{acceptedAt}} / "
 				+ "{{acceptanceReference}}.")
@@ -120,12 +120,12 @@ class AgreementIntegrationTest {
 			.andExpect(status().isConflict());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM lease_agreement_acceptances a JOIN lease_agreements l "
 				+ "ON l.id = a.agreement_id WHERE l.holding_id = ?::uuid", Long.class, holdingId)).isOne();
-		String container = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
+		String planCode = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
 		var stored = jdbc.queryForMap("SELECT agreement_number, title, body FROM lease_agreements WHERE holding_id = ?::uuid",
 				holdingId);
 		assertThat((String) stored.get("agreement_number")).matches("AGR-\\d{4}-\\d{6}");
 		assertThat(stored.get("title")).isEqualTo("Lease " + stored.get("agreement_number"));
-		assertThat((String) stored.get("body")).startsWith(marker + " for " + investor.email() + ": container " + container
+		assertThat((String) stored.get("body")).startsWith(marker + " for " + investor.email() + ": plan " + planCode
 				+ ", 12 months at ₹1,000.00.");
 
 		// The investor lists and downloads their own; others cannot.
@@ -159,7 +159,7 @@ class AgreementIntegrationTest {
 		String holdingId = jdbc.queryForObject("SELECT id::text FROM holdings WHERE order_id = ?::uuid", String.class, orderId);
 		String number = jdbc.queryForObject("SELECT agreement_number FROM lease_agreements WHERE holding_id = ?::uuid",
 				String.class, holdingId);
-		String container = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
+		String planCode = jdbc.queryForObject("SELECT code FROM investment_products WHERE id = ?", String.class, plan);
 
 		// New wording reaches the agreement still waiting, under its own number.
 		save("Agreement {{agreementNumber}}", "New wording v{{agreementVersion}} for {{planCode}}, from {{startDate}}.")
@@ -168,7 +168,7 @@ class AgreementIntegrationTest {
 		mvc.perform(get("/api/v1/agreements/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.agreement.title").value("Agreement " + number))
-			.andExpect(jsonPath("$.body").value("New wording v" + version + " for " + container
+			.andExpect(jsonPath("$.body").value("New wording v" + version + " for " + planCode
 					+ ", from the day this Agreement is accepted."));
 
 		// What is accepted is that wording, and later changes leave it as accepted.
@@ -177,7 +177,7 @@ class AgreementIntegrationTest {
 		save("Lease later", "Later wording {{planCode}}").andExpect(status().isOk());
 		mvc.perform(get("/api/v1/agreements/{id}", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.agreement.title").value("Agreement " + number))
-			.andExpect(jsonPath("$.body").value(startsWith("New wording v" + version + " for " + container + ", from ")))
+			.andExpect(jsonPath("$.body").value(startsWith("New wording v" + version + " for " + planCode + ", from ")))
 			.andExpect(jsonPath("$.body").value(org.hamcrest.Matchers.not(containsString("accepted"))));
 		mvc.perform(get("/api/v1/agreements/{id}/pdf", holdingId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk());

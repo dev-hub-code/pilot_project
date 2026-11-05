@@ -58,7 +58,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/products
         <div className="space-y-6">
           <Card title="Sales">
             <dl className="grid gap-4 text-sm sm:grid-cols-3">
-              <Item label="Investments">{p.containersSold}</Item>
+              <Item label="Investments">{p.unitsSold}</Item>
               <Item label="Published">{formatDateTime(p.publishedAt)}</Item>
             </dl>
           </Card>

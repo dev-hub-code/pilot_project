@@ -19,7 +19,7 @@ export default async function EarningsPage() {
   // Only online investors request withdrawals; network investors are paid when our team makes one.
   const canWithdraw = referrals?.scheme === "ONLINE";
   const credit = creditLabel(rentCredit);
-  // Plans pay rent only; capital shows only for containers bought before that.
+  // Plans pay rent only; capital shows only for units bought before that.
   const hasCapital = summary.capitalReturned.length > 0 || summary.leases.some((l) => Number(l.capitalTotal.amount) > 0);
   const totals = (list: EarningsSummary["balances"]) => (list.length === 0 ? "—" : list.map((m) => formatMoney(m)).join(" · "));
 

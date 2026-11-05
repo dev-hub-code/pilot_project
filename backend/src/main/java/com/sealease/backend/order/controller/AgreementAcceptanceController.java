@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** The investor accepts the lease agreement of a container assigned to them, which starts the lease and the rent. */
+/** The investor accepts the lease agreement of one of their investments, which starts the lease and the rent. */
 @RestController
 @RequestMapping("/api/v1/agreements")
 @PreAuthorize("hasAuthority('INVESTOR_PORTAL')")

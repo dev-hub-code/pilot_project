@@ -12,8 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Publishes plans through the admin API, for tests that need something to invest in, and makes up container numbers
- * for finance to assign. Tests share one database, so use a fresh number rather than one another test may hold.
+ * Publishes plans through the admin API, for tests that need something to invest in.
  */
 public final class OfferingFixtures {
 

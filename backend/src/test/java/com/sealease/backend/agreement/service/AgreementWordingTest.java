@@ -35,13 +35,13 @@ class AgreementWordingTest {
 	@Test
 	void paragraphsAreSplitOnBlankLinesAndHeadingsMarked() {
 		List<Map<String, ?>> rows = AgreementRenderer.paragraphs(
-				"Intro line one\nline two\r\n\r\n# 1. Rent\n\n  \n\nPaid monthly.\n\n# 2. End\nThe container returns.");
+				"Intro line one\nline two\r\n\r\n# 1. Rent\n\n  \n\nPaid monthly.\n\n# 2. End\nThe unit returns.");
 		assertThat(rows).containsExactly(
 				Map.of("text", "Intro line one\nline two", "heading", false),
 				Map.of("text", "1. Rent", "heading", true),
 				Map.of("text", "Paid monthly.", "heading", false),
 				Map.of("text", "2. End", "heading", true),
-				Map.of("text", "The container returns.", "heading", false));
+				Map.of("text", "The unit returns.", "heading", false));
 	}
 
 	@Test

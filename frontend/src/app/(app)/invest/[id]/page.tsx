@@ -62,7 +62,7 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
               <li>Pay by bank within 30 minutes. Online transfer or cheque are accepted.</li>
               <li>Once your payment is confirmed, accept your investment agreement. Your term starts at the next full hour.</li>
               <li>Your annual return is paid monthly into your wallet for the whole tenure. The amount you invest is not paid back.</li>
-              <li>SeaLease owns and leases out shipping containers, and pays returns from that business.</li>
+              <li>SeaLease runs a leasing business and pays returns from that business.</li>
             </ol>
           </Card>
         </div>

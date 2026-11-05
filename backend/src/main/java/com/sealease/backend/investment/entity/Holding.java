@@ -15,7 +15,7 @@ import java.util.Currency;
 import java.util.UUID;
 
 /**
- * A confirmed investment: one container allocated to one investor and leased for the plan's tenure
+ * A confirmed investment: one unit bought by one investor and leased for the plan's tenure
  * from the day payment was confirmed. Amount and accepted terms never change after creation.
  */
 @Entity
@@ -34,10 +34,6 @@ public class Holding extends BaseEntity {
 	@Column(name = "order_item_id", nullable = false, updatable = false)
 	private UUID orderItemId;
 
-	/** Null while awaiting a container. */
-	@Column(name = "container_id")
-	private UUID containerId;
-
 	@Column(name = "amount", nullable = false, updatable = false, precision = 19, scale = 4)
 	private BigDecimal amount;
 
@@ -53,7 +49,7 @@ public class Holding extends BaseEntity {
 	@Column(name = "tenure_months", nullable = false, updatable = false)
 	private int tenureMonths;
 
-	/** The lease starts when the container is assigned; both null until then. */
+	/** The lease starts when the investor accepts the agreement; both null until then. */
 	@Column(name = "lease_starts_on")
 	private LocalDate leaseStartsOn;
 
@@ -80,7 +76,7 @@ public class Holding extends BaseEntity {
 	@Column(name = "assigned_by")
 	private UUID assignedBy;
 
-	/** The finance member who took the task of assigning the container; only they may assign it. */
+	/** The finance member who took this investment's task; only they may complete it. */
 	@Column(name = "task_assignee_id")
 	private UUID taskAssigneeId;
 
@@ -142,7 +138,7 @@ public class Holding extends BaseEntity {
 		return ProductTerms.capitalReturned(amount(), monthlyCapitalReturnPercent);
 	}
 
-	/** A finance member takes the task of assigning this investment's container. */
+	/** A finance member takes this investment's task. */
 	public void takeTask(UUID assignee, Instant now) {
 		this.taskAssigneeId = assignee;
 		this.taskAssignedAt = now;
@@ -180,10 +176,6 @@ public class Holding extends BaseEntity {
 
 	public Instant getAssignedAt() {
 		return assignedAt;
-	}
-
-	public UUID getContainerId() {
-		return containerId;
 	}
 
 	public BigDecimal getMonthlyRentPercent() {

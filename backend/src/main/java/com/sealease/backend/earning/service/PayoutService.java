@@ -172,7 +172,7 @@ public class PayoutService {
 		}
 		Instant before = accrual.getCreditedUntil();
 		HoldingLabel label = holdings.labels(List.of(accrual.getHoldingId())).get(accrual.getHoldingId());
-		// Rent on a container paid in cash at the office is collected in cash there; otherwise it is paid by bank.
+		// Rent on a unit paid in cash at the office is collected in cash there; otherwise it is paid by bank.
 		EarningsBalance balance = label.paidAtOffice() ? EarningsBalance.RENT_CASH : EarningsBalance.RENT_BANK;
 		while (accrual.getCreditedUntil().isBefore(until)) {
 			Instant from = accrual.getCreditedUntil();

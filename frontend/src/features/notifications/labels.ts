@@ -2,8 +2,6 @@ import type { AppNotification } from "@/types/support";
 
 /** What opening each kind of notification lets the reader do; every notification opens its link when clicked. */
 const ACTION: Record<string, string> = {
-  // Its link opens the container's lease agreement (or, once accepted, the portfolio to download it).
-  CONTAINER_ASSIGNED: "Accept agreement",
   AGREEMENT_ISSUED: "Accept agreement",
   LEASE_STARTED: "View portfolio",
   KYC_APPROVED: "View verification",

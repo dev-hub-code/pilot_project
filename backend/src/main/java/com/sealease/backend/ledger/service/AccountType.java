@@ -10,11 +10,11 @@ public enum AccountType {
 	/** Asset: the client-money bank account withdrawals are paid out of. */
 	RENTAL_CASH(Direction.DEBIT, false),
 	/**
-	 * Liability: earnings owed to one investor, withdrawable later: rent on containers paid by bank, and manual
+	 * Liability: earnings owed to one investor, withdrawable later: rent on units paid by bank, and manual
 	 * adjustments. Paid into a bank account ({@link EarningsBalance#RENT_BANK}).
 	 */
 	INVESTOR_EARNINGS(Direction.CREDIT, true),
-	/** Liability: rent owed to one investor on containers paid in cash at the office; collected in cash there. */
+	/** Liability: rent owed to one investor on units paid in cash at the office; collected in cash there. */
 	INVESTOR_CASH_EARNINGS(Direction.CREDIT, true),
 	/** Liability: referral commission owed to one investor; withdrawn by bank or in cash, as they choose. */
 	INVESTOR_REFERRAL_EARNINGS(Direction.CREDIT, true),
@@ -24,7 +24,7 @@ public enum AccountType {
 	PLATFORM_REFERRAL_EXPENSE(Direction.DEBIT, false),
 	/** Liability: withdrawals requested and not yet paid out or returned; reserved so they cannot be spent twice. */
 	WITHDRAWALS_IN_TRANSIT(Direction.CREDIT, false),
-	/** Expense: the monthly rent paid to investors on their containers. */
+	/** Expense: the monthly rent paid to investors on their units. */
 	PLATFORM_RENT_EXPENSE(Direction.DEBIT, false),
 	/** Expense: the monthly part of their capital returned to investors. */
 	PLATFORM_CAPITAL_RETURNS(Direction.DEBIT, false);

@@ -12,7 +12,7 @@
 	<artifactId>backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>sealease-backend</name>
-	<description>Container Investment Platform - modular monolith backend</description>
+	<description>SeaLease Investment Platform - modular monolith backend</description>
 
 	<properties>
 		<java.version>25</java.version>

@@ -1,11 +1,8 @@
 package com.sealease.backend.order.entity;
 
 import com.sealease.backend.common.money.Money;
-import com.sealease.backend.container.entity.ContainerType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Immutable;
@@ -39,14 +36,6 @@ public class OrderItem {
 
 	@Column(name = "product_title", nullable = false, length = 140)
 	private String productTitle;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "container_type", nullable = false, length = 30)
-	private ContainerType containerType;
-
-	/** The container reserved at checkout, for orders placed before manual assignment; null for later orders. */
-	@Column(name = "container_id")
-	private UUID containerId;
 
 	@Column(name = "amount", nullable = false, precision = 19, scale = 4)
 	private BigDecimal amount;
@@ -125,14 +114,6 @@ public class OrderItem {
 
 	public String getProductTitle() {
 		return productTitle;
-	}
-
-	public ContainerType getContainerType() {
-		return containerType;
-	}
-
-	public UUID getContainerId() {
-		return containerId;
 	}
 
 	public BigDecimal getMonthlyRentPercent() {

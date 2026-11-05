@@ -58,7 +58,7 @@ public enum AuditCategory {
 			AuditAction.SCHEDULED_WITHDRAWALS_RUN, AuditAction.WITHDRAWAL_RETURNED,
 			AuditAction.REFERRAL_PAYOUT_MODE_CHOSEN)),
 
-	/** Everything else: plans, containers, orders, support, leads, profiles. */
+	/** Everything else: plans, orders, support, leads, profiles. */
 	OPERATIONS(EnumSet.noneOf(AuditAction.class));
 
 	static {

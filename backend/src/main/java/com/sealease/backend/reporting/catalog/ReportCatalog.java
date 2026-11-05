@@ -2,9 +2,6 @@ package com.sealease.backend.reporting.catalog;
 
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.common.time.DisplayTimeZone;
-import com.sealease.backend.container.entity.ContainerCondition;
-import com.sealease.backend.container.entity.ContainerStatus;
-import com.sealease.backend.container.entity.ContainerType;
 import com.sealease.backend.crm.entity.LeadSource;
 import com.sealease.backend.crm.entity.LeadStage;
 import com.sealease.backend.helpdesk.entity.SupportTeam;
@@ -67,7 +64,6 @@ public class ReportCatalog {
 	private static final String[] PAYMENTS = { "FINANCIAL_REPORT_VIEW", "FINANCE_VIEW", "PAYMENT_VIEW", "PAYMENT_SEARCH" };
 	private static final String[] WITHDRAWALS = { "FINANCIAL_REPORT_VIEW", "FINANCE_VIEW", "WITHDRAWAL_VIEW" };
 	private static final String[] REFERRALS = { "FINANCIAL_REPORT_VIEW", "FINANCE_VIEW", "REFERRAL_COMMISSION_VIEW", "REFERRAL_VIEW" };
-	private static final String[] CONTAINERS = { "OPERATIONAL_REPORT_VIEW", "CONTAINER_VIEW", "INVESTMENT_VIEW" };
 	private static final String[] ORDERS = { "OPERATIONAL_REPORT_VIEW", "ORDER_VIEW" };
 	private static final String[] AGREEMENTS = { "OPERATIONAL_REPORT_VIEW", "AGREEMENT_VIEW", "ORDER_VIEW" };
 	private static final String[] LEADS = { "OPERATIONAL_REPORT_VIEW", "LEAD_VIEW" };
@@ -97,7 +93,6 @@ public class ReportCatalog {
 		payments();
 		withdrawals();
 		referrals();
-		containers();
 		operations();
 		crm();
 		helpdesk();
@@ -356,8 +351,7 @@ public class ReportCatalog {
 			JOIN users u ON u.id = h.user_id
 			JOIN investment_products p ON p.id = h.product_id
 			JOIN orders o ON o.id = h.order_id
-			LEFT JOIN rent_accruals ra ON ra.holding_id = h.id
-			LEFT JOIN containers c ON c.id = h.container_id""";
+			LEFT JOIN rent_accruals ra ON ra.holding_id = h.id""";
 
 	private ReportColumn[] holdingColumns(boolean maturityFirst) {
 		ReportColumn maturity = date("maturity", "Maturity", "h.lease_ends_on");
@@ -374,7 +368,6 @@ public class ReportCatalog {
 				number("tenure", "Tenure (months)", "h.tenure_months").notSummed(),
 				date("leaseStart", "Term starts", "h.lease_starts_on"),
 				maturity,
-				text("container", "Container", "c.container_number"),
 				status("status", "Status", "h.status"),
 				money("earned", "Returns credited", "coalesce(ra.credited_rent, 0)"),
 				money("capitalReturned", "Capital returned", "coalesce(ra.credited_capital, 0)"),
@@ -389,14 +382,14 @@ public class ReportCatalog {
 
 	private void investments() {
 		add(report("investment-register", ReportCategory.INVESTMENT, "Investment register")
-			.describe("Every investment (one per container) with principal, term, returns credited and capital outstanding.")
+			.describe("Every investment with principal, term, returns credited and capital outstanding.")
 			.requires(INVESTMENTS)
 			.from(HOLDINGS_FROM)
 			.columns(holdingColumns(false))
 			.period("h.confirmed_at", "Invested")
 			.choice("status", "Status", "h.status", names(HoldingStatus.values()))
 			.choice("investorType", "Investor type", "p.audience", names(ReferralScheme.values()))
-			.search("o.order_number", code("u"), name("u"), "p.code", "c.container_number")
+			.search("o.order_number", code("u"), name("u"), "p.code")
 			.amount("h.amount")
 			.currency("h.currency")
 			.sort("confirmedAt", true)
@@ -412,7 +405,7 @@ public class ReportCatalog {
 			.periodByDay("h.lease_ends_on", "Maturity")
 			.choice("status", "Status", "h.status", names(HoldingStatus.values()))
 			.choice("investorType", "Investor type", "p.audience", names(ReferralScheme.values()))
-			.search("o.order_number", code("u"), name("u"), "p.code", "c.container_number")
+			.search("o.order_number", code("u"), name("u"), "p.code")
 			.amount("h.amount")
 			.currency("h.currency")
 			.sort("maturity", false));
@@ -559,7 +552,6 @@ public class ReportCatalog {
 				JOIN users u ON u.id = rc.user_id
 				JOIN holdings h ON h.id = rc.holding_id
 				JOIN investment_products p ON p.id = h.product_id
-				LEFT JOIN containers c ON c.id = h.container_id
 				LEFT JOIN ledger_transactions t ON t.id = rc.ledger_transaction_id""";
 		add(report("earnings-register", ReportCategory.EARNINGS, "Earnings register")
 			.describe("Every earnings credit: returns and capital credited to the investor's wallet, kept apart.")
@@ -571,7 +563,6 @@ public class ReportCatalog {
 					id("userId", "u.id"),
 					text("name", "Investor", name("u")),
 					text("plan", "Plan", "p.code"),
-					text("container", "Container", "c.container_number"),
 					money("returns", "Returns (earnings)", "rc.rent_amount"),
 					money("capital", "Capital returned", "rc.capital_amount"),
 					money("credited", "Total credited", "rc.rent_amount + rc.capital_amount"),
@@ -580,7 +571,7 @@ public class ReportCatalog {
 			.periodByDay("rc.day", "Day")
 			.choice("status", "Status", "CASE WHEN t.id IS NULL THEN 'NOT_IN_LEDGER' ELSE 'CREDITED' END",
 					List.of("CREDITED", "NOT_IN_LEDGER"))
-			.search(code("u"), name("u"), "p.code", "c.container_number")
+			.search(code("u"), name("u"), "p.code")
 			.amount("rc.rent_amount")
 			.currency("rc.currency")
 			.sort("day", true)
@@ -645,15 +636,13 @@ public class ReportCatalog {
 					rent_accruals ra
 					JOIN holdings h ON h.id = ra.holding_id
 					JOIN users u ON u.id = ra.user_id
-					JOIN investment_products p ON p.id = ra.product_id
-					LEFT JOIN containers c ON c.id = h.container_id""")
+					JOIN investment_products p ON p.id = ra.product_id""")
 			.where("ra.completed_at IS NULL")
 			.columns(
 					text("investor", "Investor ID", code("u")).linkTo("user", "userId"),
 					id("userId", "u.id"),
 					text("name", "Investor", name("u")),
 					text("plan", "Plan", "p.code"),
-					text("container", "Container", "c.container_number"),
 					dateTime("startsAt", "Starts", "ra.starts_at"),
 					dateTime("endsAt", "Ends", "ra.ends_at"),
 					money("monthly", "Monthly return", "ra.monthly_rent"),
@@ -662,7 +651,7 @@ public class ReportCatalog {
 					money("capitalCredited", "Capital returned", "ra.credited_capital"),
 					money("capitalRemaining", "Capital to come", "GREATEST(ra.capital_total - ra.credited_capital, 0)"),
 					dateTime("creditedUntil", "Credited until", "ra.credited_until"))
-			.search(code("u"), name("u"), "p.code", "c.container_number")
+			.search(code("u"), name("u"), "p.code")
 			.amount("ra.monthly_rent")
 			.currency("ra.currency")
 			.sort("endsAt", false)
@@ -937,93 +926,6 @@ public class ReportCatalog {
 			.note("The referral balance of each investor's ledger account at the end of the period."));
 	}
 
-	// ------------------------------------------------------------------------ containers
-
-	private void containers() {
-		add(report("container-inventory", ReportCategory.CONTAINER, "Container inventory")
-			.describe("Every container with its status, condition, location and current investor.")
-			.requires(CONTAINERS)
-			.from("""
-					containers c
-					LEFT JOIN holdings h ON h.container_id = c.id AND h.status IN ('ACTIVE', 'AWAITING_ACCEPTANCE')
-					LEFT JOIN users u ON u.id = h.user_id""")
-			.columns(
-					text("number", "Container", "c.container_number"),
-					status("type", "Type", "c.container_type"),
-					status("condition", "Condition", "c.condition"),
-					status("status", "Status", "c.status"),
-					text("location", "Location", "c.current_location"),
-					text("country", "Country", "c.location_country"),
-					number("year", "Built", "c.manufacture_year").notSummed(),
-					money("cost", "Acquisition cost", "c.acquisition_cost"),
-					text("investor", "Investor", code("u")).linkTo("user", "userId"),
-					id("userId", "u.id"),
-					date("leaseEnds", "Term ends", "h.lease_ends_on"),
-					text("reason", "Status note", "c.status_reason"))
-			.choice("status", "Status", "c.status", names(ContainerStatus.values()))
-			.choice("type", "Type", "c.container_type", names(ContainerType.values()))
-			.choice("condition", "Condition", "c.condition", names(ContainerCondition.values()))
-			.search("c.container_number", "c.current_location", "c.location_country", code("u"))
-			.amount("c.acquisition_cost")
-			.currency("coalesce(c.acquisition_currency, 'INR')")
-			.sort("number", false));
-
-		String util = "round(100.0 * count(*) FILTER (WHERE c.status = 'ON_LEASE') / NULLIF(count(*) FILTER (WHERE c.status <> 'RETIRED'), 0), 1)";
-		add(report("container-locations", ReportCategory.CONTAINER, "Location-wise inventory")
-			.describe("Containers per location: available, on lease, in maintenance, and utilisation.")
-			.requires(AGGREGATE)
-			.from("containers c")
-			.groupBy("coalesce(c.location_country, '—'), coalesce(c.current_location, '—')")
-			.columns(
-					text("country", "Country", "coalesce(c.location_country, '—')"),
-					text("location", "Location", "coalesce(c.current_location, '—')"),
-					number("total", "Containers", "count(*)").summed(),
-					number("available", "Available", "count(*) FILTER (WHERE c.status = 'AVAILABLE')").summed(),
-					number("reserved", "Reserved", "count(*) FILTER (WHERE c.status = 'RESERVED')").summed(),
-					number("leased", "On lease", "count(*) FILTER (WHERE c.status = 'ON_LEASE')").summed(),
-					number("maintenance", "Maintenance", "count(*) FILTER (WHERE c.status = 'MAINTENANCE')").summed(),
-					number("retired", "Retired", "count(*) FILTER (WHERE c.status = 'RETIRED')").summed(),
-					percent("utilisation", "Utilisation %", util))
-			.choice("type", "Type", "c.container_type", names(ContainerType.values()))
-			.search("c.location_country", "c.current_location")
-			.sort("total", true)
-			.note("Utilisation: containers on lease as a share of those not retired."));
-
-		add(report("container-utilisation", ReportCategory.CONTAINER, "Container utilisation by type")
-			.describe("Containers per type: available, on lease, in maintenance, and utilisation.")
-			.requires(AGGREGATE)
-			.from("containers c")
-			.groupBy("c.container_type")
-			.columns(
-					status("type", "Type", "c.container_type"),
-					number("total", "Containers", "count(*)").summed(),
-					number("available", "Available", "count(*) FILTER (WHERE c.status = 'AVAILABLE')").summed(),
-					number("leased", "On lease", "count(*) FILTER (WHERE c.status = 'ON_LEASE')").summed(),
-					number("maintenance", "Maintenance", "count(*) FILTER (WHERE c.status = 'MAINTENANCE')").summed(),
-					percent("utilisation", "Utilisation %", util))
-			.sort("total", true)
-			.note("Utilisation: containers on lease as a share of those not retired."));
-
-		add(report("container-revenue", ReportCategory.CONTAINER, "Leasing returns by container")
-			.describe("Returns credited to investors per container (the leasing income passed on to them).")
-			.requires(CONTAINERS)
-			.from("rent_credits rc JOIN holdings h ON h.id = rc.holding_id JOIN containers c ON c.id = h.container_id")
-			.groupBy("c.id, c.container_number, c.container_type, rc.currency")
-			.columns(
-					text("number", "Container", "c.container_number"),
-					status("type", "Type", "c.container_type"),
-					number("credits", "Credits", "count(*)").summed(),
-					money("returns", "Returns credited", "sum(rc.rent_amount)"),
-					money("capital", "Capital returned", "sum(rc.capital_amount)"))
-			.periodByDay("rc.day", "Day")
-			.choice("type", "Type", "c.container_type", names(ContainerType.values()))
-			.search("c.container_number")
-			.currency("rc.currency")
-			.sort("returns", true)
-			.note("SeaLease records the returns credited to investors; lessee invoices and maintenance costs are not "
-					+ "recorded in the platform."));
-	}
-
 	// ------------------------------------------------------------------------ operations
 
 	private void operations() {
@@ -1057,17 +959,15 @@ public class ReportCatalog {
 
 		String fulfilment = """
 				CASE WHEN f.investments = 0 THEN 'AWAITING_ASSIGNMENT'
-				     WHEN f.assigned < f.investments THEN 'PARTLY_ASSIGNED'
 				     WHEN f.accepted < f.agreements THEN 'AWAITING_ACCEPTANCE'
 				     ELSE 'FULFILLED' END""";
 		add(report("order-fulfilment", ReportCategory.OPERATIONAL, "Order fulfilment")
-			.describe("Confirmed orders: containers assigned, agreements issued and accepted.")
+			.describe("Confirmed orders: investments, agreements issued and accepted.")
 			.requires(ORDERS)
 			.from("""
 					orders o
 					JOIN users u ON u.id = o.user_id
-					LEFT JOIN LATERAL (SELECT count(h.id) AS investments, count(h.container_id) AS assigned,
-					                          count(la.id) AS agreements, count(ac.agreement_id) AS accepted
+					LEFT JOIN LATERAL (SELECT count(h.id) AS investments, count(la.id) AS agreements, count(ac.agreement_id) AS accepted
 					                   FROM holdings h
 					                   LEFT JOIN lease_agreements la ON la.holding_id = h.id
 					                   LEFT JOIN lease_agreement_acceptances ac ON ac.agreement_id = la.id
@@ -1080,13 +980,12 @@ public class ReportCatalog {
 					id("userId", "u.id"),
 					dateTime("confirmedAt", "Confirmed", "o.confirmed_at"),
 					number("investments", "Investments", "f.investments").summed(),
-					number("assigned", "Containers assigned", "f.assigned").summed(),
 					number("agreements", "Agreements issued", "f.agreements").summed(),
 					number("accepted", "Accepted", "f.accepted").summed(),
 					status("fulfilment", "Fulfilment", fulfilment))
 			.period("o.confirmed_at", "Confirmed")
 			.choice("fulfilment", "Fulfilment", fulfilment,
-					List.of("AWAITING_ASSIGNMENT", "PARTLY_ASSIGNED", "AWAITING_ACCEPTANCE", "FULFILLED"))
+					List.of("AWAITING_ASSIGNMENT", "AWAITING_ACCEPTANCE", "FULFILLED"))
 			.search("o.order_number", code("u"))
 			.sort("confirmedAt", true));
 
@@ -1111,7 +1010,7 @@ public class ReportCatalog {
 
 		String acceptance = "CASE WHEN ac.agreement_id IS NOT NULL THEN 'ACCEPTED' WHEN la.acceptance_required THEN 'AWAITING_ACCEPTANCE' ELSE 'NOT_REQUIRED' END";
 		add(report("agreement-register", ReportCategory.OPERATIONAL, "Agreement register")
-			.describe("Every investment agreement: number, investor, container and acceptance.")
+			.describe("Every investment agreement: number, investor and acceptance.")
 			.requires(AGREEMENTS)
 			.from("lease_agreements la JOIN users u ON u.id = la.user_id LEFT JOIN lease_agreement_acceptances ac ON ac.agreement_id = la.id")
 			.columns(
@@ -1119,7 +1018,6 @@ public class ReportCatalog {
 					text("investor", "Investor ID", code("u")).linkTo("user", "userId"),
 					id("userId", "u.id"),
 					text("name", "Investor", name("u")),
-					text("container", "Container", "la.container_number"),
 					dateTime("issuedAt", "Issued", "la.generated_at"),
 					status("acceptance", "Acceptance", acceptance),
 					dateTime("acceptedAt", "Accepted", "ac.accepted_at"),
@@ -1127,7 +1025,7 @@ public class ReportCatalog {
 					date("termEnds", "Term ends", "ac.lease_ends_on"))
 			.period("la.generated_at", "Issued")
 			.choice("acceptance", "Acceptance", acceptance, List.of("ACCEPTED", "AWAITING_ACCEPTANCE", "NOT_REQUIRED"))
-			.search("la.agreement_number", code("u"), name("u"), "la.container_number")
+			.search("la.agreement_number", code("u"), name("u"))
 			.sort("issuedAt", true));
 	}
 
@@ -1560,7 +1458,7 @@ public class ReportCatalog {
 		return Set.of("REPORT_VIEW", "REPORT_GENERATE", "REPORT_EXPORT", "FINANCIAL_REPORT_VIEW", "FINANCE_VIEW",
 				"LEDGER_VIEW", "INVESTOR_ANALYTICS_VIEW", "INVESTMENT_VIEW", "INVESTOR_VIEW", "PAYOUT_VIEW", "PAYMENT_VIEW",
 				"PAYMENT_SEARCH", "WITHDRAWAL_VIEW", "REFERRAL_COMMISSION_VIEW", "REFERRAL_VIEW", "OPERATIONAL_REPORT_VIEW",
-				"CONTAINER_VIEW", "ORDER_VIEW", "AGREEMENT_VIEW", "LEAD_VIEW", "SUPPORT_TICKET_VIEW", "SUPPORT_VIEW", "KYC_VIEW",
+				"ORDER_VIEW", "AGREEMENT_VIEW", "LEAD_VIEW", "SUPPORT_TICKET_VIEW", "SUPPORT_VIEW", "KYC_VIEW",
 				"KYC_REVIEW", "AUDIT_VIEW", "COMPLIANCE_CASE_VIEW", "INVESTOR_CONTACT_VIEW", "PHONE_NUMBER_VIEW", "SECURITY_VIEW", "USER_VIEW");
 	}
 

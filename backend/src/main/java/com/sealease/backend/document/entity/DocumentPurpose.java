@@ -13,8 +13,6 @@ public enum DocumentPurpose {
 	KYC_AADHAAR_FRONT,
 	KYC_AADHAAR_BACK,
 
-	CONTAINER_PHOTO,
-	CONTAINER_SURVEY_REPORT,
 	LEASE_AGREEMENT,
 	INSURANCE_CERTIFICATE,
 	OFFERING_MEMORANDUM,
@@ -22,14 +20,5 @@ public enum DocumentPurpose {
 	CANCELLED_CHEQUE,
 	BANK_PASSBOOK,
 
-	SUPPORT_ATTACHMENT;
-
-	public boolean isContainerDocument() {
-		return name().startsWith("CONTAINER_") || this == LEASE_AGREEMENT || this == INSURANCE_CERTIFICATE
-				|| this == OFFERING_MEMORANDUM;
-	}
-
-	public boolean isImage() {
-		return this == CONTAINER_PHOTO;
-	}
+	SUPPORT_ATTACHMENT
 }

@@ -105,7 +105,7 @@ public class HoldingService {
 		return summarise(holdings.findByOrderIdOrderByCreatedAt(orderId)).holdings();
 	}
 
-	/** One holding with its plan and container, e.g. for the lease agreement issued when its container is assigned. */
+	/** One holding with its plan, e.g. for its lease agreement. */
 	@Transactional(readOnly = true)
 	public HoldingResponse get(UUID holdingId) {
 		Holding holding = holdings.findById(holdingId).orElseThrow(() -> new ResourceNotFoundException("Holding", holdingId));
@@ -145,10 +145,10 @@ public class HoldingService {
 		return counts(productIds.isEmpty() ? List.of() : holdings.countInvestorsByProduct(productIds));
 	}
 
-	/** Containers sold per plan. */
+	/** Units sold per plan. */
 	@Transactional(readOnly = true)
-	public Map<UUID, Long> containersSold(Collection<UUID> productIds) {
-		return counts(productIds.isEmpty() ? List.of() : holdings.countContainersByProduct(productIds));
+	public Map<UUID, Long> unitsSold(Collection<UUID> productIds) {
+		return counts(productIds.isEmpty() ? List.of() : holdings.countUnitsByProduct(productIds));
 	}
 
 	/** Capital invested across all holdings, per currency. */
@@ -162,7 +162,7 @@ public class HoldingService {
 		return totals;
 	}
 
-	/** Capital confirmed into containers in one currency per UTC month since {@code from}; empty months are left out. */
+	/** Capital confirmed into investments in one currency per UTC month since {@code from}; empty months are left out. */
 	@Transactional(readOnly = true)
 	public Map<YearMonth, Money> investedByMonth(Currency currency, Instant from) {
 		Map<YearMonth, Money> totals = new TreeMap<>();

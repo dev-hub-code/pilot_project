@@ -214,7 +214,7 @@ public class ReportService {
 
 		List<Row> plans = all.stream()
 			.map(p -> Row.of(p.code(), p.title() + " · " + Format.label(p.status().name()),
-					p.containersSold() + " investment(s) · "
+					p.unitsSold() + " investment(s) · "
 							+ investors.getOrDefault(p.id(), 0L) + " investor(s)",
 					p.audience() == com.sealease.backend.referral.dto.ReferralScheme.NETWORK ? "Network investors" : "Online investors"))
 			.toList();

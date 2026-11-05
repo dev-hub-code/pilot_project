@@ -18,6 +18,6 @@ export async function acceptAgreementAction(holdingId: string, _p: FormState, fo
   }
   revalidatePath("/portfolio");
   revalidatePath(`/portfolio/${holdingId}/agreement`);
-  // Back to the portfolio: an accepted agreement no longer opens, it is downloaded from its container.
+  // Back to the portfolio: an accepted agreement no longer opens, it is downloaded from its investment.
   redirect(`/portfolio?accepted=${encodeURIComponent(holdingId)}`);
 }

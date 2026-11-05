@@ -20,7 +20,7 @@ import com.sealease.backend.investment.entity.ProductTerms;
  * A demo account's figures, worked out from its dummy orders and downline over its time frame; nothing is stored.
  *
  * <ul>
- * <li>Rent: each of the investor's own orders earns its monthly rent (price × containers × rent %) per lease month, a
+ * <li>Rent: each of the investor's own orders earns its monthly rent (price × units × rent %) per lease month, a
  * lease month running from the start's day in one month to the same day in the next, and a part month counted by its
  * days. So a whole lease pays exactly monthly rent × tenure.</li>
  * <li>Commission: each downline member's order earns the investor that level's rate (levels 1-4) of the member's
@@ -47,18 +47,18 @@ public final class DemoBook {
 	 * @param memberId {@code null} for the demo investor's own order
 	 */
 	public record Order(UUID id, UUID memberId, String number, UUID productId, String planCode, String planTitle,
-			int containers, Money pricePerContainer, BigDecimal rentPercent, int tenureMonths, LocalDate startsOn) {
+			int units, Money pricePerUnit, BigDecimal rentPercent, int tenureMonths, LocalDate startsOn) {
 
 		public Money amount() {
-			return pricePerContainer.times(BigDecimal.valueOf(containers));
+			return pricePerUnit.times(BigDecimal.valueOf(units));
 		}
 
 		public Money monthlyRent() {
 			return ProductTerms.percentOf(amount(), rentPercent);
 		}
 
-		public Money monthlyRentPerContainer() {
-			return ProductTerms.percentOf(pricePerContainer, rentPercent);
+		public Money monthlyRentPerUnit() {
+			return ProductTerms.percentOf(pricePerUnit, rentPercent);
 		}
 
 		public LocalDate endsOn() {

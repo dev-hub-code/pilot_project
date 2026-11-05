@@ -46,7 +46,7 @@ const BENEFITS = (credit: string) => [
   },
   {
     title: "Backed by a real business",
-    body: "SeaLease owns shipping containers and leases them to businesses moving goods, and pays returns from that income. Every investment has its own agreement you can download.",
+    body: "SeaLease runs a leasing business and pays returns from that income. Every investment has its own agreement you can download.",
   },
   {
     title: "Clear from day one",
@@ -164,7 +164,7 @@ function faqs(plans: Plan[], credit: string) {
   return [
     {
       question: "What exactly am I investing in?",
-      answer: "You buy units of a SeaLease plan, under an investment agreement. Each plan has its own tenure, annual return and unit price. SeaLease owns shipping containers and leases them out, and pays investors from that business.",
+      answer: "You buy units of a SeaLease plan, under an investment agreement. Each plan has its own tenure, annual return and unit price. SeaLease runs a leasing business and pays investors from that business.",
     },
     {
       question: "How much will I receive in returns?",
@@ -239,19 +239,19 @@ const COMPANY_RECORD: {
   paidToInvestorsCrore: number | null;
   payoutsMade: number | null;
   investors: number | null;
-  containers: number | null;
+  investments: number | null;
 } = {
   paidToInvestorsCrore: null, // e.g. 12 → "₹12 Cr+"
   payoutsMade: null, // e.g. 3500 → "3.5K+"
   investors: null, // e.g. 1200 → "1.2K+"
-  containers: null, // e.g. 2000 → "2K+"
+  investments: null, // e.g. 2000 → "2K+"
 };
 
 /**
  * Sample figures (not real) to preview the "Since 2022" row while developing. Never shown in production, and
  * labelled on the page. They apply only to fields left null in COMPANY_RECORD.
  */
-const SAMPLE_RECORD = { paidToInvestorsCrore: 12, payoutsMade: 3500, investors: 1200, containers: 2000 };
+const SAMPLE_RECORD = { paidToInvestorsCrore: 12, payoutsMade: 3500, investors: 1200, investments: 2000 };
 
 /** Whether a figure left null above falls back to the live platform total. Off: the row shows only entered figures. */
 const SHOW_LIVE_FIGURES = true;
@@ -268,16 +268,16 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
     paidToInvestorsCrore: COMPANY_RECORD.paidToInvestorsCrore ?? SAMPLE_RECORD.paidToInvestorsCrore,
     payoutsMade: COMPANY_RECORD.payoutsMade ?? SAMPLE_RECORD.payoutsMade,
     investors: COMPANY_RECORD.investors ?? SAMPLE_RECORD.investors,
-    containers: COMPANY_RECORD.containers ?? SAMPLE_RECORD.containers,
+    investments: COMPANY_RECORD.investments ?? SAMPLE_RECORD.investments,
   } : COMPANY_RECORD;
-  const live = SHOW_LIVE_FIGURES && stats && stats.containersEarning > 0 ? stats : null;
+  const live = SHOW_LIVE_FIGURES && stats && stats.unitsEarning > 0 ? stats : null;
   const figures = {
     paid: record.paidToInvestorsCrore !== null ? `₹${record.paidToInvestorsCrore.toLocaleString("en-IN")} Cr+`
       : live && formatMoney(live.paidToInvestors, { compact: true }),
     // Rent is credited hourly now, so the platform has no count of payouts: only the company's own figure is shown.
     payouts: record.payoutsMade !== null ? thousands(record.payoutsMade) : null,
     investors: record.investors !== null ? thousands(record.investors) : live?.investors.toLocaleString("en-IN"),
-    containers: record.containers !== null ? thousands(record.containers) : live?.containers.toLocaleString("en-IN"),
+    investments: record.investments !== null ? thousands(record.investments) : live?.units.toLocaleString("en-IN"),
   };
   return Object.values(figures).every(Boolean) ? (figures as Record<keyof typeof figures, string>) : null;
 }
@@ -300,62 +300,6 @@ const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoN
     photo: "container-lift",
     alt: "A shipping container lifted by a ship-to-shore crane onto a truck at the quay",
     body: `Once your payment is confirmed, accept your investment agreement and returns are credited to your wallet ${credit}, then paid out as your account allows.`,
-  },
-];
-
-/**
- * The photo strip: a large lead photo, then four smaller ones, all at Indian ports. These photos are CC BY / CC BY-SA
- * (Wikimedia Commons), credited on the /credits page: their licences require it.
- */
-/**
- * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
- * section's text must not present them as partners. Logos are the public-domain files on Wikimedia Commons, loaded
- * from Wikimedia's CDN (upload.wikimedia.org): each path is the file's place there.
- */
-const COMMONS_FILES = "https://upload.wikimedia.org/wikipedia/commons";
-
-/**
- * `small`: a solid or very bold logo, drawn a little smaller so it does not outweigh the others.
- * `crop`: the file has wide empty margins; the logo is cut to this aspect ratio around its centre.
- */
-const SHIPPING_LINES: { name: string; logo: string; small?: boolean; crop?: string }[] = [
-  { name: "MSC", logo: "b/b3/Mediterranean_Shipping_Company_logo.svg" },
-  { name: "Maersk", logo: "e/e6/Maersk_Group_Logo.svg" },
-  { name: "CMA CGM", logo: "d/d1/CMA_CGM_logo.svg" },
-  { name: "COSCO Shipping", logo: "f/f6/COSCOCS-ver1.svg" },
-  { name: "Hapag-Lloyd", logo: "6/6a/Hapag-Lloyd.svg" },
-  { name: "Ocean Network Express", logo: "4/45/Ocean_Network_Express_logo.svg" },
-  { name: "Evergreen Line", logo: "c/c9/Evergreen_Line_Logo.svg" },
-  { name: "HMM", logo: "5/56/HMM_Logo_Basic_Form.svg", small: true },
-  { name: "ZIM", logo: "6/69/ZIM_Logo.svg" },
-  { name: "PIL", logo: "3/30/PIL_logo.png", small: true, crop: "aspect-[360/105]" },
-  { name: "SITC", logo: "4/43/SITC_logo.svg", small: true },
-  { name: "NYK Line", logo: "c/c6/Nippon_Yusen_text_logo.svg" },
-  { name: "Mitsui O.S.K. Lines", logo: "2/22/Mitsui_O.S.K._Lines_logo.svg" },
-  { name: "K Line", logo: "thumb/6/6d/Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png/500px-Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png" },
-  { name: "Crowley", logo: "f/f6/Crowley_Maritime_logo.svg" },
-];
-
-const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
-  {
-    photo: "jnpt-cfs", caption: "Nhava Sheva (JNPT), Navi Mumbai",
-    alt: "Containers stacked high under a gantry crane at a container freight station at JNPT, Navi Mumbai",
-  },
-  {
-    photo: "kochi-cranes", caption: "Vallarpadam terminal, Kochi",
-    alt: "Ship-to-shore cranes at the Vallarpadam container terminal in Kochi against a blue sky",
-  },
-  {
-    photo: "chennai-port", caption: "Chennai Port",
-    alt: "Container cranes of the Chennai Port container terminal seen across the sea",
-  },
-  {
-    photo: "mundra-port", caption: "Mundra Port, Gujarat",
-    alt: "Container cranes along the quay at Mundra Port, seen from a ship carrying stacked containers",
-  },
-  {
-    photo: "kochi-night", caption: "Kochi Container Terminal",
-    alt: "A container ship lit up under the cranes of the Kochi Container Terminal at night",
   },
 ];
 
@@ -445,11 +389,11 @@ export default async function Home() {
         <section id="about" className="scroll-mt-24 px-5 py-20 text-center sm:px-10 lg:py-28">
           <Eyebrow>About SeaLease</Eyebrow>
           <h2 className="mx-auto mt-8 max-w-4xl text-3xl leading-tight font-normal tracking-tight sm:text-4xl lg:text-5xl">
-            Earn Monthly Returns From A Real Container Leasing Business. Choose Your Tenure, Buy Units, Earn Every Month.
+            Earn Monthly Returns From A Real Leasing Business. Choose Your Tenure, Buy Units, Earn Every Month.
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted">
-            SeaLease™ owns shipping containers and leases them to businesses moving goods around the world, and pays
-            investors returns from that income. We handle everything. You don&apos;t need any shipping experience, and
+            SeaLease™ runs a leasing business and pays investors returns from that income. We handle everything. You
+            don&apos;t need any leasing experience, and
             you can start with just a few units of a plan{lowest ? `, from ${formatMoney(lowest)} a unit` : ""}.
           </p>
           <ul className="mt-14 grid gap-px overflow-hidden rounded-xl border border-border bg-border text-left sm:grid-cols-2 xl:grid-cols-4">
@@ -460,7 +404,7 @@ export default async function Home() {
               </li>
             ))}
           </ul>
-          {/* Track record: a dark panel over a faint container yard, the story on the left and the figures on the right. */}
+          {/* Track record: a dark panel over a faint port yard, the story on the left and the figures on the right. */}
           <div className="relative isolate mx-auto mt-16 max-w-6xl overflow-hidden bg-ink text-left text-on-ink">
             <PortPhoto name="yard-stacks" alt="" sizes="(min-width: 1440px) 1152px, 100vw"
               className="absolute inset-0 -z-20 size-full object-cover opacity-25" />
@@ -485,7 +429,7 @@ export default async function Home() {
                     { label: "Paid to investors", value: figures.paid },
                     { label: "Payouts made", value: figures.payouts },
                     { label: "Investors", value: figures.investors },
-                    { label: "Investments made", value: figures.containers },
+                    { label: "Investments made", value: figures.investments },
                   ].filter((figure) => figure.value).map((figure) => (
                     <div key={figure.label} className="flex flex-col-reverse justify-end gap-2 bg-ink/85 px-4 py-6 backdrop-blur-sm min-[400px]:px-5 sm:px-7 sm:py-8">
                       <dt className="text-xs leading-snug text-on-ink/70 sm:text-sm">{figure.label}</dt>
@@ -508,64 +452,6 @@ export default async function Home() {
               </div>
             </div>
           )}
-        </section>
-
-        {/* ---------------------------------------------------------------- ports */}
-        <section aria-labelledby="ports-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-          <div className="space-y-5">
-            <Eyebrow>At The Ports</Eyebrow>
-            <h2 id="ports-heading" className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-              Where The Containers Work
-            </h2>
-            <p className="max-w-2xl text-sm leading-relaxed text-muted">
-              Containers are stacked, loaded and moved through India&apos;s container terminals every day, carrying the
-              goods of the businesses that lease them.
-            </p>
-          </div>
-          <ul className="mt-12 grid grid-cols-2 gap-2 md:grid-cols-4 md:grid-rows-2">
-            {PORT_GALLERY.map((item, index) => (
-              <li key={item.photo}
-                className={`group relative overflow-hidden bg-ink ${index === 0
-                  ? "col-span-2 aspect-[4/3] md:row-span-2 md:aspect-auto"
-                  : "aspect-square md:aspect-[4/3]"}`}>
-                <figure className="size-full">
-                  <PortPhoto name={item.photo} alt={item.alt}
-                    sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
-                    className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
-                    {item.caption}
-                  </figcaption>
-                </figure>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* --------------------------------------------------------- shipping lines */}
-        <section aria-labelledby="lines-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-14">
-            <div className="space-y-5">
-              <Eyebrow>The Global Network</Eyebrow>
-              <h2 id="lines-heading" className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                The Lines That Move The World&apos;s Cargo
-              </h2>
-            </div>
-            <p className="max-w-xl text-sm leading-relaxed text-muted">
-              Most of the world&apos;s container trade, including the ships calling at Nhava Sheva, Mundra, Chennai and
-              Kochi, is carried by a handful of large lines. The businesses that lease containers ship their goods on
-              services like theirs, which is what keeps containers in demand and earning.
-            </p>
-          </div>
-          <ul className="mt-12 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
-            {SHIPPING_LINES.map((line) => (
-              // Always a white tile: the logos are drawn for a light background, in dark mode too.
-              <li key={line.name} className="group flex h-24 items-center justify-center bg-white px-5 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
-                {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
-                <img src={`${COMMONS_FILES}/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
-                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.crop ? `${line.crop} h-7 object-cover sm:h-9` : line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
-              </li>
-            ))}
-          </ul>
         </section>
 
         {/* ----------------------------------------------------------- how it works */}

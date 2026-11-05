@@ -75,7 +75,7 @@ public class AdminProductController {
 		return products.publish(actor.userId(), productId);
 	}
 
-	/** Stops selling containers under the plan; sold containers keep their lease and payouts. */
+	/** Stops selling units under the plan; sold units keep their lease and payouts. */
 	@PostMapping("/{productId}/close")
 	@PreAuthorize("hasAuthority('INVESTMENT_APPROVE')")
 	public ProductResponse close(AuthenticatedUser actor, @PathVariable UUID productId) {

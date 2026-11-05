@@ -170,7 +170,7 @@ class GatewayPaymentIntegrationTest {
 			.andExpect(jsonPath("$.virtualAccount.ifsc").value("RATN0VAAPIS"))
 			.andExpect(jsonPath("$.virtualAccount.upiId").value("rpy.sl123@icici"))
 			.andExpect(jsonPath("$.virtualAccount.amount.amount").value("50000.00")));
-		// The containers stay reserved while the transfer is on its way.
+		// The order stays pending while the transfer is on its way.
 		assertThat(expiresAt(orderId)).isAfter(Instant.now().plus(Duration.ofDays(2)));
 
 		// Too little: kept aside for refund, and the order still waits.

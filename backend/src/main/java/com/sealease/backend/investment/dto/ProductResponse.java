@@ -13,7 +13,7 @@ import java.util.UUID;
  * Full plan view, for staff.
  *
  * @param audience            the investor type it is offered to
- * @param containersSold      investments made under this plan
+ * @param unitsSold      investments made under this plan
  */
 public record ProductResponse(
 		UUID id,
@@ -27,7 +27,7 @@ public record ProductResponse(
 		BigDecimal annualReturnPercent,
 		BigDecimal unitPrice,
 		int minUnits,
-		long containersSold,
+		long unitsSold,
 		Instant publishedAt,
 		Instant closedAt,
 		Instant cancelledAt,
@@ -35,11 +35,11 @@ public record ProductResponse(
 		Instant createdAt,
 		long version) {
 
-	public static ProductResponse from(InvestmentProduct p, long containersSold) {
+	public static ProductResponse from(InvestmentProduct p, long unitsSold) {
 		ProductTerms t = p.terms();
 		return new ProductResponse(p.getId(), p.getCode(), p.getStatus(), p.getAudience(), t.title(), t.summary(),
 				t.currency().getCurrencyCode(), t.tenureYears(), t.annualReturnPercent(), t.unitPrice(), t.minUnits(),
-				containersSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
+				unitsSold, p.getPublishedAt(), p.getClosedAt(), p.getCancelledAt(),
 				p.getCancellationReason(), p.getCreatedAt(), p.getVersion());
 	}
 

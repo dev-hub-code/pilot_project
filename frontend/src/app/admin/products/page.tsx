@@ -54,7 +54,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
               <Cell>{yearsLabel(p.tenureYears)}</Cell>
               <Cell className="tabular-nums">{formatPercent(p.annualReturnPercent)}</Cell>
               <Cell className="tabular-nums">{p.minUnits}</Cell>
-              <Cell className="tabular-nums">{p.containersSold}</Cell>
+              <Cell className="tabular-nums">{p.unitsSold}</Cell>
               <Cell><StatusBadge tone={PRODUCT_TONE[p.status]}>{PRODUCT_STATUS_LABEL[p.status]}</StatusBadge></Cell>
             </tr>
           ))}

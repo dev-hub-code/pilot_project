@@ -169,7 +169,7 @@ public class ProductService {
 	}
 
 	private List<ProductResponse> views(Collection<InvestmentProduct> page) {
-		Map<UUID, Long> sold = holdings.containersSold(page.stream().map(InvestmentProduct::getId).toList());
+		Map<UUID, Long> sold = holdings.unitsSold(page.stream().map(InvestmentProduct::getId).toList());
 		return page.stream()
 			.map(p -> ProductResponse.from(p, sold.getOrDefault(p.getId(), 0L)))
 			.toList();

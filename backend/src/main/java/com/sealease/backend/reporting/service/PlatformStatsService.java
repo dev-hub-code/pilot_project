@@ -47,7 +47,7 @@ public class PlatformStatsService {
 
 	private PlatformStats compute() {
 		String currency = money.defaultCurrency().getCurrencyCode();
-		// Rent (and capital) credited so far, and the containers it has been credited on.
+		// Rent (and capital) credited so far, and the units it has been credited on.
 		Object[] payouts = entityManager.createQuery("""
 				select count(a), sum(a.creditedRent + a.creditedCapital) from RentAccrual a
 				where a.currency = :currency and a.creditedUntil > a.startsAt

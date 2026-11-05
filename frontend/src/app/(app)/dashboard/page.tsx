@@ -44,7 +44,7 @@ const PAYOUT_SERIES: readonly ColumnSeries[] = [
   { key: "capitalScheduled", label: "Capital returned", fill: "fill-chart-2", swatch: "bg-chart-2", scheduled: true },
 ];
 
-/** Plans pay rent only; capital appears only for containers bought before that, so its series shows only then. */
+/** Plans pay rent only; capital appears only for units bought before that, so its series shows only then. */
 const RENT_SERIES = PAYOUT_SERIES.filter((s) => !s.key.startsWith("capital"));
 
 const REFERRAL_SERIES: readonly ColumnSeries[] = [
