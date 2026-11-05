@@ -61,7 +61,8 @@ import java.util.UUID;
  *
  * <p>An investor is left out of a sheet (and keeps the balances) when they cannot be paid that way, when a withdrawal
  * of one of its balances is still open or failed, or when their row would be below the minimum withdrawal. The whole
- * run is one transaction.
+ * run is one transaction, and runs of one kind take turns (two clicks on "generate" make one run, not two). A run
+ * that withdraws nothing is not recorded: the answer only says who was left out and why.
  */
 @Service
 public class WithdrawalRunService {
@@ -117,6 +118,8 @@ public class WithdrawalRunService {
 	 */
 	@Transactional
 	public WithdrawalRunResponse generate(UUID actorId, WithdrawalKind kind) {
+		// Runs of one kind take turns, on every instance: the second waits, then finds the balances already withdrawn.
+		jdbc.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> null, "withdrawal_run:" + kind.name());
 		Currency currency = money.defaultCurrency();
 		Money minimum = Money.of(settings.minimumAmount(), currency);
 		UUID runId = UUID.randomUUID();
@@ -179,6 +182,11 @@ public class WithdrawalRunService {
 			}
 		}
 
+		if (made.isEmpty()) {
+			Money none = Money.zero(currency);
+			return new WithdrawalRunResponse(null, null, kind, currency.getCurrencyCode(), now, actorId, null, null, 0,
+					MoneyResponse.from(none), null, null, 0, MoneyResponse.from(none), withCodes(skipped));
+		}
 		WithdrawalBatch bank = batch(made, kind, WithdrawalPayoutMethod.BANK_TRANSFER, reference, actorId);
 		WithdrawalBatch cash = batch(made, kind, WithdrawalPayoutMethod.OFFICE_CASH, reference, actorId);
 		int bankInvestors = investorsIn(made, WithdrawalPayoutMethod.BANK_TRANSFER);

@@ -39,7 +39,13 @@ public class OfferingQuery {
 			.collect(Collectors.toMap(OfferingTerms::id, Function.identity()));
 	}
 
-	/** Why the investor cannot (currently) buy these units of the plan; empty when they can. */
+	/**
+	 * Why the investor cannot (currently) buy these units of the plan; empty when they can.
+	 *
+	 * <p>Read without locking the plan: an order placed at the moment the plan closes may still be accepted. That is
+	 * intended. The order carries its own copy of the terms, so a plan closing (or changing) never alters an order
+	 * already placed, and locking every checkout against plan edits would serialise purchases for no benefit.
+	 */
 	@Transactional(readOnly = true)
 	public List<String> problems(UUID investorId, UUID productId, int units) {
 		InvestmentProduct product = load(productId);

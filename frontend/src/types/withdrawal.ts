@@ -281,9 +281,10 @@ export interface FinanceTask {
 
 /** One withdrawal run: every eligible investor's rent and referral balances, in a bank sheet and a cash sheet. */
 export interface WithdrawalRun {
-  id: string;
-  /** "WR-00001". */
-  reference: string;
+  /** Null only in the answer to a run that withdrew nothing: such a run is not recorded. */
+  id: string | null;
+  /** "WR-00001"; null like {@link id}. */
+  reference: string | null;
   /** RENT or REFERRAL; null for runs from before they were separate (both). */
   kind: WithdrawalKind | null;
   currency: string;

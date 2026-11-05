@@ -28,6 +28,11 @@ import java.util.concurrent.TimeUnit;
  * is at-least-once and consumers de-duplicate on the {@code eventId} header (see
  * {@link ProcessedEvents}). On the first failure the batch stops, so later events of the same
  * aggregate never overtake an earlier one.
+ *
+ * <p>One relay at a time across all instances (a transaction-scoped advisory lock): two relays claiming different
+ * rows could otherwise publish two events of one aggregate out of order. An instance that finds another relaying
+ * skips its turn. Events are sent inside the claiming transaction so a row is marked published only once
+ * acknowledged; each send waits at most {@code sendTimeout}, well within the database's idle-in-transaction limit.
  */
 @Component
 public class OutboxRelay {
@@ -63,6 +68,11 @@ public class OutboxRelay {
 	/** @return the number of events published */
 	public int publishPending() {
 		Integer published = transactions.execute(status -> {
+			Boolean relaying = jdbc.queryForObject("SELECT pg_try_advisory_xact_lock(hashtext('outbox_relay'))",
+					Boolean.class);
+			if (!Boolean.TRUE.equals(relaying)) {
+				return 0;
+			}
 			List<Row> rows = jdbc.query(CLAIM, (rs, n) -> new Row(rs.getObject("id", UUID.class), rs.getString("topic"),
 					rs.getString("event_type"), rs.getString("aggregate_type"), rs.getString("aggregate_id"),
 					rs.getString("payload"), rs.getString("correlation_id"), rs.getTimestamp("created_at")),
