@@ -46,3 +46,7 @@ export const refundSchema = z.object({
   reference: z.string().trim().min(1, "Enter the refund transfer's reference").max(100),
   reason: z.string().trim().min(3, "Give a reason").max(500),
 });
+
+export const resolveUnmatchedSchema = z.object({
+  reason: z.string().trim().min(1, "Say how it was resolved, e.g. the refund reference").max(500),
+});

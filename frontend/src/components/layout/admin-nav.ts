@@ -24,10 +24,12 @@ export const ADMIN_NAV: readonly NavItem[] = [
   { id: "orders", label: "Orders & Agreements", href: "/admin/orders", icon: "file", category: "Business Operations", requires: [P.ORDER_VIEW] },
 
   { id: "payments", label: "Payments", href: "/admin/payments", icon: "card", category: "Finance", requires: [P.FINANCE_VIEW, P.PAYMENT_CONFIRM, P.PAYMENT_SEARCH] },
+  { id: "unmatched-receipts", label: "Unmatched Receipts", href: "/admin/payments/unmatched", icon: "inbox", category: "Finance", requires: [P.FINANCE_VIEW, P.PAYMENT_CONFIRM] },
   { id: "payouts", label: "Investor Payouts", href: "/admin/payouts", icon: "coins", category: "Finance", requires: [P.FINANCE_VIEW, P.PAYOUT_PROCESS, P.PAYOUT_VIEW] },
   { id: "withdrawals", label: "Withdrawals", href: "/admin/withdrawals", icon: "wallet", category: "Finance", requires: [P.WITHDRAWAL_VIEW] },
   { id: "finance-tasks", label: "Finance Tasks", href: "/admin/finance-tasks", icon: "tasks", category: "Finance", requires: [P.WITHDRAWAL_PROCESS, P.FINANCE_TASK_PROCESS] },
   { id: "ledger", label: "Financial Ledger", href: "/admin/ledger", icon: "book", category: "Finance", requires: [P.FINANCE_VIEW, P.LEDGER_VIEW] },
+  { id: "reconciliation", label: "Reconciliation", href: "/admin/reconciliation", icon: "scale", category: "Finance", requires: [P.FINANCE_VIEW] },
 
   { id: "verification", label: "KYC & Bank Verification", href: "/admin/verification", icon: "check", category: "Compliance", requires: [P.KYC_REVIEW, P.BANK_ACCOUNT_VERIFY] },
 
