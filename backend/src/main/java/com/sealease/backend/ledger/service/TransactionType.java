@@ -7,5 +7,9 @@ public enum TransactionType {
 	REFERRAL_COMMISSION,
 	WITHDRAWAL_RESERVE,
 	WITHDRAWAL_RELEASE,
-	WITHDRAWAL_PAYOUT
+	WITHDRAWAL_PAYOUT,
+	/** Money received for an investment (reference: the payment id). */
+	DEPOSIT_RECEIVED,
+	/** Money received for an investment that could not take it, paid back (reference: the payment id). */
+	DEPOSIT_REFUNDED
 }

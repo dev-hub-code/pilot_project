@@ -26,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
@@ -340,6 +341,17 @@ class WithdrawalRequestIntegrationTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("UNDER_REVIEW"));
 		act(approver, id, "approve").andExpect(jsonPath("$.status").value("APPROVED"));
+	}
+
+	@Test
+	void theDatabaseRefusesARequestedWithdrawalApprovedWithoutItsApprovals() throws Exception {
+		Account investor = withBank();
+		credit(investor, "1000", "RENT_BANK");
+		String id = submitted(investor, "400");
+		// Finding M-2: whatever the code path, an investor's request cannot move on without its approvals.
+		assertThatThrownBy(() -> jdbc.update("UPDATE withdrawals SET status = 'APPROVED' WHERE id = ?::uuid", id))
+			.isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+			.hasMessageContaining("withdrawals_approved_chk");
 	}
 
 	// ------------------------------------------------------------------------------------------- webhook

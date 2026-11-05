@@ -56,6 +56,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -98,12 +99,15 @@ public class PaymentService {
 	private final RazorpayProperties razorpay;
 	private final ReferralSchemeService schemes;
 	private final UnmatchedGatewayReceipts unmatched;
+	private final TransactionTemplate transactions;
+	private final DepositLedger depositLedger;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
 			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
-			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, Clock clock) {
+			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, TransactionTemplate transactions,
+			DepositLedger depositLedger, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -120,6 +124,8 @@ public class PaymentService {
 		this.razorpay = razorpay;
 		this.schemes = schemes;
 		this.unmatched = unmatched;
+		this.transactions = transactions;
+		this.depositLedger = depositLedger;
 		this.clock = clock;
 	}
 
@@ -145,11 +151,100 @@ public class PaymentService {
 	 * while a payment of the same method is in flight resumes it, and one of another method still in flight is
 	 * cancelled. Paying at the office, through the gateway's checkout or into a virtual account holds the order for that
 	 * method's window, as the investor needs the time to pay.
+	 *
+	 * <p>Not one transaction: the payment provider (the gateway, over the network) is called with no lock held, so a
+	 * slow gateway does not hold up the order's cancellation, webhooks or expiry. The request is checked under the order
+	 * lock, the provider called, and the payment recorded under the lock after checking again. Whatever the provider
+	 * opened is closed when it ends up unused (the order changed meanwhile, or another request won).
 	 */
-	@Transactional
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
 		String key = IdempotencyKey.require(idempotencyKey);
+		Started checked = transactions.execute(status -> check(userId, orderId, method, key));
+		if (checked.existing() != null) {
+			return checked.existing();
+		}
+		PaymentProvider provider = providersByMethod.get(method);
+		PaymentProvider.Opened opened;
+		try {
+			opened = provider.open(new PaymentProvider.OpenRequest(checked.orderNumber(), checked.due(), checked.payBy()));
+		}
+		catch (RazorpayException e) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, e.getMessage());
+		}
+		boolean recorded = false;
+		try {
+			Started done = transactions.execute(status -> record(userId, orderId, method, key, opened));
+			recorded = done.existing() == null;
+			return recorded ? done.recorded() : done.existing();
+		}
+		finally {
+			if (!recorded) {
+				closeQuietly(provider, opened.reference());
+			}
+		}
+	}
+
+	/**
+	 * The outcome of checking a start request under the order lock: an {@code existing} payment to answer with, or what
+	 * to open at the provider; after recording, the {@code recorded} payment.
+	 */
+	private record Started(PaymentResponse existing, String orderNumber, Money due, Instant payBy,
+			PaymentResponse recorded) {
+
+		static Started answer(PaymentResponse existing) {
+			return new Started(existing, null, null, null, null);
+		}
+
+	}
+
+	/** Checks the request under the order lock, changing nothing: what to open at the provider, or the answer. */
+	private Started check(UUID userId, UUID orderId, PaymentMethod method, String key) {
 		PayableOrder order = orders.lockForPayment(orderId);
+		Optional<PaymentResponse> answer = validateStart(userId, order, method, key);
+		if (answer.isPresent()) {
+			return Started.answer(answer.get());
+		}
+		Instant holdUntil = holdUntil(method, clock.instant());
+		return new Started(null, order.orderNumber(), order.total(), holdUntil != null ? holdUntil : order.expiresAt(),
+				null);
+	}
+
+	/** Records the payment the provider opened, after checking the request again under the order lock. */
+	private Started record(UUID userId, UUID orderId, PaymentMethod method, String key, PaymentProvider.Opened opened) {
+		PayableOrder order = orders.lockForPayment(orderId);
+		Optional<PaymentResponse> answer = validateStart(userId, order, method, key);
+		if (answer.isPresent()) {
+			return Started.answer(answer.get()); // Another request won meanwhile: ours is closed.
+		}
+		for (Payment inFlight : payments.findByOrderIdAndStatus(orderId, PaymentStatus.PENDING)) {
+			cancelPending(inFlight, method == PaymentMethod.OFFICE_CASH ? "Replaced by a cash payment at the office"
+					: "Replaced by a " + humanize(method).toLowerCase(Locale.ROOT) + " payment");
+		}
+		payments.flush();
+
+		Money due = order.total();
+		Instant holdUntil = holdUntil(method, clock.instant());
+		PaymentProvider provider = providersByMethod.get(method);
+		Payment created = new Payment(orderId, userId, method, provider.name(), opened.reference(), due, key);
+		if (opened.virtualAccount() != null) {
+			created.recordVirtualAccount(opened.virtualAccount());
+		}
+		Payment payment = payments.saveAndFlush(created);
+		if (holdUntil != null) {
+			order = orders.holdForVerification(orderId, holdUntil);
+		}
+		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
+			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", due.toString(),
+					"orderExpiresAt", order.expiresAt().toString())));
+		return new Started(null, null, null, null, view(payment, order.orderNumber()));
+	}
+
+	/**
+	 * The start request's rules, checked against the locked order: the answer when it is a replay or resumes a payment
+	 * in flight, empty when a payment is to be opened; refused otherwise.
+	 */
+	private Optional<PaymentResponse> validateStart(UUID userId, PayableOrder order, PaymentMethod method, String key) {
+		UUID orderId = order.id();
 		if (!order.userId().equals(userId)) {
 			throw new ResourceNotFoundException("Order", orderId);
 		}
@@ -159,7 +254,7 @@ public class PaymentService {
 				throw new BusinessException(ErrorCode.CONFLICT,
 						IdempotencyKey.HEADER + " was already used for a different payment");
 			}
-			return view(replay.get(), order.orderNumber());
+			return Optional.of(view(replay.get(), order.orderNumber()));
 		}
 		if (!order.acceptsPaymentAt(clock.instant())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, order.status() == OrderStatus.PENDING_PAYMENT
@@ -204,41 +299,30 @@ public class PaymentService {
 						"You chose to pay in cash at our office. To pay another way, cancel this order and place it again.");
 			}
 			if (inFlight.getMethod() == method) {
-				return view(inFlight, order.orderNumber());
+				return Optional.of(view(inFlight, order.orderNumber()));
 			}
-			cancelPending(inFlight, method == PaymentMethod.OFFICE_CASH ? "Replaced by a cash payment at the office"
-					: "Replaced by a " + humanize(method).toLowerCase(Locale.ROOT) + " payment");
 		}
-		payments.flush();
+		return Optional.empty();
+	}
 
-		Money due = order.total();
-		Instant now = clock.instant();
-		Instant holdUntil = switch (method) {
+	/** How long the order is held for the investor to pay this way, or null to keep its own expiry. */
+	private Instant holdUntil(PaymentMethod method, Instant now) {
+		return switch (method) {
 			case OFFICE_CASH -> now.plus(office.holdWindow());
 			case GATEWAY -> now.plus(razorpay.checkoutWindow());
 			case VIRTUAL_ACCOUNT -> now.plus(razorpay.virtualAccountWindow());
 			default -> null;
 		};
-		PaymentProvider.Opened opened;
+	}
+
+	/** Closes what the provider opened for a payment that was never recorded. Best effort: it also expires by itself. */
+	private void closeQuietly(PaymentProvider provider, String reference) {
 		try {
-			opened = provider.open(new PaymentProvider.OpenRequest(order.orderNumber(), due,
-					holdUntil != null ? holdUntil : order.expiresAt()));
+			provider.close(reference);
 		}
-		catch (RazorpayException e) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, e.getMessage());
+		catch (RuntimeException e) {
+			log.warn("Could not close unused {} payment {} at the provider", provider.name(), reference, e);
 		}
-		Payment created = new Payment(orderId, userId, method, provider.name(), opened.reference(), due, key);
-		if (opened.virtualAccount() != null) {
-			created.recordVirtualAccount(opened.virtualAccount());
-		}
-		Payment payment = payments.saveAndFlush(created);
-		if (holdUntil != null) {
-			order = orders.holdForVerification(orderId, holdUntil);
-		}
-		audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
-			.withNewValue(Map.of("orderId", orderId.toString(), "method", method, "amount", due.toString(),
-					"orderExpiresAt", order.expiresAt().toString())));
-		return view(payment, order.orderNumber());
 	}
 
 	/**
@@ -478,6 +562,7 @@ public class PaymentService {
 		}
 		payment.markRefunded(actorId, request.reference().strip(), request.reason().strip(), clock.instant());
 		payments.flush();
+		depositLedger.refunded(payment, actorId);
 		audit.record(AuditRecord.of(actorId, AuditAction.PAYMENT_REFUNDED, ENTITY, paymentId)
 			.withNewValue(Map.of("amount", payment.amount().toString(), "reference", request.reference().strip(),
 					"reason", request.reason().strip())));
@@ -591,6 +676,7 @@ public class PaymentService {
 		Instant now = clock.instant();
 		payment.settle(accepted, externalReference, actorId, note, now);
 		payments.flush();
+		depositLedger.received(payment, received, accepted, actorId);
 		if (accepted && !orders.confirmPaid(order.id(), payment.getId(), payment.getMethod() == PaymentMethod.OFFICE_CASH)) {
 			throw new IllegalStateException("Order " + order.orderNumber() + " could not be confirmed while locked");
 		}

@@ -161,8 +161,9 @@ public class PayoutService {
 
 	/** Credits the lease's hours that have passed by {@code now}: one credit per calendar month they fall in. */
 	private int credit(UUID accrualId, Instant now, CreditInterval interval) {
-		RentAccrual accrual = accruals.findByIdForUpdate(accrualId).orElse(null);
-		// Re-checked under the lock: another run may have credited it since it was selected.
+		// Another sweep holding it credits it; this one moves on. Re-checked under the lock: another run may have
+		// credited it since it was selected.
+		RentAccrual accrual = accruals.findByIdForUpdateSkipLocked(accrualId).orElse(null);
 		if (accrual == null || accrual.isCompleted()) {
 			return 0;
 		}

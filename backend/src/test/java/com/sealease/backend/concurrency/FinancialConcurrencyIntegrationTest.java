@@ -51,11 +51,22 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.sealease.backend.common.money.Money;
+import com.sealease.backend.ledger.service.AccountType;
+import com.sealease.backend.ledger.service.EarningsBalance;
+import com.sealease.backend.ledger.service.LedgerService;
+import com.sealease.backend.ledger.service.Posting;
+import com.sealease.backend.ledger.service.TransactionType;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.util.Currency;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -95,6 +106,12 @@ class FinancialConcurrencyIntegrationTest {
 
 	@Autowired
 	private OrderService orders;
+
+	@Autowired
+	private LedgerService ledger;
+
+	@Autowired
+	private TransactionTemplate transactions;
 
 	@MockitoBean
 	private RazorpayClient razorpay;
@@ -466,21 +483,23 @@ class FinancialConcurrencyIntegrationTest {
 	}
 
 	@Test
-	void aSlowGatewayCallHoldsTheOrderLock() throws Exception {
+	void aSlowGatewayCallDoesNotHoldTheOrderLock() throws Exception {
 		Account investor = approvedOnline();
 		String orderId = gatewayOrder(investor);
+		java.util.concurrent.atomic.AtomicReference<String> opened = new java.util.concurrent.atomic.AtomicReference<>();
 		when(razorpay.createVirtualAccount(eq(ORDER_PAISE), anyString(), any(Instant.class), anyMap())).thenAnswer(call -> {
 			Thread.sleep(1500); // a slow Razorpay answer
-			return new VirtualAccount("va_" + suffix(),
+			opened.set("va_" + suffix());
+			return new VirtualAccount(opened.get(),
 					new VirtualAccountDetails("2223330012345678", "RATN0VAAPIS", "SeaLease", "RBL Bank", "rpy.sl@icici"));
 		});
 
 		long[] cancelWaitedMs = new long[1];
-		race("payment start (slow gateway) vs order cancel", 2, i -> {
+		Race race = race("payment start (slow gateway) vs order cancel", 2, i -> {
 			if (i == 0) {
 				return startPayment(investor, orderId, "VIRTUAL_ACCOUNT", key()).andReturn().getResponse().getStatus();
 			}
-			Thread.sleep(200); // let the start take the order lock first
+			Thread.sleep(200); // the start is waiting for Razorpay by now
 			long t0 = System.nanoTime();
 			int code = mvc.perform(post("/api/v1/orders/{id}/cancel", orderId)
 					.header(HttpHeaders.AUTHORIZATION, investor.bearer())).andReturn().getResponse().getStatus();
@@ -488,9 +507,13 @@ class FinancialConcurrencyIntegrationTest {
 			return code;
 		});
 
-		System.out.printf("[concurrency-audit] order cancel waited %d ms behind a payment start blocked in the gateway call%n",
+		System.out.printf("[concurrency-audit] order cancel took %d ms while a payment start waited for the gateway%n",
 				cancelWaitedMs[0]);
-		assertThat(cancelWaitedMs[0]).as("the cancel waited for the external call to finish").isGreaterThan(1000);
+		assertThat(cancelWaitedMs[0]).as("the cancel does not wait for the external call (finding M-1)").isLessThan(1000);
+		assertThat(race.count(200)).as("the cancel").isEqualTo(1);
+		assertThat(race.count(422)).as("the start finds the order cancelled").isEqualTo(1);
+		assertThat(paymentsOf(orderId, "PENDING")).as("no payment recorded for a cancelled order").isZero();
+		verify(razorpay, timeout(2000)).closeVirtualAccount(opened.get());
 	}
 
 	@Test
@@ -514,6 +537,82 @@ class FinancialConcurrencyIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT status FROM payments WHERE id = ?::uuid", String.class, paymentId))
 			.isEqualTo("REFUNDED");
 		assertThat(api.auditCount("PAYMENT_REFUNDED", UUID.fromString(paymentId))).isEqualTo(1);
+		// In the ledger: received once (to refund), refunded once, for the 40,000 that arrived (finding M-7).
+		assertThat(jdbc.queryForList("""
+				SELECT t.transaction_type || ' ' || a.account_type || ' ' || e.direction || ' ' || e.amount
+				FROM ledger_transactions t JOIN ledger_entries e ON e.transaction_id = t.id
+				JOIN ledger_accounts a ON a.id = e.account_id WHERE t.reference = ? ORDER BY 1""", String.class, paymentId))
+			.containsExactly("DEPOSIT_RECEIVED DEPOSITS_RECEIVED DEBIT 40000.0000",
+					"DEPOSIT_RECEIVED DEPOSITS_TO_REFUND CREDIT 40000.0000",
+					"DEPOSIT_REFUNDED DEPOSITS_RECEIVED CREDIT 40000.0000",
+					"DEPOSIT_REFUNDED DEPOSITS_TO_REFUND DEBIT 40000.0000");
+	}
+
+	// ------------------------------------------------------------------------------------------- wallet locks
+
+	@Test
+	void aCreditIsNotHeldUpByASpenderHoldingTheWallet() throws Exception {
+		UUID user = approvedOnline().id();
+		Currency inr = Currency.getInstance("INR");
+		Money thousand = Money.of("1000", "INR");
+		transactions.executeWithoutResult(s -> adjust(user, Posting.credit(AccountType.INVESTOR_EARNINGS, user, thousand),
+				Posting.debit(AccountType.PLATFORM_ADJUSTMENTS, null, thousand)));
+
+		// A spender (a withdrawal, a run) locks the wallet, takes 300 out and has not committed yet.
+		CountDownLatch spent = new CountDownLatch(1);
+		CountDownLatch commit = new CountDownLatch(1);
+		Money spend = Money.of("300", "INR");
+		Thread spender = Thread.ofVirtual().start(() -> transactions.executeWithoutResult(s -> {
+			ledger.lockInvestorBalance(user, inr, EarningsBalance.RENT_BANK);
+			adjust(user, Posting.debit(AccountType.INVESTOR_EARNINGS, user, spend),
+					Posting.credit(AccountType.PLATFORM_ADJUSTMENTS, null, spend));
+			spent.countDown();
+			try {
+				commit.await(15, TimeUnit.SECONDS);
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}));
+		assertThat(spent.await(10, TimeUnit.SECONDS)).isTrue();
+
+		// Rent credited meanwhile does not wait for it (finding M-3).
+		Money rent = Money.of("50", "INR");
+		long t0 = System.nanoTime();
+		transactions.executeWithoutResult(s -> adjust(user, Posting.credit(AccountType.INVESTOR_EARNINGS, user, rent),
+				Posting.debit(AccountType.PLATFORM_ADJUSTMENTS, null, rent)));
+		long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+		commit.countDown();
+		spender.join();
+		System.out.printf("[concurrency-audit] a credit took %d ms while a spender held the wallet%n", waitedMs);
+
+		assertThat(waitedMs).as("the credit did not wait for the spender").isLessThan(1000);
+		assertThat(ledger.investorBalance(user, inr, EarningsBalance.RENT_BANK)).isEqualTo(Money.of("750", "INR"));
+	}
+
+	@Test
+	void runningTotalsAlwaysEqualTheEntries() {
+		// Finding M-4: balances are read from running totals; they must agree with the entries, for every account.
+		assertThat(jdbc.queryForObject("""
+				SELECT count(*) FROM ledger_accounts a
+				WHERE a.owner_user_id IS NOT NULL AND EXISTS (
+				    SELECT 1 FROM (VALUES ('DEBIT'), ('CREDIT')) d(direction)
+				    WHERE coalesce((SELECT total FROM ledger_account_totals t
+				                    WHERE t.account_id = a.id AND t.direction = d.direction), 0)
+				       <> coalesce((SELECT sum(amount) FROM ledger_entries e
+				                    WHERE e.account_id = a.id AND e.direction = d.direction), 0))""", Integer.class))
+			.as("accounts whose totals differ from their entries").isZero();
+	}
+
+	@Test
+	void sessionsGiveUpOnLocksAndIdleTransactions() {
+		// Finding M-6: a stuck transaction cannot hold a wallet or order lock indefinitely.
+		assertThat(jdbc.queryForObject("SHOW lock_timeout", String.class)).isEqualTo("10s");
+		assertThat(jdbc.queryForObject("SHOW idle_in_transaction_session_timeout", String.class)).isEqualTo("1min");
+	}
+
+	private void adjust(UUID user, Posting... postings) {
+		ledger.post(TransactionType.ADJUSTMENT, user + ":" + suffix(), "Concurrency test", null, List.of(postings));
 	}
 
 	// ------------------------------------------------------------------------------------------- race harness

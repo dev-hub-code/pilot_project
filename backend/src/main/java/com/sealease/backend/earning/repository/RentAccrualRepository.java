@@ -2,11 +2,13 @@ package com.sealease.backend.earning.repository;
 
 import com.sealease.backend.earning.entity.RentAccrual;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
@@ -17,9 +19,14 @@ import java.util.UUID;
 
 public interface RentAccrualRepository extends JpaRepository<RentAccrual, UUID>, JpaSpecificationExecutor<RentAccrual> {
 
+	/**
+	 * Locks the lease's accrual, or finds nothing when another sweep (another instance) holds it: that sweep credits it,
+	 * so this one moves on instead of waiting ({@code SKIP LOCKED}).
+	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
 	@Query("select a from RentAccrual a where a.id = :id")
-	Optional<RentAccrual> findByIdForUpdate(@Param("id") UUID id);
+	Optional<RentAccrual> findByIdForUpdateSkipLocked(@Param("id") UUID id);
 
 	/**
 	 * Leases with at least one whole hour (ended by {@code hour}) still to credit, of active accounts: a suspended or
