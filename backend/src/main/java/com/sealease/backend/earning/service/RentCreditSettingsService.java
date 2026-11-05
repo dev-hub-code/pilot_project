@@ -1,5 +1,8 @@
 package com.sealease.backend.earning.service;
 
+import com.sealease.backend.common.cache.Caches;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
@@ -53,6 +56,8 @@ public class RentCreditSettingsService {
 		return minutes == null ? properties.interval() : CreditInterval.ofMinutes(minutes);
 	}
 
+	/** As the website shows it. Cached briefly; a change clears it. Crediting uses {@link #current}, never cached. */
+	@Cacheable(cacheNames = Caches.Names.PUBLIC_RENT_CREDIT, key = "'current'")
 	public PublicRentCredit forPublic() {
 		CreditInterval interval = current();
 		return new PublicRentCredit(interval.minutes(), interval.label());
@@ -82,6 +87,7 @@ public class RentCreditSettingsService {
 
 	/** Applies from the next crediting run. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_RENT_CREDIT, allEntries = true)
 	public RentCreditSettingsResponse update(UUID actorId, int minutes) {
 		if (!OPTIONS.contains((long) minutes)) {
 			throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Choose one of the offered intervals");

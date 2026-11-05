@@ -1,5 +1,7 @@
 package com.sealease.backend.investment.service;
 
+import com.sealease.backend.common.cache.Caches;
+import org.springframework.cache.annotation.Cacheable;
 import com.sealease.backend.common.exception.BusinessException;
 import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.common.exception.ResourceNotFoundException;
@@ -66,19 +68,23 @@ public class PlanCatalogService {
 		return search(schemes.schemeOf(viewerId), status, pageable);
 	}
 
-	/** Listed online plans for anyone, without ids. */
+	/** Listed online plans for anyone, without ids. Cached briefly; plan changes clear it. */
+	@Cacheable(cacheNames = Caches.Names.PUBLIC_PLANS,
+			key = "'open:' + #status + ':' + #pageable.pageNumber + ':' + #pageable.pageSize")
 	@Transactional(readOnly = true)
 	public Page<PlanView> openPlans(ProductStatus status, Pageable pageable) {
 		return search(ReferralScheme.ONLINE, status, pageable).map(PlanView::withoutId);
 	}
 
-	/** Open online plans for the public website. */
+	/** Open online plans for the public website. Cached briefly; plan changes clear it. */
+	@Cacheable(cacheNames = Caches.Names.PUBLIC_PLANS, key = "'website:' + #limit")
 	@Transactional(readOnly = true)
 	public List<PlanView> publicPlans(int limit) {
 		return openPlans(ProductStatus.OPEN, PageRequest.of(0, limit)).getContent();
 	}
 
-	/** A listed online plan by its code, for the open API. */
+	/** A listed online plan by its code, for the open API. Cached briefly; an unknown code is not. */
+	@Cacheable(cacheNames = Caches.Names.PUBLIC_PLANS, key = "'code:' + #code")
 	@Transactional(readOnly = true)
 	public PlanView openPlan(String code) {
 		return products.findByCode(code)
