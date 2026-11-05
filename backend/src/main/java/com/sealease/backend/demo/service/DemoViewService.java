@@ -160,7 +160,9 @@ public class DemoViewService {
 					p.kind() == Kind.RENT ? EarningsBalance.RENT_BANK : EarningsBalance.REFERRAL,
 					account.map(a -> a.accountHolderName()).orElse(null), account.map(a -> a.bankName()).orElse(null),
 					account.map(a -> a.accountNumberMasked()).orElse(null), 0, 0, null, null, null, null, null, null,
-					null, "DEMO-" + suffix, null, null, null, paidAt, paidAt));
+					null, "DEMO-" + suffix, null, null, null, paidAt, paidAt,
+					MoneyResponse.from(p.amount().minus(p.amount())), MoneyResponse.from(p.amount().minus(p.amount())),
+					MoneyResponse.from(p.amount()), null, null, null, false, paidAt, paidAt, null, null, null));
 		}
 		withdrawals.sort(Comparator.comparing(WithdrawalResponse::createdAt).reversed());
 		return page(withdrawals, pageable);

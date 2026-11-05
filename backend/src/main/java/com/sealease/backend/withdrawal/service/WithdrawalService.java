@@ -148,11 +148,25 @@ public class WithdrawalService {
 		return withdrawals.findByUserIdOrderByCreatedAtDesc(userId, pageable).map(WithdrawalResponse::forInvestor);
 	}
 
+	@Transactional(readOnly = true)
+	public Optional<WithdrawalResponse> mineOne(UUID userId, UUID withdrawalId) {
+		return withdrawals.findById(withdrawalId).filter(w -> w.getUserId().equals(userId))
+			.map(WithdrawalResponse::forInvestor);
+	}
+
 	// ------------------------------------------------------------------------------ staff
 
 	@Transactional(readOnly = true)
 	public Page<WithdrawalResponse> search(WithdrawalSearchCriteria criteria, Pageable pageable) {
-		return withdrawals.findAll(matching(criteria), pageable).map(WithdrawalResponse::forStaff);
+		Page<Withdrawal> page = withdrawals.findAll(matching(criteria), pageable);
+		Map<UUID, com.sealease.backend.user.dto.UserAccount> people = accounts.getAccounts(
+				page.getContent().stream().map(Withdrawal::getUserId).distinct().toList());
+		return page.map(w -> {
+			var person = people.get(w.getUserId());
+			return WithdrawalResponse.forStaff(w).withInvestor(person == null ? null : person.userCode(),
+					person == null ? null : ((person.firstName() == null ? "" : person.firstName()) + " "
+							+ (person.lastName() == null ? "" : person.lastName())).strip());
+		});
 	}
 
 	@Transactional(readOnly = true)
@@ -208,6 +222,24 @@ public class WithdrawalService {
 			}
 			if (c.userId() != null) {
 				predicates.add(cb.equal(root.get("userId"), c.userId()));
+			}
+			if (c.from() != null) {
+				predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), c.from()));
+			}
+			if (c.to() != null) {
+				predicates.add(cb.lessThan(root.get("createdAt"), c.to()));
+			}
+			if (c.minAmount() != null) {
+				predicates.add(cb.greaterThanOrEqualTo(root.get("amount"), c.minAmount()));
+			}
+			if (c.maxAmount() != null) {
+				predicates.add(cb.lessThanOrEqualTo(root.get("amount"), c.maxAmount()));
+			}
+			if (c.origin() != null) {
+				predicates.add(cb.equal(root.get("origin"), c.origin()));
+			}
+			if (c.reviewerId() != null) {
+				predicates.add(cb.equal(root.get("reviewAssigneeId"), c.reviewerId()));
 			}
 			if (c.q() != null && !c.q().isBlank()) {
 				Predicate reference = cb.equal(cb.upper(root.get("reference")), c.q().strip().toUpperCase(Locale.ROOT));

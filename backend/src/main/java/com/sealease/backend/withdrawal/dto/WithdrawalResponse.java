@@ -20,6 +20,11 @@ import java.util.UUID;
  *                     details; {@code payoutReference} is then the cash receipt number)
  * @param createdBy    the finance user who made it at the office (staff views only)
  * @param ticketId     the support ticket opened when its bank payment failed
+ * @param fee          charges taken from the amount; {@code tax} the tax withheld; {@code net} what is paid
+ * @param reviewerId   who is reviewing it (staff views only)
+ * @param holdReason   why it is on hold; {@code infoRequested} when the investor is asked for more information
+ * @param paymentInitiatedAt when payment was handed to the payout provider ({@code payoutProvider})
+ * @param investorCode the investor's readable ID, and {@code investorName}: staff lists only
  */
 public record WithdrawalResponse(
 		UUID id,
@@ -47,7 +52,28 @@ public record WithdrawalResponse(
 		UUID createdBy,
 		UUID ticketId,
 		Instant createdAt,
-		Instant closedAt) {
+		Instant closedAt,
+		MoneyResponse fee,
+		MoneyResponse tax,
+		MoneyResponse net,
+		UUID reviewerId,
+		Instant reviewStartedAt,
+		String holdReason,
+		boolean infoRequested,
+		Instant statusChangedAt,
+		Instant paymentInitiatedAt,
+		String payoutProvider,
+		String investorCode,
+		String investorName) {
+
+	/** The same, with who the investor is (for staff lists). */
+	public WithdrawalResponse withInvestor(String code, String name) {
+		return new WithdrawalResponse(id, reference, userId, amount, origin, status, payoutMethod, balance, bankHolderName,
+				bankName, bankAccountMasked, requiredApprovals, approvals, firstApprovedBy, firstApprovedAt, secondApprovedBy,
+				secondApprovedAt, rejectedBy, rejectionReason, batchId, payoutReference, failureReason, createdBy, ticketId,
+				createdAt, closedAt, fee, tax, net, reviewerId, reviewStartedAt, holdReason, infoRequested, statusChangedAt,
+				paymentInitiatedAt, payoutProvider, code, name);
+	}
 
 	public static WithdrawalResponse forStaff(Withdrawal w) {
 		return of(w, true);
@@ -64,7 +90,11 @@ public record WithdrawalResponse(
 				w.getRequiredApprovals(), w.approvals(), staff ? w.getFirstApprovedBy() : null, w.getFirstApprovedAt(),
 				staff ? w.getSecondApprovedBy() : null, w.getSecondApprovedAt(), staff ? w.getRejectedBy() : null,
 				w.getRejectionReason(), staff ? w.getBatchId() : null, w.getPayoutReference(), w.getFailureReason(),
-				staff ? w.getCreatedBy() : null, w.getTicketId(), w.getCreatedAt(), w.getClosedAt());
+				staff ? w.getCreatedBy() : null, w.getTicketId(), w.getCreatedAt(), w.getClosedAt(),
+				MoneyResponse.from(w.fee()), MoneyResponse.from(w.tax()), MoneyResponse.from(w.net()),
+				staff ? w.getReviewAssigneeId() : null, staff ? w.getReviewAssignedAt() : null, w.getHoldReason(),
+				w.isInfoRequested(), w.getStatusChangedAt(), w.getPaymentInitiatedAt(),
+				staff ? w.getPayoutProvider() : null, null, null);
 	}
 
 }

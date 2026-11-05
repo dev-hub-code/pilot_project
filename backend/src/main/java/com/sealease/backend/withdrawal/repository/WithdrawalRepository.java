@@ -50,6 +50,10 @@ public interface WithdrawalRepository extends JpaRepository<Withdrawal, UUID>, J
 	List<Withdrawal> findByUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAt(UUID userId,
 			Instant from, Instant to);
 
+	Optional<Withdrawal> findByReference(String reference);
+
+	List<Withdrawal> findByUserIdAndStatusIn(UUID userId, Collection<WithdrawalStatus> statuses);
+
 	List<Withdrawal> findByStatusIn(Collection<WithdrawalStatus> statuses);
 
 	@Query(value = "select nextval('withdrawal_number_seq')", nativeQuery = true)

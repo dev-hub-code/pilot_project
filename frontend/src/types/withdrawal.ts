@@ -4,6 +4,9 @@ import type { EarningsBalance } from "./earning";
 import type { Money } from "./plan";
 
 export type WithdrawalStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "ON_HOLD"
   | "PENDING_APPROVAL"
   | "APPROVED"
   | "BATCHED"
@@ -47,6 +50,119 @@ export interface Withdrawal {
   ticketId: string | null;
   createdAt: string;
   closedAt: string | null;
+  /** Charges and tax taken from the amount; net is what is paid. */
+  fee: Money;
+  tax: Money;
+  net: Money;
+  /** Who is reviewing it (staff views only). */
+  reviewerId: string | null;
+  reviewStartedAt: string | null;
+  /** Why it is on hold; infoRequested when the investor is asked for more information. */
+  holdReason: string | null;
+  infoRequested: boolean;
+  statusChangedAt: string;
+  paymentInitiatedAt: string | null;
+  /** Staff views only. */
+  payoutProvider: string | null;
+  /** Staff lists only. */
+  investorCode: string | null;
+  investorName: string | null;
+}
+
+/** One step of a withdrawal's timeline. Investors see only their steps, without staff names. */
+export interface WithdrawalEvent {
+  from: WithdrawalStatus | null;
+  to: WithdrawalStatus;
+  actorId: string | null;
+  actorName: string | null;
+  reason: string | null;
+  visibleToInvestor: boolean;
+  at: string;
+}
+
+export interface WithdrawalNote {
+  id: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface WithdrawalAdminDetail {
+  withdrawal: Withdrawal;
+  investor: { userCode: string | null; name: string; email: string; kycStatus: string };
+  walletNow: Money;
+  batchReference: string | null;
+  timeline: WithdrawalEvent[];
+  notes: WithdrawalNote[];
+}
+
+export interface WithdrawalFigure {
+  count: number;
+  amount: Money;
+}
+
+export interface WithdrawalDashboard {
+  submitted: WithdrawalFigure;
+  underReview: WithdrawalFigure;
+  onHold: WithdrawalFigure;
+  pendingSecondApproval: WithdrawalFigure;
+  approved: WithdrawalFigure;
+  inPayment: WithdrawalFigure;
+  failed: WithdrawalFigure;
+  paidToday: WithdrawalFigure;
+  paidThisMonth: WithdrawalFigure;
+  rejectedThisMonth: WithdrawalFigure;
+  avgHoursToPay: number | null;
+}
+
+/** What withdrawing an amount would pay, worked out by the backend. */
+export interface WithdrawalQuote {
+  balance: EarningsBalance;
+  payoutMethod: WithdrawalPayoutMethod;
+  available: Money;
+  amount: Money;
+  fee: Money;
+  tax: Money;
+  net: Money;
+  remaining: Money;
+  minimum: Money;
+  allowed: boolean;
+  problem: string | null;
+}
+
+export interface WithdrawalOverview {
+  currency: string;
+  totalInvestment: Money;
+  totalEarned: Money;
+  available: Money;
+  locked: Money;
+  pending: Money;
+  withdrawn: Money;
+  activePlans: number;
+  /** Online investors request their own withdrawals; network investors are paid by withdrawal runs. */
+  canRequest: boolean;
+  payoutMethod: WithdrawalPayoutMethod;
+  minimum: Money;
+  feeFlat: number;
+  feePercent: number;
+  taxPercent: number;
+  processingDays: number | null;
+  wallets: { balance: EarningsBalance; available: Money; openWithdrawalId: string | null; openWithdrawalReference: string | null }[];
+  investments: {
+    holdingId: string;
+    productCode: string;
+    productTitle: string;
+    status: "AWAITING_ACCEPTANCE" | "ACTIVE" | "MATURED";
+    invested: Money;
+    earned: Money;
+    lockedPrincipal: Money;
+    lockReason: string;
+    leaseStartsOn: string | null;
+    leaseEndsOn: string | null;
+    nextUnlock: string | null;
+  }[];
+  bankAccounts: { id: string; holderName: string; bankName: string | null; accountMasked: string; primary: boolean }[];
 }
 
 export type WithdrawalPayoutMethod = "BANK_TRANSFER" | "OFFICE_CASH";
@@ -59,11 +175,19 @@ export interface WithdrawalPolicy {
   officeHours: string;
 }
 
-/** The minimum withdrawal an admin sets; until then the configured default applies. */
+/** Withdrawal settings an admin sets; until then the configured defaults apply. */
 export interface WithdrawalSettings {
   minimumAmount: number;
   currency: string;
   defaultAmount: number;
+  feeFlat: number;
+  feePercent: number;
+  taxPercent: number;
+  /** Above this, a second, different approver is needed. */
+  dualApprovalThreshold: number;
+  defaultDualApprovalThreshold: number;
+  /** Working days shown to investors; null when not set. */
+  processingDays: number | null;
   /** When an admin last set it; null while the default applies. */
   updatedAt: string | null;
 }

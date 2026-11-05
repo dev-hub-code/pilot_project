@@ -7,8 +7,11 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import type { FormState } from "@/validators/form-state";
 import {
-  resolveFailedAction, setReferralModeAction, setWithdrawalMinimumAction, updateFinanceTaskAction,
+  resolveFailedAction, saveWithdrawalSettingsAction, setReferralModeAction,
+  updateFinanceTaskAction, withdrawalDecisionAction,
 } from "./withdrawal-actions";
+import { TextArea } from "@/components/ui/text-area";
+import type { WithdrawalSettings } from "@/types/withdrawal";
 
 
 
@@ -56,21 +59,6 @@ export function ReferralModeAdminForm({ userId, mode }: { userId: string; mode: 
   );
 }
 
-/** The minimum withdrawal, in rupees: rows below it stay in the investor's wallets until a later run. */
-export function WithdrawalMinimumForm({ minimumAmount }: { minimumAmount: number }) {
-  const [state, action] = useActionState<FormState, FormData>(setWithdrawalMinimumAction, {});
-  return (
-    <form action={action} className="flex flex-wrap items-end gap-3" noValidate>
-      <div className="w-full"><FormFeedback state={state} /></div>
-      <div className="w-48">
-        <TextField label="Minimum withdrawal (₹)" name="minimumAmount" inputMode="decimal" autoComplete="off"
-          defaultValue={String(minimumAmount)} error={state.fieldErrors?.minimumAmount} />
-      </div>
-      <SubmitButton variant="secondary" confirm="Change the minimum withdrawal? It applies from the next run.">Save</SubmitButton>
-    </form>
-  );
-}
-
 /**
  * Finance's update of an open task: paid (with the bank reference, or the receipt for cash collected at the office),
  * or - behind a toggle - failed with the reason.
@@ -105,5 +93,47 @@ export function FinanceTaskForm({ withdrawalId, reference, amount, cash }: {
         </form>
       </details>
     </div>
+  );
+}
+
+/** Every withdrawal setting; the backend works out charges and tax from these for each new request. */
+export function WithdrawalSettingsForm({ settings }: { settings: WithdrawalSettings }) {
+  const [state, action] = useActionState<FormState, FormData>(saveWithdrawalSettingsAction, {});
+  const e = state.fieldErrors ?? {};
+  return (
+    <form action={action} className="space-y-4" noValidate>
+      <FormFeedback state={state} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <TextField label="Minimum withdrawal (₹)" name="minimumAmount" inputMode="decimal" defaultValue={String(settings.minimumAmount)} error={e.minimumAmount} />
+        <TextField label="Flat charge per withdrawal (₹)" name="feeFlat" inputMode="decimal" defaultValue={String(settings.feeFlat)} error={e.feeFlat} />
+        <TextField label="Charge (% of amount)" name="feePercent" inputMode="decimal" defaultValue={String(settings.feePercent)} error={e.feePercent} />
+        <TextField label="Tax withheld, TDS (%)" name="taxPercent" inputMode="decimal" defaultValue={String(settings.taxPercent)} error={e.taxPercent} />
+        <TextField label="Second approver above (₹)" name="dualApprovalThreshold" inputMode="decimal" defaultValue={String(settings.dualApprovalThreshold)} error={e.dualApprovalThreshold} />
+        <TextField label="Processing time shown (working days)" name="processingDays" inputMode="numeric" defaultValue={settings.processingDays == null ? "" : String(settings.processingDays)} error={e.processingDays} />
+      </div>
+      <p className="text-xs text-muted">Charges and tax come out of the amount withdrawn and are fixed on each withdrawal when it is requested. Leave processing time empty to hide it.</p>
+      <SubmitButton confirm="Save the withdrawal settings? New requests use them from now on.">Save settings</SubmitButton>
+    </form>
+  );
+}
+
+/** A decision that needs a reason (reject, hold, ask for information) or an internal note. */
+export function WithdrawalDecisionForm({ withdrawalId, step, label, field, button, confirm, variant = "secondary" }: {
+  withdrawalId: string;
+  step: "reject" | "hold" | "request-info" | "notes";
+  label: string;
+  field: string;
+  button: string;
+  confirm?: string;
+  variant?: "primary" | "secondary" | "quiet" | "danger";
+}) {
+  const [state, action] = useActionState<FormState, FormData>(withdrawalDecisionAction.bind(null, withdrawalId, step), {});
+  return (
+    <form action={action} className="space-y-3" noValidate>
+      <FormFeedback state={state} />
+      <TextArea label={field} name="reason" rows={2} maxLength={1000} required defaultValue={state.success ? "" : state.values?.reason}
+        error={state.fieldErrors?.reason} aria-label={label} key={state.success ?? "draft"} />
+      <SubmitButton variant={variant} confirm={confirm}>{button}</SubmitButton>
+    </form>
   );
 }

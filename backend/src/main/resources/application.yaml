@@ -237,6 +237,10 @@ app:
     minimum-amount: ${APP_WITHDRAWAL_MINIMUM:500}
     dual-approval-threshold: ${APP_WITHDRAWAL_DUAL_APPROVAL_THRESHOLD:100000}
     max-batch-size: 500
+    # Who approved withdrawals are handed to for payment: BANK_SHEET (an Excel sheet finance pays from).
+    payout-provider: ${APP_PAYOUT_PROVIDER:BANK_SHEET}
+    # Signs payout-status webhooks (POST /api/v1/webhooks/payouts, header X-Payout-Signature). Blank: webhook off.
+    payout-webhook-secret: ${APP_PAYOUT_WEBHOOK_SECRET:}
   display:
     # The time zone dates and times are shown in (pages, statements, reports). Data is kept in UTC.
     time-zone: ${APP_DISPLAY_TIME_ZONE:Asia/Kolkata}

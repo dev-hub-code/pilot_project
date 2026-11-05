@@ -15,11 +15,8 @@ import com.sealease.backend.ledger.service.EarningsBalance;
 import com.sealease.backend.ledger.service.LedgerService;
 import com.sealease.backend.ledger.service.Posting;
 import com.sealease.backend.ledger.service.TransactionType;
-import com.sealease.backend.common.exception.BusinessException;
-import com.sealease.backend.common.exception.ErrorCode;
 import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.referral.service.ReferralSchemeService;
-import com.sealease.backend.withdrawal.dto.WithdrawalResponse;
 import com.sealease.backend.user.dto.UserAccount;
 import com.sealease.backend.user.entity.KycStatus;
 import com.sealease.backend.user.entity.UserStatus;
@@ -57,7 +54,7 @@ import java.util.UUID;
 
 /**
  * Withdrawal runs, made by an admin whenever they choose, are for network investors only: online investors request their
- * own withdrawals ({@link #request}). A run withdraws every eligible network investor's rent or referral balances up to
+ * own withdrawals ({@link WithdrawalRequestService}). A run withdraws every eligible network investor's rent or referral balances up to
  * that moment: each balance becomes one withdrawal, its amount moved from the balance into "withdrawals in transit" (in
  * progress). Balances of those who chose bank go on the run's bank sheet, and of those who chose cash on its cash sheet.
  * Each sheet is a batch with its Excel file, one row per investor; finance pays it and uploads it back ({@link PayoutBatchService#reconcile}), completing the withdrawals.
@@ -87,13 +84,15 @@ public class WithdrawalRunService {
 	private final JsonMapper json;
 	private final DemoAccountService demos;
 	private final ReferralSchemeService schemes;
+	private final WithdrawalHistory history;
 	private final Clock clock;
 
 	public WithdrawalRunService(JdbcTemplate jdbc, WithdrawalRepository withdrawals, WithdrawalService withdrawalService,
 			PayoutBatchService batches, BankAccountService bankAccounts, UserAccountService accounts,
 			UserProfileService profiles, LedgerService ledger, AuditService audit, ReferralPayoutModeService referralModes,
 			WithdrawalSettingsService settings, MoneyProperties money, JsonMapper json, DemoAccountService demos,
-			ReferralSchemeService schemes, Clock clock) {
+			ReferralSchemeService schemes, WithdrawalHistory history, Clock clock) {
+		this.history = history;
 		this.jdbc = jdbc;
 		this.withdrawals = withdrawals;
 		this.withdrawalService = withdrawalService;
@@ -203,60 +202,6 @@ public class WithdrawalRunService {
 				cashInvestors, MoneyResponse.from(cashTotal), withCodes(skipped));
 	}
 
-	/**
-	 * An online investor's own request, at any time, for the whole of one balance. It is paid the way that balance always
-	 * is, and goes straight to finance as a task in a batch of its own. Network investors are paid by the runs. A retry
-	 * with the same key returns the same withdrawal.
-	 */
-	@Transactional
-	public WithdrawalResponse request(UUID userId, EarningsBalance balance, String idempotencyKey) {
-		if (schemes.schemeOf(userId) != ReferralScheme.ONLINE) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"Network investors are paid when our team makes a withdrawal");
-		}
-		Currency currency = money.defaultCurrency();
-		WithdrawalPayoutMethod method = referralModes.current(userId).mode();
-		Optional<PayoutAccount> account = method == WithdrawalPayoutMethod.BANK_TRANSFER
-				? bankAccounts.verifiedPrimaryAccount(userId).flatMap(a -> bankAccounts.payoutAccount(a.id()))
-				: Optional.empty();
-		// Serialises requests and runs on this balance; everything below is decided under the lock.
-		Money available = whole(ledger.lockInvestorBalance(userId, currency, balance));
-		Optional<Withdrawal> earlier = withdrawals.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
-		if (earlier.isPresent()) {
-			return WithdrawalResponse.forInvestor(earlier.get());
-		}
-		String reason = ineligible(userId, method, account, currency);
-		if (reason != null) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, reason);
-		}
-		if (withdrawals.existsByUserIdAndCurrencyAndBalanceAndStatusIn(userId, currency.getCurrencyCode(), balance,
-				WithdrawalStatus.OPEN)) {
-			throw new BusinessException(ErrorCode.CONFLICT, "A withdrawal from this wallet is already in progress");
-		}
-		Money minimum = Money.of(settings.minimumAmount(), currency);
-		if (available.isLessThan(minimum)) {
-			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
-					"This wallet must have at least " + minimum + " to withdraw");
-		}
-		String reference = "WD-" + withdrawals.nextNumber();
-		Withdrawal withdrawal = withdrawals.saveAndFlush(method == WithdrawalPayoutMethod.BANK_TRANSFER
-				? Withdrawal.requested(reference, userId, available, idempotencyKey, balance, account.orElseThrow().id(),
-						account.get().holderName(), account.get().bankName(), account.get().last4())
-				: Withdrawal.requestedCash(reference, userId, available, idempotencyKey, balance));
-		ledger.post(TransactionType.WITHDRAWAL_RESERVE, withdrawal.getId().toString(),
-				balanceLabel(balance) + " withdrawal " + reference + " requested by the investor", userId,
-				List.of(Posting.debit(balance.account(), userId, available),
-						Posting.credit(AccountType.WITHDRAWALS_IN_TRANSIT, null, available)));
-		audit.record(AuditRecord.of(userId, AuditAction.WITHDRAWAL_REQUESTED, WithdrawalService.ENTITY, withdrawal.getId())
-			.withNewValue(Map.of("reference", reference, "amount", available.toString(), "balance", balance,
-					"payoutMethod", method)));
-		withdrawalService.publish(KafkaTopics.WITHDRAWAL_APPROVED, "WithdrawalApproved", withdrawal,
-				Map.of("scheduled", false));
-		batches.createForRun(balance == EarningsBalance.REFERRAL ? WithdrawalKind.REFERRAL : WithdrawalKind.RENT, method,
-				List.of(withdrawal), reference, userId);
-		return WithdrawalResponse.forInvestor(withdrawals.findById(withdrawal.getId()).orElseThrow());
-	}
-
 	@Transactional(readOnly = true)
 	public List<WithdrawalRunResponse> recent(int limit) {
 		return jdbc.query("""
@@ -306,6 +251,7 @@ public class WithdrawalRunService {
 		audit.record(AuditRecord.of(null, AuditAction.WITHDRAWAL_REQUESTED, WithdrawalService.ENTITY, withdrawal.getId())
 			.withNewValue(Map.of("reference", withdrawal.getReference(), "amount", amount.toString(), "balance", balance,
 					"payoutMethod", method, "run", run)));
+		history.record(withdrawal, null, null, "Withdrawal run " + run, true, null);
 		withdrawalService.publish(KafkaTopics.WITHDRAWAL_APPROVED, "WithdrawalApproved", withdrawal,
 				Map.of("scheduled", true, "run", run));
 		return withdrawal;
@@ -328,7 +274,7 @@ public class WithdrawalRunService {
 	}
 
 	/** Why an investor cannot be paid this way, or null when they can. */
-	private String ineligible(UUID userId, WithdrawalPayoutMethod method, Optional<PayoutAccount> account,
+	String ineligible(UUID userId, WithdrawalPayoutMethod method, Optional<PayoutAccount> account,
 			Currency currency) {
 		if (accounts.getAccount(userId).status() != UserStatus.ACTIVE) {
 			return "The account is not active";
@@ -351,7 +297,7 @@ public class WithdrawalRunService {
 	}
 
 	/** Whole minor units only; any fraction stays in the balance for the next run. */
-	private static Money whole(Money amount) {
+	static Money whole(Money amount) {
 		int digits = Math.max(amount.currency().getDefaultFractionDigits(), 0);
 		return Money.of(amount.amount().setScale(digits, RoundingMode.DOWN), amount.currency());
 	}

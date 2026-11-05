@@ -38,6 +38,8 @@ export const ACCOUNT_LABEL: Record<AccountType, string> = {
   WITHDRAWALS_IN_TRANSIT: "Withdrawals in transit",
   PLATFORM_RENT_EXPENSE: "Returns paid to investors",
   PLATFORM_CAPITAL_RETURNS: "Capital returned to investors",
+  WITHDRAWAL_FEE_INCOME: "Withdrawal charges",
+  TAX_WITHHELD: "Tax withheld from withdrawals",
 };
 
 export const EARNINGS_BALANCE_LABEL: Record<EarningsBalance, string> = {

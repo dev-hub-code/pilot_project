@@ -1,6 +1,7 @@
 package com.sealease.backend.security;
 
 import com.sealease.backend.payment.gateway.RazorpayWebhookController;
+import com.sealease.backend.withdrawal.controller.PayoutWebhookController;
 import com.sealease.backend.common.api.ApiErrorFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -82,6 +83,8 @@ public class SecurityConfig {
 				auth.requestMatchers(HttpMethod.POST, PUBLIC_LEADS).permitAll();
 				// Razorpay's webhook: signed with the webhook secret, checked by the controller.
 				auth.requestMatchers(HttpMethod.POST, RazorpayWebhookController.PATH).permitAll();
+				// Payout providers' status webhook: signed with its own secret, checked by the service.
+				auth.requestMatchers(HttpMethod.POST, PayoutWebhookController.PATH).permitAll();
 				auth.requestMatchers(HttpMethod.GET, PUBLIC_WEBSITE).permitAll();
 				// The open API: plans, read-only.
 				auth.requestMatchers(HttpMethod.GET, "/api/v1/open/**").permitAll();
