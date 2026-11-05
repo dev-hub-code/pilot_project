@@ -3,7 +3,7 @@ import type { Money } from "./plan";
 
 export type LeaseRentStatus = "RUNNING" | "COMPLETED";
 
-/** The rent of one container's lease, credited every hour from its start to its end. */
+/** The rent of one lease, credited every hour from its start to its end. */
 export interface LeaseRent {
   holdingId: string;
   /** Staff views only. */
@@ -20,7 +20,7 @@ export interface LeaseRent {
   /** Monthly rent × tenure: what the whole lease pays. */
   totalRent: Money;
   rentCredited: Money;
-  /** Capital returned over the lease (containers sold before capital returns ended); zero otherwise. */
+  /** Capital returned over the lease (units sold before capital returns ended); zero otherwise. */
   capitalTotal: Money;
   capitalCredited: Money;
   status: LeaseRentStatus;
@@ -28,8 +28,8 @@ export interface LeaseRent {
 }
 
 /**
- * An investor's three earnings balances: RENT_BANK (rent on containers paid by bank) is paid into a bank account,
- * RENT_CASH (rent on containers paid in cash at the office) is collected in cash there, and REFERRAL either way.
+ * An investor's three earnings balances: RENT_BANK (rent on units paid by bank) is paid into a bank account,
+ * RENT_CASH (rent on units paid in cash at the office) is collected in cash there, and REFERRAL either way.
  */
 export type EarningsBalance = "RENT_BANK" | "RENT_CASH" | "REFERRAL";
 
@@ -42,7 +42,7 @@ export interface EarningsSummary {
   capitalReturned: Money[];
   /** Commission on referrals' rent, already included in the wallet balance. */
   referralEarned: Money[];
-  /** The rent of each container's lease, oldest lease first. */
+  /** The rent of each lease, oldest lease first. */
   leases: LeaseRent[];
   /** Withdrawn from the wallet by a withdrawal run and not yet paid out. */
   withdrawalInProgress: Money[];

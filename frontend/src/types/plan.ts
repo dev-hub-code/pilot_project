@@ -64,7 +64,7 @@ export interface Product {
   unitPrice: number;
   minUnits: number;
   /** Investments made under the plan. */
-  containersSold: number;
+  unitsSold: number;
   publishedAt: string | null;
   closedAt: string | null;
   cancelledAt: string | null;

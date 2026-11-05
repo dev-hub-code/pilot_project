@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 /**
  * The executive overview: headline figures for a period compared with the equally long period before, figures as
- * they stand now (no comparison), twelve-month trends and the container fleet by status. Every figure is a fixed
+ * they stand now (no comparison), and twelve-month trends. Every figure is a fixed
  * aggregate query over the module tables or the ledger; nothing is estimated. Needs REPORT_VIEW (aggregates only).
  */
 @Service
@@ -61,11 +61,8 @@ public class ReportOverviewService {
 	public record TrendPoint(String month, Map<String, BigDecimal> values) {
 	}
 
-	public record Slice(String key, long count) {
-	}
-
 	public record Overview(LocalDate from, LocalDate to, LocalDate previousFrom, LocalDate previousTo, String currency,
-			List<Kpi> period, List<Kpi> now, List<TrendPoint> trends, List<Slice> containers, java.time.Instant generatedAt) {
+			List<Kpi> period, List<Kpi> now, List<TrendPoint> trends, java.time.Instant generatedAt) {
 	}
 
 	private record Flow(String key, String label, String kind, String sql, String report, String hint) {
@@ -78,7 +75,7 @@ public class ReportOverviewService {
 					"investment-register", "Investor capital received for confirmed investments; not company revenue"),
 			new Flow("investments", "New investments", "COUNT",
 					"SELECT count(*) FROM holdings WHERE confirmed_at >= :from AND confirmed_at < :to",
-					"investment-register", "Investments confirmed (one per container)"),
+					"investment-register", "Investments confirmed"),
 			new Flow("newInvestors", "New investors", "COUNT", """
 					SELECT count(*) FROM users u WHERE u.created_at >= :from AND u.created_at < :to
 					  AND EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
@@ -132,10 +129,6 @@ public class ReportOverviewService {
 					SELECT coalesce(sum(amount), 0) FROM withdrawals
 					WHERE status IN ('PENDING_APPROVAL', 'APPROVED', 'BATCHED', 'PROCESSING')""",
 					"withdrawal-aging", "Requested and not yet paid or returned"),
-			new Flow("utilisation", "Container utilisation", "PERCENT", """
-					SELECT coalesce(round(100.0 * count(*) FILTER (WHERE status = 'ON_LEASE')
-					       / NULLIF(count(*) FILTER (WHERE status <> 'RETIRED'), 0), 1), 0) FROM containers""",
-					"container-utilisation", "Containers on lease as a share of those not retired"),
 			new Flow("kycPending", "KYC awaiting review", "COUNT",
 					"SELECT count(*) FROM kyc_submissions WHERE status = 'PENDING'", "kyc-register", null),
 			new Flow("openTickets", "Open tickets", "COUNT",
@@ -163,7 +156,7 @@ public class ReportOverviewService {
 						null, flow.report(), flow.hint()));
 			}
 			return new Overview(from, to, before.from(), before.to(), "INR", flows, stocks, trends(),
-					containers(), clock.instant());
+					clock.instant());
 		});
 	}
 
@@ -196,11 +189,6 @@ public class ReportOverviewService {
 			byMonth.values().forEach(values -> values.putIfAbsent(key, BigDecimal.ZERO.setScale(2)));
 		});
 		return byMonth.entrySet().stream().map(e -> new TrendPoint(e.getKey(), e.getValue())).toList();
-	}
-
-	private List<Slice> containers() {
-		return jdbc.query("SELECT status, count(*) FROM containers GROUP BY status ORDER BY count(*) DESC",
-				(rs, n) -> new Slice(rs.getString(1), rs.getLong(2)));
 	}
 
 	private String month(String column) {

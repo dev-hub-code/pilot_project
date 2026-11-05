@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.YearMonth;
 import java.util.List;
 
-/** The investor's rent: credited every hour, per container lease. */
+/** The investor's rent: credited every hour, per lease. */
 @RestController
 @RequestMapping("/api/v1/earnings")
 @PreAuthorize("hasAuthority('INVESTOR_PORTAL')")
@@ -49,7 +49,7 @@ public class EarningController {
 				: payouts.monthly(investor.userId(), from, to);
 	}
 
-	/** The rent of each container's lease, latest lease first; {@code status} RUNNING or COMPLETED. */
+	/** The rent of each lease, latest lease first; {@code status} RUNNING or COMPLETED. */
 	@GetMapping
 	public PageResponse<LeaseRentResponse> leases(AuthenticatedUser investor,
 			@RequestParam(required = false) LeaseRentStatus status,

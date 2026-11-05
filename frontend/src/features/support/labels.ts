@@ -114,13 +114,12 @@ export const CATEGORY_LABEL: Record<TicketCategory, string> = {
   WITHDRAWAL: "A withdrawal",
   REFERRAL: "Referrals",
   KYC: "KYC & verification",
-  CONTAINER: "Containers & leasing",
   TECHNICAL: "Technical support",
   OTHER: "Something else",
 };
 
 export const CATEGORY_ORDER: readonly TicketCategory[] = ["ACCOUNT", "INVESTMENT", "PAYMENT", "EARNINGS", "WITHDRAWAL", "KYC",
-  "REFERRAL", "CONTAINER", "TECHNICAL", "OTHER"];
+  "REFERRAL", "TECHNICAL", "OTHER"];
 
 /** Stored NORMAL and URGENT read as Medium and Critical. */
 export const PRIORITY_LABEL: Record<TicketPriority, string> = { LOW: "Low", NORMAL: "Medium", HIGH: "High", URGENT: "Critical" };

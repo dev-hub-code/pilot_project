@@ -51,7 +51,7 @@ class LeadIntegrationTest {
 	@Test
 	void theWebsiteFormCreatesOneOpenLeadPerEmailAndRevealsNothing() throws Exception {
 		String email = email();
-		submit(email, "I'd like a 40ft container", null).andExpect(status().isAccepted());
+		submit(email, "I'd like to invest", null).andExpect(status().isAccepted());
 		submit(email.toUpperCase(), "Following up", null).andExpect(status().isAccepted());
 		submit(email(), "Bot text", "http://spam.example").andExpect(status().isAccepted());
 		mvc.perform(post("/api/v1/public/leads").contentType(MediaType.APPLICATION_JSON).content("""
@@ -73,7 +73,7 @@ class LeadIntegrationTest {
 			.andExpect(jsonPath("$.lead.source").value("WEBSITE"))
 			.andExpect(jsonPath("$.lead.stage").value("NEW"))
 			.andExpect(jsonPath("$.lead.ownerId").doesNotExist())
-			.andExpect(jsonPath("$.lead.message").value("I'd like a 40ft container"))
+			.andExpect(jsonPath("$.lead.message").value("I'd like to invest"))
 			.andExpect(jsonPath("$.activities[0].body").value(containsString("again: Following up")));
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic = 'lead.created' AND aggregate_id = ?",
 				Integer.class, leadId)).isEqualTo(1);

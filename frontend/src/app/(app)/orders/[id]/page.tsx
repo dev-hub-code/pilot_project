@@ -80,7 +80,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
         <Notice tone="info">
           We received your payment details ({DEPOSIT_MODE_LABEL[pending.deposit.mode]},{" "}
           {DEPOSIT_REFERENCE_LABEL[pending.deposit.mode]}: <span className="font-mono">{pending.deposit.reference}</span>).
-          Your order is confirmed once our finance team has verified the payment. Your containers stay reserved until {formatDateTime(order.expiresAt)}.
+          Your order is confirmed once our finance team has verified the payment. Please pay by {formatDateTime(order.expiresAt)}.
         </Notice>
       )}
       {order.status === "PENDING_PAYMENT" && !pending && rejected && (

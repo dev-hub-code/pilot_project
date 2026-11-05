@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Investors' rent, per container lease. It is credited automatically every hour; finance can also run it now. */
+/** Investors' rent, per lease. It is credited automatically every hour; finance can also run it now. */
 @RestController
 @RequestMapping("/api/v1/admin/payouts")
 public class AdminPayoutController {

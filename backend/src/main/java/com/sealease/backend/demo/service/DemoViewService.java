@@ -46,7 +46,7 @@ import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 
 /**
  * A demo account's own pages: the responses the investor endpoints give, filled from {@link DemoBook} instead of the
- * account's real orders, holdings, ledger and withdrawals. Ids of dummy containers, leases and payouts are derived
+ * account's real orders, holdings, ledger and withdrawals. Ids of dummy units, leases and payouts are derived
  * from the dummy order's id, so they stay the same from one request to the next.
  */
 @Service
@@ -77,16 +77,16 @@ public class DemoViewService {
 		int active = 0;
 		for (DemoBook.Order o : book.ownOrders()) {
 			total = total.plus(o.amount());
-			Money rent = o.monthlyRentPerContainer();
+			Money rent = o.monthlyRentPerUnit();
 			Money zero = Money.zero(book.currency());
 			boolean matured = !o.endsOn().isAfter(book.today());
 			if (!matured) {
-				active += o.containers();
+				active += o.units();
 			}
-			for (int n = 0; n < o.containers(); n++) {
+			for (int n = 0; n < o.units(); n++) {
 				holdings.add(new HoldingResponse(id(o, "holding", n), o.productId(), o.planCode(), o.planTitle(),
 						o.id(),
-						MoneyResponse.from(o.pricePerContainer()), o.rentPercent(), BigDecimal.ZERO, MoneyResponse.from(rent),
+						MoneyResponse.from(o.pricePerUnit()), o.rentPercent(), BigDecimal.ZERO, MoneyResponse.from(rent),
 						MoneyResponse.from(zero), MoneyResponse.from(rent), o.tenureMonths(),
 						MoneyResponse.from(rent.times(BigDecimal.valueOf(o.tenureMonths()))), o.startsOn(), o.endsOn(),
 						matured ? HoldingStatus.MATURED : HoldingStatus.ACTIVE, at(o.startsOn()),
@@ -219,12 +219,12 @@ public class DemoViewService {
 	private List<LeaseRentResponse> leases(DemoBook book) {
 		List<LeaseRentResponse> leases = new ArrayList<>();
 		for (DemoBook.Order o : book.ownOrders()) {
-			Money monthly = o.monthlyRentPerContainer();
+			Money monthly = o.monthlyRentPerUnit();
 			Money credited = DemoBook.earned(monthly, o, book.startsOn(), book.creditedUntil());
 			Money zero = Money.zero(book.currency());
 			boolean completed = !o.endsOn().isAfter(book.creditedUntil());
 			LocalDate creditedUntil = book.creditedUntil().isBefore(o.endsOn()) ? book.creditedUntil() : o.endsOn();
-			for (int n = 0; n < o.containers(); n++) {
+			for (int n = 0; n < o.units(); n++) {
 				leases.add(new LeaseRentResponse(id(o, "holding", n), null, o.productId(), o.planCode(), o.planTitle(),
 						o.tenureMonths(), at(o.startsOn()), at(o.endsOn()),
 						creditedUntil.isAfter(o.startsOn()) ? at(creditedUntil) : at(o.startsOn()),
@@ -238,10 +238,10 @@ public class DemoViewService {
 
 	private OrderResponse order(UUID userId, DemoBook.Order o) {
 		List<OrderItemResponse> items = new ArrayList<>();
-		Money monthly = o.monthlyRentPerContainer();
-		for (int n = 0; n < o.containers(); n++) {
+		Money monthly = o.monthlyRentPerUnit();
+		for (int n = 0; n < o.units(); n++) {
 			items.add(new OrderItemResponse(id(o, "item", n), o.productId(), o.planCode(), o.planTitle(),
-					MoneyResponse.from(o.pricePerContainer()), null, null, o.rentPercent(), BigDecimal.ZERO,
+					MoneyResponse.from(o.pricePerUnit()), null, null, o.rentPercent(), BigDecimal.ZERO,
 					MoneyResponse.from(monthly), o.tenureMonths()));
 		}
 		Instant placed = at(o.startsOn());

@@ -10,7 +10,7 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Per-container payout arithmetic of a plan: rent % a month for a lease of whole years the investor chooses
+ * Per-unit payout arithmetic of a plan: rent % a month for a lease of whole years the investor chooses
  * within the plan's limits, with no capital back; and the capital arithmetic that holdings sold before capital
  * returns ended still use (100 ÷ tenure % of the price back each month).
  */

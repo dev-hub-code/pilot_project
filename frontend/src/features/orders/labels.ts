@@ -51,7 +51,7 @@ export const DEPOSIT_MODE_HINT: Record<DepositMode, string> = {
   CASH_DEPOSIT: "Quote the payment reference on the deposit slip. The receipt number is on the counterfoil.",
 };
 
-/** "2 × PLAN-10001, 1 × PLAN-10002": an order's containers, per plan. */
-export function containersSummary(items: readonly { productCode: string }[]): string {
+/** "PLAN-10001, PLAN-10002": the plans an order bought units of. */
+export function plansSummary(items: readonly { productCode: string }[]): string {
   return [...new Set(items.map((item) => item.productCode))].join(", ");
 }

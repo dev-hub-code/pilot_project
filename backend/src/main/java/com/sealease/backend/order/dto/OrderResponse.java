@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * @param expiresAt payment is due by then; afterwards the reserved containers go back to inventory
- * @param items     one per container
+ * @param expiresAt payment is due by then; afterwards the order lapses
+ * @param items     one per unit
  */
 public record OrderResponse(
 		UUID id,

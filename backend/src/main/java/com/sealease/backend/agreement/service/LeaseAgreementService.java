@@ -93,11 +93,11 @@ public class LeaseAgreementService {
 	}
 
 	/**
-	 * Called in the transaction that assigns the container. A holding has one agreement: if it already has one, that
+	 * Called in the transaction that issues the agreement. A holding has one agreement: if it already has one, that
 	 * one is returned unchanged. When the facts have no lease dates, the investor must accept the agreement before the
 	 * lease starts.
 	 *
-	 * @param actorId who assigned the container
+	 * @param actorId who issued the agreement
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public LeaseAgreementResponse issue(UUID actorId, AgreementFacts facts) {

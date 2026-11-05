@@ -109,7 +109,7 @@ class ReferralIntegrationTest {
 			network(upline);
 		}
 
-		// ₹50,000 container at 2%, leased for 1 year: each payout is ₹1,000 rent.
+		// ₹50,000 unit at 2%, leased for 1 year: each payout is ₹1,000 rent.
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		String receipt = payFirstPayout(orderId);
 

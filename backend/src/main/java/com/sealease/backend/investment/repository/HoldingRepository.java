@@ -24,7 +24,7 @@ public interface HoldingRepository extends JpaRepository<Holding, UUID> {
 
 	List<Holding> findByUserIdOrderByConfirmedAtDesc(UUID userId);
 
-	/** Paid investments still waiting for finance to assign a container, oldest first. */
+	/** Paid investments still waiting for finance, oldest first. */
 	Page<Holding> findByStatusOrderByConfirmedAtAscIdAsc(HoldingStatus status, Pageable pageable);
 
 	long countByStatus(HoldingStatus status);
@@ -40,7 +40,7 @@ public interface HoldingRepository extends JpaRepository<Holding, UUID> {
 	List<Object[]> countInvestorsByProduct(@Param("productIds") Collection<UUID> productIds);
 
 	@Query("select h.productId, count(h) from Holding h where h.productId in :productIds group by h.productId")
-	List<Object[]> countContainersByProduct(@Param("productIds") Collection<UUID> productIds);
+	List<Object[]> countUnitsByProduct(@Param("productIds") Collection<UUID> productIds);
 
 	@Query("select h.currency, sum(h.amount) from Holding h group by h.currency")
 	List<Object[]> sumAmountByCurrency();

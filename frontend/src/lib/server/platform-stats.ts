@@ -5,10 +5,10 @@ import { backendFetch } from "./backend-client";
 /** The platform's track record, computed by the backend from its books. */
 export interface PlatformStats {
   paidToInvestors: Money;
-  /** Containers whose rent has started being credited. */
-  containersEarning: number;
+  /** Units whose rent has started being credited. */
+  unitsEarning: number;
   investors: number;
-  containers: number;
+  units: number;
 }
 
 /** Null when the backend cannot be reached, so the home page still renders without the figures. */

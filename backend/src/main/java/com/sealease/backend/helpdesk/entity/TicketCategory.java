@@ -9,7 +9,6 @@ public enum TicketCategory {
 	WITHDRAWAL,
 	KYC,
 	REFERRAL,
-	CONTAINER,
 	TECHNICAL,
 	OTHER
 }

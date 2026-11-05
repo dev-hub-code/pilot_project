@@ -9,7 +9,6 @@ public enum ReportCategory {
 	PAYMENT("Payment reports"),
 	WITHDRAWAL("Withdrawal reports"),
 	REFERRAL("Referral reports"),
-	CONTAINER("Container reports"),
 	OPERATIONAL("Operational reports"),
 	CRM("CRM reports"),
 	HELPDESK("Helpdesk reports"),

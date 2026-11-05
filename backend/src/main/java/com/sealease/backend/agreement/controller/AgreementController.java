@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * An investor's own lease agreements, one per container assigned to them. Accepting one (which starts the lease) is
+ * An investor's own lease agreements, one per investment. Accepting one (which starts the lease) is
  * {@code POST /api/v1/agreements/{holdingId}/accept}, in the order module.
  */
 @RestController

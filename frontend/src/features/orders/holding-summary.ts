@@ -13,7 +13,7 @@ export function holdingBreakdown(holdings: readonly Pick<Holding, "status">[]): 
   ].filter(([n]) => Number(n) > 0).map(([n, label]) => `${n} ${label}`).join(" · ");
 }
 
-/** Containers the investor still holds: everything except completed leases. */
-export function containersOwned(holdings: readonly Pick<Holding, "status">[]): number {
+/** Investments the investor still holds: everything except completed leases. */
+export function investmentsHeld(holdings: readonly Pick<Holding, "status">[]): number {
   return holdings.filter((h) => h.status !== "MATURED").length;
 }

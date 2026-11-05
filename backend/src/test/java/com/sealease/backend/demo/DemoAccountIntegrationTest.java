@@ -53,7 +53,7 @@ class DemoAccountIntegrationTest {
 		api = new TestApi(mvc, jdbc);
 		admin = api.admin();
 		investors = new InvestorFixtures(mvc, jdbc, api);
-		// ₹50,000 a container, 1 to 5 years.
+		// ₹50,000 a unit, 1 to 5 years.
 		plan = new OfferingFixtures(mvc, admin).plan();
 	}
 
@@ -174,10 +174,10 @@ class DemoAccountIntegrationTest {
 			.isZero();
 	}
 
-	private String order(String memberId, int containers, LocalDate startsOn) {
+	private String order(String memberId, int units, LocalDate startsOn) {
 		return """
 				{%s"productId":"%s","amount":"%d","startsOn":"%s"}""".formatted(
-				memberId == null ? "" : "\"memberId\":\"" + memberId + "\",", plan, containers * 50000, startsOn);
+				memberId == null ? "" : "\"memberId\":\"" + memberId + "\",", plan, units * 50000, startsOn);
 	}
 
 

@@ -17,7 +17,7 @@ export function leasePercent(lease: LeaseRent): number {
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
- * Where a lease's rent stands: starting (at the full hour after the container was assigned), waiting for its first
+ * Where a lease's rent stands: starting (at the full hour after the agreement was accepted), waiting for its first
  * hour to end, credited up to an hour, or ended.
  */
 export function leaseNote(lease: LeaseRent): string {

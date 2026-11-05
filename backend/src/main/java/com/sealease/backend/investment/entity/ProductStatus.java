@@ -4,8 +4,8 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Plan lifecycle: DRAFT → OPEN (investors buy containers) → CLOSED (no more sales), or CANCELLED
- * while still a draft. Containers already sold keep their lease and payout schedule either way.
+ * Plan lifecycle: DRAFT → OPEN (investors buy units) → CLOSED (no more sales), or CANCELLED
+ * while still a draft. Units already sold keep their lease and payout schedule either way.
  */
 public enum ProductStatus {
 	DRAFT,

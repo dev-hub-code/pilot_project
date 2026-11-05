@@ -65,7 +65,6 @@ export interface Overview {
   period: Kpi[];
   now: Kpi[];
   trends: { month: string; values: Record<string, string | number> }[];
-  containers: { key: string; count: number }[];
   generatedAt: string;
 }
 

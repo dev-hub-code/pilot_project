@@ -50,7 +50,7 @@ class OpenPlansIntegrationTest {
 			.andExpect(jsonPath("$.minUnits").value(1))
 			// Nothing about the viewer, buyers or staff.
 			.andExpect(jsonPath("$.eligibility").doesNotExist())
-			.andExpect(jsonPath("$.containersSold").doesNotExist())
+			.andExpect(jsonPath("$.unitsSold").doesNotExist())
 			.andExpect(jsonPath("$.id").doesNotExist());
 		mvc.perform(get("/api/v1/open/plans/{code}", draft)).andExpect(status().isNotFound());
 		mvc.perform(get("/api/v1/open/plans").param("size", "500")).andExpect(status().isBadRequest());

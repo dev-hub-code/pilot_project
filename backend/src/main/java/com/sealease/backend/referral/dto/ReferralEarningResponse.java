@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Commission at one level on one referred container's rent in one month. For investors {@code sourceName} is a
+ * Commission at one level on one referred unit's rent in one month. For investors {@code sourceName} is a
  * display name and the user ids are omitted; staff views carry the ids.
  *
  * @param month  {@code yyyy-MM}, UTC

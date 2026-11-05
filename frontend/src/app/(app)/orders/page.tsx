@@ -8,7 +8,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
 import { cancelOrderAction } from "@/features/orders/actions";
-import { ORDER_STATUS_LABEL, ORDER_TONE, containersSummary } from "@/features/orders/labels";
+import { ORDER_STATUS_LABEL, ORDER_TONE, plansSummary } from "@/features/orders/labels";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { Order } from "@/types/order";
@@ -39,7 +39,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
                 <dl className="grid grid-cols-2 gap-3">
                   <CardField label="Total"><span className="font-medium tabular-nums">{formatMoney(o.total)}</span></CardField>
                   <CardField label="Placed"><span className="text-muted">{formatDateTime(o.createdAt)}</span></CardField>
-                  <CardField label="Plans" className="col-span-2">{containersSummary(o.items)}</CardField>
+                  <CardField label="Plans" className="col-span-2">{plansSummary(o.items)}</CardField>
                 </dl>
                 <div className="flex items-center justify-between gap-3">
                   <Link href={`/orders/${o.id}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View order →</Link>
@@ -56,7 +56,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
               <tr key={o.id} className="hover:bg-background">
                 <Cell><Link href={`/orders/${o.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{o.orderNumber}</Link></Cell>
                 <Cell className="text-muted">{formatDateTime(o.createdAt)}</Cell>
-                <Cell className="max-w-xs truncate">{containersSummary(o.items)}</Cell>
+                <Cell className="max-w-xs truncate">{plansSummary(o.items)}</Cell>
                 <Cell className="tabular-nums">{formatMoney(o.total)}</Cell>
                 <Cell><StatusBadge tone={ORDER_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge></Cell>
                 <Cell>

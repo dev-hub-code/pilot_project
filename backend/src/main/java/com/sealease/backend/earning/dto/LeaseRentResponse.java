@@ -8,12 +8,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * The rent of one container's lease, credited every hour from {@code startsAt} to {@code endsAt}.
+ * The rent of one lease, credited every hour from {@code startsAt} to {@code endsAt}.
  *
  * @param userId        shown to staff only
  * @param creditedUntil credited up to this hour
  * @param totalRent     monthly rent × tenure: what the whole lease pays
- * @param capitalTotal  capital returned over the lease (containers sold before capital returns ended); zero otherwise
+ * @param capitalTotal  capital returned over the lease (units sold before capital returns ended); zero otherwise
  * @param status        RUNNING (or about to start), COMPLETED once the whole lease is credited
  */
 public record LeaseRentResponse(

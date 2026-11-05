@@ -12,7 +12,7 @@ import java.util.List;
  * @param rentPaid             rent credited over all time, per currency
  * @param capitalReturned      capital credited back over all time, per currency
  * @param referralEarned       commission on referrals' rent credited over all time, per currency
- * @param leases               the rent of each container's lease, oldest lease first
+ * @param leases               the rent of each lease, oldest lease first
  * @param withdrawalInProgress withdrawn from the wallet and not yet paid out, per currency
  * @param totalWithdrawn       paid out to the investor over all time, per currency
  * @param nextCreditAt         when the next hour of rent ends and is credited (a minute or so after); {@code null} with

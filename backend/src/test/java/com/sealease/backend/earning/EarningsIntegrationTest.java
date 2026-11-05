@@ -66,8 +66,8 @@ class EarningsIntegrationTest {
 	// --------------------------------------------------------------------------------- rent
 
 	@Test
-	void rentIsCreditedHourlyAndTheContainerReturnsToStockAfterTheLastHour() throws Exception {
-		// ₹50,000 container at 2% rent, leased for 1 year (12 months): ₹1,000 a month. Plans pay rent only.
+	void rentIsCreditedHourlyUntilTheLastHour() throws Exception {
+		// ₹50,000 unit at 2% rent, leased for 1 year (12 months): ₹1,000 a month. Plans pay rent only.
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
@@ -125,7 +125,7 @@ class EarningsIntegrationTest {
 	}
 
 	@Test
-	void theLastHourMaturesTheHoldingAndTheContainerReturnsToStock() throws Exception {
+	void theLastHourMaturesTheHolding() throws Exception {
 		Account investor = investors.approvedInvestor();
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
@@ -158,7 +158,7 @@ class EarningsIntegrationTest {
 		String code = JsonPath.read(mvc.perform(get("/api/v1/referrals/me").header(HttpHeaders.AUTHORIZATION, referrer.bearer()))
 			.andReturn().getResponse().getContentAsString(), "$.code");
 		Account investor = investors.approve(api.register(code));
-		// ₹50,000 container at 2% rent, leased for 1 year: ₹1,000 rent a month; level-1 commission 2% of ₹50,000 a month.
+		// ₹50,000 unit at 2% rent, leased for 1 year: ₹1,000 rent a month; level-1 commission 2% of ₹50,000 a month.
 		String orderId = investors.invest(investor, offerings.plan(), 1);
 		UUID holding = jdbc.queryForObject("SELECT id FROM holdings WHERE order_id = ?::uuid", UUID.class, orderId);
 
@@ -169,7 +169,7 @@ class EarningsIntegrationTest {
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM referral_earnings WHERE source_holding_id = ?",
 				Integer.class, holding)).isEqualTo(credits(holding)).isGreaterThanOrEqualTo(2);
 		assertThat(referralBalance(referrer)).isEqualByComparingTo("2000");
-		// Staff's commission history adds the hourly commissions up: one entry for the referred container this month.
+		// Staff's commission history adds the hourly commissions up: one entry for the referred unit this month.
 		mvc.perform(get("/api/v1/admin/referral-earnings").param("beneficiaryId", referrer.id().toString())
 				.header(HttpHeaders.AUTHORIZATION, api.admin().bearer()))
 			.andExpect(jsonPath("$.content.length()").value(1))

@@ -106,14 +106,14 @@ public class DemoAccountService {
 		LocalDate[] frame = frame(userId);
 		Map<UUID, DemoBook.Member> members = members(userId);
 		List<DemoBook.Order> orders = jdbc.query("""
-				SELECT id, member_id, order_number, product_id, plan_code, plan_title, containers,
-				       price_per_container, currency, rent_percent, tenure_months, starts_on
+				SELECT id, member_id, order_number, product_id, plan_code, plan_title, units,
+				       price_per_unit, currency, rent_percent, tenure_months, starts_on
 				FROM demo_orders WHERE account_id = ? ORDER BY starts_on, created_at""",
 				(rs, i) -> new DemoBook.Order(rs.getObject("id", UUID.class), rs.getObject("member_id", UUID.class),
 						rs.getString("order_number"), rs.getObject("product_id", UUID.class), rs.getString("plan_code"),
 						rs.getString("plan_title"),
-						rs.getInt("containers"),
-						Money.of(rs.getBigDecimal("price_per_container"), Currency.getInstance(rs.getString("currency"))),
+						rs.getInt("units"),
+						Money.of(rs.getBigDecimal("price_per_unit"), Currency.getInstance(rs.getString("currency"))),
 						rs.getBigDecimal("rent_percent"), rs.getInt("tenure_months"),
 						rs.getObject("starts_on", LocalDate.class)),
 				userId);
@@ -231,7 +231,7 @@ public class DemoAccountService {
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
 				INSERT INTO demo_orders (id, account_id, member_id, order_number, product_id, plan_code, plan_title,
-				                         containers, price_per_container, currency, rent_percent,
+				                         units, price_per_unit, currency, rent_percent,
 				                         tenure_months, starts_on, created_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""", id, userId, request.memberId(), "ORD-" + number,
 				plan.id(), plan.code(), plan.title(), price,
@@ -332,7 +332,7 @@ public class DemoAccountService {
 	private DemoAccountView.Order order(DemoBook.Order o, String memberName, Money rentCredited) {
 		return new DemoAccountView.Order(o.id(), o.memberId(), memberName, o.number(), o.productId(), o.planCode(),
 				o.planTitle(),
-				o.containers(), MoneyResponse.from(o.pricePerContainer()), MoneyResponse.from(o.amount()), o.rentPercent(),
+				o.units(), MoneyResponse.from(o.pricePerUnit()), MoneyResponse.from(o.amount()), o.rentPercent(),
 				MoneyResponse.from(o.monthlyRent()), o.tenureMonths(), o.startsOn(), o.endsOn(),
 				rentCredited == null ? null : MoneyResponse.from(rentCredited));
 	}

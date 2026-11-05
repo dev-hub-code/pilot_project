@@ -74,18 +74,18 @@ public final class InvestorFixtures {
 	}
 
 	/**
-	 * Buys containers under the plan, paid by bank and confirmed by the admin, who then assigns an available container
-	 * of the plan's type to each (starting the leases and payouts); returns the confirmed order id.
+	 * Buys units of the plan, paid by bank and confirmed by the admin; the investor then accepts each agreement
+	 * (starting the leases and payouts). Returns the confirmed order id.
 	 */
-	public String invest(Account investor, UUID product, int containers) throws Exception {
-		String orderId = paidOrder(investor, product, containers);
-		assignContainers(investor, orderId);
+	public String invest(Account investor, UUID product, int units) throws Exception {
+		String orderId = paidOrder(investor, product, units);
+		acceptAgreements(investor, orderId);
 		return orderId;
 	}
 
-	/** Buys containers under the plan, paid by bank and confirmed by the admin; they await their containers. */
-	public String paidOrder(Account investor, UUID product, int containers) throws Exception {
-		String orderId = placeOrder(investor, product, containers);
+	/** Buys units of the plan, paid by bank and confirmed by the admin; they await the investor's acceptance. */
+	public String paidOrder(Account investor, UUID product, int units) throws Exception {
+		String orderId = placeOrder(investor, product, units);
 		// Bank payments are only offered while the company has an active account to pay into.
 		if (companyAccount == null) {
 			companyAccount = api.companyBankAccount();
@@ -114,7 +114,7 @@ public final class InvestorFixtures {
 	}
 
 	/** The investor accepts the agreement of each of the order's paid investments, which starts them. */
-	public void assignContainers(Account investor, String orderId) throws Exception {
+	public void acceptAgreements(Account investor, String orderId) throws Exception {
 		for (UUID holding : awaitingAcceptance(orderId)) {
 			acceptAgreement(investor, holding);
 		}

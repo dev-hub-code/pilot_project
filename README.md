@@ -1,7 +1,7 @@
 # SeaLease — Investment Platform
 
 Investors put an amount of their choice into an investment plan for their investor type, under an investment agreement,
-and are paid returns every month of the term. SeaLease owns and leases out containers and pays returns from that income.
+and are paid returns every month of the term. SeaLease runs a leasing business and pays returns from that income.
 Holdings from before plans became returns-only also get 100 ÷ tenure % of the amount back each month. Uplines earn four-level referral income. Built as a **modular monolith** with financial
 correctness, auditability and idempotency as first-class concerns.
 
@@ -145,7 +145,7 @@ only to verified addresses) until AWS grants production access.
 ## Backend architecture
 
 Root package `com.sealease.backend`. Each business module (`auth`, `user`, `investment`,
-`container`, `order`, `earning`, `referral`, `withdrawal`, …) is added as a top-level package
+`order`, `earning`, `referral`, `withdrawal`, …) is added as a top-level package
 with its own `controller / service / repository / entity / dto / mapper / event` sub-packages.
 Modules talk to each other through service interfaces or domain events — never through each
 other's repositories or entities — so any module can later be extracted into a service.
@@ -187,7 +187,6 @@ Modules (Phase 4):
 
 | Module        | Responsibility                                                                   |
 |---------------|----------------------------------------------------------------------------------|
-| `container`   | The company's own containers: numbers, specs, location, photos and documents. Not shown to investors or tied to investments |
 | `investment`  | Plans by investor type, with term limits; DRAFT → OPEN → CLOSED lifecycle |
 
 Modules (Phase 5):
@@ -234,7 +233,7 @@ Modules (Phase 10):
 | `helpdesk`     | Support tickets: conversation, internal notes, encrypted attachments, priority and first-response targets, assignment |
 | `notification` | In-app notification centre (unread count, mark read) and `notification.created` events |
 
-Dependency direction is one-way (`payment` → `order` → `invoice`, `investment` → `container`;
+Dependency direction is one-way (`payment` → `order` → `invoice`, `order` → `investment`;
 `earning` → `investment`, `ledger`; `referral` → `earning` (event), `ledger`, `user`; `auth` → `referral`;
 `withdrawal` → `ledger`, `bankaccount`, `user`; `crm` → `user`, `role`, `order` (event);
 `helpdesk` → `notification`, `document`, `order`, `withdrawal`, `investment`, `role`;
@@ -344,20 +343,15 @@ from a secret manager; keep `COOKIE_SECURE` on.
   over the tenure. Holdings from before keep their terms.
 - **After payment.** Confirming the order makes one holding per plan, `AWAITING_ACCEPTANCE`, and issues its investment
   agreement. Nothing is assigned to the investor. Accepting the agreement starts the term at the next full hour.
-- **Internal names.** Code, API fields and database tables keep the older words `rent`, `lease` and `container`
+- **Internal names.** Code, API fields and database tables keep the older words `rent` and `lease`
   (`monthlyRentPercent`, `lease_agreements`); only text people read says returns, term and investment.
 - **Quote.** For a number of units: amount = units × unit price; monthly returns = amount × annual return % ÷ 12 (rounded half-up to
   the paisa; orders keep the monthly rate to 8 decimals); over the tenure, monthly returns × 12 × tenure.
 
-### Containers & plans API
+### Plans API
 
 | Method & path                                              | Access                | Purpose                                 |
 |------------------------------------------------------------|-----------------------|-----------------------------------------|
-| `GET /api/v1/admin/containers[/{id}]`                      | `INVESTMENT_VIEW`     | Search (number, status, type), detail   |
-| `POST /api/v1/admin/containers`, `PUT /…/{id}`             | `INVESTMENT_CREATE` / `INVESTMENT_UPDATE` | Register / edit          |
-| `POST /api/v1/admin/containers/{id}/status`                | `INVESTMENT_UPDATE`   | Status change with reason (not to or from `RESERVED` / `ON_LEASE`) |
-| `POST /…/containers/{id}/documents` (multipart), `PATCH /…/documents/{docId}` | `INVESTMENT_UPDATE` | Upload photo/survey/lease/insurance/memorandum; toggle investor visibility |
-| `GET /…/containers/{id}/documents/{docId}`                 | `INVESTMENT_VIEW`     | Document content                        |
 | `GET /api/v1/admin/investment-products[/{id}]`             | `INVESTMENT_VIEW`     | Search, detail                          |
 | `POST /api/v1/admin/investment-products`, `PUT /…/{id}`    | `INVESTMENT_CREATE` / `INVESTMENT_UPDATE` | Create / edit draft      |
 | `POST /…/investment-products/{id}/publish` · `/close` · `/reopen` · `/cancel` | `INVESTMENT_APPROVE` | Open to investors / stop sales / resume sales / cancel a draft |
@@ -365,7 +359,7 @@ from a secret manager; keep `COOKIE_SECURE` on.
 | `GET /api/v1/plans/{id}/quote?units=`                      | 〃                    | What the units cost and pay             |
 | `GET /api/v1/public/plans`, `/api/v1/open/plans[/{code}]`  | Public                | Open online plans                       |
 
-Seed company bank accounts, container stock and plans into a **local** API (runs as the bootstrap admin, safe to re-run):
+Seed company bank accounts and plans into a **local** API (runs as the bootstrap admin, safe to re-run):
 
 ```bash
 python3 scripts/seed-demo-data.py
@@ -406,7 +400,7 @@ units of a plan ──▶ order PENDING_PAYMENT ──payment succeeded──▶
   while the order is open. Nobody may decide on a payment for their own order.
 - **Money is never silently kept.** A payment arriving for an expired, cancelled or already paid
   order becomes `REFUND_REQUIRED`, and finance records the refund (`FINANCE_ADJUST`).
-- **Locking.** Order row, then payment row, then container rows. Payment settlement,
+- **Locking.** Order row, then payment row. Payment settlement,
   cancellation and the expiry sweep therefore serialise without deadlocks.
 - **Outbox.** Events are inserted in the business transaction. A relay (every 1 s, `FOR UPDATE
   SKIP LOCKED`, safe on several instances) publishes them with `eventId`/`eventType` headers, keyed
@@ -444,20 +438,19 @@ units of a plan ──▶ order PENDING_PAYMENT ──payment succeeded──▶
 | `GET /api/v1/agreements`, `/agreements/{holdingId}[/pdf]` | `INVESTOR_PORTAL` | Own lease agreements, with wording / as PDF |
 | `POST /api/v1/agreements/{holdingId}/accept`          | `INVESTOR_PORTAL`   | Accept the agreement: starts the lease and rent |
 | `GET /api/v1/admin/agreements?orderId`, `/admin/agreements/{holdingId}/pdf` | `ORDER_VIEW` | An order's lease agreements |
-| `POST /api/v1/admin/container-assignments/orders/{orderId}/agreements` | `CONTAINER_ASSIGN` | Issue agreements for containers assigned before agreements existed |
 
 ### Payouts & the ledger
 
 ```text
-payment confirmed ──▶ holding per container, AWAITING_CONTAINER (no lease, no payouts)
-container assigned by finance ──▶ ACTIVE, lease from that day for the chosen tenure (T months)
+payment confirmed ──▶ holding per unit, AWAITING_ACCEPTANCE (no lease, no payouts)
+agreement accepted by the investor ──▶ ACTIVE, lease from then for the chosen tenure (T months)
                       one installment per calendar month of the lease (a part month at each end)
 every day that ends ──payout job (hourly) or POST /admin/payouts/run──▶ that day's rent credited to the wallet
 last day of a month credited ──▶ installment PAID, referral commission on it paid
-last installment PAID ──▶ holding MATURED, container back to AVAILABLE
+last installment PAID ──▶ holding MATURED
 ```
 
-- **Amounts.** Per container per month: rent = price × the plan's rent %, rounded half-up to the paisa and
+- **Amounts.** Per unit per month: rent = price × the plan's rent %, rounded half-up to the paisa and
   fixed when the schedule is created; a part month gets its days ÷ the month's days of it. Holdings bought
   before plans became rent-only (their recorded capital return % is above 0) also get capital = price ÷ tenure a
   month; the last installment's capital takes up the rounding.
@@ -707,7 +700,7 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 - **Reports.** *Investor statement*: per currency, opening and closing earnings balance and every entry in the period,
   plus holdings and withdrawals requested. *Financial summary*: per currency, rent paid and capital returned to investors,
   referral commissions, adjustments, withdrawals requested, returned and paid,
-  and what is owed / in transit at period end — straight from the ledger. *Plans & payouts*: containers sold and in stock per
+  and what is owed / in transit at period end — straight from the ledger. *Plans & payouts*: units sold per
   published plan, and payouts due but not yet paid. *Invoices* as PDF.
 - **Periods** are inclusive dates in UTC, at most 366 days.
 - **Access.** Investors get their own statement and invoices. Staff previews need `REPORT_VIEW`; PDF/CSV downloads need
@@ -737,9 +730,9 @@ cash at the office (from the withdrawal day) ──finance makes it in front of 
 1. ✅ Project setup & base architecture
 2. ✅ Authentication — registration, login, RS256 JWT, refresh-token rotation, roles & permissions
 3. ✅ Users — profile, KYC, bank details
-4. ✅ Plans — containers, investment plans by tenure and unit, container stock
+4. ✅ Plans — investment plans by tenure and unit
 5. ✅ Orders, payments, investment confirmation, invoices (+ transactional outbox)
-6. ✅ Earnings — leases per container, monthly payouts (rent + capital back over the tenure), double-entry ledger
+6. ✅ Earnings — leases per unit, monthly payouts (rent + capital back over the tenure), double-entry ledger
 7. ✅ Referrals — four-level hierarchy, effective-dated rates, commissions on rent paid, downline tree
 8. ✅ Withdrawals — reserved balances, single/dual approval, payout batches, bank file, reconciliation
 9. ✅ Sales CRM — leads from staff and the website, pipeline, activity log, assignment, conversion to investors

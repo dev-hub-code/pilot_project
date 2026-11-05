@@ -4,8 +4,8 @@ export type TicketStatus = "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_ON_CUSTOMER
   | "RESOLVED" | "CLOSED" | "REOPENED";
 /** Stored names; shown as Low, Medium, High and Critical. */
 export type TicketPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
-export type TicketCategory = "ACCOUNT" | "INVESTMENT" | "PAYMENT" | "EARNINGS" | "WITHDRAWAL" | "REFERRAL" | "KYC"
-  | "CONTAINER" | "TECHNICAL" | "OTHER";
+export type TicketCategory = "ACCOUNT" | "INVESTMENT" | "PAYMENT" | "EARNINGS" | "WITHDRAWAL" | "REFERRAL" | "KYC" | "TECHNICAL"
+  | "OTHER";
 export type TicketChannel = "PORTAL" | "STAFF" | "SYSTEM" | "EMAIL";
 export type SlaState = "BREACHED" | "AT_RISK" | "PAUSED" | "ON_TRACK" | "MET" | "NONE";
 export type RelatedType = "ORDER" | "WITHDRAWAL" | "HOLDING";

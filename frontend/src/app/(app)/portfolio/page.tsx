@@ -20,7 +20,7 @@ import type { EarningsSummary } from "@/types/earning";
 import type { HoldingStatus, Portfolio } from "@/types/order";
 import { formatMoney, formatPercent } from "@/utils/money";
 
-import { containersOwned, holdingBreakdown } from "@/features/orders/holding-summary";
+import { investmentsHeld, holdingBreakdown } from "@/features/orders/holding-summary";
 
 export const metadata: Metadata = { title: "Portfolio" };
 
@@ -56,13 +56,13 @@ export default async function PortfolioPage({ searchParams }: PageProps<"/portfo
       {typeof accepted === "string" && agreements.get(accepted)?.acceptedAt && (
         <Notice tone="success">
           Agreement {agreements.get(accepted)?.agreementNumber} accepted. Your term starts at the next full hour, and returns
-          is credited to your wallet {credit} from then on. You can download the agreement from the container below.
+          is credited to your wallet {credit} from then on. You can download the agreement from the investment below.
         </Notice>
       )}
       <AgreementPrompt holdings={portfolio.holdings} />
       <StatGrid label="Portfolio summary" stats={[
         { label: "Total invested", value: portfolio.totalsByCurrency.length === 0 ? "—" : portfolio.totalsByCurrency.map((m) => formatMoney(m)).join(" · ") },
-        { label: "Investments", value: containersOwned(portfolio.holdings), note: holdingBreakdown(portfolio.holdings) || "None yet" },
+        { label: "Investments", value: investmentsHeld(portfolio.holdings), note: holdingBreakdown(portfolio.holdings) || "None yet" },
         { label: "Returns wallet", value: rentWallet, note: nextCreditNote(earnings.nextCreditAt, credit) },
       ]} />
 
