@@ -294,6 +294,9 @@ app:
       # How long an order stays reserved once the investor opens the checkout, or asks for a virtual account.
       checkout-window: ${RAZORPAY_CHECKOUT_WINDOW:30m}
       virtual-account-window: ${RAZORPAY_VIRTUAL_ACCOUNT_WINDOW:3d}
+      # Bank transfer into a virtual account needs Razorpay Smart Collect activated on the account. Until it is, set
+      # false: investors are offered the checkout only.
+      virtual-accounts: ${RAZORPAY_VIRTUAL_ACCOUNTS:true}
   notifications:
     email:
       # Also email each notification to users who keep email notifications on (Settings).
