@@ -144,7 +144,7 @@ export default async function ReconciliationPage() {
               <Cell className="font-mono text-xs">{d.paymentId}</Cell>
               <Cell>{humanize(d.status)}</Cell>
               <Cell className="tabular-nums">{formatMoney(d.amount)}</Cell>
-              <Cell>{d.missing === "DEPOSIT_RECEIVED" ? "Money received" : "Refund"}</Cell>
+              <Cell>{d.missing === "DEPOSIT_RECEIVED" ? "Money received" : d.missing === "REINVESTMENT" ? "Reinvestment" : "Refund"}</Cell>
             </tr>
           ))}
         </DataTable>

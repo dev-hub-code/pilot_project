@@ -197,6 +197,8 @@ public class ReportService {
 							Format.money(total(t, zero, TransactionType.WITHDRAWAL_RELEASE, AccountType.WITHDRAWALS_IN_TRANSIT, Direction.DEBIT))),
 					Row.of("Withdrawals paid out", "", "",
 							Format.money(total(t, zero, TransactionType.WITHDRAWAL_PAYOUT, AccountType.RENTAL_CASH, Direction.CREDIT))),
+					Row.of("Reinvested by investors", "Paid for investments from their balances", "",
+							Format.money(total(t, zero, TransactionType.REINVESTMENT, AccountType.INVESTOR_PRINCIPAL, Direction.CREDIT))),
 					Row.total("Owed to investors", "At the end of the period", "", Format.money(owed.getOrDefault(code, zero))),
 					Row.total("Withdrawals in transit", "At the end of the period", "", Format.money(inTransit.getOrDefault(code, zero))))));
 		}

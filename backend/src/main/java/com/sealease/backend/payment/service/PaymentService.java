@@ -64,6 +64,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -101,13 +102,14 @@ public class PaymentService {
 	private final UnmatchedGatewayReceipts unmatched;
 	private final TransactionTemplate transactions;
 	private final DepositLedger depositLedger;
+	private final ReinvestmentLedger reinvestment;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
 			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
 			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, TransactionTemplate transactions,
-			DepositLedger depositLedger, Clock clock) {
+			DepositLedger depositLedger, ReinvestmentLedger reinvestment, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -126,6 +128,7 @@ public class PaymentService {
 		this.unmatched = unmatched;
 		this.transactions = transactions;
 		this.depositLedger = depositLedger;
+		this.reinvestment = reinvestment;
 		this.clock = clock;
 	}
 
@@ -133,15 +136,16 @@ public class PaymentService {
 
 	/**
 	 * How this investor pays. Online investors pay through the gateway (its checkout, or a virtual account for a bank
-	 * transfer), confirmed automatically; network investors pay by bank transfer or in cash at the office, confirmed by
-	 * finance. Online investors never pay in cash: until the gateway is set up, they pay by bank transfer only.
+	 * transfer), confirmed automatically, or from their available balance; network investors pay by bank transfer or in
+	 * cash at the office, confirmed by finance. Online investors never pay in cash: until the gateway is set up, they pay
+	 * by bank transfer (or from their balance).
 	 */
 	@Transactional(readOnly = true)
 	public List<PaymentMethod> methodsFor(UUID userId) {
 		if (schemes.schemeOf(userId) == ReferralScheme.ONLINE) {
 			return razorpay.enabled()
-					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT)
-					: List.of(PaymentMethod.BANK_TRANSFER);
+					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT, PaymentMethod.WALLET)
+					: List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.WALLET);
 		}
 		return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.OFFICE_CASH);
 	}
@@ -159,6 +163,10 @@ public class PaymentService {
 	 */
 	public PaymentResponse start(UUID userId, UUID orderId, PaymentMethod method, String idempotencyKey) {
 		String key = IdempotencyKey.require(idempotencyKey);
+		if (method == PaymentMethod.WALLET) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Paying from your available balance needs your password");
+		}
 		Started checked = transactions.execute(status -> check(userId, orderId, method, key));
 		if (checked.existing() != null) {
 			return checked.existing();
@@ -287,7 +295,7 @@ public class PaymentService {
 					? "Bank payment is not set up yet. Please pay in cash at our office, or contact support."
 					: "Bank payment is not set up yet. Please contact support.");
 		}
-		if (provider == null) {
+		if (provider == null && method != PaymentMethod.WALLET) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					humanize(method) + " payments are not available");
 		}
@@ -323,6 +331,55 @@ public class PaymentService {
 		catch (RuntimeException e) {
 			log.warn("Could not close unused {} payment {} at the provider", provider.name(), reference, e);
 		}
+	}
+
+	/**
+	 * What an online investor can reinvest now: their returns and referral commission (null for anyone who cannot pay
+	 * from their balance). For display; it is checked again, under the wallet's lock, when spent.
+	 */
+	@Transactional(readOnly = true)
+	public Money reinvestableBalance(UUID userId, Currency currency) {
+		return schemes.schemeOf(userId) == ReferralScheme.ONLINE ? reinvestment.available(userId, currency) : null;
+	}
+
+	/**
+	 * Pays an order from the online investor's available balance, with their password. One transaction: the order is
+	 * locked first, as for every payment, then the investor's balances, as a withdrawal locks them; the amount is checked
+	 * against the locked balances, the ledger posted and the order confirmed. Nothing is recorded unless all of it
+	 * succeeds. Idempotent per key.
+	 */
+	public PaymentResponse payFromBalance(UUID userId, UUID orderId, String password, String idempotencyKey) {
+		String key = IdempotencyKey.require(idempotencyKey);
+		if (schemes.schemeOf(userId) != ReferralScheme.ONLINE) {
+			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+					"Paying from your balance is available to online investors only");
+		}
+		users.confirmPassword(userId, password);
+		return transactions.execute(status -> {
+			PayableOrder order = orders.lockForPayment(orderId);
+			Optional<PaymentResponse> answer = validateStart(userId, order, PaymentMethod.WALLET, key);
+			if (answer.isPresent()) {
+				return answer.get();
+			}
+			for (Payment inFlight : payments.findByOrderIdAndStatus(orderId, PaymentStatus.PENDING)) {
+				// The investor says they already paid another way: that money is verified first, never left to arrive
+				// for an order paid twice.
+				if (inFlight.hasDepositDetails() || inFlight.getReceiptNumber() != null) {
+					throw new BusinessException(ErrorCode.CONFLICT, "You told us you paid this order by "
+							+ humanize(inFlight.getMethod()).toLowerCase(Locale.ROOT)
+							+ ". Wait for it to be verified, or cancel the order and place it again.");
+				}
+			}
+			Payment payment = payments.saveAndFlush(new Payment(orderId, userId, PaymentMethod.WALLET,
+					PaymentMethod.WALLET.name(), "BAL-" + order.orderNumber(), order.total(), key));
+			UUID posted = reinvestment.spend(payment, order.orderNumber());
+			audit.record(AuditRecord.of(userId, AuditAction.PAYMENT_STARTED, ENTITY, payment.getId())
+				.withNewValue(Map.of("orderId", orderId.toString(), "method", PaymentMethod.WALLET,
+						"amount", payment.amount().toString(), "ledgerTransactionId", posted.toString())));
+			// The evidence is the ledger posting just made, under the wallet's lock: the payment is settled on it.
+			settle(payment, order, payment.amount(), posted.toString(), null);
+			return view(payment, order.orderNumber());
+		});
 	}
 
 	/**
@@ -676,7 +733,10 @@ public class PaymentService {
 		Instant now = clock.instant();
 		payment.settle(accepted, externalReference, actorId, note, now);
 		payments.flush();
-		depositLedger.received(payment, received, accepted, actorId);
+		if (payment.getMethod() != PaymentMethod.WALLET) {
+			// A balance payment is posted as a reinvestment by payFromBalance; no money arrived.
+			depositLedger.received(payment, received, accepted, actorId);
+		}
 		if (accepted && !orders.confirmPaid(order.id(), payment.getId(), payment.getMethod() == PaymentMethod.OFFICE_CASH)) {
 			throw new IllegalStateException("Order " + order.orderNumber() + " could not be confirmed while locked");
 		}
@@ -793,6 +853,7 @@ public class PaymentService {
 			case OFFICE_CASH -> "Cash";
 			case GATEWAY -> "Online";
 			case VIRTUAL_ACCOUNT -> "Bank transfer";
+			case WALLET -> "Available balance";
 		};
 	}
 

@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import { failureState } from "@/lib/server/action-errors";
 import type { Order, Payment, PaymentMethod } from "@/types/order";
 import { type FormState, firstErrors } from "@/validators/form-state";
-import { depositSchema, idempotencyKeySchema, receiptSchema, unitsSchema } from "@/validators/order";
+import { depositSchema, idempotencyKeySchema, payFromBalanceSchema, receiptSchema, unitsSchema } from "@/validators/order";
 
 const id = (value: string) => encodeURIComponent(value);
 
@@ -58,6 +58,27 @@ export async function startPaymentAction(orderId: string, method: PaymentMethod,
   }
   revalidatePath(`/orders/${orderId}`);
   return {};
+}
+
+/**
+ * Pays the order from the investor's available balance, confirmed with their password. The backend checks the balance
+ * (under its lock) and confirms the order at once; nothing about the amount comes from here.
+ */
+export async function payFromBalanceAction(orderId: string, idempotencyKey: string, _p: FormState, formData: FormData): Promise<FormState> {
+  if (!idempotencyKeySchema.safeParse(idempotencyKey).success) return { error: "Reload the page and try again." };
+  const parsed = payFromBalanceSchema.safeParse({ password: String(formData.get("password") ?? "") });
+  if (!parsed.success) return { fieldErrors: firstErrors(parsed.error) };
+  try {
+    await authFetch<Payment>(`/api/v1/orders/${id(orderId)}/payments/balance`, {
+      method: "POST", json: parsed.data, idempotencyKey,
+    });
+  } catch (error) {
+    return failureState(error);
+  }
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  revalidatePath("/dashboard");
+  return { success: "Paid from your balance. Your investment is confirmed." };
 }
 
 /**

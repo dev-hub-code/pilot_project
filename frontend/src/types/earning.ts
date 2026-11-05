@@ -95,7 +95,8 @@ export interface LedgerEntry {
     | "WITHDRAWAL_RELEASE"
     | "WITHDRAWAL_PAYOUT"
     | "DEPOSIT_RECEIVED"
-    | "DEPOSIT_REFUNDED";
+    | "DEPOSIT_REFUNDED"
+    | "REINVESTMENT";
   reference: string;
   description: string;
   direction: Direction;

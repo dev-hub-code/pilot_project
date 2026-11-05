@@ -19,5 +19,10 @@ public enum PaymentMethod {
 	 * Online investors: a virtual bank account (and UPI ID) opened for this payment, paid by NEFT, RTGS, IMPS or UPI.
 	 * Confirmed automatically when the money lands.
 	 */
-	VIRTUAL_ACCOUNT
+	VIRTUAL_ACCOUNT,
+	/**
+	 * Online investors: paid from their available balance (the earnings in their wallet), confirmed at once. The ledger
+	 * moves the amount from their earnings to their invested capital in the same transaction.
+	 */
+	WALLET
 }

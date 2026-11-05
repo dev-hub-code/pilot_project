@@ -186,17 +186,20 @@ public class ReconciliationService {
 
 	/**
 	 * Payments settled since deposits are posted to the ledger (the first such posting) without their posting, and
-	 * refunds of posted deposits without theirs. Earlier payments were never posted, and are left as they are.
+	 * refunds of posted deposits without theirs. Earlier payments were never posted, and are left as they are. A payment
+	 * from the investor's balance is posted as a reinvestment (always, so its own posting is looked for from the start).
 	 */
 	private List<UnpostedDeposit> unpostedDeposits() {
 		return jdbc.query("""
 				WITH since AS (SELECT min(created_at) AS at FROM ledger_transactions WHERE transaction_type = 'DEPOSIT_RECEIVED')
 				SELECT p.id, p.status, p.amount, p.currency, p.settled_at,
-				       CASE WHEN r.id IS NULL THEN 'DEPOSIT_RECEIVED' ELSE 'DEPOSIT_REFUNDED' END AS missing
+				       CASE WHEN r.id IS NOT NULL THEN 'DEPOSIT_REFUNDED'
+				            WHEN p.method = 'WALLET' THEN 'REINVESTMENT' ELSE 'DEPOSIT_RECEIVED' END AS missing
 				FROM payments p CROSS JOIN since
-				LEFT JOIN ledger_transactions r ON r.transaction_type = 'DEPOSIT_RECEIVED' AND r.reference = p.id::text
+				LEFT JOIN ledger_transactions r ON r.reference = p.id::text
+				      AND r.transaction_type = CASE WHEN p.method = 'WALLET' THEN 'REINVESTMENT' ELSE 'DEPOSIT_RECEIVED' END
 				LEFT JOIN ledger_transactions f ON f.transaction_type = 'DEPOSIT_REFUNDED' AND f.reference = p.id::text
-				WHERE since.at IS NOT NULL AND p.settled_at >= since.at
+				WHERE p.settled_at IS NOT NULL AND (p.method = 'WALLET' OR (since.at IS NOT NULL AND p.settled_at >= since.at))
 				  AND (r.id IS NULL OR (p.status = 'REFUNDED' AND f.id IS NULL))
 				ORDER BY p.settled_at LIMIT ?""", (rs, i) -> new UnpostedDeposit(rs.getObject("id", UUID.class),
 				rs.getString("status"), money(rs.getBigDecimal("amount"), rs.getString("currency")),

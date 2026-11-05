@@ -45,7 +45,7 @@ export interface ReconciliationReport {
     status: string;
     amount: Money;
     settledAt: string;
-    missing: "DEPOSIT_RECEIVED" | "DEPOSIT_REFUNDED";
+    missing: "DEPOSIT_RECEIVED" | "DEPOSIT_REFUNDED" | "REINVESTMENT";
   }[];
 }
 
