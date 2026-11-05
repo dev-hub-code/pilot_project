@@ -1,5 +1,7 @@
 package com.sealease.backend.investment.service;
 
+import com.sealease.backend.common.cache.Caches;
+import org.springframework.cache.annotation.CacheEvict;
 import com.sealease.backend.audit.AuditAction;
 import com.sealease.backend.audit.AuditRecord;
 import com.sealease.backend.audit.AuditService;
@@ -57,6 +59,7 @@ public class ProductService {
 
 	/** A new draft plan. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse create(UUID actorId, ProductRequest request) {
 		InvestmentProduct product = new InvestmentProduct("LST-" + products.nextCodeNumber(), actorId);
 		product.setAudience(request.audience());
@@ -69,6 +72,7 @@ public class ProductService {
 
 	/** Terms are editable only while DRAFT: once published, investors rely on them. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse update(UUID actorId, UUID productId, ProductRequest request) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
@@ -85,6 +89,7 @@ public class ProductService {
 	}
 
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse publish(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {
@@ -101,6 +106,7 @@ public class ProductService {
 	 * Stops selling the plan. Orders already placed can still be paid, and investments made keep their term and payouts.
 	 */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse close(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.OPEN) {
@@ -116,6 +122,7 @@ public class ProductService {
 
 	/** Sells a closed plan again, on the terms it was published with. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse reopen(UUID actorId, UUID productId) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.CLOSED) {
@@ -131,6 +138,7 @@ public class ProductService {
 
 	/** A draft that will never be published. Published plans are closed instead. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.PUBLIC_PLANS, allEntries = true)
 	public ProductResponse cancel(UUID actorId, UUID productId, String reason) {
 		InvestmentProduct product = lock(productId);
 		if (product.getStatus() != ProductStatus.DRAFT) {

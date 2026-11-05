@@ -1,5 +1,8 @@
 package com.sealease.backend.terms.service;
 
+import com.sealease.backend.common.cache.Caches;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -45,7 +48,11 @@ public class TermsService {
 		this.clock = clock;
 	}
 
-	/** The version in force. */
+	/**
+	 * The version in force, as shown. Cached briefly; a save clears it. {@link #accept} reads it fresh, so an account
+	 * always records the version actually in force.
+	 */
+	@Cacheable(cacheNames = Caches.Names.TERMS, key = "'current'")
 	@Transactional(readOnly = true)
 	public TermsView.Version current() {
 		return jdbc.query(SELECT + " ORDER BY t.version DESC LIMIT 1", (rs, i) -> version(rs, true)).stream().findFirst()
@@ -65,6 +72,7 @@ public class TermsService {
 
 	/** Saves new wording as the next version, in force from now on. */
 	@Transactional
+	@CacheEvict(cacheNames = Caches.Names.TERMS, allEntries = true)
 	public TermsView.Version save(UUID actorId, TermsRequest request) {
 		String title = request.title().strip();
 		String body = normalise(request.body());
