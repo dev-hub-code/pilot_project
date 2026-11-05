@@ -156,7 +156,7 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
   - `UnmatchedGatewayReceipts.record` stores each receipt once (a redelivery changes nothing) and audits it (`PAYMENT_UNMATCHED_RECEIVED`).
   - Finance lists receipts with `GET /api/v1/admin/payments/unmatched` (`FINANCE_VIEW` or `PAYMENT_CONFIRM`). They close each one with a note via `POST /api/v1/admin/payments/unmatched/{id}/resolve` (`PAYMENT_CONFIRM`, audited `PAYMENT_UNMATCHED_RESOLVED`).
   - Payout webhooks for an unknown reference were already stored in `payout_webhook_events`.
-  - There is no admin screen for the list yet; the API is in place.
+  - Admin screen: **Finance → Unmatched Receipts** (`/admin/payments/unmatched`) lists them and resolves each with a note.
 
 ### MEDIUM
 
@@ -275,7 +275,7 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
     - the trial balance;
     - settled payments missing their ledger posting.
   - A daily job (06:00 in the display time zone) keeps the result in `reconciliation_runs` once across instances (advisory lock) and logs a warning when anything needs attention. `GET /api/v1/admin/reconciliation/runs` lists the runs.
-  - There is no admin screen for it yet.
+  - Admin screen: **Finance → Reconciliation** (`/admin/reconciliation`).
 
 ### LOW
 
