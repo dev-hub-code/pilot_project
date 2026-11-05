@@ -104,13 +104,15 @@ public class PaymentService {
 	private final TransactionTemplate transactions;
 	private final DepositLedger depositLedger;
 	private final ReinvestmentLedger reinvestment;
+	private final PaymentGatewaySettingsService gatewaySettings;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
 			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
 			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, TransactionTemplate transactions,
-			DepositLedger depositLedger, ReinvestmentLedger reinvestment, Clock clock) {
+			DepositLedger depositLedger, ReinvestmentLedger reinvestment, PaymentGatewaySettingsService gatewaySettings,
+			Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -130,6 +132,7 @@ public class PaymentService {
 		this.transactions = transactions;
 		this.depositLedger = depositLedger;
 		this.reinvestment = reinvestment;
+		this.gatewaySettings = gatewaySettings;
 		this.clock = clock;
 	}
 
@@ -144,11 +147,12 @@ public class PaymentService {
 	@Transactional(readOnly = true)
 	public List<PaymentMethod> methodsFor(UUID userId) {
 		if (schemes.schemeOf(userId) == ReferralScheme.ONLINE) {
-			if (!razorpay.enabled()) {
+			GatewaySettings gateway = gatewaySettings.current();
+			if (!gateway.checkoutOffered()) {
 				return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.WALLET);
 			}
 			// Bank transfer into a virtual account needs Smart Collect; without it, the checkout only.
-			return razorpay.virtualAccountsEnabled()
+			return gateway.virtualAccountsOffered()
 					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT, PaymentMethod.WALLET)
 					: List.of(PaymentMethod.GATEWAY, PaymentMethod.WALLET);
 		}
@@ -161,8 +165,9 @@ public class PaymentService {
 	 */
 	@Transactional(readOnly = true)
 	public Money checkoutLimit(UUID userId, Currency currency) {
-		return methodsFor(userId).contains(PaymentMethod.GATEWAY) && razorpay.hasCheckoutLimit()
-				? Money.of(razorpay.maxAmount(), currency) : null;
+		GatewaySettings gateway = gatewaySettings.current();
+		return methodsFor(userId).contains(PaymentMethod.GATEWAY) && gateway.hasCheckoutLimit()
+				? Money.of(gateway.maxAmount(), currency) : null;
 	}
 
 	/**
@@ -307,8 +312,9 @@ public class PaymentService {
 			}
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, reason);
 		}
-		if (method == PaymentMethod.GATEWAY && !razorpay.checkoutAllows(order.total())) {
-			Money limit = Money.of(razorpay.maxAmount(), order.total().currency());
+		GatewaySettings gateway = gatewaySettings.current();
+		if (method == PaymentMethod.GATEWAY && !gateway.checkoutAllows(order.total())) {
+			Money limit = Money.of(gateway.maxAmount(), order.total().currency());
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Online payment is limited to "
 					+ limit.display() + " per payment, and this order is " + order.total().display() + ". "
 					+ (allowed.contains(PaymentMethod.VIRTUAL_ACCOUNT) ? "Please pay by bank transfer instead."
@@ -345,8 +351,8 @@ public class PaymentService {
 	private Instant holdUntil(PaymentMethod method, Instant now) {
 		return switch (method) {
 			case OFFICE_CASH -> now.plus(office.holdWindow());
-			case GATEWAY -> now.plus(razorpay.checkoutWindow());
-			case VIRTUAL_ACCOUNT -> now.plus(razorpay.virtualAccountWindow());
+			case GATEWAY -> now.plus(gatewaySettings.current().checkoutWindow());
+			case VIRTUAL_ACCOUNT -> now.plus(gatewaySettings.current().virtualAccountWindow());
 			default -> null;
 		};
 	}
@@ -843,7 +849,7 @@ public class PaymentService {
 			PaymentProvider.VirtualAccountDetails va = payment.virtualAccount();
 			virtualAccount = new VirtualAccountInstructions(MoneyResponse.from(payment.amount()), va.accountNumber(),
 					va.ifsc(), va.accountName(), va.bankName(), va.upiId(),
-					payment.getCreatedAt().plus(razorpay.virtualAccountWindow()));
+					payment.getCreatedAt().plus(gatewaySettings.current().virtualAccountWindow()));
 		}
 		return PaymentResponse.from(payment, orderNumber, instructions, deposit, officeCash, checkout, virtualAccount);
 	}
