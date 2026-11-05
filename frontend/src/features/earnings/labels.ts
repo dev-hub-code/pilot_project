@@ -40,6 +40,9 @@ export const ACCOUNT_LABEL: Record<AccountType, string> = {
   PLATFORM_CAPITAL_RETURNS: "Capital returned to investors",
   WITHDRAWAL_FEE_INCOME: "Withdrawal charges",
   TAX_WITHHELD: "Tax withheld from withdrawals",
+  DEPOSITS_RECEIVED: "Money received for investments",
+  INVESTOR_PRINCIPAL: "Investor principal",
+  DEPOSITS_TO_REFUND: "Money received to refund",
 };
 
 export const EARNINGS_BALANCE_LABEL: Record<EarningsBalance, string> = {

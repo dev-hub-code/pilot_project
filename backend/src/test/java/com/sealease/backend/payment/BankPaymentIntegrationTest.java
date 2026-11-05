@@ -153,6 +153,12 @@ class BankPaymentIntegrationTest {
 		String paid = paymentId(startBankPayment(first, placeOrder(first, offerings.plan())));
 		submit(first, paid, account, "ONLINE", utr).andExpect(status().isOk());
 		confirm(finance, paid, utr, "50000").andExpect(status().isOk());
+		// The money is in the ledger as what the investor paid for their units (finding M-7).
+		assertThat(jdbc.queryForList("""
+				SELECT a.account_type || ' ' || e.direction || ' ' || e.amount FROM ledger_transactions t
+				JOIN ledger_entries e ON e.transaction_id = t.id JOIN ledger_accounts a ON a.id = e.account_id
+				WHERE t.transaction_type = 'DEPOSIT_RECEIVED' AND t.reference = ? ORDER BY 1""", String.class, paid))
+			.containsExactly("DEPOSITS_RECEIVED DEBIT 50000.0000", "INVESTOR_PRINCIPAL CREDIT 50000.0000");
 
 		// The same transfer (in any case) cannot be evidence for a second deposit; that order still waits for its money.
 		Account second = approvedInvestor();

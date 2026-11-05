@@ -17,6 +17,18 @@ spring:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       minimum-idle: ${DB_POOL_MIN_IDLE:5}
       connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      # A transaction waits at most this long for a row lock (then fails and is answered "try again"), and one left
+      # open and idle (a stuck request) is ended, so it cannot hold a wallet or order lock indefinitely.
+      connection-init-sql: >-
+        SET lock_timeout = '${DB_LOCK_TIMEOUT:10s}';
+        SET idle_in_transaction_session_timeout = '${DB_IDLE_IN_TRANSACTION_TIMEOUT:60s}'
+
+  task:
+    scheduling:
+      # Background jobs (outbox relay, order expiry, rent, KYC follow-up, SLA, ticket auto-close, reconciliation) run on
+      # their own threads, so a long rent sweep does not hold up publishing events or expiring orders.
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:4}
 
   jpa:
     open-in-view: false

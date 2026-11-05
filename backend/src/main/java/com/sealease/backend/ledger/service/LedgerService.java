@@ -58,10 +58,18 @@ public class LedgerService {
 
 	private static final String ENTITY = "LEDGER_TRANSACTION";
 
-	/** Signed balance on the account's normal side. */
+	/**
+	 * Signed balance on the account's normal side. An investor's account is read from its running totals (kept by the
+	 * database as entries are posted), so the cost does not grow with the account's history; a platform account is
+	 * summed from its entries.
+	 */
 	private static final String BALANCE = """
-			coalesce((SELECT sum(CASE WHEN e.direction = a.normal THEN e.amount ELSE -e.amount END)
-			          FROM ledger_entries e WHERE e.account_id = a.id), 0)
+			CASE WHEN a.owner_user_id IS NOT NULL
+			     THEN coalesce((SELECT sum(CASE WHEN t.direction = a.normal THEN t.total ELSE -t.total END)
+			                    FROM ledger_account_totals t WHERE t.account_id = a.id), 0)
+			     ELSE coalesce((SELECT sum(CASE WHEN e.direction = a.normal THEN e.amount ELSE -e.amount END)
+			                    FROM ledger_entries e WHERE e.account_id = a.id), 0)
+			END
 			""";
 	private static final String ACCOUNTS = """
 			SELECT a.id, a.account_type, a.owner_user_id, a.currency, a.created_at, %s AS balance
@@ -181,16 +189,32 @@ public class LedgerService {
 	 * Locks an investor's earnings account (opening it if needed) and returns its balance. Every
 	 * posting that takes money out of the account (adjustments, withdrawals) holds this lock, so two
 	 * of them can never both spend the same balance.
+	 *
+	 * <p>{@code FOR NO KEY UPDATE}, not {@code FOR UPDATE}: spenders still wait for each other, but money posted into
+	 * the account meanwhile (rent, commission: each entry's foreign key takes a key-share lock on the account) does not
+	 * wait for the spender to commit.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public Money lockInvestorBalance(UUID userId, Currency currency, EarningsBalance which) {
 		UUID accountId = accountId(which.account(), userId, currency,
 				OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
-		jdbc.queryForObject("SELECT id FROM ledger_accounts WHERE id = ? FOR UPDATE", UUID.class, accountId);
+		jdbc.queryForObject("SELECT id FROM ledger_accounts WHERE id = ? FOR NO KEY UPDATE", UUID.class, accountId);
 		return Money.of(balanceOf(accountId), currency);
 	}
 
 	// ------------------------------------------------------------------------------ queries
+
+	/** The amount a transaction moved (its debits), if it was posted. */
+	@Transactional(readOnly = true)
+	public Optional<Money> postedAmount(TransactionType type, String reference) {
+		return jdbc.query("""
+				SELECT t.currency, sum(e.amount) AS amount
+				FROM ledger_transactions t JOIN ledger_entries e ON e.transaction_id = t.id AND e.direction = 'DEBIT'
+				WHERE t.transaction_type = ? AND t.reference = ?
+				GROUP BY t.currency
+				""", (rs, i) -> Money.of(rs.getBigDecimal("amount"), Currency.getInstance(rs.getString("currency"))),
+				type.name(), reference).stream().findFirst();
+	}
 
 	/** An investor's balance, unlocked (zero when the account has never been opened); for display only. */
 	@Transactional(readOnly = true)

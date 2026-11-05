@@ -153,6 +153,9 @@ public class ReportCatalog {
 				+ " WHEN 'PLATFORM_CAPITAL_RETURNS' THEN 'Capital returned to investors'"
 				+ " WHEN 'WITHDRAWAL_FEE_INCOME' THEN 'Withdrawal charges'"
 				+ " WHEN 'TAX_WITHHELD' THEN 'Tax withheld from withdrawals'"
+				+ " WHEN 'DEPOSITS_RECEIVED' THEN 'Money received for investments'"
+				+ " WHEN 'INVESTOR_PRINCIPAL' THEN 'Investor principal'"
+				+ " WHEN 'DEPOSITS_TO_REFUND' THEN 'Money received to refund'"
 				+ " ELSE " + typeSql + " END";
 	}
 

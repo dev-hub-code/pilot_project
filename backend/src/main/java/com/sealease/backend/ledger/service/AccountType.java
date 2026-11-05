@@ -31,7 +31,13 @@ public enum AccountType {
 	/** Revenue: charges the company keeps from withdrawals, taken when the withdrawal is paid. */
 	WITHDRAWAL_FEE_INCOME(Direction.CREDIT, false),
 	/** Liability: tax withheld from withdrawals, owed to the tax authority. */
-	TAX_WITHHELD(Direction.CREDIT, false);
+	TAX_WITHHELD(Direction.CREDIT, false),
+	/** Asset: money received from investors for their investments (bank, cash at the office or the gateway). */
+	DEPOSITS_RECEIVED(Direction.DEBIT, false),
+	/** Liability: what investors paid for the units they hold. */
+	INVESTOR_PRINCIPAL(Direction.CREDIT, false),
+	/** Liability: money received that cannot pay for an investment and must be returned to the investor. */
+	DEPOSITS_TO_REFUND(Direction.CREDIT, false);
 
 	private final Direction normalBalance;
 	private final boolean perInvestor;

@@ -21,7 +21,7 @@ The money paths are well built. The platform uses a double-entry ledger whose ro
 | H-3 | Bank references (UTR / receipt numbers) are not unique for manually confirmed deposits or for withdrawal payouts | One bank reference can confirm several deposits or mark several withdrawals paid. A single finance user can confirm an investment for money that never arrived. |
 | H-4 | A Razorpay or payout webhook for a reference that isn't ours is only logged | Money received this way leaves no record to reconcile or refund |
 
-There are also 8 MEDIUM findings (lock contention, an external call made while holding a lock, the single scheduler thread, no lock timeouts) and 5 LOW findings.
+There are also 8 MEDIUM findings (lock contention, an external call made while holding a lock, the single scheduler thread, no lock timeouts) and 5 LOW findings. **All 8 MEDIUM findings are fixed** (branch `fix-medium-concurrency-issues`); see "Done" under each.
 
 > **Status: all four HIGH findings are fixed** (branch `fix-high-concurrency-issues`). The two acceptance tests are enabled and pass. The burst of 100 withdrawal requests now gets no 500s, and all 30 concurrent Razorpay and payout deliveries are answered 200. See "Fix" under each finding below.
 
@@ -160,15 +160,22 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 
 ### MEDIUM
 
-**M-1: Razorpay is called while the order row is locked**
+**M-1: Razorpay is called while the order row is locked** (fixed)
 
 - `PaymentService.java:149` locks the order, and `:221` then calls Razorpay to create an order or virtual account.
 - Razorpay timeouts are 15 s for connect and 15 s for read (`payment/gateway/RazorpayProperties.java:29`, `HttpRazorpayClient.java:34-35`).
 - **Measured:** an order cancel waited **1.3 s** behind a 1.5 s gateway call. Webhooks and the expiry sweep for that order wait the same way, and the request holds a pooled connection throughout.
 - If the transaction rolls back after Razorpay succeeded, the virtual account it created is left open. It isn't closed, because closing is only registered for after-commit.
 - **Fix.** Insert the `PENDING` payment, commit, call the provider outside the lock, then attach the result. Or keep the current flow but register a rollback hook that closes the provider object.
+- **Done.**
+  - `PaymentService.start` now takes three short steps:
+    1. it checks the request under the order lock, changing nothing;
+    2. it calls the provider with no transaction or lock held;
+    3. it records the payment under the lock, after checking again.
+  - Whatever the provider opened is closed if the payment isn't recorded (the order changed meanwhile, another request won, or recording failed).
+  - Measured afterwards: the order cancel took **4 ms** (was 1.3 s) while the start waited for the gateway. The start then found the order cancelled (422), and the virtual account was closed.
 
-**M-2: The database does not require approvals for investor-requested withdrawals**
+**M-2: The database does not require approvals for investor-requested withdrawals** (fixed)
 
 - `withdrawals_approved_chk` (`ddl/V2__tables.sql:1016`) exempts `origin = 'REQUESTED'`.
 - Maker-checker for online withdrawals is enforced only in `WithdrawalReviewService.java:128-153`.
@@ -178,8 +185,11 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
   CHECK (origin <> 'REQUESTED' OR status IN ('SUBMITTED','UNDER_REVIEW','ON_HOLD','PENDING_APPROVAL','REJECTED','CANCELLED')
          OR (first_approved_by IS NOT NULL AND (required_approvals = 1 OR second_approved_by IS NOT NULL)))
   ```
+- **Done.** `ddl/V24` replaces `withdrawals_approved_chk` with the rule above.
+  - Runs and office withdrawals stay exempt, as before; they are approved by how they are made.
+  - The migration first checks existing data and stops with the query to find any offending rows.
 
-**M-3: Withdrawal runs hold every wallet lock in one long transaction**
+**M-3: Withdrawal runs hold every wallet lock in one long transaction** (fixed)
 
 - `WithdrawalRunService.java:118-200` processes every eligible investor in a single transaction and locks each wallet (`:156`) until the end.
 - The wallet lock is `FOR UPDATE` (`LedgerService.java:189`). That blocks the `FOR KEY SHARE` lock PostgreSQL takes for every `ledger_entries` foreign-key insert.
@@ -187,22 +197,35 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 - **Fix:**
   - Use `SELECT … FOR NO KEY UPDATE`. It still serialises spenders but no longer blocks credits.
   - Give each investor in a run its own transaction, and record the run's results row by row.
+- **Done.**
+  - `LedgerService.lockInvestorBalance` takes `FOR NO KEY UPDATE`.
+  - Measured afterwards: a credit posted while a spender held the wallet took **4 ms**. With the old `FOR UPDATE` the same test hits the lock timeout.
+  - **Kept as one transaction:** the run itself. Its withdrawals, its two sheets and its run record must succeed or fail together: a run committed investor by investor could leave reserved withdrawals on no sheet if it stopped halfway. With credits no longer blocked, the long transaction only makes other spenders on the same wallets (adjustments) wait, which is the intended serialisation.
 
-**M-4: Balances are summed from every entry while the wallet is locked**
+**M-4: Balances are summed from every entry while the wallet is locked** (fixed)
 
 - `LedgerService.java:62-65` and `:433-436` recompute the balance from all of an account's entries each time.
 - Rent is credited once per interval (hourly by default, down to every 5 minutes), so the work per withdrawal grows with the account's age. That work happens inside the wallet lock.
 - **Fix.** Keep an `account_balances` row (or a checkpoint plus the entries after it), updated in the same transaction as each posting and under the same lock.
+- **Done.**
+  - `ddl/V24` adds `ledger_account_totals` (debits and credits per investor account), filled from existing entries.
+  - A trigger on `ledger_entries` keeps it up to date; entries can't be changed or deleted, so it can't drift.
+  - Investor balances are read from it. Platform accounts are still summed: every investor's postings touch them, and they are rarely read.
+  - Debits and credits are kept as separate rows, so a credit never waits for an uncommitted debit.
+  - A test checks that the totals equal the entries for every account.
 
-**M-5: One scheduler thread for all jobs**
+**M-5: One scheduler thread for all jobs** (fixed)
 
 - No `spring.task.scheduling.pool.size` is set (`config/SchedulingConfig.java`), so six jobs share one thread: the outbox relay (every 1 s), order expiry, rent crediting, KYC follow-up, SLA monitor and ticket auto-close. A long rent sweep delays Kafka publishing and order expiry.
 - On N instances each job runs N times. That's safe (verified), but in the test 7 of 8 sweeps waited on locks only to find nothing to do.
 - **Fix:**
   - Set the scheduling pool size to about 4.
   - Use ShedLock (JDBC) for the rent sweep, or select its due accruals with `FOR UPDATE SKIP LOCKED`.
+- **Done.**
+  - `spring.task.scheduling.pool.size` is 4 (`SCHEDULING_POOL_SIZE`).
+  - The rent sweep locks each lease with `SKIP LOCKED`: an instance moves past a lease another instance is crediting instead of waiting for it.
 
-**M-6: No database lock or statement timeouts**
+**M-6: No database lock or statement timeouts** (fixed)
 
 - Nothing sets `lock_timeout`, `statement_timeout` or `idle_in_transaction_session_timeout`.
 - A stuck transaction holding a wallet or order lock blocks other requests until the 10 s pool timeout, and the scheduled jobs indefinitely.
@@ -213,16 +236,25 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
   ```
 
   Give the jobs longer values if needed.
+- **Done.**
+  - Hikari `connection-init-sql` sets `lock_timeout` 10 s (`DB_LOCK_TIMEOUT`) and `idle_in_transaction_session_timeout` 60 s (`DB_IDLE_IN_TRANSACTION_TIMEOUT`) on every connection.
+  - A lock timeout is answered 409 "try again".
+  - No `statement_timeout` is set: reports and migrations can legitimately run long.
 
-**M-7: Deposits, principal and refunds are not in the double-entry ledger**
+**M-7: Deposits, principal and refunds are not in the double-entry ledger** (fixed)
 
 - The ledger covers earnings, commissions, adjustments and withdrawals only (`ledger_transactions_type_chk`, `ddl/V2__tables.sql`).
 - Money received for investments and refunds paid out live only in `payments`, so the trial balance does not cover client money received.
 - **Fix (design decision):**
   - Post `DEPOSIT_RECEIVED` (cash ↔ investor principal) on settlement and `DEPOSIT_REFUNDED` on refund, with the payment id as reference.
   - Add a reconciliation report: payments SUCCEEDED = principal postings.
+- **Done.**
+  - New accounts `DEPOSITS_RECEIVED`, `INVESTOR_PRINCIPAL` and `DEPOSITS_TO_REFUND`, and new transactions `DEPOSIT_RECEIVED` and `DEPOSIT_REFUNDED`, all referenced by the payment id.
+  - **When money arrives:** it is posted against principal (it paid for the order) or against to-refund.
+  - **When it is refunded:** the amount received is reversed.
+  - Payments settled before this change are not back-posted, so no historical record changes. Reconciliation checks every payment settled since the first posting.
 
-**M-8: No automated reconciliation**
+**M-8: No automated reconciliation** (fixed)
 
 - Ambiguous payout outcomes are recorded (`payout_webhook_events.outcome = NEEDS_RECONCILIATION | AMOUNT_MISMATCH | UNKNOWN_WITHDRAWAL`).
 - `REFUND_REQUIRED` payments wait for finance.
@@ -233,6 +265,17 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
   - `REFUND_REQUIRED` older than N days;
   - `WITHDRAWALS_IN_TRANSIT` compared with open withdrawals;
   - the trial balance.
+- **Done.**
+  - `GET /api/v1/admin/reconciliation` (`FINANCE_VIEW`) lists:
+    - payout events needing attention (last 30 days);
+    - withdrawals in `PROCESSING` over 3 days;
+    - `REFUND_REQUIRED` payments over 3 days;
+    - open unmatched gateway receipts;
+    - withdrawals in transit (ledger) compared with open withdrawals;
+    - the trial balance;
+    - settled payments missing their ledger posting.
+  - A daily job (06:00 in the display time zone) keeps the result in `reconciliation_runs` once across instances (advisory lock) and logs a warning when anything needs attention. `GET /api/v1/admin/reconciliation/runs` lists the runs.
+  - There is no admin screen for it yet.
 
 ### LOW
 

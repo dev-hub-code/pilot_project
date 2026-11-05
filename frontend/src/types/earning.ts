@@ -69,7 +69,10 @@ export type AccountType =
   | "PLATFORM_RENT_EXPENSE"
   | "PLATFORM_CAPITAL_RETURNS"
   | "WITHDRAWAL_FEE_INCOME"
-  | "TAX_WITHHELD";
+  | "TAX_WITHHELD"
+  | "DEPOSITS_RECEIVED"
+  | "INVESTOR_PRINCIPAL"
+  | "DEPOSITS_TO_REFUND";
 export type Direction = "DEBIT" | "CREDIT";
 
 export interface LedgerAccount {
@@ -90,7 +93,9 @@ export interface LedgerEntry {
     | "REFERRAL_COMMISSION"
     | "WITHDRAWAL_RESERVE"
     | "WITHDRAWAL_RELEASE"
-    | "WITHDRAWAL_PAYOUT";
+    | "WITHDRAWAL_PAYOUT"
+    | "DEPOSIT_RECEIVED"
+    | "DEPOSIT_REFUNDED";
   reference: string;
   description: string;
   direction: Direction;
