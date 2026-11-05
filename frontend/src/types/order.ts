@@ -43,10 +43,14 @@ export interface Order {
  */
 export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD" | "GATEWAY" | "VIRTUAL_ACCOUNT" | "WALLET";
 
-/** How this investor can pay; `availableBalance` is what an online investor can pay from their balance now. */
+/**
+ * How this investor can pay. `availableBalance` is what an online investor can pay from their balance now;
+ * `checkoutLimit` is the most one checkout (GATEWAY) payment can be, a larger order being paid another way.
+ */
 export interface PaymentMethods {
   methods: PaymentMethod[];
   availableBalance?: Money;
+  checkoutLimit?: Money;
 }
 
 /** What the gateway's checkout needs, while a gateway payment is pending. */

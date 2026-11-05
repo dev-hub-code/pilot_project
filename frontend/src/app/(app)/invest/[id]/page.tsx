@@ -14,6 +14,7 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireSession } from "@/lib/server/auth/session";
 import { onboardingHref } from "@/lib/server/onboarding";
 import { isUuid } from "@/lib/server/routes/document-proxy";
+import type { PaymentMethods } from "@/types/order";
 import type { PlanDetail, PlanQuote } from "@/types/plan";
 import { formatMoney, formatPercent } from "@/utils/money";
 
@@ -34,7 +35,11 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
     throw error;
   }
   const { plan, eligibility } = detail;
-  const quote = await authFetch<PlanQuote>(`/api/v1/plans/${id}/quote?units=${plan.minUnits}`);
+  const [quote, payment] = await Promise.all([
+    authFetch<PlanQuote>(`/api/v1/plans/${id}/quote?units=${plan.minUnits}`),
+    // Only to warn about the checkout's limit; the page works without it.
+    investor ? authFetch<PaymentMethods>("/api/v1/payments/methods").catch(() => null) : Promise.resolve(null),
+  ]);
   const open = plan.status === "OPEN";
 
   return (
@@ -69,7 +74,9 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
 
         <section className="space-y-5 rounded-xl border border-border bg-surface p-6 lg:sticky lg:top-6 lg:self-start" aria-label="Buy units">
           <BuyUnitsForm productId={id} tenureYears={plan.tenureYears} initial={quote} idempotencyKey={randomUUID()}
-            canBuy={investor && eligibility.eligible} />
+            canBuy={investor && eligibility.eligible} checkoutLimit={payment?.checkoutLimit}
+            bankTransfer={(payment?.methods ?? []).includes("VIRTUAL_ACCOUNT")}
+            availableBalance={payment?.availableBalance} />
           {!investor ? (
             <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
           ) : !eligibility.eligible && (

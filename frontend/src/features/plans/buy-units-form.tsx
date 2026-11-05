@@ -6,8 +6,9 @@ import { FormFeedback } from "@/components/ui/form-feedback";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TextField } from "@/components/ui/text-field";
 import { placeOrderAction } from "@/features/orders/actions";
+import { overCheckoutLimit } from "@/features/orders/checkout-limit";
 import { yearsLabel } from "@/features/orders/lease-years";
-import type { PlanQuote } from "@/types/plan";
+import type { Money, PlanQuote } from "@/types/plan";
 import { formatMoney, formatPercent } from "@/utils/money";
 import type { FormState } from "@/validators/form-state";
 import { quotePlanAction } from "./actions";
@@ -19,12 +20,18 @@ const DEBOUNCE_MS = 350;
  * The investor enters how many units to buy and sees what they cost and pay, worked out by the backend as they type.
  * With {@code canBuy} they accept the terms and place the order; otherwise the form is only an estimate.
  */
-export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, canBuy }: {
+export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, canBuy, checkoutLimit, bankTransfer = false, availableBalance }: {
   productId: string;
   tenureYears: number;
   initial: PlanQuote;
   idempotencyKey: string;
   canBuy: boolean;
+  /** The most one online checkout payment can be, when there is a limit. */
+  checkoutLimit?: Money;
+  /** The investor can pay by bank transfer, which has no such limit. */
+  bankTransfer?: boolean;
+  /** What an online investor can pay from their balance (reinvest). */
+  availableBalance?: Money;
 }) {
   const [state, action] = useActionState<FormState, FormData>(placeOrderAction.bind(null, productId, idempotencyKey), {});
   const [units, setUnits] = useState(state.values?.units ?? String(initial.units));
@@ -79,6 +86,16 @@ export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, 
           Total returns over {yearsLabel(tenureYears)} ({quote.payouts} payouts):{" "}
           <strong className="font-display text-lg">{formatMoney(quote.totalReturns)}</strong>
         </p>
+        {canBuy && overCheckoutLimit(quote.amount, checkoutLimit) && checkoutLimit && (
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            Online payment is limited to {formatMoney(checkoutLimit)} per payment.{" "}
+            {bankTransfer
+              ? "You can pay this order by bank transfer instead."
+              : availableBalance && Number(availableBalance.amount) >= Number(quote.amount.amount)
+                ? "You can pay this order from your available balance instead."
+                : `To pay online, invest up to ${formatMoney(checkoutLimit)} per order.`}
+          </p>
+        )}
         {quote.problems.length > 0 && (
           <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-300">
             {quote.problems.map((problem) => <li key={problem}>• {problem}</li>)}

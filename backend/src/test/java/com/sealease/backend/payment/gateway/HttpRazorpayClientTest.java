@@ -67,7 +67,7 @@ class HttpRazorpayClientTest {
 		server.start();
 		URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
 		RazorpayProperties properties = new RazorpayProperties("rzp_test_key", "secret", "", base, "SeaLease",
-				Duration.ofMinutes(30), Duration.ofDays(3), Duration.ofSeconds(5), true);
+				Duration.ofMinutes(30), Duration.ofDays(3), Duration.ofSeconds(5), true, new java.math.BigDecimal("500000"));
 		assertThat(properties.virtualAccountsEnabled()).isTrue();
 		return new HttpRazorpayClient(properties);
 	}

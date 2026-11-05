@@ -297,6 +297,9 @@ app:
       # Bank transfer into a virtual account needs Razorpay Smart Collect activated on the account. Until it is, set
       # false: investors are offered the checkout only.
       virtual-accounts: ${RAZORPAY_VIRTUAL_ACCOUNTS:true}
+      # The most Razorpay accepts in one checkout payment, in rupees (₹5,00,000 unless Razorpay has raised it for the
+      # account; 0 for no limit). A larger order is not offered the checkout and is paid another way.
+      max-amount: ${RAZORPAY_MAX_AMOUNT:500000}
   notifications:
     email:
       # Also email each notification to users who keep email notifications on (Settings).

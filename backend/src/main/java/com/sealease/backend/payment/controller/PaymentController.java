@@ -50,8 +50,9 @@ public class PaymentController {
 	@GetMapping("/api/v1/payments/methods")
 	public PaymentMethodsResponse methods(AuthenticatedUser investor) {
 		Money balance = payments.reinvestableBalance(investor.userId(), money.defaultCurrency());
+		Money limit = payments.checkoutLimit(investor.userId(), money.defaultCurrency());
 		return new PaymentMethodsResponse(payments.methodsFor(investor.userId()),
-				balance == null ? null : MoneyResponse.from(balance));
+				balance == null ? null : MoneyResponse.from(balance), limit == null ? null : MoneyResponse.from(limit));
 	}
 
 	/** The gateway's checkout finished: its signed result, checked with the gateway before the order is confirmed. */

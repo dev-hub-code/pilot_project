@@ -8,6 +8,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
+import { overCheckoutLimit } from "@/features/orders/checkout-limit";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
 import { BalancePaymentForm } from "@/features/orders/balance-payment-form";
 import { DepositForm } from "@/features/orders/deposit-form";
@@ -33,8 +34,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   let demo: boolean;
   let methods: PaymentMethod[];
   let availableBalance: Money | undefined;
+  let checkoutLimit: Money | undefined;
   try {
-    [order, payments, demo, { methods, availableBalance }] = await Promise.all([
+    [order, payments, demo, { methods, availableBalance, checkoutLimit }] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
       isDemoAccount(),
@@ -51,6 +53,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const paid = payments.find((p) => p.status === "SUCCEEDED");
   // Online investors pay through the gateway; network investors by bank or at the office.
   const online = methods.includes("GATEWAY");
+  // The gateway takes one payment of at most this much; a larger order is paid another way (the backend refuses it).
+  const overLimit = overCheckoutLimit(order.total, checkoutLimit);
   // Online investors may pay from their balance, unless they have told us they paid another way (that is verified
   // first). Whether it covers the order is only a hint here: the backend checks it before spending.
   const balancePayable = methods.includes("WALLET") && availableBalance != null && !awaitingVerification;
@@ -259,7 +263,17 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     </p>
                   </div>
                 )}
-                {pending?.method !== "GATEWAY" && (
+                {overLimit && checkoutLimit && (
+                  <Notice tone="info">
+                    Online payment is limited to {formatMoney(checkoutLimit)} per payment.{" "}
+                    {methods.includes("VIRTUAL_ACCOUNT")
+                      ? "Please pay this order by bank transfer."
+                      : balancePayable && balanceCovers
+                        ? "Please pay this order from your available balance above."
+                        : `Please cancel this order and place orders of up to ${formatMoney(checkoutLimit)} each.`}
+                  </Notice>
+                )}
+                {!overLimit && pending?.method !== "GATEWAY" && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "GATEWAY", key())}
                     label="Pay online (UPI, net banking or card)" pendingLabel="Preparing payment…" className="w-full" />
                 )}
