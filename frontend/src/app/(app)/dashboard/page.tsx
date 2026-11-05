@@ -75,6 +75,11 @@ export default async function DashboardPage() {
     : [null, null, null, null, null];
   // Only online investors request withdrawals; network investors are paid when our team makes one.
   const canWithdraw = referrals?.scheme === "ONLINE";
+  // Online investors can also put their returns and referral commission into a new plan (paid from the balance).
+  const reinvestable = (earnings?.wallet ?? [])
+    .filter((w) => w.balance === "RENT_BANK" || w.balance === "REFERRAL")
+    .reduce((total, w) => total + Number(w.amount.amount), 0);
+  const canReinvest = canWithdraw && reinvestable > 0;
   const list = (amounts: Money[] | undefined) => (amounts && amounts.length > 0
     ? amounts.map((m) => formatMoney(m, { compact: true })).join(" · ")
     : "—");
@@ -102,6 +107,7 @@ export default async function DashboardPage() {
         actions={!needsVerification && (
           <div className="flex flex-wrap gap-2">
             {canWithdraw && <LinkButton href="/withdrawals" variant="secondary">Withdraw</LinkButton>}
+            {canReinvest && <LinkButton href="/invest?reinvest=1" variant="secondary">Reinvest</LinkButton>}
             <LinkButton href="/invest">Invest</LinkButton>
           </div>
         )} />
