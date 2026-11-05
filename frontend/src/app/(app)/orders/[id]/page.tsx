@@ -9,6 +9,7 @@ import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
+import { BalancePaymentForm } from "@/features/orders/balance-payment-form";
 import { DepositForm } from "@/features/orders/deposit-form";
 import { RazorpayCheckout } from "@/features/orders/razorpay-checkout";
 import { ReceiptForm } from "@/features/orders/receipt-form";
@@ -17,7 +18,8 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch } from "@/lib/server/auth/session";
 import { isDemoAccount } from "@/lib/server/demo";
 import { isUuid } from "@/lib/server/routes/document-proxy";
-import type { Order, Payment, PaymentMethod } from "@/types/order";
+import type { Money } from "@/types/plan";
+import type { Order, Payment, PaymentMethod, PaymentMethods } from "@/types/order";
 import { formatDateTime, humanize } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 
@@ -30,12 +32,13 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   let payments: Payment[];
   let demo: boolean;
   let methods: PaymentMethod[];
+  let availableBalance: Money | undefined;
   try {
-    [order, payments, demo, { methods }] = await Promise.all([
+    [order, payments, demo, { methods, availableBalance }] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
       isDemoAccount(),
-      authFetch<{ methods: PaymentMethod[] }>("/api/v1/payments/methods"),
+      authFetch<PaymentMethods>("/api/v1/payments/methods"),
     ]);
   } catch (error) {
     if (error instanceof BackendError && error.status === 404) notFound();
@@ -48,6 +51,10 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const paid = payments.find((p) => p.status === "SUCCEEDED");
   // Online investors pay through the gateway; network investors by bank or at the office.
   const online = methods.includes("GATEWAY");
+  // Online investors may pay from their balance, unless they have told us they paid another way (that is verified
+  // first). Whether it covers the order is only a hint here: the backend checks it before spending.
+  const balancePayable = methods.includes("WALLET") && availableBalance != null && !awaitingVerification;
+  const balanceCovers = availableBalance != null && Number(availableBalance.amount) >= Number(order.total.amount);
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -197,6 +204,20 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
               </p>
             )}
           </Card>
+
+          {order.status === "PENDING_PAYMENT" && balancePayable && availableBalance && (
+            <Card title="Reinvest">
+              {balanceCovers ? (
+                <BalancePaymentForm orderId={order.id} orderNumber={order.orderNumber} total={order.total}
+                  available={availableBalance} idempotencyKey={key()} />
+              ) : (
+                <p className="text-sm text-muted">
+                  Your available balance ({formatMoney(availableBalance)}) does not cover this order, so it cannot be paid
+                  from your balance. Pay below, or place a smaller order to reinvest.
+                </p>
+              )}
+            </Card>
+          )}
 
           {order.status === "PENDING_PAYMENT" && online && (
             <Card title="Pay">

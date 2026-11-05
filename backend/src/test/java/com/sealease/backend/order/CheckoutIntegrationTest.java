@@ -426,10 +426,10 @@ class CheckoutIntegrationTest {
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, offerings.plan(), 1);
 
-		// Without the gateway set up, online investors pay by bank transfer only.
+		// Without the gateway set up, online investors pay by bank transfer (or from their balance).
 		mvc.perform(get("/api/v1/payments/methods").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.methods", contains("BANK_TRANSFER")));
+			.andExpect(jsonPath("$.methods", contains("BANK_TRANSFER", "WALLET")));
 		startPayment(investor, orderId, "OFFICE_CASH").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message", containsString("Cash payment is not available")));
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid", Integer.class, orderId))

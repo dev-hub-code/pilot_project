@@ -17,6 +17,11 @@ export const confirmTransferSchema = z.object({
 const reference = (message: string) =>
   z.string().trim().min(3, message).max(100).regex(/^[A-Za-z0-9/ -]+$/, "Use letters, digits, spaces, dashes or slashes only");
 
+/** Paying from the available balance is confirmed with the investor's password, as a withdrawal is. */
+export const payFromBalanceSchema = z.object({
+  password: z.string().min(1, "Enter your password to confirm").max(200),
+});
+
 export const depositSchema = z.object({
   companyBankAccountId: z.uuid("Choose the account you paid into"),
   mode: z.enum(["ONLINE", "CHEQUE"], { message: "Choose how you paid" }),

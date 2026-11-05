@@ -11,5 +11,7 @@ public enum TransactionType {
 	/** Money received for an investment (reference: the payment id). */
 	DEPOSIT_RECEIVED,
 	/** Money received for an investment that could not take it, paid back (reference: the payment id). */
-	DEPOSIT_REFUNDED
+	DEPOSIT_REFUNDED,
+	/** An investor's earnings spent on an investment, paid from their available balance (reference: the payment id). */
+	REINVESTMENT
 }

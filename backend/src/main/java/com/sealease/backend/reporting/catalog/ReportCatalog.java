@@ -519,7 +519,7 @@ public class ReportCatalog {
 		String signed = "CASE WHEN e.direction = 'CREDIT' THEN e.amount ELSE -e.amount END";
 		String inPeriod = "e.created_at >= :periodFrom";
 		add(report("investor-statements", ReportCategory.INVESTOR, "Investor financial statements")
-			.describe("Per investor: opening balance, returns and capital credited, commissions, adjustments, withdrawals, closing.")
+			.describe("Per investor: opening balance, returns and capital credited, commissions, adjustments, withdrawals, reinvested, closing.")
 			.requires(INVESTORS)
 			.from("""
 					ledger_accounts a
@@ -541,11 +541,13 @@ public class ReportCatalog {
 							+ " AND t.transaction_type = 'ADJUSTMENT' THEN " + signed + " END), 0)"),
 					money("withdrawals", "Withdrawals", "coalesce(-sum(CASE WHEN " + inPeriod
 							+ " AND t.transaction_type IN ('WITHDRAWAL_RESERVE', 'WITHDRAWAL_RELEASE') THEN " + signed + " END), 0)"),
+					money("reinvested", "Reinvested", "coalesce(-sum(CASE WHEN " + inPeriod
+							+ " AND t.transaction_type = 'REINVESTMENT' THEN " + signed + " END), 0)"),
 					money("closing", "Closing balance", "coalesce(sum(" + signed + "), 0)"))
 			.search(code("u"), name("u"))
 			.currency("a.currency")
 			.sort("closing", true)
-			.note("From the investors' ledger accounts: closing = opening + credits + adjustments − withdrawals. "
+			.note("From the investors' ledger accounts: closing = opening + credits + adjustments − withdrawals − reinvested. "
 					+ "Withdrawals are counted when requested (reserved) and added back if returned."));
 	}
 

@@ -64,7 +64,7 @@ class GatewayWithoutVirtualAccountsIntegrationTest {
 
 		mvc.perform(get("/api/v1/payments/methods").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.methods", contains("GATEWAY")));
+			.andExpect(jsonPath("$.methods", contains("GATEWAY", "WALLET")));
 
 		start(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value("Bank transfer isn't available right now; please pay online"));
