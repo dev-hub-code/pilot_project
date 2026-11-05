@@ -242,7 +242,8 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                   <ActionButton action={startPaymentAction.bind(null, order.id, "GATEWAY", key())}
                     label="Pay online (UPI, net banking or card)" pendingLabel="Preparing payment…" className="w-full" />
                 )}
-                {pending?.method !== "VIRTUAL_ACCOUNT" && (
+                {/* Offered only while Razorpay Smart Collect is on (the backend decides). */}
+                {methods.includes("VIRTUAL_ACCOUNT") && pending?.method !== "VIRTUAL_ACCOUNT" && (
                   <ActionButton action={startPaymentAction.bind(null, order.id, "VIRTUAL_ACCOUNT", key())}
                     label="Pay by bank transfer (NEFT, RTGS, IMPS)" pendingLabel="Opening an account…"
                     variant="secondary" className="w-full" />

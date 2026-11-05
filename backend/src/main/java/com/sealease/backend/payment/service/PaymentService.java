@@ -139,9 +139,13 @@ public class PaymentService {
 	@Transactional(readOnly = true)
 	public List<PaymentMethod> methodsFor(UUID userId) {
 		if (schemes.schemeOf(userId) == ReferralScheme.ONLINE) {
-			return razorpay.enabled()
+			if (!razorpay.enabled()) {
+				return List.of(PaymentMethod.BANK_TRANSFER);
+			}
+			// Bank transfer into a virtual account needs Smart Collect; without it, the checkout only.
+			return razorpay.virtualAccountsEnabled()
 					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT)
-					: List.of(PaymentMethod.BANK_TRANSFER);
+					: List.of(PaymentMethod.GATEWAY);
 		}
 		return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.OFFICE_CASH);
 	}
@@ -269,7 +273,10 @@ public class PaymentService {
 		boolean cashAllowed = allowed.contains(PaymentMethod.OFFICE_CASH);
 		if (!allowed.contains(method)) {
 			String reason;
-			if (allowed.contains(PaymentMethod.GATEWAY)) {
+			if (method == PaymentMethod.VIRTUAL_ACCOUNT && allowed.contains(PaymentMethod.GATEWAY)) {
+				reason = "Bank transfer isn't available right now; please pay online";
+			}
+			else if (allowed.contains(PaymentMethod.GATEWAY)) {
 				reason = "Please pay online, through the checkout or by bank transfer to your payment's own account";
 			}
 			else if (method == PaymentMethod.OFFICE_CASH) {
