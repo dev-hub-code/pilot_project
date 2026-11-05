@@ -22,6 +22,7 @@ import com.sealease.backend.withdrawal.entity.WithdrawalOrigin;
 import com.sealease.backend.withdrawal.entity.WithdrawalPayoutMethod;
 import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import com.sealease.backend.withdrawal.repository.WithdrawalRepository;
+import com.sealease.backend.withdrawal.repository.WithdrawalRepository.PayoutKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -170,13 +171,14 @@ public class WithdrawalPaymentService {
 		}
 		String reference = text(event, "withdrawalReference");
 		String providerReference = text(event, "providerReference");
-		Optional<Withdrawal> found = reference == null ? Optional.empty() : withdrawals.findByReference(reference);
+		// Only what the event is checked against: the withdrawal itself is read once locked, in settleFromProvider.
+		Optional<PayoutKeys> found = reference == null ? Optional.empty() : withdrawals.findPayoutKeysByReference(reference);
 		// Recorded first: a second delivery of the same event stops here.
 		int inserted = jdbc.update("""
 				INSERT INTO payout_webhook_events (id, provider, event_id, event_type, withdrawal_id, provider_reference,
 				                                   outcome, payload, received_at)
 				VALUES (?, ?, ?, ?, ?, ?, 'RECEIVED', CAST(? AS jsonb), ?) ON CONFLICT (provider, event_id) DO NOTHING""",
-				UUID.randomUUID(), WEBHOOK_PROVIDER, eventId, type, found.map(Withdrawal::getId).orElse(null),
+				UUID.randomUUID(), WEBHOOK_PROVIDER, eventId, type, found.map(PayoutKeys::getId).orElse(null),
 				providerReference, body, Timestamp.from(clock.instant()));
 		if (inserted == 0) {
 			return WebhookOutcome.DUPLICATE;
@@ -185,13 +187,13 @@ public class WithdrawalPaymentService {
 		jdbc.update("UPDATE payout_webhook_events SET outcome = ? WHERE provider = ? AND event_id = ?", outcome.name(),
 				WEBHOOK_PROVIDER, eventId);
 		audit.record(AuditRecord.of(null, AuditAction.PAYOUT_WEBHOOK_RECEIVED, WithdrawalService.ENTITY,
-				found.map(Withdrawal::getId).orElse(null))
+				found.map(PayoutKeys::getId).orElse(null))
 			.withNewValue(Map.of("event", eventId, "type", type, "outcome", outcome.name(),
 					"providerReference", providerReference == null ? "" : providerReference)));
 		return outcome;
 	}
 
-	private WebhookOutcome settle(String type, Optional<Withdrawal> found, String providerReference, JsonNode event) {
+	private WebhookOutcome settle(String type, Optional<PayoutKeys> found, String providerReference, JsonNode event) {
 		boolean paid = "payout.paid".equals(type);
 		boolean failed = "payout.failed".equals(type);
 		if (!paid && !failed) {
@@ -202,23 +204,23 @@ public class WithdrawalPaymentService {
 			log.warn("Payout webhook {} for an unknown withdrawal", type);
 			return WebhookOutcome.UNKNOWN_WITHDRAWAL;
 		}
-		Withdrawal w = found.get();
+		PayoutKeys w = found.get();
 		if (paid) {
 			if (providerReference == null) {
 				return WebhookOutcome.NEEDS_RECONCILIATION;
 			}
 			BigDecimal amount = decimal(text(event, "amount"));
-			if (amount == null || amount.compareTo(w.net().amount()) != 0
+			if (amount == null || amount.compareTo(w.getNetAmount()) != 0
 					|| !w.getCurrency().equalsIgnoreCase(String.valueOf(text(event, "currency")))) {
-				log.warn("Payout webhook amount does not match withdrawal {}", w.getReference());
+				log.warn("Payout webhook amount does not match withdrawal {}", text(event, "withdrawalReference"));
 				return WebhookOutcome.AMOUNT_MISMATCH;
 			}
 		}
 		boolean changed = batches.settleFromProvider(w.getId(), paid, providerReference, text(event, "reason"));
 		if (!changed) {
-			// Already settled, or not with the provider: left for finance, never re-applied.
-			return w.getStatus() == WithdrawalStatus.PAID && paid ? WebhookOutcome.DUPLICATE
-					: WebhookOutcome.NEEDS_RECONCILIATION;
+			// Already settled, not with the provider, or its reference already used: left for finance, never re-applied.
+			boolean alreadyPaid = withdrawals.findStatusById(w.getId()).orElse(null) == WithdrawalStatus.PAID;
+			return alreadyPaid && paid ? WebhookOutcome.DUPLICATE : WebhookOutcome.NEEDS_RECONCILIATION;
 		}
 		return paid ? WebhookOutcome.PAID : WebhookOutcome.FAILED;
 	}

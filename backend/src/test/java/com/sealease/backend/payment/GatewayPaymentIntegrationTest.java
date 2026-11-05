@@ -211,7 +211,7 @@ class GatewayPaymentIntegrationTest {
 	}
 
 	@Test
-	void webhooksMustBeSignedAndOnesForOtherPaymentsAreIgnored() throws Exception {
+	void webhooksMustBeSignedAndOnesForOtherPaymentsAreAcknowledged() throws Exception {
 		String body = creditedEvent("pay_" + suffix(), "va_unknown", ORDER_PAISE);
 		mvc.perform(post("/api/v1/webhooks/razorpay").contentType(MediaType.APPLICATION_JSON).content(body))
 			.andExpect(status().isUnauthorized());
@@ -220,6 +220,44 @@ class GatewayPaymentIntegrationTest {
 			.andExpect(status().isUnauthorized());
 		webhook(body).andExpect(status().isOk());
 		webhook(event("refund.processed", "\"refund\":{\"entity\":{\"id\":\"rfnd_1\"}}")).andExpect(status().isOk());
+	}
+
+	@Test
+	void moneyForAnUnknownReferenceIsRecordedOnceForFinanceToResolve() throws Exception {
+		String gatewayPayment = "pay_" + suffix();
+		String account = "va_" + suffix();
+		String body = creditedEvent(gatewayPayment, account, ORDER_PAISE);
+		webhook(body).andExpect(status().isOk());
+		webhook(body).andExpect(status().isOk()); // Razorpay delivers again: still one record.
+
+		String id = jdbc.queryForObject("""
+				SELECT id::text FROM unmatched_gateway_receipts WHERE provider = 'RAZORPAY' AND gateway_payment_id = ?""",
+				String.class, gatewayPayment);
+		assertThat(api.auditCount("PAYMENT_UNMATCHED_RECEIVED", id)).isEqualTo(1);
+
+		Account finance = api.staff("ADMIN", "FINANCE");
+		mvc.perform(get("/api/v1/admin/payments/unmatched").param("open", "true")
+				.header(HttpHeaders.AUTHORIZATION, approvedInvestor().bearer()))
+			.andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/admin/payments/unmatched").param("open", "true")
+				.header(HttpHeaders.AUTHORIZATION, finance.bearer()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.id == '%s')].providerReference".formatted(id)).value(account))
+			.andExpect(jsonPath("$[?(@.id == '%s')].amount.amount".formatted(id)).value("50000.00"));
+
+		resolve(finance, id, " ").andExpect(status().isBadRequest());
+		resolve(finance, id, "Refunded to the sender, Razorpay refund rfnd_123").andExpect(status().isOk())
+			.andExpect(jsonPath("$.resolvedBy").value(finance.id().toString()))
+			.andExpect(jsonPath("$.resolution").value("Refunded to the sender, Razorpay refund rfnd_123"));
+		resolve(finance, id, "Again").andExpect(status().isUnprocessableContent());
+		resolve(finance, UUID.randomUUID().toString(), "Unknown").andExpect(status().isNotFound());
+		assertThat(api.auditCount("PAYMENT_UNMATCHED_RESOLVED", id)).isEqualTo(1);
+	}
+
+	private ResultActions resolve(Account actor, String receiptId, String note) throws Exception {
+		return mvc.perform(post("/api/v1/admin/payments/unmatched/{id}/resolve", receiptId)
+			.header(HttpHeaders.AUTHORIZATION, actor.bearer()).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"reason\":\"" + note + "\"}"));
 	}
 
 	// ------------------------------------------------------------------------------ helpers

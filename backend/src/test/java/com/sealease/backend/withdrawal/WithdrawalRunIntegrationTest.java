@@ -222,18 +222,22 @@ class WithdrawalRunIntegrationTest {
 		updateTask(task(bea, rentBank), "FAILED", null, " ").andExpect(status().isBadRequest());
 
 		// Finance pays the rent bank tasks: Alice is paid; Bea's bank transfer failed.
-		updateTask(task(alice, rentBank), "PAID", "UTR-1", null).andExpect(status().isOk())
+		String utr = "UTR-" + UUID.randomUUID();
+		updateTask(task(alice, rentBank), "PAID", utr, null).andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("PAID"))
-			.andExpect(jsonPath("$.payoutReference").value("UTR-1"))
+			.andExpect(jsonPath("$.payoutReference").value(utr))
 			.andExpect(jsonPath("$.accountNumber").value(org.hamcrest.Matchers.startsWith("••••")));
 		updateTask(task(bea, rentBank), "FAILED", null, "Account closed").andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("FAILED"));
 		// Done once: it cannot be updated again.
-		updateTask(task(alice, rentBank), "PAID", "UTR-1", null).andExpect(status().is4xxClientError());
+		updateTask(task(alice, rentBank), "PAID", utr, null).andExpect(status().is4xxClientError());
 		summary(alice).andExpect(jsonPath("$.totalWithdrawn[0].amount").value("1000.50"))
 			.andExpect(jsonPath("$.withdrawalInProgress[0].amount").value("250.00"));
-		// Then the referral bank task: her referral too.
-		updateTask(task(alice, referralBank), "PAID", "UTR-2", null).andExpect(status().isOk());
+		// Then the referral bank task: her referral too. A bank reference already recorded for another withdrawal (in
+		// any case) is refused: one transfer is not evidence for two payouts.
+		updateTask(task(alice, referralBank), "PAID", utr.toLowerCase(), null).andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("already recorded")));
+		updateTask(task(alice, referralBank), "PAID", "UTR-" + UUID.randomUUID(), null).andExpect(status().isOk());
 		summary(alice).andExpect(jsonPath("$.totalWithdrawn[0].amount").value("1250.50"))
 			.andExpect(jsonPath("$.withdrawalInProgress.length()").value(0));
 		tasks(finance, "DONE", rentBank)
@@ -284,7 +288,7 @@ class WithdrawalRunIntegrationTest {
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 		api.takePayment(paymentId, finance);
 		mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, finance.bearer())
-				.contentType(MediaType.APPLICATION_JSON).content("{\"externalReference\":\"CR-ORDER-1\",\"amountReceived\":\"50000\"}"))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"externalReference\":\"CR-" + paymentId + "\",\"amountReceived\":\"50000\"}"))
 			.andExpect(status().isOk());
 		assertThat(jdbc.queryForList("SELECT paid_at_office FROM holdings WHERE order_id = ?::uuid", Boolean.class, orderId))
 			.containsExactly(true);

@@ -224,7 +224,7 @@ class CheckoutIntegrationTest {
 		confirmTransfer(finance, paymentId, "99999.99").andExpect(status().isUnprocessableContent());
 		confirmTransfer(finance, paymentId, "100000").andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("SUCCEEDED"))
-			.andExpect(jsonPath("$.externalReference").value("BANK-REF-1"));
+			.andExpect(jsonPath("$.externalReference").value("BANK-REF-" + paymentId));
 		confirmTransfer(finance, paymentId, "100000").andExpect(status().isConflict());
 
 		// Paid: the investment awaits its agreement, with no term and no payouts yet.
@@ -608,7 +608,7 @@ class CheckoutIntegrationTest {
 		api.takePayment(paymentId, actor);
 		return mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON)
-			.content("{\"externalReference\":\"BANK-REF-1\",\"amountReceived\":\"" + amount + "\"}"));
+			.content("{\"externalReference\":\"BANK-REF-" + paymentId + "\",\"amountReceived\":\"" + amount + "\"}"));
 	}
 
 

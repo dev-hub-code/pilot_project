@@ -23,6 +23,8 @@ The money paths are well built. The platform uses a double-entry ledger whose ro
 
 There are also 8 MEDIUM findings (lock contention, an external call made while holding a lock, the single scheduler thread, no lock timeouts) and 5 LOW findings.
 
+> **Status: all four HIGH findings are fixed** (branch `fix-high-concurrency-issues`). The two acceptance tests are enabled and pass. The burst of 100 withdrawal requests now gets no 500s, and all 30 concurrent Razorpay and payout deliveries are answered 200. See "Fix" under each finding below.
+
 > H-2 comes from the withdrawal-management change merged in PR #15 (`UserAccountService.confirmPassword` running in `REQUIRES_NEW`). It is a regression from that change, not a long-standing issue.
 
 ---
@@ -74,7 +76,7 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 
 ### HIGH
 
-**H-1: Read, then lock the same row: concurrent deliveries are answered 409**
+**H-1: Read, then lock the same row: concurrent deliveries are answered 409** (fixed)
 
 - **Pattern.** The entity is loaded without a lock, and the same transaction later runs a `PESSIMISTIC_WRITE` query for it. If another transaction committed a change in between, Hibernate raises *"Query result contains conflicting version of entity already held in persistence context"* (mapped to 409) and rolls back.
 - **What it means.** The comments say "re-checked under the lock", but the check actually runs on the stale copy. Only the `@Version` column (`common/persistence/BaseEntity.java:34`) stops a wrong update.
@@ -90,8 +92,12 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 - **Fix:**
   - Take the lock first. Either look up only the id (a projection query), then lock, or call `entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE)` on the instance already loaded.
   - On webhook endpoints, retry once internally on `OptimisticLockingFailureException` before answering.
+- **Done.**
+  - Every location above now reads only ids (projection queries `PaymentKeys`, `PayoutKeys`, `findBatchIdById`, `findStatusById`) and loads the entity for the first time with its lock.
+  - The finance-task assignee check runs on the locked withdrawal.
+  - With locking done this way, no internal retry was needed. Measured afterwards: 30/30 Razorpay and 30/30 payout deliveries answered 200, and 10/10 extra transfers were set aside for refund on the first delivery.
 
-**H-2: A burst of withdrawal requests exhausts the connection pool (regression from PR #15)**
+**H-2: A burst of withdrawal requests exhausts the connection pool (regression from PR #15)** (fixed)
 
 - **Code.** `withdrawal/service/WithdrawalRequestService.java:111` runs a query inside the request transaction, so it holds a connection. Then `:119` calls `user/service/UserAccountService.java:150` (`REQUIRES_NEW`), which needs a second connection. That method then does a bcrypt check while holding the `users` row lock.
 - **Measured (100 parallel requests):** 1 created, 46 correctly refused ("already in progress"), **50–52 HTTP 500** (`Connection is not available, request timed out after 10000ms`), and 1–3 requests that never returned. p50 latency was 10.3 s.
@@ -99,9 +105,13 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 - **Fix.** Check the password before the request transaction starts:
   - make `submit` a non-transactional coordinator that calls `confirmPassword` and then a `@Transactional` method; or
   - move the database read at `:111` after the password check, with no transaction open.
+- **Done.**
+  - `submit` is no longer `@Transactional`. It runs the idempotency lookup, the scheme check and the password check first, each in its own short transaction.
+  - The wallet lock, reservation and save then run in one `TransactionTemplate`, which re-checks the idempotency key under the lock.
+  - Measured afterwards: 100 parallel requests gave 1 created, 99 refused (409) and 0 server errors.
 - The acceptance test `aBurstOfWithdrawalRequestsIsAnsweredWithoutServerErrors` is ready, currently `@Disabled`.
 
-**H-3: Bank and cash references can be reused**
+**H-3: Bank and cash references can be reused** (fixed)
 
 - **Deposits.**
   - `PaymentService.java:393-424` accepts any `externalReference` (UTR / receipt) when finance confirms a bank or cash deposit.
@@ -127,12 +137,26 @@ The concurrency tests in section 9 confirm this under load. The HIGH findings be
 
   - Return a clear "reference already used for …" error.
   - Consider a second approver for deposits above the dual-approval threshold, using the existing `approval` module.
+- **Done.**
+  - **Database (`ddl/V23`).** `payments_manual_reference_uk` covers bank and cash deposits for any reference finance records. `withdrawals_payout_reference_uk` covers paid bank-transfer withdrawals. Both ignore case. The migration first checks existing data and stops with the queries to find duplicates.
+  - **Service checks.** These give a clear 409 that names the other record:
+    - `confirmBankTransfer` refuses a reused reference;
+    - `PayoutBatchService.pay` (finance tasks and batches) refuses a reused UTR;
+    - a payout webhook with a reused UTR is left `NEEDS_RECONCILIATION` instead of paying.
+  - **Cash receipts.** One cash receipt may still cover several payouts that **one** investor collects at once (an existing rule). The service refuses it for another investor.
+  - The deposit maker-checker is not done; it remains a recommendation.
 
-**H-4: Gateway money with no matching payment is only logged**
+**H-4: Gateway money with no matching payment is only logged** (fixed)
 
 - **Code.** `PaymentService.java:339-342`: when `virtual_account.credited` or `payment.captured` names a reference that isn't ours, the method logs a warning and the webhook answers 200.
 - **Impact.** Money that reached the company's Razorpay account leaves no row for finance to reconcile or refund.
 - **Fix.** Persist it to an `unmatched_gateway_receipts` table (provider, ids, amount, payload, received_at) and list it for finance.
+- **Done.**
+  - `ddl/V23` adds `unmatched_gateway_receipts`, unique per `(provider, gateway_payment_id)`.
+  - `UnmatchedGatewayReceipts.record` stores each receipt once (a redelivery changes nothing) and audits it (`PAYMENT_UNMATCHED_RECEIVED`).
+  - Finance lists receipts with `GET /api/v1/admin/payments/unmatched` (`FINANCE_VIEW` or `PAYMENT_CONFIRM`). They close each one with a note via `POST /api/v1/admin/payments/unmatched/{id}/resolve` (`PAYMENT_CONFIRM`, audited `PAYMENT_UNMATCHED_RESOLVED`).
+  - Payout webhooks for an unknown reference were already stored in `payout_webhook_events`.
+  - There is no admin screen for the list yet; the API is in place.
 
 ### MEDIUM
 
@@ -496,7 +520,7 @@ The existing constraints are strong. Kept as-is:
 
 ## 9. Concurrency tests (executed)
 
-`backend/src/test/java/com/sealease/backend/concurrency/FinancialConcurrencyIntegrationTest.java`: 12 enabled tests (all pass) and 2 `@Disabled` acceptance tests for H-1 and H-2. They run against PostgreSQL 18 (Testcontainers) with the production pool size of 20.
+`backend/src/test/java/com/sealease/backend/concurrency/FinancialConcurrencyIntegrationTest.java`: 12 tests, plus 2 acceptance tests for H-1 and H-2 that were `@Disabled` until the fixes; all 16 now pass. They run against PostgreSQL 18 (Testcontainers) with the production pool size of 20.
 
 | Scenario | n | Result codes | Money invariants | p50 / max | Pool peak / waiting | Lock waiters (peak) | Deadlocks |
 |----------|---|--------------|------------------|-----------|---------------------|---------------------|-----------|

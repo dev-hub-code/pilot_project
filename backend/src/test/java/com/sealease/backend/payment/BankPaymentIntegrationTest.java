@@ -21,6 +21,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -141,6 +142,33 @@ class BankPaymentIntegrationTest {
 		mvc.perform(get("/api/v1/orders/{id}", orderId).header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(jsonPath("$.status").value("CONFIRMED"));
 		submit(investor, payment, account, "ONLINE", "UTR000").andExpect(status().isConflict());
+	}
+
+	@Test
+	void oneBankReferenceConfirmsOnlyOneDeposit() throws Exception {
+		UUID account = api.companyBankAccount();
+		Account finance = api.staff("ADMIN", "FINANCE");
+		String utr = "UTR" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+		Account first = approvedInvestor();
+		String paid = paymentId(startBankPayment(first, placeOrder(first, offerings.plan())));
+		submit(first, paid, account, "ONLINE", utr).andExpect(status().isOk());
+		confirm(finance, paid, utr, "50000").andExpect(status().isOk());
+
+		// The same transfer (in any case) cannot be evidence for a second deposit; that order still waits for its money.
+		Account second = approvedInvestor();
+		String orderId = placeOrder(second, offerings.plan());
+		String payment = paymentId(startBankPayment(second, orderId));
+		submit(second, payment, account, "ONLINE", utr).andExpect(status().isOk());
+		confirm(finance, payment, " " + utr.toLowerCase() + " ", "50000").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("already recorded")));
+		assertThat(jdbc.queryForObject("SELECT status FROM payments WHERE id = ?::uuid", String.class, payment))
+			.isEqualTo("PENDING");
+		assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?::uuid", String.class, orderId))
+			.isEqualTo("PENDING_PAYMENT");
+
+		// The database refuses it too, whatever the code path.
+		assertThatThrownBy(() -> jdbc.update("UPDATE payments SET external_reference = ? WHERE id = ?::uuid",
+				utr.toLowerCase(), payment)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
 	}
 
 	@Test

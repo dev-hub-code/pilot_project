@@ -17,7 +17,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -145,7 +144,6 @@ class FinancialConcurrencyIntegrationTest {
 	 * (REQUIRES_NEW), so 100 at once exhaust the pool of 20 and most fail after the 10 s connection timeout.
 	 */
 	@Test
-	@Disabled("Audit finding H-2: a burst of withdrawal requests exhausts the connection pool")
 	void aBurstOfWithdrawalRequestsIsAnsweredWithoutServerErrors() throws Exception {
 		Account investor = withBank();
 		credit(investor, "1000", "RENT_BANK");
@@ -246,7 +244,7 @@ class FinancialConcurrencyIntegrationTest {
 				SELECT count(*) FROM ledger_transactions WHERE transaction_type = 'WITHDRAWAL_PAYOUT' AND reference = ?""",
 				Integer.class, id)).as("paid once in the ledger").isEqualTo(1);
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM payout_webhook_events WHERE withdrawal_id = ?::uuid",
-				Integer.class, id)).as("each distinct event recorded at most once").isLessThanOrEqualTo(11);
+				Integer.class, id)).as("each distinct event recorded at most once").isEqualTo(11);
 		assertThat(jdbc.queryForObject("""
 				SELECT count(*) FROM payout_webhook_events WHERE withdrawal_id = ?::uuid AND outcome = 'PAID'""",
 				Integer.class, id)).isEqualTo(1);
@@ -257,7 +255,6 @@ class FinancialConcurrencyIntegrationTest {
 	 * newer row it then locks (409, retried by the provider). Enable once the webhook locks before it reads.
 	 */
 	@Test
-	@Disabled("Audit finding H-1: concurrent webhook deliveries can be answered 409")
 	void everyConcurrentPayoutCallbackIsAcknowledged() throws Exception {
 		Account investor = withBank();
 		credit(investor, "1000", "RENT_BANK");
@@ -424,13 +421,12 @@ class FinancialConcurrencyIntegrationTest {
 			return razorpayWebhook(creditedEvent(gatewayPayment, account, ORDER_PAISE)).andReturn().getResponse().getStatus();
 		});
 
-		assertThat(race.count(500)).isZero();
+		assertThat(race.count(200)).as("every delivery is acknowledged").isEqualTo(30);
 		assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?::uuid", String.class, orderId))
 			.isEqualTo("CONFIRMED");
 		assertThat(paymentsOf(orderId, "SUCCEEDED")).as("one payment pays the order").isEqualTo(1);
-		// A transfer whose delivery lost the race (409) is recorded when Razorpay delivers it again (finding H-1).
-		assertThat(paymentsOf(orderId, "REFUND_REQUIRED")).as("other transfers are only ever set aside to refund")
-			.isLessThanOrEqualTo(10);
+		assertThat(paymentsOf(orderId, "REFUND_REQUIRED")).as("each other transfer is set aside to refund")
+			.isEqualTo(10);
 		assertThat(jdbc.queryForObject("""
 				SELECT count(*) FROM (SELECT external_reference FROM payments WHERE order_id = ?::uuid
 				GROUP BY external_reference HAVING count(*) > 1) d""", Integer.class, orderId))

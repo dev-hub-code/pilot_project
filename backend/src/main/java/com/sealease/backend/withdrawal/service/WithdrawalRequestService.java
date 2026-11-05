@@ -29,6 +29,7 @@ import com.sealease.backend.withdrawal.entity.WithdrawalStatus;
 import com.sealease.backend.withdrawal.repository.WithdrawalRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -63,12 +64,14 @@ public class WithdrawalRequestService {
 	private final LedgerService ledger;
 	private final AuditService audit;
 	private final MoneyProperties money;
+	private final TransactionTemplate transactions;
 	private final Clock clock;
 
 	public WithdrawalRequestService(WithdrawalRepository withdrawals, WithdrawalService withdrawalService,
 			WithdrawalRunService runs, WithdrawalSettingsService settings, WithdrawalHistory history,
 			ReferralPayoutModeService payoutModes, ReferralSchemeService schemes, BankAccountService bankAccounts,
-			UserAccountService accounts, LedgerService ledger, AuditService audit, MoneyProperties money, Clock clock) {
+			UserAccountService accounts, LedgerService ledger, AuditService audit, MoneyProperties money,
+			TransactionTemplate transactions, Clock clock) {
 		this.withdrawals = withdrawals;
 		this.withdrawalService = withdrawalService;
 		this.runs = runs;
@@ -81,6 +84,7 @@ public class WithdrawalRequestService {
 		this.ledger = ledger;
 		this.audit = audit;
 		this.money = money;
+		this.transactions = transactions;
 		this.clock = clock;
 	}
 
@@ -103,10 +107,11 @@ public class WithdrawalRequestService {
 	}
 
 	/**
-	 * Submits a request for review. The password is checked first (a wrong one counts towards the sign-in lockout);
-	 * everything else is decided under the wallet's lock.
+	 * Submits a request for review. Deliberately not one transaction: the password is checked first, in a transaction of
+	 * its own (a wrong one counts towards the sign-in lockout), while the request holds no other connection, so a request
+	 * never needs two pooled connections at once and a burst of requests cannot exhaust the pool. Everything else is then
+	 * decided in one transaction under the wallet's lock.
 	 */
-	@Transactional
 	public WithdrawalResponse submit(UUID userId, WithdrawalRequest request, String idempotencyKey) {
 		Optional<Withdrawal> earlier = withdrawals.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
 		if (earlier.isPresent()) {
@@ -117,7 +122,11 @@ public class WithdrawalRequestService {
 					"Network investors are paid when our team makes a withdrawal");
 		}
 		accounts.confirmPassword(userId, request.password());
+		return transactions.execute(status -> reserve(userId, request, idempotencyKey));
+	}
 
+	/** Saves the request and reserves its amount, under the wallet's lock. Runs in the transaction {@link #submit} opens. */
+	private WithdrawalResponse reserve(UUID userId, WithdrawalRequest request, String idempotencyKey) {
 		Currency currency = money.defaultCurrency();
 		EarningsBalance balance = request.balance();
 		WithdrawalPayoutMethod method = payoutModes.current(userId).mode();
@@ -126,7 +135,7 @@ public class WithdrawalRequestService {
 				: Optional.empty();
 		// Serialises requests and runs on this wallet; everything below is decided under the lock.
 		Money available = WithdrawalRunService.whole(ledger.lockInvestorBalance(userId, currency, balance));
-		earlier = withdrawals.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
+		Optional<Withdrawal> earlier = withdrawals.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
 		if (earlier.isPresent()) {
 			return WithdrawalResponse.forInvestor(earlier.get());
 		}
