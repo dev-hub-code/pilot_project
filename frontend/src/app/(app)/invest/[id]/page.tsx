@@ -75,7 +75,8 @@ export default async function PlanPage({ params }: PageProps<"/invest/[id]">) {
         <section className="space-y-5 rounded-xl border border-border bg-surface p-6 lg:sticky lg:top-6 lg:self-start" aria-label="Buy units">
           <BuyUnitsForm productId={id} tenureYears={plan.tenureYears} initial={quote} idempotencyKey={randomUUID()}
             canBuy={investor && eligibility.eligible} checkoutLimit={payment?.checkoutLimit}
-            payableOtherwise={(payment?.methods ?? []).some((m) => m !== "GATEWAY")} />
+            bankTransfer={(payment?.methods ?? []).includes("VIRTUAL_ACCOUNT")}
+            availableBalance={payment?.availableBalance} />
           {!investor ? (
             <Notice tone="info">Employee preview: this is what investors see. Investing needs an investor account.</Notice>
           ) : !eligibility.eligible && (

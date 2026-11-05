@@ -64,7 +64,7 @@ class GatewayWithoutVirtualAccountsIntegrationTest {
 
 		mvc.perform(get("/api/v1/payments/methods").header(HttpHeaders.AUTHORIZATION, investor.bearer()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.methods", contains("GATEWAY")));
+			.andExpect(jsonPath("$.methods", contains("GATEWAY", "WALLET")));
 
 		start(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value("Bank transfer isn't available right now; please pay online"));
@@ -88,7 +88,8 @@ class GatewayWithoutVirtualAccountsIntegrationTest {
 
 		start(investor, orderId, "GATEWAY").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message").value("Online payment is limited to ₹5,00,000.00 per payment, and this order "
-					+ "is ₹5,50,000.00. Please cancel it and place orders of up to ₹5,00,000.00 each."));
+					+ "is ₹5,50,000.00. Please pay from your available balance if it covers the order, or cancel it "
+					+ "and place orders of up to ₹5,00,000.00 each."));
 		verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid", Integer.class, orderId))
 			.isZero();

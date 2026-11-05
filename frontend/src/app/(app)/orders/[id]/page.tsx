@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/features/orders/action-button";
 import { overCheckoutLimit } from "@/features/orders/checkout-limit";
 import { cancelOrderAction, startPaymentAction } from "@/features/orders/actions";
+import { BalancePaymentForm } from "@/features/orders/balance-payment-form";
 import { DepositForm } from "@/features/orders/deposit-form";
 import { RazorpayCheckout } from "@/features/orders/razorpay-checkout";
 import { ReceiptForm } from "@/features/orders/receipt-form";
@@ -32,9 +33,10 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   let payments: Payment[];
   let demo: boolean;
   let methods: PaymentMethod[];
+  let availableBalance: Money | undefined;
   let checkoutLimit: Money | undefined;
   try {
-    [order, payments, demo, { methods, checkoutLimit }] = await Promise.all([
+    [order, payments, demo, { methods, availableBalance, checkoutLimit }] = await Promise.all([
       authFetch<Order>(`/api/v1/orders/${id}`),
       authFetch<Payment[]>(`/api/v1/orders/${id}/payments`),
       isDemoAccount(),
@@ -53,6 +55,10 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
   const online = methods.includes("GATEWAY");
   // The gateway takes one payment of at most this much; a larger order is paid another way (the backend refuses it).
   const overLimit = overCheckoutLimit(order.total, checkoutLimit);
+  // Online investors may pay from their balance, unless they have told us they paid another way (that is verified
+  // first). Whether it covers the order is only a hint here: the backend checks it before spending.
+  const balancePayable = methods.includes("WALLET") && availableBalance != null && !awaitingVerification;
+  const balanceCovers = availableBalance != null && Number(availableBalance.amount) >= Number(order.total.amount);
   // Rendered fresh per request: a new key per intent, reused by retries of that same form.
   const key = () => crypto.randomUUID();
 
@@ -203,6 +209,20 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
             )}
           </Card>
 
+          {order.status === "PENDING_PAYMENT" && balancePayable && availableBalance && (
+            <Card title="Reinvest">
+              {balanceCovers ? (
+                <BalancePaymentForm orderId={order.id} orderNumber={order.orderNumber} total={order.total}
+                  available={availableBalance} idempotencyKey={key()} />
+              ) : (
+                <p className="text-sm text-muted">
+                  Your available balance ({formatMoney(availableBalance)}) does not cover this order, so it cannot be paid
+                  from your balance. Pay below, or place a smaller order to reinvest.
+                </p>
+              )}
+            </Card>
+          )}
+
           {order.status === "PENDING_PAYMENT" && online && (
             <Card title="Pay">
               <div className="space-y-6">
@@ -248,7 +268,9 @@ export default async function OrderPage({ params }: PageProps<"/orders/[id]">) {
                     Online payment is limited to {formatMoney(checkoutLimit)} per payment.{" "}
                     {methods.includes("VIRTUAL_ACCOUNT")
                       ? "Please pay this order by bank transfer."
-                      : `Please cancel this order and place orders of up to ${formatMoney(checkoutLimit)} each.`}
+                      : balancePayable && balanceCovers
+                        ? "Please pay this order from your available balance above."
+                        : `Please cancel this order and place orders of up to ${formatMoney(checkoutLimit)} each.`}
                   </Notice>
                 )}
                 {!overLimit && pending?.method !== "GATEWAY" && (

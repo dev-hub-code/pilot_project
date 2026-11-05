@@ -38,16 +38,18 @@ export interface Order {
 /**
  * Online investors pay through the gateway: its checkout (GATEWAY) or a virtual account for a bank transfer
  * (VIRTUAL_ACCOUNT), confirmed automatically. Network investors pay by bank (BANK_TRANSFER) or cash at the office
- * (OFFICE_CASH), confirmed by finance. CARD appears on payments made before card payments were withdrawn.
+ * (OFFICE_CASH), confirmed by finance. Online investors can also pay from their available balance (WALLET), confirmed at
+ * once. CARD appears on payments made before card payments were withdrawn.
  */
-export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD" | "GATEWAY" | "VIRTUAL_ACCOUNT";
+export type PaymentMethod = "BANK_TRANSFER" | "OFFICE_CASH" | "CARD" | "GATEWAY" | "VIRTUAL_ACCOUNT" | "WALLET";
 
 /**
- * How this investor can pay. `checkoutLimit` is the most one checkout (GATEWAY) payment can be; a larger order is paid
- * another way.
+ * How this investor can pay. `availableBalance` is what an online investor can pay from their balance now;
+ * `checkoutLimit` is the most one checkout (GATEWAY) payment can be, a larger order being paid another way.
  */
 export interface PaymentMethods {
   methods: PaymentMethod[];
+  availableBalance?: Money;
   checkoutLimit?: Money;
 }
 

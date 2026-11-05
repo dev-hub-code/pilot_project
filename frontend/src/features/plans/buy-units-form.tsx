@@ -20,7 +20,7 @@ const DEBOUNCE_MS = 350;
  * The investor enters how many units to buy and sees what they cost and pay, worked out by the backend as they type.
  * With {@code canBuy} they accept the terms and place the order; otherwise the form is only an estimate.
  */
-export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, canBuy, checkoutLimit, payableOtherwise = false }: {
+export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, canBuy, checkoutLimit, bankTransfer = false, availableBalance }: {
   productId: string;
   tenureYears: number;
   initial: PlanQuote;
@@ -28,8 +28,10 @@ export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, 
   canBuy: boolean;
   /** The most one online checkout payment can be, when there is a limit. */
   checkoutLimit?: Money;
-  /** The investor has another way to pay than the checkout (e.g. bank transfer). */
-  payableOtherwise?: boolean;
+  /** The investor can pay by bank transfer, which has no such limit. */
+  bankTransfer?: boolean;
+  /** What an online investor can pay from their balance (reinvest). */
+  availableBalance?: Money;
 }) {
   const [state, action] = useActionState<FormState, FormData>(placeOrderAction.bind(null, productId, idempotencyKey), {});
   const [units, setUnits] = useState(state.values?.units ?? String(initial.units));
@@ -87,9 +89,11 @@ export function BuyUnitsForm({ productId, tenureYears, initial, idempotencyKey, 
         {canBuy && overCheckoutLimit(quote.amount, checkoutLimit) && checkoutLimit && (
           <p className="text-sm text-amber-700 dark:text-amber-300">
             Online payment is limited to {formatMoney(checkoutLimit)} per payment.{" "}
-            {payableOtherwise
+            {bankTransfer
               ? "You can pay this order by bank transfer instead."
-              : `To pay online, invest up to ${formatMoney(checkoutLimit)} per order.`}
+              : availableBalance && Number(availableBalance.amount) >= Number(quote.amount.amount)
+                ? "You can pay this order from your available balance instead."
+                : `To pay online, invest up to ${formatMoney(checkoutLimit)} per order.`}
           </p>
         )}
         {quote.problems.length > 0 && (

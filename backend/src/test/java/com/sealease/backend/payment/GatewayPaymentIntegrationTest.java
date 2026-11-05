@@ -83,7 +83,7 @@ class GatewayPaymentIntegrationTest {
 		Account online = approvedInvestor();
 		Account network = network(approvedInvestor());
 
-		methods(online).andExpect(jsonPath("$.methods", contains("GATEWAY", "VIRTUAL_ACCOUNT")));
+		methods(online).andExpect(jsonPath("$.methods", contains("GATEWAY", "VIRTUAL_ACCOUNT", "WALLET")));
 		methods(network).andExpect(jsonPath("$.methods", contains("BANK_TRANSFER", "OFFICE_CASH")));
 
 		String onlineOrder = placeOrder(online, offerings.plan());
