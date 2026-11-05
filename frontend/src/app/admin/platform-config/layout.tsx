@@ -14,7 +14,7 @@ export default async function PlatformConfigLayout({ children }: LayoutProps<"/a
   if (tabs.length === 0) redirect("/admin");
   return (
     <div className="space-y-6">
-      <PageHeader title="Platform config" description="How the platform runs: withdrawals, returns, referral rates and company accounts." />
+      <PageHeader title="Platform config" description="How the platform runs: withdrawals, returns, referral rates, the payment gateway and company accounts." />
       <ConfigTabs tabs={tabs} />
       {children}
     </div>

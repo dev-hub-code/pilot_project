@@ -10,7 +10,9 @@ import java.time.Duration;
 
 /**
  * Razorpay, through which online investors pay (app.payments.razorpay). Off until the API keys are set: online
- * investors then pay by bank transfer or at the office, as network investors do.
+ * investors then pay by bank transfer or at the office, as network investors do. The switches, the checkout limit and the
+ * payment windows here are defaults: admins change them in Platform config → Payment gateway
+ * ({@code PaymentGatewaySettingsService}). The keys and secrets are set only here.
  *
  * @param keyId                 the API key id (rzp_test_… or rzp_live_…); public, the checkout needs it
  * @param keySecret             the API key secret: signs checkout results and authenticates API calls

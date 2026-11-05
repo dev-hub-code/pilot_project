@@ -90,6 +90,8 @@ export function configTabs(permissions: readonly string[]): MenuLink[] {
       show: can(P.PAYOUT_PROCESS) || can(P.SYSTEM_SETTINGS_MANAGE) || can(P.FINANCE_VIEW) },
     { href: "/admin/platform-config/referral-rates", label: "Referral rates",
       show: can(P.FINANCE_VIEW) || can(P.REFERRAL_CONFIG_MANAGE) },
+    { href: "/admin/platform-config/payment-gateway", label: "Payment gateway",
+      show: can(P.SYSTEM_SETTINGS_MANAGE) || can(P.FINANCE_VIEW) },
     { href: "/admin/platform-config/company-accounts", label: "Company accounts",
       show: can(P.FINANCE_VIEW) || can(P.COMPANY_BANK_ACCOUNT_MANAGE) || can(P.COMPANY_BANK_ACCOUNT_VIEW) },
   ].filter((item) => item.show).map(({ href, label }) => ({ href, label }));
