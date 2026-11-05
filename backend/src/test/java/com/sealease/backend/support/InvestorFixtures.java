@@ -107,7 +107,7 @@ public final class InvestorFixtures {
 		api.takePayment(paymentId, admin);
 		mvc.perform(post("/api/v1/admin/payments/{id}/confirm", paymentId).header(HttpHeaders.AUTHORIZATION, admin.bearer())
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"externalReference\":\"STATEMENT-1\",\"amountReceived\":\"" + amount + "\"}"))
+				.content("{\"externalReference\":\"STATEMENT-" + paymentId + "\",\"amountReceived\":\"" + amount + "\"}"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("SUCCEEDED"));
 		return orderId;

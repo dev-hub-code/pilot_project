@@ -41,6 +41,7 @@ import com.sealease.backend.payment.provider.BankTransferProperties;
 import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
 import com.sealease.backend.payment.repository.PaymentRepository;
+import com.sealease.backend.payment.repository.PaymentRepository.PaymentKeys;
 import jakarta.persistence.criteria.Predicate;
 import com.sealease.backend.referral.dto.ReferralScheme;
 import com.sealease.backend.referral.service.ReferralSchemeService;
@@ -96,12 +97,13 @@ public class PaymentService {
 	private final UserAccountService users;
 	private final RazorpayProperties razorpay;
 	private final ReferralSchemeService schemes;
+	private final UnmatchedGatewayReceipts unmatched;
 	private final Clock clock;
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
 			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
-			ReferralSchemeService schemes, Clock clock) {
+			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, Clock clock) {
 		this.payments = payments;
 		this.orders = orders;
 		for (PaymentProvider provider : providers) {
@@ -117,6 +119,7 @@ public class PaymentService {
 		this.users = users;
 		this.razorpay = razorpay;
 		this.schemes = schemes;
+		this.unmatched = unmatched;
 		this.clock = clock;
 	}
 
@@ -245,7 +248,7 @@ public class PaymentService {
 	 */
 	@Transactional
 	public PaymentResponse submitDeposit(UUID userId, UUID paymentId, SubmitDepositRequest request) {
-		Payment payment = load(paymentId);
+		PaymentKeys payment = keys(paymentId);
 		if (!payment.getUserId().equals(userId)) {
 			throw new ResourceNotFoundException("Payment", paymentId);
 		}
@@ -282,7 +285,7 @@ public class PaymentService {
 	 */
 	@Transactional
 	public PaymentResponse submitReceipt(UUID userId, UUID paymentId, SubmitReceiptRequest request) {
-		Payment payment = load(paymentId);
+		PaymentKeys payment = keys(paymentId);
 		if (!payment.getUserId().equals(userId)) {
 			throw new ResourceNotFoundException("Payment", paymentId);
 		}
@@ -330,14 +333,16 @@ public class PaymentService {
 	 * second transfer into the same virtual account) is recorded as a payment of its own: it pays the order if the order
 	 * is still waiting, otherwise it is refunded.
 	 *
-	 * @return the payment that records the money, or empty if the reference is not one of ours
+	 * @return the payment that records the money, or empty if the reference is not one of ours (the money is then
+	 *         recorded as an unmatched receipt for finance)
 	 */
 	@Transactional
 	public Optional<PaymentResponse> recordGatewayPayment(String provider, String providerReference,
 			String gatewayPaymentId, Money received) {
-		Optional<Payment> found = payments.findByProviderAndProviderReference(provider, providerReference);
+		// Only the ids: the payment itself is read once locked, after its order.
+		Optional<PaymentKeys> found = payments.findKeysByProviderReference(provider, providerReference);
 		if (found.isEmpty()) {
-			log.warn("{} reported payment {} for {}, which is not one of ours", provider, gatewayPaymentId, providerReference);
+			unmatched.record(provider, providerReference, gatewayPaymentId, received);
 			return Optional.empty();
 		}
 		PayableOrder order = orders.lockForPayment(found.get().getOrderId());
@@ -387,11 +392,12 @@ public class PaymentService {
 
 	/**
 	 * Finance records that a bank transfer arrived, or that cash was received at the office ({@code externalReference}
-	 * is then the receipt number). Nobody may confirm a payment for their own order.
+	 * is then the receipt number, which no other payment of that method may have). Nobody may confirm a payment for their
+	 * own order.
 	 */
 	@Transactional
 	public PaymentResponse confirmBankTransfer(UUID actorId, UUID paymentId, ConfirmTransferRequest request) {
-		Payment payment = load(paymentId);
+		PaymentKeys payment = keys(paymentId);
 		if (!isManual(payment.getMethod())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
 					"Only bank and office payments are confirmed manually");
@@ -419,7 +425,14 @@ public class PaymentService {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "The amount due is "
 					+ locked.amount().display() + "; partial or excess transfers must be returned to the investor");
 		}
-		settle(locked, order, received, request.externalReference().strip(), actorId);
+		// One transfer or receipt is evidence for one payment: a reference already recorded is refused.
+		String reference = request.externalReference().strip();
+		payments.findOthersWithExternalReference(locked.getMethod(), reference, locked.getId()).stream().findFirst()
+			.ifPresent(other -> {
+				throw new BusinessException(ErrorCode.CONFLICT, "Reference " + reference + " is already recorded for payment "
+						+ other + ": check the bank statement or receipt book");
+			});
+		settle(locked, order, received, reference, actorId);
 		return staffView(locked, order.orderNumber());
 	}
 
@@ -429,7 +442,7 @@ public class PaymentService {
 	 */
 	@Transactional
 	public PaymentResponse rejectBankPayment(UUID actorId, UUID paymentId, String reason) {
-		Payment payment = load(paymentId);
+		PaymentKeys payment = keys(paymentId);
 		if (!isManual(payment.getMethod())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Only bank and office payments are rejected manually");
 		}
@@ -672,6 +685,11 @@ public class PaymentService {
 	/** Payments finance confirms or rejects by hand: bank transfers and cash at the office. */
 	private static boolean isManual(PaymentMethod method) {
 		return method == PaymentMethod.BANK_TRANSFER || method == PaymentMethod.OFFICE_CASH;
+	}
+
+	/** The payment's fixed facts, without loading it: it is loaded once locked (see {@link PaymentKeys}). */
+	private PaymentKeys keys(UUID paymentId) {
+		return payments.findKeysById(paymentId).orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
 	}
 
 	private Payment load(UUID paymentId) {

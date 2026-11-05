@@ -9,9 +9,11 @@ import com.sealease.backend.payment.dto.ConfirmTransferRequest;
 import com.sealease.backend.payment.dto.PaymentResponse;
 import com.sealease.backend.payment.dto.PaymentSearchCriteria;
 import com.sealease.backend.payment.dto.RefundRequest;
+import com.sealease.backend.payment.dto.UnmatchedReceiptResponse;
 import com.sealease.backend.payment.entity.PaymentMethod;
 import com.sealease.backend.payment.entity.PaymentStatus;
 import com.sealease.backend.payment.service.PaymentService;
+import com.sealease.backend.payment.service.UnmatchedGatewayReceipts;
 import com.sealease.backend.security.AuthenticatedUser;
 import com.sealease.backend.user.service.UserAccountService;
 import jakarta.validation.Valid;
@@ -38,8 +40,11 @@ public class AdminPaymentController {
 
 	private final OrderService orders;
 	private final UserAccountService accounts;
+	private final UnmatchedGatewayReceipts unmatched;
 
-	public AdminPaymentController(ApprovalService approvals, PaymentService payments, OrderService orders, UserAccountService accounts) {
+	public AdminPaymentController(ApprovalService approvals, PaymentService payments, OrderService orders,
+			UserAccountService accounts, UnmatchedGatewayReceipts unmatched) {
+		this.unmatched = unmatched;
 		this.orders = orders;
 		this.accounts = accounts;
 		this.payments = payments;
@@ -64,6 +69,21 @@ public class AdminPaymentController {
 		return PageResponse.from(payments.search(new PaymentSearchCriteria(visible, method, searching ? q : null,
 				searching ? orders.idByNumber(q).orElse(null) : null,
 				searching ? accounts.findIdExactly(q).orElse(null) : null, searchOnly), pageable));
+	}
+
+	/** Money the gateway took for a reference that matches none of our payments: open ones first. */
+	@GetMapping("/api/v1/admin/payments/unmatched")
+	@PreAuthorize("hasAnyAuthority('FINANCE_VIEW', 'PAYMENT_CONFIRM')")
+	public List<UnmatchedReceiptResponse> unmatched(@RequestParam(defaultValue = "false") boolean open) {
+		return unmatched.list(open);
+	}
+
+	/** Finance traced an unmatched receipt (refunded it or matched it by hand) and closes it with a note. */
+	@PostMapping("/api/v1/admin/payments/unmatched/{receiptId}/resolve")
+	@PreAuthorize("hasAuthority('PAYMENT_CONFIRM')")
+	public UnmatchedReceiptResponse resolveUnmatched(AuthenticatedUser actor, @PathVariable UUID receiptId,
+			@Valid @RequestBody ReasonRequest request) {
+		return unmatched.resolve(actor.userId(), receiptId, request.reason());
 	}
 
 	/** Takes the payment: only the finance member it is assigned to may confirm or reject it. */

@@ -53,6 +53,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -252,24 +253,30 @@ public class PayoutBatchService {
 	}
 
 	/**
-	 * One item: the bank paid it. A bank transfer needs the bank's reference (UTR) as evidence; a cash hand-over may
-	 * give the receipt number.
+	 * One item: the bank paid it. A bank transfer needs the bank's reference (UTR) as evidence, used for no other paid
+	 * withdrawal; a cash hand-over may give the receipt number. {@code mayAct} is checked on the locked withdrawal before
+	 * anything changes (e.g. that the finance member holds its task).
 	 */
 	@Transactional
-	public BatchDetail markPaid(UUID actorId, UUID batchId, UUID withdrawalId, String payoutReference) {
+	public BatchDetail markPaid(UUID actorId, UUID batchId, UUID withdrawalId, String payoutReference,
+			Consumer<Withdrawal> mayAct) {
 		WithdrawalBatch batch = lockSent(batchId);
 		Withdrawal withdrawal = item(batchId, withdrawalId);
+		mayAct.accept(withdrawal);
 		requireEvidence(withdrawal, payoutReference);
 		pay(actorId, batch, withdrawal, blankToNull(payoutReference));
 		closeIfDone(batch);
 		return detail(batchId);
 	}
 
-	/** One item: the bank did not pay it. It is held, with a ticket, until finance resolves it. */
+	/** One item: the bank did not pay it. It is held, with a ticket, until finance resolves it. See {@link #markPaid}. */
 	@Transactional
-	public BatchDetail markFailed(UUID actorId, UUID batchId, UUID withdrawalId, String reason) {
+	public BatchDetail markFailed(UUID actorId, UUID batchId, UUID withdrawalId, String reason,
+			Consumer<Withdrawal> mayAct) {
 		WithdrawalBatch batch = lockSent(batchId);
-		fail(actorId, batch, item(batchId, withdrawalId), reason.strip());
+		Withdrawal withdrawal = item(batchId, withdrawalId);
+		mayAct.accept(withdrawal);
+		fail(actorId, batch, withdrawal, reason.strip());
 		closeIfDone(batch);
 		return detail(batchId);
 	}
@@ -348,6 +355,11 @@ public class PayoutBatchService {
 	 * withdrawal (the ledger refuses a second payout), so a repeated confirmation can never pay twice.
 	 */
 	private void pay(UUID actorId, WithdrawalBatch batch, Withdrawal withdrawal, String payoutReference) {
+		String usedBy = paidWithReference(withdrawal, payoutReference);
+		if (usedBy != null) {
+			throw new BusinessException(ErrorCode.CONFLICT, "Reference " + payoutReference + " is already recorded for "
+					+ usedBy + ": enter the reference of this payment");
+		}
 		Money amount = withdrawal.amount();
 		WithdrawalStatus before = withdrawal.markPaid(payoutReference, clock.instant());
 		withdrawals.flush();
@@ -363,6 +375,20 @@ public class PayoutBatchService {
 					"payoutReference", payoutReference == null ? "" : payoutReference)));
 		history.record(withdrawal, before, actorId, payoutReference, true, WithdrawalHistory.Notice.PAID);
 		withdrawalService.publish(KafkaTopics.WITHDRAWAL_COMPLETED, "WithdrawalPaid", withdrawal, Map.of());
+	}
+
+	/**
+	 * The paid withdrawal already recorded with {@code payoutReference} (bank reference or cash receipt), other than this
+	 * one; null when there is none. One bank transfer pays one withdrawal, so a reference is evidence for one only.
+	 */
+	private String paidWithReference(Withdrawal withdrawal, String payoutReference) {
+		if (payoutReference == null || payoutReference.isBlank()) {
+			return null;
+		}
+		// A bank reference is one transfer to one withdrawal; a cash receipt may cover several payouts one investor
+		// collects at the office, but never another investor's.
+		return withdrawals.findPaidWithPayoutReference(withdrawal.getPayoutMethod(), payoutReference.strip(),
+				withdrawal.getId(), withdrawal.isOfficeCash(), withdrawal.getUserId()).stream().findFirst().orElse(null);
 	}
 
 	/** A bank transfer is marked paid only with the bank's reference for it: the evidence it was paid. */
@@ -381,15 +407,21 @@ public class PayoutBatchService {
 	 */
 	@Transactional
 	public boolean settleFromProvider(UUID withdrawalId, boolean paid, String providerReference, String reason) {
-		Withdrawal peek = withdrawals.findById(withdrawalId)
-			.orElseThrow(() -> new ResourceNotFoundException("Withdrawal", withdrawalId));
-		if (peek.getBatchId() == null) {
+		// Locked before it is read: batch, then withdrawal, as everywhere else.
+		UUID batchId = withdrawals.findBatchIdById(withdrawalId).orElse(null);
+		if (batchId == null) {
+			if (!withdrawals.existsById(withdrawalId)) {
+				throw new ResourceNotFoundException("Withdrawal", withdrawalId);
+			}
 			return false;
 		}
-		WithdrawalBatch batch = lock(peek.getBatchId());
+		WithdrawalBatch batch = lock(batchId);
 		Withdrawal withdrawal = withdrawals.findByIdForUpdate(withdrawalId).orElseThrow();
 		if (withdrawal.getStatus() != WithdrawalStatus.PROCESSING || batch.getStatus() != BatchStatus.SENT) {
 			return false;
+		}
+		if (paid && paidWithReference(withdrawal, providerReference) != null) {
+			return false; // Evidence already used for another withdrawal: left for finance to reconcile.
 		}
 		// The member who initiated the payment owns any follow-up (a failed payment's ticket).
 		UUID actor = withdrawal.getPaymentInitiatedBy() != null ? withdrawal.getPaymentInitiatedBy() : batch.getCreatedBy();

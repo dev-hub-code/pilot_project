@@ -374,6 +374,29 @@ class WithdrawalRequestIntegrationTest {
 	}
 
 	@Test
+	void aBankReferenceAlreadyRecordedForAnotherWithdrawalIsLeftForFinance() throws Exception {
+		Account investor = withBank();
+		credit(investor, "1000", "RENT_BANK");
+		String first = approvedAndInitiated(investor, "300");
+		Account other = withBank();
+		credit(other, "1000", "RENT_BANK");
+		String second = approvedAndInitiated(other, "200");
+		String utr = "UTR" + key().substring(0, 12);
+
+		webhook(event("evt-%s".formatted(reference(first)), "payout.paid", reference(first), utr, "300.00"))
+			.andExpect(jsonPath("$.outcome").value("PAID"));
+		// The same bank reference (any case) cannot be evidence that a second withdrawal was paid.
+		webhook(event("evt-%s".formatted(reference(second)), "payout.paid", reference(second), utr.toLowerCase(), "200.00"))
+			.andExpect(jsonPath("$.outcome").value("NEEDS_RECONCILIATION"));
+
+		assertThat(statusOf(first)).isEqualTo("PAID");
+		assertThat(statusOf(second)).isEqualTo("PROCESSING");
+		assertThat(jdbc.queryForObject("""
+				SELECT count(*) FROM ledger_transactions WHERE transaction_type = 'WITHDRAWAL_PAYOUT' AND reference = ?""",
+				Integer.class, second)).isZero();
+	}
+
+	@Test
 	void aFailedWebhookHoldsTheMoneyUntilFinanceResolvesIt() throws Exception {
 		Account investor = withBank();
 		credit(investor, "1000", "RENT_BANK");

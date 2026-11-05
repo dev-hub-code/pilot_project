@@ -154,23 +154,22 @@ public class FinanceTaskService {
 		}
 	}
 
-	/** Marks the task paid (with the bank reference or cash receipt) or failed (with the reason). */
+	/**
+	 * Marks the task paid (with the bank reference or cash receipt) or failed (with the reason). Who holds the task is
+	 * checked on the withdrawal once it is locked, never on a copy read before.
+	 */
 	@Transactional
 	public FinanceTaskResponse update(UUID actorId, UUID withdrawalId, FinanceTaskUpdateRequest request) {
-		Withdrawal withdrawal = withdrawals.findById(withdrawalId)
-			.filter(w -> w.getBatchId() != null)
+		UUID batchId = withdrawals.findBatchIdById(withdrawalId)
 			.orElseThrow(() -> new ResourceNotFoundException("Finance task", withdrawalId));
-		if (View.OPEN.statuses.contains(withdrawal.getStatus())) {
-			requireTaskOf(actorId, withdrawal);
-		}
 		if (request.outcome() == FinanceTaskUpdateRequest.Outcome.PAID) {
-			payouts.markPaid(actorId, withdrawal.getBatchId(), withdrawalId, request.reference());
+			payouts.markPaid(actorId, batchId, withdrawalId, request.reference(), w -> requireTaskOf(actorId, w));
 		}
 		else {
 			if (request.reason() == null || request.reason().isBlank()) {
 				throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Say why it could not be paid");
 			}
-			payouts.markFailed(actorId, withdrawal.getBatchId(), withdrawalId, request.reason());
+			payouts.markFailed(actorId, batchId, withdrawalId, request.reason(), w -> requireTaskOf(actorId, w));
 		}
 		Withdrawal done = withdrawals.findById(withdrawalId).orElseThrow();
 		done.taskDone(clock.instant());
