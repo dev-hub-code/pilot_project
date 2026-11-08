@@ -16,6 +16,7 @@ import { AddressLocationFields } from "./address-location-fields";
 import { updateProfileAction } from "./actions";
 import { DateField } from "@/components/ui/date-field";
 import { formatDayMonthYear, latestBirthDate } from "@/utils/format";
+import { MapPin, UserRound } from "lucide-react";
 
 /** @param countries for the mobile number's country code, and the address: picking one loads its states, then its cities */
 export function ProfileForm({ profile, countries }: { profile: Profile; countries: Country[] }) {
@@ -42,8 +43,10 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
   return (
     <form ref={form} action={action} className="scroll-mt-24 space-y-6" noValidate>
       <FormFeedback state={state} />
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 text-sm font-medium text-muted">Personal</legend>
+      <fieldset className="grid gap-4 rounded-2xl border border-border/70 bg-background/40 p-4 sm:grid-cols-2 sm:p-5">
+        <legend className="float-left mb-1 flex w-full items-center gap-2.5 text-sm font-semibold sm:col-span-2">
+          <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-gold/10 text-gold-text"><UserRound className="size-4" /></span> Personal
+        </legend>
         <TextField label="First name" name="firstName" defaultValue={v("firstName", profile.firstName)}
           readOnly error={e.firstName} autoComplete="given-name" />
         <TextField label="Last name" name="lastName" defaultValue={v("lastName", profile.lastName)}
@@ -62,14 +65,16 @@ export function ProfileForm({ profile, countries }: { profile: Profile; countrie
           defaultNumber={state.values?.phone ?? phone.national} defaultCountry={state.values?.phoneCountry || phone.country}
           error={e.phone ?? e.phoneCountry} />
         <TextField label="Email" name="email" value={profile.email} readOnly disabled />
+        <p className="text-xs leading-relaxed text-muted sm:col-span-2">
+          Your name is as given at registration, and your date of birth and nationality cannot be changed once saved.
+          Contact support if any of them needs correcting.
+        </p>
       </fieldset>
-      <p className="-mt-3 text-xs text-muted">
-        Your name is as given at registration, and your date of birth and nationality cannot be changed once saved.
-        Contact support if any of them needs correcting.
-      </p>
 
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-3 text-sm font-medium text-muted">Address</legend>
+      <fieldset className="grid gap-4 rounded-2xl border border-border/70 bg-background/40 p-4 sm:grid-cols-2 sm:p-5">
+        <legend className="float-left mb-1 flex w-full items-center gap-2.5 text-sm font-semibold sm:col-span-2">
+          <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-gold/10 text-gold-text"><MapPin className="size-4" /></span> Address
+        </legend>
         <TextField label="Address line 1" name="line1" defaultValue={v("line1", profile.address.line1)}
           error={e.line1} autoComplete="address-line1" />
         <TextField label="Address line 2 (optional)" name="line2" defaultValue={v("line2", profile.address.line2)}

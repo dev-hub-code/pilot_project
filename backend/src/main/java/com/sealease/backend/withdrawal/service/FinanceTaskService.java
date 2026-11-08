@@ -54,10 +54,12 @@ import java.util.stream.Stream;
 @Service
 public class FinanceTaskService {
 
-	/** Open: still to pay. Done: paid, failed (held, with a ticket) or returned to the wallet. */
+	/** Open: still to pay. Done: paid, failed (held, with a ticket) or returned to the wallet. All: both. */
 	public enum View {
 		OPEN(List.of(WithdrawalStatus.BATCHED, WithdrawalStatus.PROCESSING)),
-		DONE(List.of(WithdrawalStatus.PAID, WithdrawalStatus.FAILED, WithdrawalStatus.RETURNED));
+		DONE(List.of(WithdrawalStatus.PAID, WithdrawalStatus.FAILED, WithdrawalStatus.RETURNED)),
+		ALL(List.of(WithdrawalStatus.BATCHED, WithdrawalStatus.PROCESSING,
+				WithdrawalStatus.PAID, WithdrawalStatus.FAILED, WithdrawalStatus.RETURNED));
 
 		private final List<WithdrawalStatus> statuses;
 
@@ -92,15 +94,24 @@ public class FinanceTaskService {
 		this.clock = clock;
 	}
 
-	/** Open tasks oldest first (in the order to pay them); done tasks latest first. Every filter but the view is optional. */
+	/**
+	 * Open tasks oldest first (in the order to pay them); done tasks latest first; all tasks newest first.
+	 * Every filter but the view is optional.
+	 */
 	@Transactional
 	public Page<FinanceTaskResponse> search(UUID actorId, View view, WithdrawalPayoutMethod method, WithdrawalKind kind,
 			UUID batchId, String query, Pageable pageable) {
-		Sort sort = view == View.OPEN ? Sort.by("createdAt", "reference") : Sort.by(Sort.Direction.DESC, "closedAt", "createdAt");
+		Sort sort = switch (view) {
+			case OPEN -> Sort.by("createdAt", "reference");
+			case DONE -> Sort.by(Sort.Direction.DESC, "closedAt", "createdAt");
+			case ALL -> Sort.by(Sort.Direction.DESC, "createdAt", "reference");
+		};
 		Page<Withdrawal> page = withdrawals.findAll(matching(view, method, kind, batchId).and(searching(query)),
 				PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort));
 		List<FinanceTaskResponse> tasks = responses(page.getContent());
-		if (view == View.OPEN && tasks.stream().anyMatch(t -> t.payoutMethod() == WithdrawalPayoutMethod.BANK_TRANSFER)) {
+		// Open bank tasks show full account numbers (in the open view or among all), so each viewing is recorded.
+		if (tasks.stream().anyMatch(t -> t.payoutMethod() == WithdrawalPayoutMethod.BANK_TRANSFER
+				&& View.OPEN.statuses.contains(t.status()))) {
 			audit.record(AuditRecord.of(actorId, AuditAction.FINANCE_TASKS_VIEWED, ENTITY, null)
 				.withNewValue(Map.of("tasks", tasks.size(), "page", pageable.getPageNumber())));
 		}

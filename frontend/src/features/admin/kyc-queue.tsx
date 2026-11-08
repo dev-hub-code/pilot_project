@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -10,8 +9,14 @@ import type { PageResponse } from "@/types/api";
 import type { AdminBankAccount, KycSubmission, KycSubmissionStatus } from "@/types/user";
 import { kycNumbers } from "@/features/profile/kyc-labels";
 import { formatDateTime, humanize } from "@/utils/format";
+import { CheckCircle2, Hourglass, Landmark, type LucideIcon, UserCheck, UserRound, XCircle } from "lucide-react";
 
-const STATUSES: KycSubmissionStatus[] = ["PENDING", "APPROVED", "REJECTED"];
+const STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const satisfies readonly KycSubmissionStatus[];
+const STATUS_TAB: Record<(typeof STATUSES)[number], { label: string; icon: LucideIcon }> = {
+  PENDING: { label: "To review", icon: Hourglass },
+  APPROVED: { label: "Approved", icon: CheckCircle2 },
+  REJECTED: { label: "Rejected", icon: XCircle },
+};
 
 /**
  * Identity reviews, the Verification page's list. Bank accounts are decided on each review, so for staff who verify
@@ -29,39 +34,77 @@ export async function KycQueue({ statusParam, page }: { statusParam: unknown; pa
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted">Oldest submissions first. Assign a review to yourself before deciding it.</p>
-      <nav aria-label="Filter by status" className="flex gap-2 text-sm">
-        {STATUSES.map((s) => (
-          <Link key={s} href={`/admin/verification?status=${s}`} aria-current={s === status ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${s === status ? "border-brand text-brand" : "border-border text-muted"}`}>
-            {humanize(s)}
-          </Link>
-        ))}
-      </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Filter by status" className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface p-1 text-sm shadow-sm">
+          {STATUSES.map((s) => {
+            const { label, icon: Icon } = STATUS_TAB[s];
+            return (
+              <Link key={s} href={`/admin/verification?status=${s}`} aria-current={s === status ? "page" : undefined}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 font-medium whitespace-nowrap transition-colors duration-200 ${s === status
+                  ? "bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold"
+                  : "text-muted hover:bg-background hover:text-foreground"}`}>
+                <Icon aria-hidden="true" className="size-4" /> {label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">
+            {queue.totalElements.toLocaleString("en-IN")} {queue.totalElements === 1 ? "submission" : "submissions"}
+          </span>
+          {pendingBanks && pendingBanks.totalElements > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300">
+              <Landmark aria-hidden="true" className="size-3.5" />
+              {pendingBanks.totalElements.toLocaleString("en-IN")} bank {pendingBanks.totalElements === 1 ? "account" : "accounts"} to verify
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="flex items-start gap-2 rounded-xl bg-background/60 px-4 py-3 text-sm text-muted ring-1 ring-border">
+        <UserCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-gold-text" />
+        Oldest submissions first. Assign a review to yourself before deciding it.
+      </p>
       {queue.content.length === 0 ? (
         <EmptyState title="Nothing here" description={status === "PENDING" ? "The review queue is empty." : undefined} />
       ) : (
-        <DataTable columns={["Legal name", "Document", "Nationality", "Submitted", "Assigned to", "Status", ...(canVerifyBanks ? ["Bank account"] : [])]}>
+        // A list rather than a table: each review is a row on wide screens and a card on narrow ones, with no sideways scrolling.
+        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           {queue.content.map((s) => (
-            <tr key={s.id} className="hover:bg-background">
-              <Cell>
-                <Link href={`/admin/kyc/${s.id}`} className="card-link font-medium text-brand hover:underline">
-                  {s.legalFirstName} {s.legalLastName}
-                </Link>
-              </Cell>
-              <Cell className="font-mono text-sm font-bold">{kycNumbers(s)}</Cell>
-              <Cell>{s.nationality}</Cell>
-              <Cell className="text-muted">{formatDateTime(s.submittedAt)}</Cell>
-              <Cell className={s.assignee ? undefined : "text-muted"}>
-                {s.assignee ? (s.assignee.id === session.userId ? "You" : s.assignee.name) : "Nobody yet"}
-              </Cell>
-              <Cell><StatusBadge tone={toneFor(s.status)}>{humanize(s.status)}</StatusBadge></Cell>
-              {canVerifyBanks && (
-                <Cell>{bankToVerify.has(s.userId) ? <StatusBadge tone="warning">To verify</StatusBadge> : <span className="text-muted">—</span>}</Cell>
-              )}
-            </tr>
+            <li key={s.id}
+              className="group relative grid gap-3 p-4 transition-colors hover:bg-background sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gold/10 text-xs font-semibold text-gold-text transition-colors group-hover:bg-gold group-hover:text-on-gold">
+                  {(s.legalFirstName.charAt(0) + s.legalLastName.charAt(0)).toUpperCase() || "?"}
+                </span>
+                <div className="min-w-0">
+                  <Link href={`/admin/kyc/${s.id}`} className="card-link block truncate font-medium text-foreground group-hover:text-gold-text">
+                    {s.legalFirstName} {s.legalLastName}
+                  </Link>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                    <span className="rounded-md bg-background px-1.5 py-0.5 font-mono font-semibold tracking-wide text-foreground ring-1 ring-border break-all">{kycNumbers(s)}</span>
+                    <span>{s.nationality}</span>
+                    <span>Submitted {formatDateTime(s.submittedAt)}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pl-[3.25rem] sm:justify-end sm:pl-0">
+                {s.assignee ? (
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${s.assignee.id === session.userId
+                    ? "bg-gold/15 text-gold-text" : "bg-background text-foreground ring-1 ring-border"}`}>
+                    <UserRound aria-hidden="true" className="size-3" />
+                    {s.assignee.id === session.userId ? "You" : s.assignee.name}
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted">Nobody yet</span>
+                )}
+                <StatusBadge tone={toneFor(s.status)}>{humanize(s.status)}</StatusBadge>
+                {canVerifyBanks && bankToVerify.has(s.userId) && (
+                  <StatusBadge tone="warning"><Landmark aria-hidden="true" className="size-3" />Bank to verify</StatusBadge>
+                )}
+              </div>
+            </li>
           ))}
-        </DataTable>
+        </ul>
       )}
       <Pagination page={queue} basePath="/admin/verification" params={{ status }} />
     </div>

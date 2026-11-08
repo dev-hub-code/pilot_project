@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { MenuSection } from "@/components/layout/account-menu";
@@ -70,14 +70,18 @@ export function Breadcrumbs({ sections }: { sections: readonly MenuSection[] }) 
   return (
     <nav aria-label="Breadcrumb" className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 print:hidden">
       <ol className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-muted">
-        <li><Link href="/admin" className="inline-flex min-h-6 items-center hover:text-foreground">Dashboard</Link></li>
+        <li>
+          <Link href="/admin" className="inline-flex min-h-7 items-center gap-1.5 rounded-lg px-2 transition-colors hover:bg-surface hover:text-foreground">
+            <Home aria-hidden="true" className="size-3.5" /> Dashboard
+          </Link>
+        </li>
         {crumbs.map((crumb, index) => (
           <li key={crumb.href} className="flex min-w-0 items-center gap-1">
             <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
             {index === crumbs.length - 1
-              ? <span aria-current="page" className="font-medium text-foreground">{crumb.label}</span>
+              ? <span aria-current="page" className="rounded-lg bg-surface px-2 py-0.5 font-medium text-foreground shadow-sm ring-1 ring-border">{crumb.label}</span>
               : crumb.linked
-                ? <Link href={crumb.href} className="inline-flex min-h-6 items-center hover:text-foreground">{crumb.label}</Link>
+                ? <Link href={crumb.href} className="inline-flex min-h-7 items-center rounded-lg px-2 transition-colors hover:bg-surface hover:text-foreground">{crumb.label}</Link>
                 : <span>{crumb.label}</span>}
           </li>
         ))}

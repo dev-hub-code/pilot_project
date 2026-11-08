@@ -17,12 +17,12 @@ export const BULK_FORM = "bulk-assign";
 export function BulkAssignForm({ action, agents }: { action: Action; agents: { value: string; label: string }[] }) {
   const [state, formAction] = useActionState<FormState, FormData>(action, {});
   return (
-    <form id={BULK_FORM} action={formAction} className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-3 text-sm">
+    <form id={BULK_FORM} action={formAction} className="flex flex-wrap items-end gap-3 rounded-2xl border border-gold/30 bg-gold/5 p-4 text-sm shadow-sm">
       <label className="flex min-h-10 items-center gap-2 self-center"><SelectAll /> All on this page</label>
-      <div className="space-y-1">
+      <div className="min-w-0 flex-1 space-y-1 sm:flex-none">
         <label htmlFor="bulk-target" className="block font-medium">Assign ticked tickets to</label>
         <select id="bulk-target" name="target" defaultValue=""
-          className="min-w-56 rounded-lg border border-border bg-surface px-3 py-2 outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+          className="w-full min-w-0 rounded-lg border sm:w-auto sm:min-w-56 border-border bg-surface px-3 py-2 outline-none focus:border-gold focus:ring-1 focus:ring-gold">
           <option value="" disabled>Choose…</option>
           <optgroup label="Spread automatically">
             <option value="strategy:LEAST_LOADED">Least-loaded agent</option>
@@ -44,7 +44,7 @@ export function BulkAssignForm({ action, agents }: { action: Action; agents: { v
 /** Ticks every ticket on the page. */
 export function SelectAll() {
   return (
-    <input type="checkbox" className="size-4"
+    <input type="checkbox" className="size-4 accent-[var(--gold)]"
       onChange={(e) => document.querySelectorAll<HTMLInputElement>(`input[form="${BULK_FORM}"][name="ticketId"]`)
         .forEach((box) => { box.checked = e.target.checked; })} />
   );
@@ -81,7 +81,7 @@ export function RecentSearches({ current }: { current: string }) {
     <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
       Recent:
       {recent.map((q) => (
-        <Link key={q} href={`/admin/support?${new URLSearchParams({ view: "all", q })}`} className="rounded-full border border-border px-2 py-0.5 hover:text-foreground">{q}</Link>
+        <Link key={q} href={`/admin/support?${new URLSearchParams({ view: "all", q })}`} className="inline-flex min-h-7 items-center rounded-full border border-border bg-background/60 px-2.5 transition-colors hover:border-gold/40 hover:text-foreground">{q}</Link>
       ))}
     </p>
   );

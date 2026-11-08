@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import Link from "next/link";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
@@ -27,6 +28,7 @@ export function AcceptInvitationForm({ token, email, firstName, lastName, countr
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       <TextField label="Email" name="email" type="email" value={email} readOnly disabled />
       <div className="grid gap-4 sm:grid-cols-2">

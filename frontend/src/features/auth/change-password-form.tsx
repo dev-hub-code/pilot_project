@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export function ChangePasswordForm({ temporary, returnTo }: { temporary: boolean
   const errors = state.fieldErrors ?? {};
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       <TextField label={temporary ? "Temporary password" : "Current password"} name="currentPassword" type="password"

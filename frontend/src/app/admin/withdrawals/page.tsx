@@ -2,7 +2,7 @@ import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  AlertTriangle, BadgeCheck, CircleCheck, Download, FileStack, FileSearch, Hourglass, Inbox, SlidersHorizontal, Timer,
+  AlertTriangle, ArrowRight, BadgeCheck, CircleCheck, Download, FileStack, FileSearch, Hourglass, Inbox, Search, SlidersHorizontal, Timer, X,
 } from "lucide-react";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -112,34 +112,55 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
       </section>
 
       {(dashboard.failed.count > 0 || dashboard.onHold.count > 0) && (
-        <div className="flex flex-wrap gap-3 text-sm">
+        <div className="grid gap-3 sm:grid-cols-2">
           {dashboard.failed.count > 0 && (
-            <Link href="/admin/withdrawals?status=FAILED" className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-rose-700 hover:bg-rose-500/10 dark:text-rose-400">
-              <AlertTriangle className="size-4" aria-hidden="true" /> {dashboard.failed.count} failed payment{dashboard.failed.count === 1 ? "" : "s"} to resolve
+            <Link href="/admin/withdrawals?status=FAILED"
+              className="group flex items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 text-sm transition-colors hover:bg-rose-500/10">
+              <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400">
+                <AlertTriangle className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-rose-700 dark:text-rose-400">
+                  {dashboard.failed.count} failed payment{dashboard.failed.count === 1 ? "" : "s"} to resolve
+                </span>
+                <span className="block text-xs text-muted">{formatMoney(dashboard.failed.amount)} the bank did not pay</span>
+              </span>
+              <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-rose-700 transition-transform group-hover:translate-x-0.5 dark:text-rose-400" />
             </Link>
           )}
           {dashboard.onHold.count > 0 && (
-            <Link href="/admin/withdrawals?status=ON_HOLD" className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400">
-              <Hourglass className="size-4" aria-hidden="true" /> {dashboard.onHold.count} on hold
+            <Link href="/admin/withdrawals?status=ON_HOLD"
+              className="group flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm transition-colors hover:bg-amber-500/10">
+              <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                <Hourglass className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-amber-700 dark:text-amber-400">{dashboard.onHold.count} on hold</span>
+                <span className="block text-xs text-muted">{formatMoney(dashboard.onHold.amount)} waiting on a decision</span>
+              </span>
+              <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-amber-700 transition-transform group-hover:translate-x-0.5 dark:text-amber-400" />
             </Link>
           )}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-        {/* Pipeline tabs */}
-        <nav aria-label="Queue" className="flex overflow-x-auto border-b border-border">
+      <div className="space-y-3">
+        {/* Pipeline tabs: one row, scrolling sideways on narrow screens. */}
+        <nav aria-label="Queue"
+          className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1 text-sm shadow-sm [scrollbar-width:none]">
           {tabs.map((t) => {
             const selected = (status || "ALL") === t.status;
             return (
               <Link key={t.status} href={`/admin/withdrawals?status=${t.status}`} aria-current={selected ? "page" : undefined}
-                className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm whitespace-nowrap transition-colors ${
-                  selected ? "border-gold font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 font-medium whitespace-nowrap transition-colors duration-200 ${selected
+                  ? "bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold"
+                  : "text-muted hover:bg-background hover:text-foreground"}`}>
                 {t.label}
                 {t.figure && t.figure.count > 0 && (
-                  <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${
-                    t.status === "FAILED" ? "bg-rose-500/10 text-rose-700 dark:text-rose-400" : selected ? "bg-gold text-on-gold" : "bg-background text-muted"}`}>
-                    {t.figure.count}
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
+                    t.status === "FAILED" ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                      : selected ? "bg-on-ink/15 text-on-ink dark:bg-on-gold/15 dark:text-on-gold" : "bg-background text-muted ring-1 ring-border"}`}>
+                    {t.figure.count.toLocaleString("en-IN")}
                   </span>
                 )}
               </Link>
@@ -148,18 +169,22 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
         </nav>
 
         {/* Filters */}
-        <form action="/admin/withdrawals" role="search" className="space-y-3 p-4">
+        <form action="/admin/withdrawals" role="search" className="space-y-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <input type="hidden" name="status" value={status || "ALL"} />
-          <div className="flex flex-wrap gap-2">
-            <input name="q" defaultValue={q} placeholder="Search by reference, investor ID or email" aria-label="Search withdrawals"
-              className={`${INPUT} min-w-60 flex-1`} />
-            <button type="submit" className="h-10 rounded-lg bg-gold px-5 text-sm font-medium text-on-gold hover:bg-gold-hover">Search</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-64 items-center gap-2 rounded-xl border border-border bg-background/60 p-1 focus-within:border-gold">
+              <Search aria-hidden="true" className="ml-2.5 size-4 shrink-0 text-muted" />
+              <input name="q" type="search" defaultValue={q} placeholder="Reference, investor ID or email" aria-label="Search withdrawals"
+                className="h-9 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none" />
+              <button type="submit" className="h-9 rounded-lg bg-gold px-4 text-sm font-semibold text-on-gold transition-colors hover:bg-gold-hover">Search</button>
+            </div>
           </div>
           <details open={advanced} className="group">
-            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground">
-              <SlidersHorizontal className="size-3.5" aria-hidden="true" /> More filters{advanced ? " (active)" : ""}
+            <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted transition-colors hover:border-gold hover:text-foreground group-open:border-gold/50 group-open:text-foreground">
+              <SlidersHorizontal className="size-3.5" aria-hidden="true" /> More filters
+              {advanced && <span className="rounded-full bg-gold px-1.5 text-[10px] font-semibold text-on-gold">Active</span>}
             </summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-6">
               <Field label="Requested from"><input type="date" name="from" defaultValue={from} className={INPUT} /></Field>
               <Field label="Requested to"><input type="date" name="to" defaultValue={to} className={INPUT} /></Field>
               <Field label="Amount from (₹)"><input name="minAmount" inputMode="decimal" defaultValue={minAmount} className={INPUT} /></Field>
@@ -169,11 +194,19 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
                   {Object.entries(SORTS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </Field>
-              <label className="flex items-end gap-2 pb-2.5 text-sm">
-                <input type="checkbox" name="mine" value="true" defaultChecked={mine} className="size-4" /> Reviewing myself
+              <label className="flex h-10 cursor-pointer items-center gap-2 self-end rounded-lg border border-border px-3 text-sm transition-colors hover:border-gold">
+                <input type="checkbox" name="mine" value="true" defaultChecked={mine} className="size-4 accent-[var(--gold)]" /> Reviewing myself
               </label>
             </div>
-            {advanced && <Link href={`/admin/withdrawals?status=${status || "ALL"}`} className="mt-2 inline-block text-xs text-gold-text hover:underline">Clear filters</Link>}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="submit" className="h-9 rounded-lg bg-ink px-4 text-sm font-medium text-on-ink transition-opacity hover:opacity-90 dark:bg-gold dark:text-on-gold">Apply filters</button>
+              {advanced && (
+                <Link href={`/admin/withdrawals?status=${status || "ALL"}`}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted transition-colors hover:border-gold hover:text-gold-text">
+                  <X aria-hidden="true" className="size-3.5" /> Clear filters
+                </Link>
+              )}
+            </div>
           </details>
         </form>
       </div>
@@ -191,7 +224,7 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
             const waiting = age(w.statusChangedAt);
             const late = open && olderThanDays(w.statusChangedAt, 2);
             return (
-              <tr key={w.id} className="hover:bg-background">
+              <tr key={w.id} className="group hover:bg-background">
                 {payable.length > 0 && (
                   <Cell>
                     {payable.some((p) => p.id === w.id) && (
@@ -202,16 +235,23 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
                 )}
                 <Cell>
                   <div className="flex items-center gap-3">
-                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon className="size-4" aria-hidden="true" /></span>
+                    <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-105 ${tone}`}><Icon className="size-4" aria-hidden="true" /></span>
                     <div>
-                      <Link href={`/admin/withdrawals/${w.id}`} className="card-link font-mono font-medium text-gold-text hover:underline">{w.reference}</Link>
+                      <Link href={`/admin/withdrawals/${w.id}`} className="card-link font-mono font-medium text-gold-text">{w.reference}</Link>
                       <p className="text-xs text-muted">{formatDateTime(w.createdAt)} · {w.origin === "SCHEDULED" ? "Run" : w.origin === "OFFICE" ? "Office" : "Request"}</p>
                     </div>
                   </div>
                 </Cell>
                 <Cell>
-                  <p className="font-medium">{w.investorName || "—"}</p>
-                  <p className="font-mono text-xs text-muted">{w.investorCode}</p>
+                  <div className="flex items-center gap-2.5">
+                    <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gold/10 text-[11px] font-semibold text-gold-text">
+                      {initials(w.investorName)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium">{w.investorName || "—"}</p>
+                      <p className="font-mono text-xs text-muted">{w.investorCode}</p>
+                    </div>
+                  </div>
                 </Cell>
                 <Cell className="tabular-nums">
                   <p className="font-semibold">{formatMoney(w.amount)}</p>
@@ -230,8 +270,13 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
                   {w.requiredApprovals > 1 && open && <p className="mt-1 text-xs text-muted">{w.approvals}/{w.requiredApprovals} approvals</p>}
                   {w.reviewerId && open && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><FileSearch className="size-3" aria-hidden="true" />{w.reviewerId === session.userId ? "You" : "Assigned"}</p>}
                 </Cell>
-                <Cell className={`tabular-nums ${late ? "font-medium text-rose-700 dark:text-rose-400" : "text-muted"}`}>
-                  {open ? waiting : "—"}
+                <Cell className="tabular-nums">
+                  {open ? (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${late
+                      ? "bg-rose-500/10 text-rose-700 dark:text-rose-400" : "bg-background text-muted ring-1 ring-border"}`}>
+                      <Timer aria-hidden="true" className="size-3" />{waiting}
+                    </span>
+                  ) : <span className="text-muted">—</span>}
                 </Cell>
               </tr>
             );
@@ -246,6 +291,12 @@ export default async function AdminWithdrawalsPage({ searchParams }: PageProps<"
 function sum(...figures: WithdrawalFigure[]): { amount: string; currency: string } {
   const currency = figures[0]?.amount.currency ?? "INR";
   return { amount: figures.reduce((t, f) => t + Number(f.amount.amount), 0).toFixed(2), currency };
+}
+
+/** Up to two initials from a name, for the avatar. */
+function initials(name: string | null | undefined): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.charAt(0) ?? "") + (parts.length > 1 ? (parts.at(-1)?.charAt(0) ?? "") : "")).toUpperCase() || "?";
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

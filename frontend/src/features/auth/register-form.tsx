@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import Link from "next/link";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
@@ -19,6 +20,7 @@ export function RegisterForm({ referralCode, countries }: { referralCode?: strin
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField

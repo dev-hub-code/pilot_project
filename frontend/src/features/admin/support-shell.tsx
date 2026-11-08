@@ -27,15 +27,15 @@ export async function SupportShell({ active, children }: { active: SupportTab; c
   return (
     <div className="space-y-6">
       {tabs.length > 1 && (
-        <nav aria-label="Support" className="-mx-1 flex gap-1 overflow-x-auto border-b border-border pb-px text-sm">
+        <nav aria-label="Support" className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-border bg-surface p-1 text-sm shadow-sm">
           {tabs.map((t) => (
             <Link key={t.key} href={t.href} aria-current={t.key === active ? "page" : undefined}
-              className={`whitespace-nowrap border-b-2 px-3 py-2 ${t.key === active ? "border-gold font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"}`}>
+              className={`whitespace-nowrap rounded-lg px-4 py-2 font-medium transition-colors duration-200 ${t.key === active ? "bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold" : "text-muted hover:bg-background hover:text-foreground"}`}>
               {t.label}
             </Link>
           ))}
           {reports && (
-            <Link href="/admin/reports/ticket-agent-performance" className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-muted hover:text-foreground">
+            <Link href="/admin/reports/ticket-agent-performance" className="whitespace-nowrap rounded-lg px-4 py-2 font-medium transition-colors duration-200 text-muted hover:bg-background hover:text-foreground">
               Reports
             </Link>
           )}

@@ -29,7 +29,7 @@ export async function agreementTemplateAction(_p: AgreementFormState, formData: 
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/agreement");
+  revalidatePath("/admin/platform-config/agreement");
   return { success: "Saved. Agreements issued from now on use this wording." };
 }
 

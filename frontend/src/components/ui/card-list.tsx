@@ -3,11 +3,11 @@
  * DataTable (`className="hidden sm:block"`), so a row reads top to bottom instead of scrolling sideways.
  */
 export function CardList({ label, children }: { label: string; children: React.ReactNode }) {
-  return <ul aria-label={label} className="divide-y divide-border border border-border bg-surface sm:hidden">{children}</ul>;
+  return <ul aria-label={label} className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-sm sm:hidden">{children}</ul>;
 }
 
 export function CardListItem({ children }: { children: React.ReactNode }) {
-  return <li className="space-y-3 p-4 text-sm">{children}</li>;
+  return <li className="space-y-3 p-4 text-sm transition-colors active:bg-background">{children}</li>;
 }
 
 /** One labelled value of a card; place inside a `<dl>`. */

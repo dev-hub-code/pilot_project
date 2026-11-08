@@ -34,6 +34,13 @@
   --gold-text: #1a55ad;
   --gold-on-ink: #8fc0fa;     /* accent used as text on dark panels (AA) */      /* accent used as text on light surfaces (AA) */
   --focus: #1f62c9;
+  /* Landing page: the silver-blue sheen behind the page and the frosted glass of its panels. */
+  --sheen-top: #f1f4f8;
+  --sheen-bottom: #cdd7e4;
+  --glass: rgb(255 255 255 / 0.55);
+  --glass-strong: rgb(255 255 255 / 0.8);
+  --glass-border: rgb(255 255 255 / 0.75);
+  --heading-soft: #67778f;   /* second tone of two-tone headings (3:1+ on the sheen, large text only) */
   /* Chart series, in fixed order (validated for colour-vision deficiency on --surface). */
   --chart-1: #1f62c9;        /* blue: rent */
   --chart-2: #c9731f;        /* orange: capital returned */
@@ -58,6 +65,12 @@
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
+  --color-sheen-top: var(--sheen-top);
+  --color-sheen-bottom: var(--sheen-bottom);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  --color-heading-soft: var(--heading-soft);
   /* Legacy alias: "brand" means the accent. */
   --color-brand: var(--gold-text);
   --font-sans: var(--font-body);
@@ -84,6 +97,12 @@
     --chart-1: #5a9bf0;
     --chart-2: #d98a3a;
     --chart-3: #22a07d;
+    --sheen-top: #0f1a2c;
+    --sheen-bottom: #08111f;
+    --glass: rgb(17 29 49 / 0.6);
+    --glass-strong: rgb(17 29 49 / 0.85);
+    --glass-border: rgb(255 255 255 / 0.09);
+    --heading-soft: #8b9cb6;
     color-scheme: dark;
   }
 }
@@ -105,6 +124,12 @@
   --chart-1: #5a9bf0;
   --chart-2: #d98a3a;
   --chart-3: #22a07d;
+  --sheen-top: #0f1a2c;
+  --sheen-bottom: #08111f;
+  --glass: rgb(17 29 49 / 0.6);
+  --glass-strong: rgb(17 29 49 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.09);
+  --heading-soft: #8b9cb6;
   color-scheme: dark;
 }
 
@@ -253,6 +278,22 @@ h1, h2, h3 {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* The landing page's mobile menu drops in under the header. */
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The sign-in pages' photo drifts slowly, and their floating chip bobs. */
+@keyframes auth-pan {
+  from { transform: scale(1.08) translate(0, 0); }
+  to { transform: scale(1.08) translate(-2%, -2%); }
+}
+@keyframes auth-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
 /* The confirmation window (components/ui/confirm-dialog.tsx) rises in. */

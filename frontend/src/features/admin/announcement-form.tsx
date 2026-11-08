@@ -48,11 +48,6 @@ export function AnnouncementForm() {
         <TextField label="Link (optional)" name="link" maxLength={300} defaultValue={v.link} error={e.link}
           placeholder="/invest" />
       </div>
-      <p className="text-xs text-muted">
-        Every active account in the audience gets it in their notifications straight away; suspended and disabled
-        accounts do not. It is not emailed, and it
-        cannot be withdrawn once sent. A link opens that page of the site when the notification is clicked.
-      </p>
       <SendButton />
     </form>
   );

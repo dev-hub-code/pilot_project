@@ -8,10 +8,10 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
     <div className="space-y-6">
       {report.sections.map((section, i) => (
         <section key={`${i}-${section.name}`} className="space-y-2">
-          <h2 className="text-lg font-semibold tracking-tight">{section.name}</h2>
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight"><span aria-hidden="true" className="h-5 w-1 rounded-full bg-gold" />{section.name}</h2>
+          <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-background text-xs uppercase tracking-[0.08em] text-muted">
+              <thead className="border-b border-border bg-background/70 text-[11px] uppercase tracking-[0.06em] text-muted">
                 <tr>
                   {section.headers.map((h, c) => (
                     <th key={c} scope="col" className={`whitespace-nowrap px-4 py-2 font-medium ${c === 3 ? "text-right" : ""}`}>{h}</th>
@@ -22,7 +22,7 @@ export function ReportPreview({ report }: { report: ReportDocument }) {
                 {section.rows.length === 0 ? (
                   <tr><td colSpan={4} className="px-4 py-3 text-muted">Nothing in this period.</td></tr>
                 ) : section.rows.map((row, r) => (
-                  <tr key={r} className={row.emphasis ? "font-semibold" : ""}>
+                  <tr key={r} className={`transition-colors hover:bg-background/60 ${row.emphasis ? "bg-gold/5 font-semibold" : ""}`}>
                     <td className="whitespace-nowrap px-4 py-2"><EmailText>{row.c1}</EmailText></td>
                     <td className="px-4 py-2"><EmailText>{row.c2}</EmailText></td>
                     <td className="px-4 py-2 text-muted"><EmailText>{row.c3}</EmailText></td>
