@@ -16,8 +16,8 @@ Every person and email below is made up. Use your own test addresses (Mailpit lo
 
 | Person | Role | What they can do |
 |---|---|---|
-| **Arjun Mehta** | `SUPER_ADMIN` (protected) | Everything enforced. The only role that can send announcements, manage demo accounts, configure support and write knowledge-base articles. |
-| **Neha Kulkarni** | `PLATFORM_ADMIN` | Users, staff, roles (`ROLE_MANAGE`), role assignment, departments, system settings, terms, audit log |
+| **Arjun Mehta** | `SUPER_ADMIN` (protected) | Everything enforced. The only role that can manage demo accounts. |
+| **Neha Kulkarni** | `PLATFORM_ADMIN` | Users, staff, roles (`ROLE_MANAGE`), role assignment, departments, system settings (which also opens support settings and the knowledge base), terms, audit log, announcements, disabling and enabling accounts |
 | **Vikram Rao** | `SECURITY_ADMIN` | Audit log, security dashboard, view roles and staff, suspend accounts |
 
 ### Investor Relations
@@ -63,9 +63,9 @@ Every person and email below is made up. Use your own test addresses (Mailpit lo
 
 | Person | Role | What they can do |
 |---|---|---|
-| **Imran Khan** | `SUPPORT_MANAGER` | View and manage tickets, view investors |
+| **Imran Khan** | `SUPPORT_MANAGER` | View and manage tickets, view investors, support settings, knowledge base, support analytics, announcements |
 | **Tanvi Jain** | `SUPPORT_EXECUTIVE` | View and manage tickets |
-| **Nikhil Bhat** | `SENIOR_SUPPORT_EXECUTIVE` | View and manage tickets, find payments by exact search |
+| **Nikhil Bhat** | `SENIOR_SUPPORT_EXECUTIVE` | View and manage tickets, find payments by exact search, write knowledge-base articles |
 
 ### Sales & CRM
 
@@ -87,7 +87,7 @@ Every person and email below is made up. Use your own test addresses (Mailpit lo
 
 | Person | Role | What they can do |
 |---|---|---|
-| **Swati Mishra** | `BI_MANAGER` | View and generate reports, statements, report history |
+| **Swati Mishra** | `BI_MANAGER` | View and generate reports, statements, report history, support analytics |
 | **Rakesh Nanda** | `FINANCIAL_ANALYST` | Reports, finance overview |
 | **Pallavi Ghosh** | `BUSINESS_ANALYST` | Reports (read only) |
 
@@ -258,9 +258,10 @@ on in Platform config → Payment gateway.
    for the bank-transfer hold (in hours).
 2. She transfers the amount from her bank. Razorpay's signed notification arrives, the payment is matched to the
    order without anyone confirming it, and the order becomes **Confirmed**.
-3. She transfers less than the order total on a second order. Check that the order is **not** confirmed and that
-   finance can see the short payment (on Payments or Unmatched Receipts). Note what happens: this case is not
-   documented in the code comments, so record the actual behaviour.
+3. She transfers less than the order total on a second order. The order is **not** confirmed: the money is flagged
+   **Refund required** instead of being kept, and is refunded as in S3.6. A second transfer into a virtual account
+   that is already settled is recorded as its own payment: it pays the order if the order is still waiting,
+   otherwise it is also flagged for refund.
 4. Neha switches the virtual account option off. New orders no longer offer it, and orders already started still
    complete.
 
@@ -300,9 +301,10 @@ on in Platform config → Payment gateway.
 1. A bank credit arrives that matches no order. It appears on **Unmatched Receipts**.
 2. Pooja matches it to the right order, or Amit marks it resolved with a note.
 
-### S3.6 Refund that needs a second person (Pooja, Sunita)
+### S3.6 Refund that needs a second person (Rajesh, Sunita)
 
-1. A payment that was taken twice is marked "refund required". A refund request is created.
+1. A payment that was taken twice is marked **Refund required**. Rajesh (`FINANCE_ADJUST`) requests the refund.
+   Pooja cannot: confirming payments does not include refunding them.
 2. The request appears on **Approvals → Pending** as a "Payment refund". Whoever made the request sees
    "You made this request, so someone else must decide it".
 3. Sunita approves it ("Approve and run"), so the refund runs. A second refund request is rejected with a reason,
@@ -433,18 +435,17 @@ Use a plan with a one-year tenure, or a demo account, to reach the end of a term
 **Check:** the SLA bar on the ticket shows the time left. Imran uses the queue tabs, search, "More filters" and the
 bulk actions to reassign or close several tickets at once.
 
-### S7.2 Support configuration (Arjun)
+### S7.2 Support configuration (Imran, Nikhil, Swati, Tanvi)
 
-These permissions are given to no role by default. Give them to Imran through a custom role, or test them as Arjun.
+1. **Support Settings** (Imran, `SUPPORT_CONFIG_MANAGE`): SLA policies, business hours, categories, auto-assignment
+   and escalation. Tanvi can read the settings but not change them.
+2. **Knowledge Base** (Nikhil, `KNOWLEDGE_BASE_MANAGE`): write an article, publish it, then archive it. Kabir finds a
+   published customer article when he searches before opening a ticket; internal articles stay staff-only. Tanvi can
+   read articles but not edit or archive them.
+3. **Support dashboard and feedback** (Swati, `SUPPORT_ANALYTICS_VIEW`): change the period and check the ticket
+   volumes and ratings. Swati sees the analytics without being able to work tickets.
 
-1. **Support Settings** (`SUPPORT_CONFIG_MANAGE`): SLA policies, business hours, categories, auto-assignment and
-   escalation.
-2. **Knowledge Base** (`KNOWLEDGE_BASE_MANAGE`): write an article, publish it, then archive it. Kabir finds it when he
-   searches before opening a ticket.
-3. **Support dashboard and feedback** (`SUPPORT_ANALYTICS_VIEW`): change the period and check the ticket volumes and
-   ratings.
-
-### S7.3 Announcements (Arjun)
+### S7.3 Announcements (Imran, Neha)
 
 1. Send an announcement to each audience in turn: everyone, investors, online investors, network investors, and
    staff. The "Before you send" card is shown. The right people see each announcement in their notifications.
@@ -543,9 +544,11 @@ These permissions are given to no role by default. Give them to Imran through a 
 
 ## 15. Gaps to know before testing
 
-- **Only the super admin** holds `ANNOUNCEMENT_MANAGE`, `DEMO_ACCOUNT_MANAGE`, `SUPPORT_CONFIG_MANAGE`,
-  `KNOWLEDGE_BASE_MANAGE` and `SUPPORT_ANALYTICS_VIEW` by default. To test them as another employee, give them a
-  custom role first.
+- **Demo accounts** are the super admin's alone, on purpose.
+- **Access added in migration V28:** support settings, knowledge base and support analytics (Support manager),
+  knowledge base (Senior support), support analytics (BI manager), announcements (Support manager, Platform admin)
+  and disabling accounts (Platform admin). Employees who already hold these roles get the new pages at their next
+  sign-in.
 - **Publishing, closing and cancelling a plan** need `INVESTMENT_APPROVE` (Kavita). The product team can create
   and edit drafts but not publish them.
 - **Reserved permissions** (shown as "Reserved" on Permissions) have no feature behind them yet. Granting them
