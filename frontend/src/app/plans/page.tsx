@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Eyebrow } from "@/components/brand/eyebrow";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { PlanCard } from "@/features/plans/plan-card";
+import { PlanCard, highestReturnCode, planGridClass } from "@/features/plans/plan-card";
 import { PublicFrame } from "@/features/plans/public-frame";
 import { openPlans } from "@/lib/server/public-plans";
 
@@ -33,10 +33,11 @@ export default async function PublicPlansPage({ searchParams }: PageProps<"/plan
         ) : plans.content.length === 0 ? (
           <EmptyState title="No plans here right now" description="New plans are added regularly." />
         ) : (
-          <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className={planGridClass(plans.content.length)}>
             {plans.content.map((plan) => (
               <li key={plan.code} className="flex">
-                <PlanCard plan={plan} href="/login?next=%2Finvest" action="Sign in to invest" />
+                <PlanCard plan={plan} href="/login?next=%2Finvest" action="Sign in to invest"
+                  highlight={plan.code === highestReturnCode(plans.content)} />
               </li>
             ))}
           </ul>

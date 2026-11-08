@@ -14,7 +14,7 @@ import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stat
 import { getPhoneCountries } from "@/lib/server/phone-countries";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { getPublicPlans } from "@/lib/server/public-plans";
-import { PlanCard } from "@/features/plans/plan-card";
+import { PlanCarousel } from "@/features/plans/plan-carousel";
 import { yearsLabel } from "@/features/orders/lease-years";
 import type { PublicPlan as Plan } from "@/types/plan";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
@@ -677,11 +677,9 @@ export default async function Home() {
           <section aria-labelledby="plans-heading" className="mt-20 px-5 sm:px-10 lg:mt-28 lg:px-14">
             <Eyebrow>Plans</Eyebrow>
             <h2 id="plans-heading" className="mt-4 text-3xl leading-tight font-normal tracking-tight sm:text-4xl">Choose Your Tenure</h2>
-            <ul className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {plans.slice(0, 6).map((plan) => (
-                <li key={plan.code} className="flex"><PlanCard plan={plan} href="/invest" action="Invest" /></li>
-              ))}
-            </ul>
+            <div className="mt-8">
+              <PlanCarousel plans={plans} href="/invest" action="Invest" />
+            </div>
           </section>
         )}
 
