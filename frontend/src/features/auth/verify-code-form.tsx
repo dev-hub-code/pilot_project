@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -18,6 +19,7 @@ export function VerifyCodeForm({ email, stay = false, onboarding = false }: { em
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       {stay && <input type="hidden" name="stay" value="1" />}
       {onboarding && <input type="hidden" name="then" value="onboarding" />}

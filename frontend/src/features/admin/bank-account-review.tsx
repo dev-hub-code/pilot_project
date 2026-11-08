@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Notice } from "@/components/ui/notice";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toneFor } from "@/components/ui/status-tones";
-import { BankAccountDetails } from "@/features/profile/bank-account-details";
+import { DetailTile } from "@/components/ui/detail-tile";
 import { BANK_PROOF_LABEL } from "@/features/profile/bank-labels";
 import type { AdminBankAccount } from "@/types/user";
 import { formatDateTime, humanize } from "@/utils/format";
+import { Building2, Clock, CreditCard, ExternalLink, FileText, Hash, Landmark, Repeat, TriangleAlert, UserRound } from "lucide-react";
 import {
   assignBankAccountAction, rejectBankAccountAction, unassignBankAccountAction, verifyBankAccountAction,
 } from "./actions";
@@ -38,41 +39,60 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
   );
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
-        <div className="min-w-0 flex-1 space-y-3">
-          <BankAccountDetails account={account} accountNumber={accountNumber} ifsc={ifsc.code} />
-          <p className="text-muted">Added {formatDateTime(account.createdAt)}</p>
-          <Link href={`/admin/users/${userId}?from=bank-verification`} className="text-brand hover:underline">View account owner</Link>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-semibold">
+          <Landmark aria-hidden="true" className="size-4 text-gold-text" />
+          {account.bankName ?? "Bank account"}
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
           {account.replacesAccountId && <StatusBadge tone="warning">Change of account</StatusBadge>}
           <StatusBadge tone={toneFor(account.status)}>{humanize(account.status)}</StatusBadge>
         </div>
       </div>
-      {replaces && (
-        <p className="border-l-4 border-gold bg-background px-4 py-3 text-sm">
-          Replaces{" "}
-          <span className="font-mono text-base font-bold tracking-wide">{replacesAccountNumber ?? replaces.accountNumberMasked}</span> ({replaces.accountHolderName},{" "}
-          {humanize(replaces.status).toLowerCase()}{replaces.primary ? ", primary" : ""}). Verifying retires that
-          account and moves payouts to this one; rejecting leaves it in use.
+
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <DetailTile icon={UserRound} label="Account holder name">{account.accountHolderName}</DetailTile>
+        <DetailTile icon={CreditCard} label="Account number">
+          <span className="font-mono text-base font-bold tracking-wide break-all">{accountNumber ?? account.accountNumber}</span>
+        </DetailTile>
+        <DetailTile icon={Hash} label="IFSC"><span className="font-mono text-base font-bold tracking-wide">{ifsc.code ?? "—"}</span></DetailTile>
+        <DetailTile icon={Building2} label="Bank name">
+          {account.bankName ?? <span className="text-muted">Not found for this IFSC</span>}
+        </DetailTile>
+        <DetailTile icon={Clock} label="Added">{formatDateTime(account.createdAt)}</DetailTile>
+        <DetailTile icon={FileText} label="Proof of account">
+          {account.proofType ? (
+            <a href={`/admin/bank-accounts/${account.id}/proof`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-gold-text hover:underline">
+              Open {BANK_PROOF_LABEL[account.proofType].toLowerCase()} <ExternalLink aria-hidden="true" className="size-3.5" />
+            </a>
+          ) : (
+            <span className="text-rose-600 dark:text-rose-400">None uploaded</span>
+          )}
+          <span className="block text-xs font-normal text-muted">{account.proofType ? "Each view is recorded" : "Reject so the investor can add it again with one"}</span>
+        </DetailTile>
+        {replaces && (
+          <DetailTile icon={Repeat} label="Replaces" className="sm:col-span-2">
+            <span className="font-mono text-base font-bold tracking-wide">{replacesAccountNumber ?? replaces.accountNumberMasked}</span>
+            <span className="block text-xs font-normal text-muted">
+              {replaces.accountHolderName}, {humanize(replaces.status).toLowerCase()}{replaces.primary ? ", primary" : ""}. Verifying retires
+              that account and moves payouts to this one; rejecting leaves it in use.
+            </span>
+          </DetailTile>
+        )}
+      </dl>
+
+      {otherUsersWithSameAccount > 0 && (
+        <p className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-400">
+          <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+          Also registered by {otherUsersWithSameAccount} other {otherUsersWithSameAccount === 1 ? "user" : "users"}.
         </p>
       )}
-      <p className="text-sm">
-        {account.proofType ? (
-          <a href={`/admin/bank-accounts/${account.id}/proof`} target="_blank" rel="noopener noreferrer"
-            className="text-brand hover:underline">
-            Open {BANK_PROOF_LABEL[account.proofType].toLowerCase()} (each view is recorded)
-          </a>
-        ) : (
-          <span className="font-medium text-rose-600 dark:text-rose-400">
-            No bank statement, cancelled cheque or passbook: reject so the investor can add the account again with one.
-          </span>
-        )}
-      </p>
-      {otherUsersWithSameAccount > 0 && (
-        <p className="text-sm font-medium text-rose-600 dark:text-rose-400">
-          Warning: also registered by {otherUsersWithSameAccount} other user(s).
-        </p>
+      {!sharedAssignment && (
+        <Link href={`/admin/users/${userId}?from=bank-verification`}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium transition-colors hover:border-gold hover:text-gold-text">
+          <UserRound aria-hidden="true" className="size-3.5" /> View account owner
+        </Link>
       )}
       {userId !== viewerId && account.status === "PENDING_VERIFICATION" && (sharedAssignment ? (
         assignee?.id === viewerId ? decision : assignee ? (

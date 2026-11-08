@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { formatDate, humanize } from "@/utils/format";
 import type { FormState } from "@/validators/form-state";
 import { NO_REFERRER } from "@/validators/referral";
 import { moveReferralAction } from "./referral-actions";
+import { GripVertical, MoveRight, UserMinus } from "lucide-react";
 
 /** Levels 1-4 earn commission; deeper members are shown so they can be arranged too. */
 const COMMISSION_LEVELS = 4;
@@ -121,9 +123,10 @@ export function DownlineEditor({ panes, side }: { panes: AdminDownline[]; side: 
       {state.success && <Notice tone="success">{state.success}</Notice>}
 
       <div {...dropProps(REMOVE)} aria-hidden={!dragged}
-        className={`sticky top-2 z-10 border-2 border-dashed px-4 py-3 text-center text-sm transition-colors ${
+        className={`sticky top-2 z-10 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-3 text-center text-sm shadow-sm transition-colors ${
           over === REMOVE ? "border-rose-600 bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200"
-            : removable ? "border-rose-400 bg-surface text-rose-700 dark:text-rose-300" : "border-border bg-surface text-muted"}`}>
+            : removable ? "border-rose-400 bg-surface text-rose-700 dark:text-rose-300" : "border-border bg-surface/90 text-muted backdrop-blur-md"}`}>
+        <UserMinus aria-hidden="true" className="size-4 shrink-0" />
         {removable ? `Drop here to remove ${dragged.name} from their downline`
           : dragged ? `Nobody refers ${dragged.name}: drop them onto someone to place them in a downline`
             : "Remove from downline: drag someone here so nobody refers them (their own downline stays with them)"}
@@ -139,11 +142,16 @@ export function DownlineEditor({ panes, side }: { panes: AdminDownline[]; side: 
 
       <dialog ref={dialog} aria-labelledby={titleId}
         onClose={() => setPending(null)}
-        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-border bg-surface p-0 text-foreground shadow-2xl backdrop:bg-ink/60 backdrop:backdrop-blur-[2px] open:animate-[confirm-in_150ms_ease-out]">
         {pending && (
           <form action={formAction} className="space-y-5 p-6" noValidate>
+            <KeepValues state={state} />
             <div className="space-y-1.5">
-              <h2 id={titleId} className="font-semibold">
+              <h2 id={titleId} className="flex items-center gap-2 font-semibold">
+                <span aria-hidden="true" className={`flex size-8 items-center justify-center rounded-lg ${removing
+                  ? "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300" : "bg-gold/10 text-gold-text"}`}>
+                  {removing ? <UserMinus className="size-4" /> : <MoveRight className="size-4" />}
+                </span>
                 {removing ? `Remove ${pending.member.name} from their downline` : `Move ${pending.member.name}`}
               </h2>
               <p className="text-sm leading-relaxed text-muted">
@@ -186,16 +194,27 @@ interface DragProps {
 function Pane({ root, ...props }: { root: Node } & DragProps) {
   const { dropProps } = props;
   const referrer = root.referrerId ? "Referred by someone above them" : "Nobody referred them";
+  const size = all(root).length - 1;
   return (
-    <section className="space-y-2 lg:max-h-[75vh] lg:overflow-y-auto lg:pr-1">
+    <section className="space-y-3 lg:max-h-[75vh] lg:overflow-y-auto lg:pr-1">
       <div {...dropProps(root.userId)} {...dragHandlers(root, props)}
-        className={`flex cursor-grab flex-wrap items-center justify-between gap-3 border-2 p-4 transition-colors active:cursor-grabbing ${
-          targetStyle(root, props, "border-foreground/30")}`}>
-        <div className="min-w-0">
-          <p className="text-xs font-medium tracking-[0.08em] text-muted uppercase">Investor · {referrer}</p>
-          <a href={`/admin/users/${root.userId}`} className="font-semibold hover:underline" draggable={false}>{root.name}</a>
-          {root.status !== "ACTIVE" && <> <StatusBadge tone={toneFor(root.status)}>{humanize(root.status)}</StatusBadge></>}
-          <p className="text-sm text-muted wrap-anywhere"><EmailText>{root.email}</EmailText></p>
+        className={`flex cursor-grab flex-wrap items-center justify-between gap-3 rounded-2xl border-2 p-4 shadow-sm transition-colors active:cursor-grabbing ${
+          targetStyle(root, props, "border-gold/40", "bg-gold/5")}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(140deg,var(--gold),var(--gold-on-ink))] text-sm font-semibold text-on-gold shadow-sm">
+            {initialsOf(root.name)}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium tracking-[0.08em] text-muted uppercase">Investor · {referrer}</p>
+            <p className="flex flex-wrap items-center gap-2">
+              <a href={`/admin/users/${root.userId}`} className="font-semibold hover:text-gold-text hover:underline" draggable={false}>{root.name}</a>
+              {root.status !== "ACTIVE" && <StatusBadge tone={toneFor(root.status)}>{humanize(root.status)}</StatusBadge>}
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-border">
+                {size} {size === 1 ? "member" : "members"}
+              </span>
+            </p>
+            <p className="text-sm text-muted wrap-anywhere"><EmailText>{root.email}</EmailText></p>
+          </div>
         </div>
         <Button type="button" variant="quiet" className="min-h-9 px-3 text-xs" onClick={() => props.onMove(root)}>Move</Button>
       </div>
@@ -221,19 +240,20 @@ function Member({ node, ...props }: { node: Node } & DragProps) {
   return (
     <li className="space-y-2">
       <div {...dropProps(node.userId)} {...dragHandlers(node, props)}
-        className={`flex cursor-grab flex-wrap items-center justify-between gap-x-4 gap-y-2 border-2 px-4 py-3 text-sm transition-colors active:cursor-grabbing ${
-          targetStyle(node, props, "border-border")}`}>
+        className={`group flex cursor-grab flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border-2 px-3 py-2.5 text-sm transition-colors active:cursor-grabbing sm:px-4 ${
+          targetStyle(node, props, "border-border", "bg-surface hover:border-gold/40")}`}>
         <span className="flex min-w-0 items-center gap-3">
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0 text-muted" fill="currentColor">
-            <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" />
-            <circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
-          </svg>
+          <GripVertical aria-hidden="true" className="size-4 shrink-0 text-muted transition-colors group-hover:text-gold-text" />
+          <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gold/10 text-[11px] font-semibold text-gold-text">
+            {initialsOf(node.name)}
+          </span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-border px-2 py-0.5 text-[11px] tracking-[0.08em] text-muted uppercase">
+              <a href={`/admin/users/${node.userId}`} className="font-medium hover:text-gold-text hover:underline" draggable={false}>{node.name}</a>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] uppercase ${node.level > COMMISSION_LEVELS
+                ? "bg-background text-muted ring-1 ring-border" : "bg-gold/10 text-gold-text"}`}>
                 Level {node.level}{node.level > COMMISSION_LEVELS ? " · no commission" : ""}
               </span>
-              <a href={`/admin/users/${node.userId}`} className="font-medium hover:underline" draggable={false}>{node.name}</a>
               {node.status !== "ACTIVE" && <StatusBadge tone={toneFor(node.status)}>{humanize(node.status)}</StatusBadge>}
             </span>
             <span className="block text-xs text-muted wrap-anywhere">
@@ -246,7 +266,7 @@ function Member({ node, ...props }: { node: Node } & DragProps) {
         </span>
       </div>
       {node.children.length > 0 && (
-        <div className="ml-4 border-l border-border pl-4">
+        <div className="ml-4 border-l-2 border-gold/20 pl-3 sm:ml-6 sm:pl-4">
           <Branch nodes={node.children} {...props} />
         </div>
       )}
@@ -258,11 +278,16 @@ function Member({ node, ...props }: { node: Node } & DragProps) {
  * While dragging, where the person may go shows dashed gold and everyone else fades; the one under the pointer is
  * filled. Only colours change, so nothing shifts under the pointer.
  */
-function targetStyle(node: Node, { dragged, over, canDropOn }: DragProps, border: string) {
+function targetStyle(node: Node, { dragged, over, canDropOn }: DragProps, border: string, background: string) {
   if (over === node.userId) return "border-gold bg-gold/10";
-  if (!dragged) return `${border} bg-surface`;
-  if (dragged.userId === node.userId) return `${border} bg-surface opacity-40`;
-  return canDropOn(node.userId) ? "border-dashed border-gold/70 bg-surface" : `${border} bg-surface opacity-50`;
+  if (!dragged) return `${border} ${background}`;
+  if (dragged.userId === node.userId) return `${border} ${background} opacity-40`;
+  return canDropOn(node.userId) ? `border-dashed border-gold/70 ${background}` : `${border} ${background} opacity-50`;
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.charAt(0) ?? "") + (parts.length > 1 ? (parts.at(-1)?.charAt(0) ?? "") : "")).toUpperCase() || "?";
 }
 
 function dragHandlers(node: Node, { onDragStart, onDragEnd }: DragProps): React.HTMLAttributes<HTMLElement> {

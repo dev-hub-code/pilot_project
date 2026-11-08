@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Notice } from "@/components/ui/notice";
@@ -16,6 +17,7 @@ export function ForgotPasswordForm({ email, stay = false }: { email?: string; st
   const [state, formAction] = useActionState<FormState, FormData>(requestPasswordResetAction, {});
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       {state.success && <Notice tone="success">{state.success}</Notice>}
       {stay && <input type="hidden" name="stay" value="1" />}

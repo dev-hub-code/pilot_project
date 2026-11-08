@@ -4,8 +4,6 @@ import Link from "next/link";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { ReportsShell } from "@/features/analytics/reports-shell";
-import { TextField } from "@/components/ui/text-field";
-import { Button } from "@/components/ui/button";
 import { PeriodForm } from "@/features/reports/period-form";
 import { ReportPreview, thisMonth } from "@/features/reports/report-preview";
 import { Permission, hasPermission } from "@/lib/permissions";
@@ -14,6 +12,8 @@ import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import { isUuid } from "@/lib/server/routes/document-proxy";
 import type { ReportDocument } from "@/types/report";
 import { EmailText } from "@/components/ui/email-text";
+import { DownloadLink } from "@/features/analytics/report-ui";
+import { BarChart3, Layers, type LucideIcon, Search, UserRound } from "lucide-react";
 
 export const metadata: Metadata = { title: "Statements & summaries" };
 
@@ -22,6 +22,9 @@ const REPORTS = [
   { key: "offerings", label: "Plans & payouts", description: "Investments per plan, and payouts due and not yet paid." },
   { key: "statement", label: "Investor statement", description: "One investor's account activity, holdings and withdrawals." },
 ] as const;
+const REPORT_ICON: Record<(typeof REPORTS)[number]["key"], LucideIcon> = {
+  "financial-summary": BarChart3, offerings: Layers, statement: UserRound,
+};
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function ReportsPage({ searchParams }: PageProps<"/admin/reports/documents">) {
@@ -56,26 +59,41 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
     <ReportsShell active="documents">
       <PageHeader title="Statements & summaries" description={report.description}
         actions={document && canDownload ? (
-          <div className="flex gap-3 text-sm">
-            <a href={download("pdf")} className="rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface">Download PDF</a>
-            <a href={download("csv")} className="rounded-full border border-border px-4 py-1.5 text-muted hover:text-foreground">CSV</a>
+          <div className="flex flex-wrap gap-2">
+            <DownloadLink href={download("pdf")} format="pdf" primary label="Download PDF" />
+            <DownloadLink href={download("csv")} format="csv" />
           </div>
         ) : undefined} />
-      <nav aria-label="Report" className="flex flex-wrap gap-2 text-sm">
-        {REPORTS.map((r) => (
-          <Link key={r.key} href={`/admin/reports/documents?report=${r.key}`} aria-current={r === report ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${r === report ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {r.label}
-          </Link>
-        ))}
+      <nav aria-label="Report" className="grid gap-3 sm:grid-cols-3">
+        {REPORTS.map((r) => {
+          const Icon = REPORT_ICON[r.key];
+          const on = r === report;
+          return (
+            <Link key={r.key} href={`/admin/reports/documents?report=${r.key}`} aria-current={on ? "page" : undefined}
+              className={`group flex items-start gap-3 rounded-2xl border p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${on
+                ? "border-gold bg-gold/5 ring-2 ring-gold/25" : "border-border bg-surface hover:border-gold/40"}`}>
+              <span aria-hidden="true" className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors ${on
+                ? "bg-ink text-on-ink dark:bg-gold dark:text-on-gold" : "bg-gold/10 text-gold-text"}`}>
+                <Icon className="size-5" />
+              </span>
+              <span className="min-w-0">
+                <span className={`block font-semibold ${on ? "text-gold-text" : ""}`}>{r.label}</span>
+                <span className="block text-xs text-muted">{r.description}</span>
+              </span>
+            </Link>
+          );
+        })}
       </nav>
       {report.key === "statement" && (
-        <form action="/admin/reports/documents" className="flex flex-wrap items-end gap-3">
+        <form action="/admin/reports/documents" role="search"
+          className="flex w-full max-w-xl items-center gap-2 rounded-xl border border-border bg-surface p-1 shadow-sm focus-within:border-gold">
           <input type="hidden" name="report" value="statement" />
           <input type="hidden" name="from" value={from} />
           <input type="hidden" name="to" value={to} />
-          <div className="w-full sm:w-96"><TextField label="Investor user id" name="userId" defaultValue={userId ?? ""} autoComplete="off" /></div>
-          <Button type="submit" variant="secondary">Load</Button>
+          <Search aria-hidden="true" className="ml-2.5 size-4 shrink-0 text-muted" />
+          <input name="userId" defaultValue={userId ?? ""} autoComplete="off" placeholder="Investor user id" aria-label="Investor user id"
+            className="h-9 min-w-0 flex-1 bg-transparent px-1 font-mono text-sm outline-none" />
+          <button type="submit" className="h-9 rounded-lg bg-gold px-4 text-sm font-semibold text-on-gold transition-colors hover:bg-gold-hover">Load</button>
         </form>
       )}
       {report.key !== "offerings" && (

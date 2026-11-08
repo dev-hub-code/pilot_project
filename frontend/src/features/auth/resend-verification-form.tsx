@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Notice } from "@/components/ui/notice";
@@ -13,6 +14,7 @@ export function ResendVerificationForm({ email }: { email?: string }) {
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       {state.success && <Notice tone="success">{state.success}</Notice>}
       <TextField

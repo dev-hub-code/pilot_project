@@ -1,7 +1,6 @@
 import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
 import { Cell, DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -18,6 +17,7 @@ import type { DuePayouts, LeaseRent, LeaseRentStatus } from "@/types/earning";
 import { formatDate } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
+import { CheckCircle2, Clock, UserRound } from "lucide-react";
 
 export const metadata: Metadata = { title: "Returns" };
 
@@ -41,43 +41,66 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
   ]);
   const credit = creditLabel(rentCredit);
   const dueCount = due.reduce((n, d) => n + d.count, 0);
+  // Capital back applies only to investments from before plans became returns-only: the column shows only then.
+  const showCapital = leases.content.some((l) => Number(l.capitalTotal.amount) > 0);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Returns"
         description={`Every investment's returns are credited to its investor's wallet ${credit} throughout its term, from the full hour after the investor accepts its agreement: the monthly returns × the term months elapsed, so the whole term pays exactly monthly returns × tenure. Referral commission on it is credited with it. Investments made before plans became returns-only also get part of the amount back, the same way.`} />
 
-      <Card title="Returns not yet credited" description="Each interval that has ended is credited automatically within a minute or so.">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-sm">
+      <section aria-labelledby="due-title"
+        className={`flex flex-wrap items-center gap-4 rounded-2xl border p-5 shadow-sm ${dueCount === 0
+          ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/[0.07]"
+          : "border-amber-300/70 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/[0.07]"}`}>
+        <span aria-hidden="true" className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${dueCount === 0
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+          : "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"}`}>
+          {dueCount === 0 ? <CheckCircle2 className="size-5" /> : <Clock className="size-5" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="due-title" className="font-semibold">
+            {dueCount === 0 ? "All caught up" : "Returns not yet credited"}
+          </h2>
+          <p className="text-sm text-muted">
             {dueCount === 0
-              ? "Nothing is waiting: all returns due so far has been credited."
+              ? "Nothing is waiting: all returns due so far have been credited."
               : due.map((d) => `${d.count} term(s) behind · ${formatMoney(d.total)}`).join(" · ")}
+            {" "}Each interval that has ended is credited automatically within a minute or so.
           </p>
-          {dueCount > 0 && hasPermission(session.permissions, Permission.PAYOUT_PROCESS) && (
-            <ActionButton action={runPayoutsAction} label="Credit returns now" pendingLabel="Crediting…"
-              confirm="Credit all returns due so far to investors' wallets now?" />
-          )}
         </div>
-      </Card>
+        {dueCount > 0 && hasPermission(session.permissions, Permission.PAYOUT_PROCESS) && (
+          <ActionButton action={runPayoutsAction} label="Credit returns now" pendingLabel="Crediting…"
+            confirm="Credit all returns due so far to investors' wallets now?" />
+        )}
+      </section>
 
-      <nav aria-label="Filter" className="flex flex-wrap gap-2 text-sm">
-        {VIEWS.map((v) => (
-          <Link key={v.status} href={`/admin/payouts?status=${v.status}`} aria-current={v === view ? "page" : undefined}
-            className={`rounded-full border px-3 py-1 ${v === view ? "border-foreground text-foreground" : "border-border text-muted"}`}>
-            {v.label}
-          </Link>
-        ))}
-      </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Filter" className="inline-flex gap-1 rounded-xl border border-border bg-surface p-1 text-sm shadow-sm">
+          {VIEWS.map((v) => (
+            <Link key={v.status} href={`/admin/payouts?status=${v.status}`} aria-current={v === view ? "page" : undefined}
+              className={`rounded-lg px-4 py-2 font-medium whitespace-nowrap transition-colors duration-200 ${v === view
+                ? "bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold"
+                : "text-muted hover:bg-background hover:text-foreground"}`}>
+              {v.label}
+            </Link>
+          ))}
+        </nav>
+        {leases.totalElements > 0 && (
+          <p className="text-sm text-muted">{leases.totalElements.toLocaleString("en-IN")} {leases.totalElements === 1 ? "term" : "terms"}</p>
+        )}
+      </div>
 
       {leases.content.length === 0 ? (
         <EmptyState title={view.status === "RUNNING" ? "No terms earning returns" : "No completed terms"} />
       ) : (
-        <DataTable columns={["Investor", "Plan", "Term", "Monthly returns", "Returns credited", "Capital back", "Progress", "Status"]}>
+        <DataTable columns={["Plan", "Term", "Monthly returns", "Returns credited", ...(showCapital ? ["Capital back"] : []), "Progress", "Status", "Investor"]}>
           {leases.content.map((l) => (
             <tr key={l.holdingId} className="align-top">
-              <Cell>{l.userId && <Link href={`/admin/users/${l.userId}`} className="inline-flex min-h-6 items-center text-gold-text hover:underline">View</Link>}</Cell>
-              <Cell className="font-mono text-xs">{l.productCode}</Cell>
+              <Cell>
+                <span className="block font-medium">{l.productTitle ?? l.productCode}</span>
+                {l.productTitle && <span className="block font-mono text-xs text-muted">{l.productCode}</span>}
+              </Cell>
               <Cell className="whitespace-nowrap text-xs text-muted">
                 {formatDate(l.startsAt)} – {formatDate(l.endsAt)}
                 <span className="block">{l.tenureMonths} months</span>
@@ -87,17 +110,30 @@ export default async function PayoutsPage({ searchParams }: PageProps<"/admin/pa
                 <span className="font-medium">{formatMoney(l.rentCredited)}</span>
                 <span className="block text-xs text-muted">of {formatMoney(l.totalRent)}</span>
               </Cell>
-              <Cell className="tabular-nums">
-                {formatMoney(l.capitalCredited)}
-                <span className="block text-xs text-muted">of {formatMoney(l.capitalTotal)}</span>
-              </Cell>
-              <Cell className="min-w-36">
+              {showCapital && (
+                <Cell className="tabular-nums">
+                  {formatMoney(l.capitalCredited)}
+                  <span className="block text-xs text-muted">of {formatMoney(l.capitalTotal)}</span>
+                </Cell>
+              )}
+              <Cell className="min-w-40">
+                <span className="mb-1.5 flex justify-end">
+                  <span className="rounded-full bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold-text tabular-nums">{Math.round(leasePercent(l))}%</span>
+                </span>
                 <ProgressBar percent={leasePercent(l)} label={`${l.productCode} returns credited`} />
                 <span className="mt-1 block text-xs text-muted">
                   {leaseNote(l)}
                 </span>
               </Cell>
               <Cell><StatusBadge tone={LEASE_TONE[l.status]}>{LEASE_STATUS_LABEL[l.status]}</StatusBadge></Cell>
+              <Cell>
+                {l.userId && (
+                  <Link href={`/admin/users/${l.userId}`}
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:border-gold hover:text-gold-text">
+                    <UserRound aria-hidden="true" className="size-3.5" /> View
+                  </Link>
+                )}
+              </Cell>
             </tr>
           ))}
         </DataTable>

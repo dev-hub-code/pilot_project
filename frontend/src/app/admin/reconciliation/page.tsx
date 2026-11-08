@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, TriangleAlert } from "lucide-react";
+import {
+  ArrowLeftRight, ArrowRight, CalendarCheck, CheckCircle2, FileWarning, Hourglass, type LucideIcon, RadioTower, ReceiptText, Scale,
+  TriangleAlert, Undo2,
+} from "lucide-react";
 import { deniedUnlessInMenu } from "@/components/layout/page-access";
 import { Cell, DataTable } from "@/components/ui/data-table";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatGrid } from "@/components/ui/stat-grid";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { METHOD_LABEL } from "@/features/orders/labels";
 import { WITHDRAWAL_STATUS_LABEL } from "@/features/withdrawals/labels";
@@ -37,31 +38,44 @@ export default async function ReconciliationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reconciliation"
-        description="What needs finance's attention, and whether the ledger agrees with the payments and withdrawals it records. Checked live each time you open this page, and once a day automatically." />
-
-      <section className={`flex items-start gap-3 rounded-xl border p-5 ${report.issues === 0
-        ? "border-emerald-600/20 bg-emerald-50 dark:bg-emerald-500/10" : "border-amber-600/20 bg-amber-50 dark:bg-amber-500/10"}`}>
-        {report.issues === 0
-          ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden="true" />
-          : <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />}
-        <div>
-          <p className="font-semibold">{report.issues === 0 ? "Everything reconciles" : `${report.issues} ${report.issues === 1 ? "item needs" : "items need"} attention`}</p>
-          <p className="text-sm text-muted">Checked {formatDateTime(report.generatedAt)}</p>
+      {/* ------------------------------------------------------------------ banner */}
+      <section aria-labelledby="recon-title" className="relative isolate overflow-hidden rounded-3xl bg-ink text-on-ink shadow-xl shadow-ink/20">
+        <div aria-hidden="true" className={`absolute -top-24 -right-24 -z-10 size-80 rounded-full blur-3xl ${report.issues === 0 ? "bg-emerald-400/25" : "bg-amber-400/30"}`} />
+        <div aria-hidden="true" className="absolute -bottom-32 -left-20 -z-10 size-72 rounded-full bg-gold/15 blur-3xl" />
+        <div className="space-y-6 p-6 sm:p-8 lg:p-10">
+          <div className="flex flex-wrap items-center gap-5">
+            <span aria-hidden="true" className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ring-1 ${report.issues === 0
+              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30" : "bg-amber-500/15 text-amber-300 ring-amber-400/30"}`}>
+              {report.issues === 0 ? <CheckCircle2 className="size-7" /> : <TriangleAlert className="size-7" />}
+            </span>
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-xs font-medium tracking-[0.14em] text-on-ink/60 uppercase">Reconciliation</p>
+              <h1 id="recon-title" className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                {report.issues === 0 ? "Everything reconciles"
+                  : <><span className="text-amber-300">{report.issues}</span> {report.issues === 1 ? "item needs" : "items need"} attention</>}
+              </h1>
+              <p className="max-w-3xl text-sm text-on-ink/70">
+                Whether the ledger agrees with the payments and withdrawals it records. Checked live {formatDateTime(report.generatedAt)}, and once a day automatically.
+              </p>
+            </div>
+          </div>
+          <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <BannerTile icon={TriangleAlert} label="Needs attention" good={report.issues === 0}
+              value={report.issues.toLocaleString("en-IN")} note="Items across every check" />
+            <BannerTile icon={Scale} label="Trial balance" good={balanced}
+              value={balanced ? "Balanced" : "Out of balance"} note="Debits equal credits in every currency" />
+            <BannerTile icon={ArrowLeftRight} label="Withdrawals in transit" good={transitMatches}
+              value={transitMatches ? "Agrees" : "Differs"} note="Ledger against open withdrawals" />
+            <BannerTile icon={CalendarCheck} label="Last daily check" good={!lastRun || lastRun.issues === 0}
+              value={lastRun ? (lastRun.issues === 0 ? "All clear" : `${lastRun.issues} to check`) : "—"}
+              note={lastRun ? formatDateTime(lastRun.runAt) : "Not run yet: it runs every morning"} />
+          </dl>
         </div>
       </section>
 
-      <StatGrid label="Checks" stats={[
-        { label: "Needs attention", value: report.issues },
-        { label: "Trial balance", value: balanced ? "Balanced" : "Out of balance", note: "Debits equal credits in every currency" },
-        { label: "Withdrawals in transit", value: transitMatches ? "Agrees" : "Differs", note: "Ledger against open withdrawals" },
-        { label: "Last daily check", value: lastRun ? lastRun.issues : "—",
-          note: lastRun ? `items on ${formatDateTime(lastRun.runAt)}` : "Not run yet: it runs every morning" },
-      ]} />
-
-      <Section title="Unmatched gateway receipts" count={report.unmatchedReceipts.length}
+      <Section icon={ReceiptText} title="Unmatched gateway receipts" count={report.unmatchedReceipts.length}
         description="Money taken by the gateway for a reference that is none of ours."
-        action={<Link href="/admin/payments/unmatched" className="text-sm text-gold-text hover:underline">Resolve receipts</Link>}>
+        action={<ActionLink href="/admin/payments/unmatched">Resolve receipts</ActionLink>}>
         <DataTable columns={["Received", "Gateway payment", "Paid against", "Amount"]}>
           {report.unmatchedReceipts.map((r) => (
             <tr key={r.id}>
@@ -74,7 +88,7 @@ export default async function ReconciliationPage() {
         </DataTable>
       </Section>
 
-      <Section title="Payout events to check" count={report.payoutEvents.length}
+      <Section icon={RadioTower} title="Payout events to check" count={report.payoutEvents.length}
         description="Messages from the payout provider (last 30 days) that could not be applied automatically: compare them with the bank statement.">
         <DataTable columns={["Received", "Event", "Outcome", "Withdrawal", "Bank reference"]}>
           {report.payoutEvents.map((e) => (
@@ -98,7 +112,7 @@ export default async function ReconciliationPage() {
         </DataTable>
       </Section>
 
-      <Section title="Withdrawals stuck in payment" count={report.stuckWithdrawals.length}
+      <Section icon={Hourglass} title="Withdrawals stuck in payment" count={report.stuckWithdrawals.length}
         description="Handed to the bank or provider more than 3 days ago, and still neither paid nor failed.">
         <DataTable columns={["Withdrawal", "Status", "Amount", "Since"]}>
           {report.stuckWithdrawals.map((w) => (
@@ -116,9 +130,9 @@ export default async function ReconciliationPage() {
         </DataTable>
       </Section>
 
-      <Section title="Refunds overdue" count={report.pendingRefunds.length}
+      <Section icon={Undo2} title="Refunds overdue" count={report.pendingRefunds.length}
         description="Money received that must go back to the investor, still not refunded after 3 days."
-        action={<Link href="/admin/payments?view=refunds" className="text-sm text-gold-text hover:underline">Record refunds</Link>}>
+        action={<ActionLink href="/admin/payments?view=refunds">Record refunds</ActionLink>}>
         <DataTable columns={["Received", "Order", "Paid by", "Amount"]}>
           {report.pendingRefunds.map((p) => (
             <tr key={p.paymentId}>
@@ -135,7 +149,7 @@ export default async function ReconciliationPage() {
         </DataTable>
       </Section>
 
-      <Section title="Deposits missing from the ledger" count={report.unpostedDeposits.length}
+      <Section icon={FileWarning} title="Deposits missing from the ledger" count={report.unpostedDeposits.length}
         description="Payments settled (or refunded) without their ledger posting. This should never happen: tell the technical team.">
         <DataTable columns={["Settled", "Payment", "Status", "Amount", "Missing"]}>
           {report.unpostedDeposits.map((d) => (
@@ -151,7 +165,7 @@ export default async function ReconciliationPage() {
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Withdrawals in transit" count={report.inTransit.filter((t) => !t.matches).length}
+        <Section icon={ArrowLeftRight} title="Withdrawals in transit" count={report.inTransit.filter((t) => !t.matches).length}
           description="What the ledger holds for withdrawals on their way, against the open withdrawals that reserved it." always>
           {report.inTransit.length === 0 ? <p className="text-sm text-muted">No withdrawals have been made yet.</p> : <DataTable columns={["Currency", "Ledger", "Open withdrawals", ""]}>
             {report.inTransit.map((t) => (
@@ -165,10 +179,10 @@ export default async function ReconciliationPage() {
           </DataTable>}
         </Section>
 
-        <Section title="Trial balance" count={report.trialBalance.filter((t) => !t.balanced).length}
+        <Section icon={Scale} title="Trial balance" count={report.trialBalance.filter((t) => !t.balanced).length}
           description="Total debits and credits over the whole ledger." always
           action={can(Permission.LEDGER_VIEW) || can(Permission.FINANCE_VIEW)
-            ? <Link href="/admin/ledger" className="text-sm text-gold-text hover:underline">Open the ledger</Link> : undefined}>
+            ? <ActionLink href="/admin/ledger">Open the ledger</ActionLink> : undefined}>
           <DataTable columns={["Currency", "Debits", "Credits", ""]}>
             {report.trialBalance.map((t) => (
               <tr key={t.currency}>
@@ -182,15 +196,27 @@ export default async function ReconciliationPage() {
         </Section>
       </div>
 
-      <section className="space-y-3" aria-label="Daily checks">
-        <h2 className="text-lg font-semibold tracking-tight">Daily checks</h2>
+      <section className="space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6" aria-labelledby="runs-title">
+        <h2 id="runs-title" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
+          <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold">
+            <CalendarCheck className="size-[18px]" />
+          </span>
+          Daily checks
+          <span className="text-sm font-normal text-muted">last {runs.length}</span>
+        </h2>
         {runs.length === 0 ? <p className="text-sm text-muted">The first daily check runs tomorrow morning.</p> : (
-          <ol className="flex flex-wrap gap-2">
+          <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             {runs.map((r) => (
-              <li key={r.id} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-                <span className="text-muted">{formatDateTime(r.runAt)}</span>{" · "}
-                <span className={r.issues === 0 ? "text-emerald-700 dark:text-emerald-400" : "font-medium text-amber-700 dark:text-amber-400"}>
-                  {r.issues === 0 ? "All clear" : `${r.issues} to check`}
+              <li key={r.id} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm ${r.issues === 0
+                ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/10"}`}>
+                {r.issues === 0
+                  ? <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
+                  : <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-amber-700 dark:text-amber-400" />}
+                <span className="min-w-0">
+                  <span className={`block font-medium ${r.issues === 0 ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
+                    {r.issues === 0 ? "All clear" : `${r.issues} to check`}
+                  </span>
+                  <span className="block truncate text-xs text-muted">{formatDateTime(r.runAt)}</span>
                 </span>
               </li>
             ))}
@@ -201,8 +227,32 @@ export default async function ReconciliationPage() {
   );
 }
 
+/** A headline check inside the banner, green when it passes and amber when it does not. */
+function BannerTile({ icon: Icon, label, value, note, good }: { icon: LucideIcon; label: string; value: string; note: string; good: boolean }) {
+  return (
+    <div className="rounded-2xl border border-on-ink/15 bg-on-ink/[0.08] p-4 backdrop-blur-md">
+      <dt className="flex items-center gap-2 text-xs text-on-ink/60">
+        <Icon aria-hidden="true" className={`size-4 ${good ? "text-emerald-300" : "text-amber-300"}`} /> {label}
+      </dt>
+      <dd className={`mt-1.5 font-display text-xl font-semibold tracking-tight tabular-nums ${good ? "" : "text-amber-300"}`}>{value}</dd>
+      <dd className="mt-0.5 truncate text-xs text-on-ink/55">{note}</dd>
+    </div>
+  );
+}
+
+function ActionLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href}
+      className="group inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:border-gold hover:text-gold-text">
+      {children}
+      <ArrowRight aria-hidden="true" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
 /** One check: its rows when something needs attention, otherwise a single "all clear" line ({@code always}: the rows regardless). */
-function Section({ title, description, count, action, always = false, children }: {
+function Section({ icon: Icon, title, description, count, action, always = false, children }: {
+  icon: LucideIcon;
   title: string;
   description: string;
   count: number;
@@ -210,19 +260,33 @@ function Section({ title, description, count, action, always = false, children }
   always?: boolean;
   children: React.ReactNode;
 }) {
+  const clear = count === 0;
+  const expanded = !clear || always;
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-surface p-5 shadow-sm" aria-label={title}>
+    <section aria-label={title}
+      className={`relative overflow-hidden rounded-2xl border bg-surface shadow-sm ${clear ? "border-border" : "border-amber-500/40"} ${expanded ? "space-y-4 p-5 sm:p-6" : "p-4"}`}>
+      {!clear && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-amber-500" />}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-            {title}
-            <StatusBadge tone={count === 0 ? "success" : "warning"}>{count === 0 ? "Clear" : count}</StatusBadge>
-          </h2>
-          <p className="mt-0.5 text-sm text-muted">{description}</p>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span aria-hidden="true" className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${clear
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"}`}>
+            <Icon className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="flex flex-wrap items-center gap-2 font-semibold tracking-tight sm:text-lg">
+              {title}
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${clear
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                {clear ? <><CheckCircle2 aria-hidden="true" className="size-3" /> Clear</> : count.toLocaleString("en-IN")}
+              </span>
+            </h2>
+            <p className="mt-0.5 text-sm text-muted">{description}</p>
+          </div>
         </div>
-        {(count > 0 || always) && action}
+        {expanded && action}
       </header>
-      {count > 0 || always ? children : <p className="text-sm text-muted">Nothing to check.</p>}
+      {expanded && children}
     </section>
   );
 }

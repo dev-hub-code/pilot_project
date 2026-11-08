@@ -59,8 +59,8 @@ export const ADMIN_NAV: readonly NavItem[] = [
     requires: [P.FINANCE_VIEW, P.REFERRAL_CONFIG_MANAGE] },
   { id: "bank-accounts", label: "Company Bank Accounts", href: "/admin/platform-config/company-accounts", icon: "bank", category: "Platform Settings",
     requires: [P.FINANCE_VIEW, P.COMPANY_BANK_ACCOUNT_MANAGE, P.COMPANY_BANK_ACCOUNT_VIEW] },
-  { id: "terms", label: "Terms & Conditions", href: "/admin/terms", icon: "file", category: "Platform Settings", requires: [P.TERMS_MANAGE] },
-  { id: "agreement", label: "Agreement Templates", href: "/admin/agreement", icon: "file", category: "Platform Settings", requires: [P.AGREEMENT_TEMPLATE_MANAGE] },
+  { id: "terms", label: "Terms & Conditions", href: "/admin/platform-config/terms", icon: "file", category: "Platform Settings", requires: [P.TERMS_MANAGE] },
+  { id: "agreement", label: "Agreement Templates", href: "/admin/platform-config/agreement", icon: "file", category: "Platform Settings", requires: [P.AGREEMENT_TEMPLATE_MANAGE] },
 
   { id: "security", label: "Security Dashboard", href: "/admin/security", icon: "shield", category: "Security", requires: [P.AUDIT_VIEW, P.SECURITY_VIEW] },
   { id: "audit", label: "Audit Logs", href: "/admin/audit", icon: "history", category: "Security", requires: [P.AUDIT_VIEW] },
@@ -94,5 +94,7 @@ export function configTabs(permissions: readonly string[]): MenuLink[] {
       show: can(P.SYSTEM_SETTINGS_MANAGE) || can(P.FINANCE_VIEW) },
     { href: "/admin/platform-config/company-accounts", label: "Company accounts",
       show: can(P.FINANCE_VIEW) || can(P.COMPANY_BANK_ACCOUNT_MANAGE) || can(P.COMPANY_BANK_ACCOUNT_VIEW) },
+    { href: "/admin/platform-config/terms", label: "Terms", show: can(P.TERMS_MANAGE) },
+    { href: "/admin/platform-config/agreement", label: "Agreement", show: can(P.AGREEMENT_TEMPLATE_MANAGE) },
   ].filter((item) => item.show).map(({ href, label }) => ({ href, label }));
 }

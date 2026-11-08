@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import Link from "next/link";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
@@ -13,6 +14,7 @@ export function LoginForm({ next }: { next?: string }) {
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && (
         <Alert>{state.error}</Alert>
       )}

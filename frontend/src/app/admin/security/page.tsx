@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ColumnChart, type ColumnDatum, type ColumnSeries } from "@/components/charts/column-chart";
-import { Card } from "@/components/ui/card";
-import { Cell, DataTable } from "@/components/ui/data-table";
+import {
+  Activity, ArrowUpRight, BarChart3, CheckCircle2, Clock, Download, Eye, FileCheck, Globe, IdCard, KeyRound, Landmark, Lock, LogIn,
+  type LucideIcon, MonitorSmartphone, Paperclip, RotateCcwKey, ScrollText, Shield, ShieldAlert, ShieldCheck, Unlock, UserCog, UserX,
+} from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LinkButton } from "@/components/ui/link-button";
-import { PageHeader } from "@/components/ui/page-header";
-import { AuditTable } from "@/features/security/audit-table";
+import { AuditList } from "@/features/security/audit-list";
 import { PERIODS, personLabel } from "@/features/security/labels";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { SecurityOverview, UserRef } from "@/types/security";
 import { formatDateTime } from "@/utils/format";
+import { widthClass } from "@/utils/width-class";
 import { EmailText } from "@/components/ui/email-text";
 
 export const metadata: Metadata = { title: "Security" };
@@ -50,151 +51,259 @@ export default async function SecurityPage({ searchParams }: PageProps<"/admin/s
   const since = overview.from.slice(0, 10);
   const log = (filters: Record<string, string>) => `/admin/audit?${new URLSearchParams({ from: since, ...filters })}`;
 
-  const tiles = [
-    { label: "Sign-ins", value: t.signIns, note: "Successful", href: log({ action: "LOGIN" }) },
-    { label: "Failed sign-ins", value: t.failedSignIns, note: "Wrong password on an existing account",
+  const tiles: Tile[] = [
+    { icon: LogIn, label: "Sign-ins", value: t.signIns, note: "Successful", href: log({ action: "LOGIN" }) },
+    { icon: KeyRound, label: "Failed sign-ins", value: t.failedSignIns, note: "Wrong password on an existing account",
       href: log({ action: "LOGIN_FAILED" }), alert: t.failedSignIns > 0 },
-    { label: "Accounts locked now", value: overview.lockedAccounts.length, note: `${t.lockouts} lockouts in the period`,
+    { icon: Lock, label: "Accounts locked now", value: overview.lockedAccounts.length, note: `${t.lockouts} lockouts in the period`,
       href: "#locked", alert: overview.lockedAccounts.length > 0 },
-    { label: "Stolen-token alerts", value: t.stolenTokenDetections, note: "Sessions ended after token reuse",
+    { icon: ShieldAlert, label: "Stolen-token alerts", value: t.stolenTokenDetections, note: "Sessions ended after token reuse",
       href: log({ action: "TOKEN_REFRESH_REUSE_DETECTED" }), alert: t.stolenTokenDetections > 0 },
-    { label: "Active sessions", value: t.activeSessions, note: `${t.signedInUsers} people signed in now`, href: null },
-    { label: "Password resets", value: t.passwordResets, note: `${t.passwordChanges} passwords changed`,
+    { icon: MonitorSmartphone, label: "Active sessions", value: t.activeSessions, note: `${t.signedInUsers} people signed in now`, href: null },
+    { icon: RotateCcwKey, label: "Password resets", value: t.passwordResets, note: `${t.passwordChanges} password${t.passwordChanges === 1 ? "" : "s"} changed`,
       href: log({ action: "PASSWORD_RESET" }) },
-    { label: "Personal data opened", value: t.sensitiveAccess, note: "KYC, bank proofs, attachments, reports",
+    { icon: Eye, label: "Personal data opened", value: t.sensitiveAccess, note: "KYC, bank proofs, attachments, reports",
       href: log({ category: "SENSITIVE_DATA" }) },
-    { label: "Access & settings changes", value: t.privilegedChanges, note: "Roles, staff, suspensions, money settings",
+    { icon: UserCog, label: "Access & settings changes", value: t.privilegedChanges, note: "Roles, staff, suspensions, money settings",
       href: "#changes" },
   ];
+  const concerns = [
+    overview.lockedAccounts.length > 0 && `${overview.lockedAccounts.length} account${overview.lockedAccounts.length === 1 ? "" : "s"} locked`,
+    t.stolenTokenDetections > 0 && `${t.stolenTokenDetections} stolen-token alert${t.stolenTokenDetections === 1 ? "" : "s"}`,
+    t.failedSignIns > 0 && `${t.failedSignIns} failed sign-in${t.failedSignIns === 1 ? "" : "s"}`,
+  ].filter((c): c is string => Boolean(c));
+  const serious = overview.lockedAccounts.length > 0 || t.stolenTokenDetections > 0;
+  const maxAccount = Math.max(1, ...overview.failedByAccount.map((r) => r.attempts));
+  const maxIp = Math.max(1, ...overview.failedByIp.map((r) => r.attempts));
+  const ACCESS_KINDS = [
+    { key: "kycDocuments", label: "KYC documents", icon: IdCard },
+    { key: "kycSubmissions", label: "KYC submissions", icon: FileCheck },
+    { key: "bankProofs", label: "Bank proofs", icon: Landmark },
+    { key: "ticketAttachments", label: "Attachments", icon: Paperclip },
+    { key: "reports", label: "Reports", icon: BarChart3 },
+    { key: "auditExports", label: "Log exports", icon: Download },
+  ] as const;
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Security" description="Sign-in activity, locked accounts and staff access to personal data, from the audit log."
-        actions={<LinkButton href="/admin/audit" variant="secondary">Open audit log</LinkButton>} />
-
-      <nav aria-label="Period" className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted">Last</span>
-        {PERIODS.map((p) => (
-          <Link key={p.hours} href={`/admin/security?hours=${p.hours}`} aria-current={p.hours === hours ? "page" : undefined}
-            className={`rounded-full border px-4 py-1.5 ${p.hours === hours
-              ? "border-foreground bg-foreground text-surface" : "border-border hover:border-foreground/60"}`}>
-            {p.label}
+    <div className="space-y-6">
+      <section className="relative isolate overflow-hidden rounded-3xl bg-ink p-6 text-on-ink shadow-xl shadow-ink/20 sm:p-8">
+        <div aria-hidden="true" className={`absolute -top-24 -right-20 -z-10 size-72 rounded-full blur-3xl ${serious ? "bg-rose-500/25" : "bg-gold/25"}`} />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <span aria-hidden="true" className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${serious
+              ? "bg-rose-500 text-white" : concerns.length > 0 ? "bg-amber-400 text-ink" : "bg-emerald-500 text-white"}`}>
+              {serious ? <ShieldAlert className="size-6" /> : concerns.length > 0 ? <Shield className="size-6" /> : <ShieldCheck className="size-6" />}
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight">Security</h1>
+              <p className="text-sm text-on-ink/70">
+                {concerns.length === 0 ? "All quiet: no failed sign-ins, lockouts or stolen-token alerts in this period." : concerns.join(" · ")}
+              </p>
+            </div>
+          </div>
+          <Link href="/admin/audit" className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-sm font-medium transition-colors hover:bg-white/15">
+            <ScrollText aria-hidden="true" className="size-4" /> Open audit log
           </Link>
-        ))}
-        <span className="text-xs text-muted">Since {formatDateTime(overview.from)}</span>
-      </nav>
+        </div>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <nav aria-label="Period" className="grid w-full grid-cols-4 gap-1 rounded-xl bg-white/10 p-1 text-sm sm:inline-grid sm:w-auto">
+            {PERIODS.map((p) => (
+              <Link key={p.hours} href={`/admin/security?hours=${p.hours}`} aria-current={p.hours === hours ? "page" : undefined}
+                className={`rounded-lg px-2 py-1.5 text-center font-medium whitespace-nowrap transition-colors sm:px-3 ${p.hours === hours
+                  ? "bg-gold text-on-gold shadow-sm" : "text-on-ink/70 hover:bg-white/10 hover:text-on-ink"}`}>
+                {p.label}
+              </Link>
+            ))}
+          </nav>
+          <span className="inline-flex items-center gap-1.5 text-xs text-on-ink/60">
+            <Clock aria-hidden="true" className="size-3.5" /> Since {formatDateTime(overview.from)}
+          </span>
+        </div>
+      </section>
 
-      <section className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Key figures">
+      <ul aria-label="Key figures" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((tile) => {
+          const Icon = tile.icon;
           const body = (
             <>
-              <p className="text-sm text-muted">{tile.label}</p>
-              <p className={`font-display text-2xl font-semibold tabular-nums ${tile.alert ? "text-rose-600 dark:text-rose-400" : ""}`}>
-                {tile.value}
-              </p>
-              <p className="text-xs text-muted">{tile.note}</p>
+              <div className="flex items-start justify-between gap-2">
+                <span aria-hidden="true" className={`flex size-9 items-center justify-center rounded-xl ${tile.alert
+                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-gold/10 text-gold-text"}`}>
+                  <Icon className="size-[18px]" />
+                </span>
+                {tile.href && <ArrowUpRight aria-hidden="true" className="size-4 text-muted transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />}
+              </div>
+              <p className={`mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl tracking-tight tabular-nums ${tile.alert ? "text-rose-600 dark:text-rose-400" : ""}`}>{tile.value}</p>
+              <p className="text-xs font-medium sm:text-sm">{tile.label}</p>
+              <p className="hidden text-xs text-muted sm:block">{tile.note}</p>
             </>
           );
-          return tile.href ? (
-            <Link key={tile.label} href={tile.href} className="space-y-2 bg-surface p-5 hover:bg-background">{body}</Link>
-          ) : (
-            <div key={tile.label} className="space-y-2 bg-surface p-5">{body}</div>
+          const box = `group block h-full rounded-2xl border bg-surface p-3.5 shadow-sm sm:p-4 ${tile.alert ? "border-rose-500/30" : "border-border"}`;
+          return (
+            <li key={tile.label}>
+              {tile.href
+                ? <Link href={tile.href} className={`${box} transition duration-200 hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-md`}>{body}</Link>
+                : <div className={box}>{body}</div>}
+            </li>
           );
         })}
-      </section>
+      </ul>
 
-      <Card title="Sign-in activity" description={overview.bucket === "HOUR" ? "Each hour (UTC)" : "Each day (UTC)"} className="min-w-0">
-        <ColumnChart series={ACTIVITY_SERIES} data={activityColumns(overview)} label="Sign-ins and failed sign-ins over time" />
-      </Card>
+      <Section icon={Activity} title="Sign-in activity" description={overview.bucket === "HOUR" ? "Each hour (UTC)" : "Each day (UTC)"}>
+        <div className="min-w-0 p-5">
+          <ColumnChart series={ACTIVITY_SERIES} data={activityColumns(overview)} label="Sign-ins and failed sign-ins over time" />
+        </div>
+      </Section>
 
-      <section className="grid gap-6" aria-label="Failed sign-ins">
-        <Card title="Failed sign-ins by account" description="Many on one account suggests password guessing">
-          {overview.failedByAccount.length === 0 ? <EmptyState title="No failed sign-ins" /> : (
-            <DataTable columns={["Account", "Attempts", "Latest"]}>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Section icon={UserX} title="Failed sign-ins by account" description="Many on one account suggests password guessing">
+          {overview.failedByAccount.length === 0 ? <Quiet text="No failed sign-ins" /> : (
+            <ul className="divide-y divide-border">
               {overview.failedByAccount.map((row) => (
-                <tr key={row.account.id}>
-                  <Cell className="max-w-64 truncate"><Person person={row.account} /></Cell>
-                  <Cell className="tabular-nums">
-                    <Link href={`/admin/audit?${new URLSearchParams({ action: "LOGIN_FAILED", entityType: "USER", entityId: row.account.id, from: since })}`}
-                      className="text-brand hover:underline">{row.attempts}</Link>
-                  </Cell>
-                  <Cell className="text-muted">{formatDateTime(row.latest)}</Cell>
-                </tr>
+                <AttemptRow key={row.account.id} attempts={row.attempts} max={maxAccount} latest={row.latest}
+                  href={`/admin/audit?${new URLSearchParams({ action: "LOGIN_FAILED", entityType: "USER", entityId: row.account.id, from: since })}`}>
+                  <Person person={row.account} />
+                </AttemptRow>
               ))}
-            </DataTable>
+            </ul>
           )}
-        </Card>
-        <Card title="Failed sign-ins by IP address" description="Many from one address suggests one source trying many accounts">
-          {overview.failedByIp.length === 0 ? <EmptyState title="No failed sign-ins" /> : (
-            <DataTable columns={["IP address", "Attempts", "Latest"]}>
+        </Section>
+        <Section icon={Globe} title="Failed sign-ins by IP address" description="Many from one address suggests one source trying many accounts">
+          {overview.failedByIp.length === 0 ? <Quiet text="No failed sign-ins" /> : (
+            <ul className="divide-y divide-border">
               {overview.failedByIp.map((row) => (
-                <tr key={row.ipAddress}>
-                  <Cell className="font-mono text-xs">{row.ipAddress}</Cell>
-                  <Cell className="tabular-nums">
-                    <Link href={log({ action: "LOGIN_FAILED", ip: row.ipAddress })} className="text-brand hover:underline">{row.attempts}</Link>
-                  </Cell>
-                  <Cell className="text-muted">{formatDateTime(row.latest)}</Cell>
-                </tr>
+                <AttemptRow key={row.ipAddress} attempts={row.attempts} max={maxIp} latest={row.latest}
+                  href={log({ action: "LOGIN_FAILED", ip: row.ipAddress })}>
+                  <span className="font-mono text-xs">{row.ipAddress}</span>
+                </AttemptRow>
               ))}
-            </DataTable>
+            </ul>
           )}
-        </Card>
-      </section>
+        </Section>
+      </div>
 
-      <section id="locked" className="scroll-mt-6">
-        <Card title="Locked accounts" description="Locked after repeated failed sign-ins; they unlock by themselves at the time shown">
-          {overview.lockedAccounts.length === 0 ? <EmptyState title="No account is locked" /> : (
-            <DataTable columns={["Account", "Failed attempts", "Locked until"]}>
-              {overview.lockedAccounts.map((row) => (
-                <tr key={row.account.id}>
-                  <Cell><Person person={row.account} /></Cell>
-                  <Cell className="tabular-nums">{row.failedAttempts}</Cell>
-                  <Cell className="text-muted">{formatDateTime(row.lockedUntil)}</Cell>
-                </tr>
-              ))}
-            </DataTable>
-          )}
-        </Card>
-      </section>
-
-      <Card title="Staff access to personal data" description="Who opened identity documents, bank proofs and attachments, or took data out">
-        {overview.sensitiveAccess.length === 0 ? <EmptyState title="No access in this period" /> : (
-          <DataTable columns={["Staff member", "KYC documents", "KYC submissions", "Bank proofs", "Attachments", "Reports", "Log exports", "Latest"]}>
-            {overview.sensitiveAccess.map((row) => (
-              <tr key={row.staff.id}>
-                <Cell className="max-w-64 truncate">
-                  <Link href={log({ category: "SENSITIVE_DATA", actor: row.staff.id })} className="text-brand hover:underline"
-                    title={personLabel(row.staff)}>{row.staff.email ? <EmailText>{row.staff.email}</EmailText> : "Deleted account"}</Link>
-                </Cell>
-                {[row.kycDocuments, row.kycSubmissions, row.bankProofs, row.ticketAttachments, row.reports, row.auditExports].map((n, i) => (
-                  <Cell key={i} className={`tabular-nums ${n === 0 ? "text-muted" : ""}`}>{n}</Cell>
-                ))}
-                <Cell className="text-muted">{formatDateTime(row.latest)}</Cell>
-              </tr>
+      <Section id="locked" icon={Lock} title="Locked accounts" count={overview.lockedAccounts.length}
+        description="Locked after repeated failed sign-ins; they unlock by themselves at the time shown" alert={overview.lockedAccounts.length > 0}>
+        {overview.lockedAccounts.length === 0 ? <Quiet text="No account is locked" /> : (
+          <ul className="divide-y divide-border">
+            {overview.lockedAccounts.map((row) => (
+              <li key={row.account.id} className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                    <Lock className="size-4" />
+                  </span>
+                  <div className="min-w-0 truncate"><Person person={row.account} /></div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-full bg-rose-500/10 px-2.5 py-1 font-medium text-rose-700 tabular-nums dark:text-rose-300">{row.failedAttempts} failed</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-background px-2.5 py-1 text-muted ring-1 ring-border">
+                    <Unlock aria-hidden="true" className="size-3.5" /> Unlocks {formatDateTime(row.lockedUntil)}
+                  </span>
+                </div>
+              </li>
             ))}
-          </DataTable>
+          </ul>
         )}
-      </Card>
+      </Section>
 
-      <section id="changes" className="grid scroll-mt-6 gap-6">
-        <Card title="Access & settings changes" description="Roles, staff accounts, suspensions and money settings; latest 10">
-          {overview.privilegedChanges.length === 0 ? <EmptyState title="No changes in this period" /> : (
-            <AuditTable entries={overview.privilegedChanges} showIp={false} />
+      <Section icon={Eye} title="Staff access to personal data" count={overview.sensitiveAccess.length}
+        description="Who opened identity documents, bank proofs and attachments, or took data out">
+        {overview.sensitiveAccess.length === 0 ? <Quiet text="No access in this period" /> : (
+          <ul className="divide-y divide-border">
+            {overview.sensitiveAccess.map((row) => (
+              <li key={row.staff.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] lg:items-center">
+                <div className="min-w-0 text-sm">
+                  <Link href={log({ category: "SENSITIVE_DATA", actor: row.staff.id })} className="block truncate font-medium hover:text-gold-text"
+                    title={personLabel(row.staff)}>{row.staff.email ? <EmailText>{row.staff.email}</EmailText> : "Deleted account"}</Link>
+                  <p className="text-xs text-muted">Latest {formatDateTime(row.latest)}</p>
+                </div>
+                <ul className="flex flex-wrap gap-1.5 text-xs">
+                  {ACCESS_KINDS.map(({ key, label, icon: Icon }) => {
+                    const n = row[key];
+                    return (
+                      <li key={key} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ring-1 ${n > 0
+                        ? "bg-gold/10 text-gold-text ring-gold/20" : "bg-background text-muted/70 ring-border"}`}>
+                        <Icon aria-hidden="true" className="size-3.5" /> {label} <span className="font-semibold tabular-nums">{n}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <div id="changes" className="grid scroll-mt-6 gap-6">
+        <Section icon={UserCog} title="Access & settings changes" description="Roles, staff accounts, suspensions and money settings; latest 10">
+          {overview.privilegedChanges.length === 0 ? <Quiet text="No changes in this period" /> : (
+            <div className="p-4"><AuditList entries={overview.privilegedChanges} showIp={false} /></div>
           )}
-        </Card>
-        <Card title="Security events" description="Lockouts, stolen-token alerts and password changes; latest 10">
-          {overview.securityEvents.length === 0 ? <EmptyState title="No security events in this period" /> : (
-            <AuditTable entries={overview.securityEvents} showIp={false} />
+        </Section>
+        <Section icon={ShieldAlert} title="Security events" description="Lockouts, stolen-token alerts and password changes; latest 10">
+          {overview.securityEvents.length === 0 ? <Quiet text="No security events in this period" /> : (
+            <div className="p-4"><AuditList entries={overview.securityEvents} showIp={false} /></div>
           )}
-        </Card>
-      </section>
+        </Section>
+      </div>
     </div>
+  );
+}
+
+type Tile = { icon: LucideIcon; label: string; value: number; note: string; href: string | null; alert?: boolean };
+
+function Section({ id, icon: Icon, title, description, count, alert, children }: {
+  id?: string; icon: LucideIcon; title: string; description?: string; count?: number; alert?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className={`scroll-mt-6 overflow-hidden rounded-2xl border bg-surface shadow-sm ${alert ? "border-rose-500/30" : "border-border"}`}>
+      <div className="flex items-start gap-3 border-b border-border bg-background/40 px-5 py-4">
+        <span aria-hidden="true" className={`flex size-9 shrink-0 items-center justify-center rounded-xl shadow-sm ${alert
+          ? "bg-rose-500 text-white" : "bg-ink text-on-ink dark:bg-gold dark:text-on-gold"}`}>
+          <Icon className="size-[18px]" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="font-semibold tracking-tight">{title}{count !== undefined && <span className="ml-2 text-sm font-normal text-muted">{count}</span>}</h2>
+          {description && <p className="text-xs text-muted">{description}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Quiet({ text }: { text: string }) {
+  return (
+    <p className="flex items-center gap-2 px-5 py-6 text-sm text-muted">
+      <CheckCircle2 aria-hidden="true" className="size-4 text-emerald-600 dark:text-emerald-400" /> {text}
+    </p>
+  );
+}
+
+function AttemptRow({ attempts, max, latest, href, children }: {
+  attempts: number; max: number; latest: string; href: string; children: React.ReactNode;
+}) {
+  return (
+    <li className="space-y-2 px-5 py-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 truncate">{children}</div>
+        <Link href={href} className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-700 tabular-nums hover:bg-rose-500/20 dark:text-rose-300">
+          {attempts} {attempts === 1 ? "attempt" : "attempts"}
+        </Link>
+      </div>
+      <div className="flex items-center gap-3">
+        <div aria-hidden="true" className="h-1.5 flex-1 overflow-hidden rounded-full bg-background ring-1 ring-border">
+          <div className={`h-full rounded-full bg-rose-500/70 ${widthClass((attempts / max) * 100)}`} />
+        </div>
+        <span className="shrink-0 text-[11px] text-muted">Latest {formatDateTime(latest)}</span>
+      </div>
+    </li>
   );
 }
 
 function Person({ person }: { person: UserRef }) {
   return (
-    <Link href={`/admin/users/${person.id}`} className="text-brand hover:underline" title={personLabel(person)}>
+    <Link href={`/admin/users/${person.id}`} className="font-medium hover:text-gold-text" title={personLabel(person)}>
       {person.email ? <EmailText>{person.email}</EmailText> : "Deleted account"}
     </Link>
   );

@@ -16,7 +16,7 @@ export async function saveTermsAction(_p: FormState, formData: FormData): Promis
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/terms");
+  revalidatePath("/admin/platform-config/terms");
   revalidatePath("/terms");
   return { success: "Saved. The Terms & conditions page shows this now, and everyone signing up accepts it." };
 }

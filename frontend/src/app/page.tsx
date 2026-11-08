@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { Eyebrow } from "@/components/brand/eyebrow";
+import { ArrowRight, Building2, Clock, Layers, Play, ShieldCheck, TrendingUp } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { PortPhoto, type PortPhotoName } from "@/components/brand/port-photo";
 import { LandingHeader } from "@/components/layout/landing-header";
 import { LandingMenu } from "@/components/layout/landing-menu";
-import { LinkButton } from "@/components/ui/link-button";
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { LandingNavLinks } from "@/components/layout/landing-nav-links";
+import { HeroPortfolioCard } from "@/features/landing/hero-portfolio-card";
+import { Heading, IconTile, Pill, glass, glassHover } from "@/features/landing/landing-ui";
 import { ChoosePlanVisual, EarnReturnsVisual, OnboardingVisual } from "@/features/landing/how-it-works-visuals";
 import { ReviewCarousel, type Review } from "@/features/landing/review-carousel";
 import { InterestForm } from "@/features/leads/interest-form";
@@ -17,14 +18,7 @@ import { getPublicPlans } from "@/lib/server/public-plans";
 import { PlanCarousel } from "@/features/plans/plan-carousel";
 import { yearsLabel } from "@/features/orders/lease-years";
 import type { PublicPlan as Plan } from "@/types/plan";
-import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
 import { formatMoney, formatPercent } from "@/utils/money";
-
-const stateTone: Record<ServiceState, StatusTone> = {
-  UP: "success",
-  DOWN: "warning",
-  UNREACHABLE: "danger",
-};
 
 const NAV = [
   { href: "#about", label: "About" },
@@ -358,10 +352,10 @@ const STEPS = (credit: string): { title: string; body: string; visual: "onboardi
 ];
 
 export default async function Home() {
-  // System status must reflect the live backend, never a build-time snapshot.
+  // Plans, figures and the credit interval must be live, never a build-time snapshot.
   await connection();
-  const [backend, stats, phoneCountries, plans, rentCredit] = await Promise.all([getBackendStatus(), getPlatformStats(),
-    getPhoneCountries(), getPublicPlans(), getRentCredit()]);
+  const [stats, phoneCountries, plans, rentCredit] = await Promise.all([getPlatformStats(), getPhoneCountries(),
+    getPublicPlans(), getRentCredit()]);
   const credit = creditLabel(rentCredit);
   const example = examplePortfolio(plans);
   const cheapest = cheapestPlan(plans);
@@ -371,105 +365,123 @@ export default async function Home() {
   const figures = trackRecord(stats, usesSampleFigures);
   const reviews = production ? REVIEWS.filter((review) => !review.sample) : REVIEWS;
 
+  const invested = example.holdings.reduce((sum, h) => sum + h.price, 0);
+  const top = plans.reduce<Plan | undefined>((best, p) => (!best || p.annualReturnPercent > best.annualReturnPercent ? p : best), undefined);
+  const topPlan = top ? { title: top.title, rate: formatPercent(top.annualReturnPercent) } : null;
+  const sectionX = "px-5 sm:px-10 lg:px-14";
+
   return (
-    <div className="flex-1 bg-frame p-2 sm:p-5 lg:p-10">
-      <div className="mx-auto max-w-[1440px] bg-surface">
+    <div className="flex-1 bg-frame p-2 sm:p-5 lg:p-8">
+      {/* overflow-clip, not hidden: the sticky header needs no scroll container in between. */}
+      <div className="relative isolate mx-auto max-w-[1440px] overflow-clip rounded-[1.5rem] border border-glass-border bg-[linear-gradient(180deg,var(--sheen-top)_0%,var(--sheen-bottom)_32%,var(--sheen-top)_62%,var(--sheen-bottom)_100%)] shadow-2xl shadow-ink/15 sm:rounded-[2rem]">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[900px] bg-[radial-gradient(ellipse_70%_60%_at_20%_0%,var(--glass-strong),transparent_70%)]" />
         <LandingHeader>
-          <Logo tone="light" />
-          <nav aria-label="Main" className="flex items-center gap-3 xl:gap-4">
-            {/* In-page sections in a frosted pill; signing in and investing sit apart from it. */}
-            <ul className="hidden items-center gap-0.5 rounded-full border border-on-ink/15 bg-ink/35 p-1.5 text-sm shadow-lg shadow-ink/20 backdrop-blur-md xl:flex">
-              {NAV.filter((item) => item.href.startsWith("#")).map((item) => (
-                <li key={item.href}>
-                  {/* In-page sections use plain anchors: <Link> skips the scroll when the URL already has that hash. */}
-                  <a href={item.href}
-                    className="block whitespace-nowrap rounded-full px-4 py-2 text-on-ink/80 transition-colors hover:bg-on-ink/10 hover:text-on-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none 2xl:px-5">
-                    {item.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
+          <Logo />
+          <nav aria-label="Main" className="flex items-center gap-3 xl:flex-1 xl:justify-end xl:gap-6">
+            <LandingNavLinks links={NAV.filter((item) => item.href.startsWith("#"))} />
             <Link href="/login"
-              className="hidden whitespace-nowrap rounded-full border border-on-ink/40 bg-ink/35 px-5 py-2.5 text-sm font-medium text-on-ink shadow-lg shadow-ink/20 backdrop-blur-md transition-colors hover:border-on-ink hover:bg-on-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none xl:inline-flex">
+              className="group relative hidden whitespace-nowrap px-2 py-2 text-sm font-medium text-foreground transition-colors hover:text-gold-text focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none xl:inline-flex">
               Sign In
+              <span aria-hidden="true" className="absolute inset-x-2 bottom-1 h-px origin-left scale-x-0 bg-current transition-transform duration-300 group-hover:scale-x-100" />
             </Link>
-            <Link
-              href="/register"
-              className="hidden items-center gap-2 whitespace-nowrap rounded-full bg-gold px-5 py-2.5 text-sm font-medium text-on-gold shadow-lg shadow-ink/25 transition-colors hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-on-ink focus-visible:outline-none sm:inline-flex"
-            >
-              Register
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
+            <Link href="/register"
+              className={`group hidden items-center gap-2 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-semibold text-foreground transition duration-300 hover:-translate-y-px hover:border-ink hover:bg-ink hover:text-on-ink hover:shadow-lg hover:shadow-ink/25 focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none sm:inline-flex dark:hover:border-gold dark:hover:bg-gold dark:hover:text-on-gold ${glass}`}>
+              Get Started
+              <ArrowRight aria-hidden="true" className="-mr-1 size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
             </Link>
             <LandingMenu links={NAV} />
           </nav>
         </LandingHeader>
 
         {/* ------------------------------------------------------------------- hero */}
-        <section className="relative isolate flex min-h-[640px] flex-col overflow-hidden bg-ink pt-24 text-on-ink lg:h-[min(88vh,860px)] lg:pt-28">
-          <PortPhoto name="savannah-cranes" alt="" eager sizes="(min-width: 1440px) 1440px, 100vw"
-            className="absolute inset-0 -z-20 size-full object-cover" />
-          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-ink/95 via-ink/55 to-ink/40" />
-          <div aria-hidden="true" className="absolute inset-0 -z-10 hidden bg-gradient-to-r from-ink/60 to-transparent lg:block" />
-
-
-          <div className="mt-auto grid gap-10 px-5 pb-10 sm:px-10 lg:grid-cols-2 lg:items-end lg:px-14 lg:pb-16">
-            <h1 className="max-w-xl text-4xl leading-[1.04] font-bold tracking-tight min-[400px]:text-5xl sm:text-6xl xl:text-7xl">
-              Invest In The Business That Moves The World
-            </h1>
-            <div className="max-w-lg space-y-7 lg:justify-self-end">
-              <p className="text-base leading-relaxed text-on-ink/90">
-                Choose A Plan, Invest The Amount You Want, And Earn Monthly Returns From The First
-                Hour Of Your Term.
+        <section className="relative isolate overflow-hidden pt-28 lg:pt-36">
+          <div className={`grid items-center gap-10 lg:grid-cols-[1.3fr_1fr] ${sectionX}`}>
+            <div className="space-y-7">
+              <Pill>Monthly returns from a leasing business</Pill>
+              <h1 className="max-w-2xl text-[2.6rem] leading-[1.05] font-semibold tracking-tight text-foreground min-[400px]:text-5xl sm:text-6xl lg:text-[3.3rem] xl:text-[3.9rem]">
+                Invest In The <span className="text-heading-soft">Business</span><br className="hidden sm:block" />{" "}
+                <span className="text-heading-soft">That</span> Moves The World
+              </h1>
+              <p className="max-w-lg text-base leading-relaxed text-muted sm:text-lg">
+                Choose a plan, invest the amount you want, and earn monthly returns from the first hour of your term.
               </p>
-              <dl className="grid gap-3 border-t border-on-ink/20 pt-6 sm:grid-cols-3 sm:gap-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <Link href="/register"
+                  className="group inline-flex min-h-12 items-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-on-ink shadow-lg shadow-ink/30 transition duration-300 hover:-translate-y-0.5 hover:bg-gold hover:shadow-xl hover:shadow-gold/30 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:outline-none dark:bg-gold dark:text-on-gold">
+                  Start Investing <ArrowRight aria-hidden="true" className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+                </Link>
+                <a href="#how-it-works" className="group inline-flex items-center gap-3 text-sm font-medium text-foreground">
+                  <span className={`relative flex size-11 items-center justify-center rounded-full transition duration-300 group-hover:scale-110 group-hover:bg-ink group-hover:text-on-ink dark:group-hover:bg-gold dark:group-hover:text-on-gold ${glass}`}>
+                    <span aria-hidden="true" className="absolute inset-0 rounded-full ring-2 ring-gold/40 motion-safe:animate-ping [animation-duration:2.4s]" />
+                    <Play aria-hidden="true" className="ml-0.5 size-4 fill-current" />
+                  </span>
+                  <span className="underline-offset-4 group-hover:underline">See how it works</span>
+                </a>
+              </div>
+              <ul className="flex flex-wrap gap-x-7 gap-y-4 pt-2">
                 {[
-                  { term: "Plans for you", detail: "Choose your amount and your term" },
-                  { term: "Returns " + credit, detail: "Credited to your wallet from the first full hour" },
-                  { term: "Your own agreement", detail: "An agreement for every investment you make" },
+                  { icon: <Layers className="size-[18px]" />, term: "Plans for you", detail: "Your amount, your term" },
+                  { icon: <Clock className="size-[18px]" />, term: "Returns " + credit, detail: "From the first full hour" },
+                  { icon: <ShieldCheck className="size-[18px]" />, term: "Your own agreement", detail: "For every investment" },
                 ].map((point) => (
-                  <div key={point.term} className="flex items-baseline gap-3 sm:block sm:space-y-1.5">
-                    <dt className="w-36 shrink-0 text-sm font-semibold text-gold-on-ink first-letter:uppercase sm:w-auto">{point.term}</dt>
-                    <dd className="text-xs leading-relaxed text-on-ink/75">{point.detail}</dd>
-                  </div>
+                  <li key={point.term} className="group flex items-center gap-3">
+                    <IconTile>{point.icon}</IconTile>
+                    <span className="text-sm leading-tight">
+                      <span className="block font-semibold first-letter:uppercase">{point.term}</span>
+                      <span className="block text-xs text-muted">{point.detail}</span>
+                    </span>
+                  </li>
                 ))}
-              </dl>
+              </ul>
             </div>
+            <HeroPortfolioCard invested={invested} holdings={example.holdings.length} monthly={example.monthly} topPlan={topPlan} money={inr} />
+          </div>
+          {/* The port at the foot of the hero, fading up into the sheen, with a quiet line of copy over it. */}
+          <div className={`relative isolate mt-6 flex h-56 items-end justify-end pb-8 sm:h-72 lg:h-80 ${sectionX}`}>
+            <div aria-hidden="true" className="absolute inset-x-0 bottom-0 -z-10 h-[calc(100%+5rem)] [mask-image:linear-gradient(to_bottom,transparent,black_45%)]">
+              <PortPhoto name="savannah-cranes" alt="" eager sizes="(min-width: 1440px) 1440px, 100vw"
+                className="size-full object-cover object-[center_65%] saturate-[0.65]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
+            </div>
+            <p className="max-w-40 text-right text-[11px] leading-relaxed font-medium tracking-[0.18em] text-on-ink/85 uppercase">
+              Every return on record, every month
+            </p>
           </div>
         </section>
 
         {/* ------------------------------------------------------------------ about */}
-        <section id="about" className="scroll-mt-24 px-5 py-20 text-center sm:px-10 lg:py-28">
-          <Eyebrow>About SeaLease</Eyebrow>
-          <h2 className="mx-auto mt-8 max-w-4xl text-3xl leading-tight font-normal tracking-tight sm:text-4xl lg:text-5xl">
-            Earn Monthly Returns From A Real Leasing Business. Choose Your Tenure, Buy Units, Earn Every Month.
-          </h2>
+        <section id="about" className={`scroll-mt-24 py-20 text-center lg:py-28 ${sectionX}`}>
+          <Pill>About SeaLease</Pill>
+          <Heading center className="mt-6 max-w-4xl text-3xl leading-tight sm:text-4xl lg:text-5xl"
+            lead="Earn Monthly Returns From A Real Leasing Business." soft="Choose Your Tenure, Buy Units, Earn Every Month." />
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted">
             SeaLease™ runs a leasing business and pays investors returns from that income. We handle everything. You
             don&apos;t need any leasing experience, and
             you can start with just a few units of a plan{lowest ? `, from ${formatMoney(lowest)} a unit` : ""}.
           </p>
-          <ul className="mt-14 grid gap-px overflow-hidden rounded-xl border border-border bg-border text-left sm:grid-cols-2 xl:grid-cols-4">
-            {BENEFITS(credit).map((benefit) => (
-              <li key={benefit.title} className="space-y-3 bg-surface p-8">
+          <ul className="mt-14 grid gap-5 text-left sm:grid-cols-2 xl:grid-cols-4">
+            {BENEFITS(credit).map((benefit, index) => (
+              <li key={benefit.title} className={`group relative space-y-4 overflow-hidden rounded-3xl p-7 ${glass} ${glassHover}`}>
+                <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-gold to-gold-on-ink transition-transform duration-500 group-hover:scale-x-100" />
+                <span aria-hidden="true" className="absolute top-6 right-7 font-display text-4xl font-semibold text-heading-soft/20 transition-colors duration-300 group-hover:text-gold/25">
+                  0{index + 1}
+                </span>
+                <IconTile>{[<Clock key="c" className="size-5" />, <TrendingUp key="t" className="size-5" />,
+                  <Building2 key="b" className="size-5" />, <ShieldCheck key="s" className="size-5" />][index % 4]}</IconTile>
                 <h3 className="text-lg font-semibold tracking-tight">{benefit.title}</h3>
                 <p className="text-sm leading-relaxed text-muted">{benefit.body}</p>
               </li>
             ))}
           </ul>
-          {/* Track record: a dark panel over a faint port yard, the story on the left and the figures on the right. */}
-          <div className="relative isolate mx-auto mt-16 max-w-6xl overflow-hidden bg-ink text-left text-on-ink">
+          {/* Track record: a dark glass panel over a faint port yard, the story on the left and the figures on the right. */}
+          <div className="relative isolate mx-auto mt-16 overflow-hidden rounded-[2rem] bg-ink text-left text-on-ink shadow-2xl shadow-ink/25">
             <PortPhoto name="yard-stacks" alt="" sizes="(min-width: 1440px) 1152px, 100vw"
               className="absolute inset-0 -z-20 size-full object-cover opacity-25" />
-            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/90 to-ink/75" />
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/90 to-ink/70" />
             <div className={`grid gap-10 px-6 py-12 sm:px-10 lg:items-center lg:gap-14 lg:px-14 lg:py-16 ${figures ? "lg:grid-cols-[1fr_1.1fr]" : ""}`}>
               <div className="space-y-5">
-                <p className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-gold-on-ink">
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-gold" />
-                  Since 2022
-                </p>
-                <h3 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Trusted By Investors Around The World</h3>
+                <Pill tone="light">Since 2022</Pill>
+                <Heading tone="light" as="h3" className="text-3xl leading-tight sm:text-4xl" lead="Trusted By Investors" soft="Around The World" />
                 <p className="max-w-md text-sm leading-relaxed text-on-ink/75">
                   Since 2022, investors from around the world have invested with SeaLease, and we have been paying them their
                   returns ever since.
@@ -478,14 +490,14 @@ export default async function Home() {
                 </p>
               </div>
               {figures && (
-                <dl className="grid grid-cols-2 gap-px border border-on-ink/15 bg-on-ink/15">
+                <dl className="grid grid-cols-2 gap-3">
                   {[
                     { label: "Paid to investors", value: figures.paid },
                     { label: "Payouts made", value: figures.payouts },
                     { label: "Investors", value: figures.investors },
                     { label: "Investments made", value: figures.investments },
                   ].filter((figure) => figure.value).map((figure) => (
-                    <div key={figure.label} className="flex flex-col-reverse justify-end gap-2 bg-ink/85 px-4 py-6 backdrop-blur-sm min-[400px]:px-5 sm:px-7 sm:py-8">
+                    <div key={figure.label} className="flex flex-col-reverse justify-end gap-2 rounded-2xl border border-on-ink/10 bg-on-ink/[0.06] px-4 py-6 backdrop-blur-md transition duration-300 hover:-translate-y-0.5 hover:border-gold-on-ink/40 hover:bg-on-ink/[0.1] min-[400px]:px-5 sm:px-7 sm:py-8">
                       <dt className="text-xs leading-snug text-on-ink/70 sm:text-sm">{figure.label}</dt>
                       <dd className="font-display text-2xl font-semibold whitespace-nowrap text-gold-on-ink min-[400px]:text-3xl sm:text-4xl">{figure.value}</dd>
                     </div>
@@ -493,14 +505,15 @@ export default async function Home() {
                 </dl>
               )}
             </div>
-            <p className="border-t border-on-ink/15 px-6 py-4 text-xs leading-relaxed text-on-ink/55 sm:px-10 lg:px-14">
+            <p className="border-t border-on-ink/10 px-6 py-4 text-xs leading-relaxed text-on-ink/55 sm:px-10 lg:px-14">
               Past payouts are not a guarantee of future returns. Every plan&apos;s returns and term are shown in
               full before you invest.
             </p>
           </div>
           {reviews.length > 0 && (
-            <div className="mt-20">
-              <Eyebrow>What Our Investors Say</Eyebrow>
+            <div className="mt-24">
+              <Pill>What Our Investors Say</Pill>
+              <Heading center className="mt-5 text-3xl leading-tight sm:text-4xl" lead="In Their" soft="Own Words" />
               <div className="mt-10">
                 <ReviewCarousel reviews={reviews} />
               </div>
@@ -509,84 +522,85 @@ export default async function Home() {
         </section>
 
         {/* ---------------------------------------------------------------- ports */}
-        <section aria-labelledby="ports-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-          <div className="space-y-5">
-            <Eyebrow>At The Ports</Eyebrow>
-            <h2 id="ports-heading" className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-              Where The Containers Work
-            </h2>
-            <p className="max-w-2xl text-sm leading-relaxed text-muted">
+        <section aria-labelledby="ports-heading" className={`pb-20 lg:pb-28 ${sectionX}`}>
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-end lg:gap-14">
+            <div className="space-y-5">
+              <Pill>At The Ports</Pill>
+              <Heading id="ports-heading" lead="Where The" soft="Containers Work" />
+            </div>
+            <p className="max-w-xl text-sm leading-relaxed text-muted lg:justify-self-end">
               Containers are stacked, loaded and moved through India&apos;s container terminals every day, carrying the
               goods of the businesses that lease them.
             </p>
           </div>
-          <ul className="mt-12 grid grid-cols-2 gap-2 md:grid-cols-4 md:grid-rows-2">
+          <ul className="mt-12 grid grid-cols-2 gap-3 md:grid-cols-4 md:grid-rows-2 lg:gap-4">
             {PORT_GALLERY.map((item, index) => (
               <li key={item.photo}
-                className={`group relative overflow-hidden bg-ink ${index === 0
+                className={`group relative overflow-hidden rounded-3xl bg-ink shadow-lg shadow-ink/15 transition-shadow duration-500 hover:shadow-2xl hover:shadow-ink/30 ${index === 0
                   ? "col-span-2 aspect-[4/3] md:row-span-2 md:aspect-auto"
                   : "aspect-square md:aspect-[4/3]"}`}>
                 <figure className="size-full">
                   <PortPhoto name={item.photo} alt={item.alt}
                     sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
-                    className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
+                    className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" />
+                  <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-ink/60 via-transparent to-transparent opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+                  <figcaption className="absolute bottom-3 left-3 rounded-full border border-on-ink/20 bg-ink/45 px-3 py-1.5 text-xs text-on-ink backdrop-blur-md transition-transform duration-500 group-hover:-translate-y-1 sm:text-sm">
                     {item.caption}
                   </figcaption>
                 </figure>
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-xs text-muted">
-            Photos from Wikimedia Commons. <Link href="/credits" className="underline underline-offset-2 hover:text-foreground">Photo credits</Link>
-          </p>
         </section>
 
         {/* --------------------------------------------------------- shipping lines */}
-        <section aria-labelledby="lines-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-14">
-            <div className="space-y-5">
-              <Eyebrow>The Global Network</Eyebrow>
-              <h2 id="lines-heading" className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                The Lines That Move The World&apos;s Cargo
-              </h2>
+        <section aria-labelledby="lines-heading" className={`pb-20 lg:pb-28 ${sectionX}`}>
+          <div className={`rounded-[2rem] p-6 sm:p-10 lg:p-14 ${glass}`}>
+            <div className="grid gap-6 lg:grid-cols-2 lg:items-end lg:gap-14">
+              <div className="space-y-5">
+                <Pill>The Global Network</Pill>
+                <Heading id="lines-heading" lead="The Lines That Move" soft="The World's Cargo" />
+              </div>
+              <p className="max-w-xl text-sm leading-relaxed text-muted lg:justify-self-end">
+                Most of the world&apos;s container trade, including the ships calling at Nhava Sheva, Mundra, Chennai and
+                Kochi, is carried by a handful of large lines. The businesses that lease containers ship their goods on
+                services like theirs, which is what keeps containers in demand and earning.
+              </p>
             </div>
-            <p className="max-w-xl text-sm leading-relaxed text-muted">
-              Most of the world&apos;s container trade, including the ships calling at Nhava Sheva, Mundra, Chennai and
-              Kochi, is carried by a handful of large lines. The businesses that lease containers ship their goods on
-              services like theirs, which is what keeps containers in demand and earning.
-            </p>
+            <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {SHIPPING_LINES.map((line) => (
+                // Always a white tile: the logos are drawn for a light background, in dark mode too.
+                <li key={line.name} className="group flex h-24 items-center justify-center rounded-2xl bg-white px-5 shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:shadow-lg hover:ring-gold/30 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
+                  <img src={`${COMMONS_FILES}/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
+                    className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.crop ? `${line.crop} h-7 object-cover sm:h-9` : line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="mt-12 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
-            {SHIPPING_LINES.map((line) => (
-              // Always a white tile: the logos are drawn for a light background, in dark mode too.
-              <li key={line.name} className="group flex h-24 items-center justify-center bg-white px-5 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
-                {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
-                <img src={`${COMMONS_FILES}/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
-                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.crop ? `${line.crop} h-7 object-cover sm:h-9` : line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
-              </li>
-            ))}
-          </ul>
         </section>
 
         {/* ----------------------------------------------------------- how it works */}
-        <section id="how-it-works" className="scroll-mt-24 border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+        <section id="how-it-works" className={`scroll-mt-24 pb-20 lg:pb-28 ${sectionX}`}>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="space-y-5">
-              <Eyebrow>How It Works</Eyebrow>
-              <h2 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Three Steps From Sign-Up To Earning Returns
-              </h2>
+              <Pill>How It Works</Pill>
+              <Heading className="max-w-xl text-3xl leading-tight sm:text-4xl lg:text-[2.75rem]" lead="Three Steps From Sign‑Up" soft="To Earning Returns" />
             </div>
-            <LinkButton href="/register" variant="secondary">Create Your Account</LinkButton>
+            <Link href="/register"
+              className="group inline-flex min-h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-on-ink shadow-lg shadow-ink/25 transition duration-300 hover:-translate-y-0.5 hover:bg-gold hover:shadow-gold/30 dark:bg-gold dark:text-on-gold">
+              Create Your Account <ArrowRight aria-hidden="true" className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </Link>
           </div>
-          <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
+          <ol className="mt-12 grid gap-5 md:grid-cols-3">
             {STEPS(credit).map((step, index) => (
-              <li key={step.title} className="space-y-4 bg-surface p-8">
+              <li key={step.title} className={`group space-y-3 overflow-hidden rounded-3xl p-8 ${glass} ${glassHover}`}>
                 {step.visual === "onboarding" && <OnboardingVisual />}
                 {step.visual === "plan" && <ChoosePlanVisual plans={plans} />}
                 {step.visual === "returns" && <EarnReturnsVisual plans={plans} />}
-                <span className="font-display text-4xl font-semibold text-gold-text">0{index + 1}</span>
+                <span className="inline-flex rounded-full bg-ink px-3 py-1 font-display text-xs font-semibold tracking-wider text-on-ink transition-colors duration-300 group-hover:bg-gold group-hover:text-on-gold dark:bg-gold dark:text-on-gold">
+                  STEP 0{index + 1}
+                </span>
                 <h3 className="text-xl font-semibold tracking-tight">{step.title}</h3>
                 <p className="text-sm leading-relaxed text-muted">{step.body}</p>
               </li>
@@ -595,22 +609,22 @@ export default async function Home() {
         </section>
 
         {/* -------------------------------------------------------------- investors */}
-        <section id="investors" className="grid scroll-mt-24 md:grid-cols-2">
-          <div className="space-y-5 bg-background px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-            <Eyebrow>Your Investments</Eyebrow>
-            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Every Investment In One Place</h3>
+        <section id="investors" className={`grid scroll-mt-24 gap-5 pb-20 md:grid-cols-2 lg:pb-28 ${sectionX}`}>
+          <div className={`space-y-5 rounded-[2rem] p-7 transition-shadow duration-300 hover:shadow-[0_28px_60px_-28px_rgb(31_98_201/0.45)] sm:p-10 lg:p-12 ${glass}`}>
+            <Pill>Your Investments</Pill>
+            <Heading as="h3" className="text-2xl leading-tight sm:text-3xl" lead="Every Investment" soft="In One Place" />
             <p className="max-w-md text-sm leading-relaxed text-muted">
               Every investment appears in your portfolio once your payment is confirmed, with its amount, term and
               investment agreement to accept and download.
             </p>
-            <div className="max-w-md rounded-xl border border-border bg-surface">
+            <div className="max-w-md overflow-hidden rounded-2xl border border-glass-border bg-glass-strong shadow-sm">
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
                 <p className="text-sm font-semibold">Example investor&apos;s portfolio</p>
                 <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">Example</span>
               </div>
               <ul className="divide-y divide-border">
                 {example.holdings.map((holding) => (
-                  <li key={holding.plan} className="space-y-1 px-5 py-4 text-sm">
+                  <li key={holding.plan} className="space-y-1 px-5 py-4 text-sm transition-colors hover:bg-glass">
                     <div className="flex items-center justify-between gap-4">
                       <p className="font-display font-semibold tracking-wide">{holding.plan}</p>
                       <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs text-gold-text">Running</span>
@@ -620,23 +634,25 @@ export default async function Home() {
                 ))}
               </ul>
             </div>
-            <LinkButton href="/plans" variant="secondary">View Plans</LinkButton>
+            <Link href="/plans" className={`group inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition duration-300 hover:-translate-y-0.5 hover:border-ink hover:bg-ink hover:text-on-ink dark:hover:border-gold dark:hover:bg-gold dark:hover:text-on-gold ${glass}`}>
+              View Plans <ArrowRight aria-hidden="true" className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </Link>
           </div>
-          <div className="relative isolate space-y-5 overflow-hidden bg-ink px-5 py-20 text-on-ink sm:px-10 lg:px-14 lg:py-28">
+          <div className="relative isolate space-y-5 overflow-hidden rounded-[2rem] bg-ink p-7 text-on-ink shadow-2xl shadow-ink/25 sm:p-10 lg:p-12">
             <PortPhoto name="container-wall" alt="" sizes="(min-width: 768px) 50vw, 100vw"
               className="absolute inset-0 -z-20 size-full object-cover opacity-25" />
             <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-br from-ink via-ink/85 to-ink/60" />
-            <Eyebrow tone="light">Your Returns</Eyebrow>
-            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Returns Set By Your Plan</h3>
+            <Pill tone="light">Your Returns</Pill>
+            <Heading as="h3" tone="light" className="text-2xl leading-tight sm:text-3xl" lead="Returns Set" soft="By Your Plan" />
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
-              Choose a plan by its tenure and buy units of it: each plan has its own annual return, paid monthly. Returns are credited to your wallet
+              Choose a plan by its tenure and buy units of it: each plan has its own annual return, paid monthly. Returns are credited to your wallet{" "}
               {credit} for the whole term, so you know from day one what each investment will earn.
             </p>
             <p className="max-w-md text-sm leading-relaxed text-on-ink/80">
               Open to every verified investor.
             </p>
-            <div className="max-w-md border border-on-ink/20">
-              <div className="flex items-center justify-between gap-4 border-b border-on-ink/20 px-5 py-3">
+            <div className="max-w-md overflow-hidden rounded-2xl border border-on-ink/15 bg-on-ink/[0.06] backdrop-blur-md">
+              <div className="flex items-center justify-between gap-4 border-b border-on-ink/15 px-5 py-3">
                 <p className="text-sm font-semibold">The same investor&apos;s returns</p>
                 <span className="rounded-full border border-on-ink/30 px-3 py-1 text-xs text-on-ink/70">Example</span>
               </div>
@@ -649,16 +665,16 @@ export default async function Home() {
                 </thead>
                 <tbody>
                   {example.holdings.map((holding) => (
-                    <tr key={holding.plan}>
+                    <tr key={holding.plan} className="transition-colors hover:bg-on-ink/[0.05]">
                       <td className="px-5 py-2 text-on-ink/80">{holding.plan}</td>
                       <td className="px-5 py-2 text-right tabular-nums">{inr(holding.returns)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-on-ink/20">
+                  <tr className="border-t border-on-ink/15">
                     <th scope="row" className="px-5 py-3 text-left font-semibold">Earned every month</th>
-                    <td className="px-5 py-3 text-right font-display text-lg font-semibold text-gold tabular-nums">{inr(example.monthly)}</td>
+                    <td className="px-5 py-3 text-right font-display text-lg font-semibold text-gold-on-ink tabular-nums">{inr(example.monthly)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -668,85 +684,67 @@ export default async function Home() {
               you invest.
             </p>
             {/* Signed out, this shows the public plans; signed in, the investor's own. */}
-            <LinkButton href="/invest">Invest Now</LinkButton>
+            <Link href="/invest"
+              className="group inline-flex min-h-11 items-center gap-2 rounded-xl bg-on-ink px-5 text-sm font-semibold text-ink shadow-lg transition duration-300 hover:-translate-y-0.5 hover:bg-gold-on-ink">
+              Invest Now <ArrowRight aria-hidden="true" className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </Link>
           </div>
         </section>
 
         {/* ------------------------------------------------------------------ plans */}
         {plans.length > 0 && (
-          <section aria-labelledby="plans-heading" className="mt-20 px-5 sm:px-10 lg:mt-28 lg:px-14">
-            <Eyebrow>Plans</Eyebrow>
-            <h2 id="plans-heading" className="mt-4 text-3xl leading-tight font-normal tracking-tight sm:text-4xl">Choose Your Tenure</h2>
-            <div className="mt-8">
+          <section aria-labelledby="plans-heading" className={`pb-20 lg:pb-28 ${sectionX}`}>
+            <div className="space-y-5">
+              <Pill>Plans</Pill>
+              <Heading id="plans-heading" lead="Choose Your" soft="Tenure" />
+            </div>
+            <div className="mt-10">
               <PlanCarousel plans={plans} href="/invest" action="Invest" />
             </div>
           </section>
         )}
 
-        {/* -------------------------------------------------------------------- cta */}
-        <section aria-labelledby="cta-heading" className="relative isolate mt-20 overflow-hidden bg-ink px-5 py-20 text-on-ink sm:px-10 lg:mt-28 lg:px-14 lg:py-28">
-          <PortPhoto name="terminal-above" alt="" sizes="(min-width: 1440px) 1440px, 100vw"
-            className="absolute inset-0 -z-20 size-full object-cover" />
-          <div aria-hidden="true" className="absolute inset-0 -z-10 bg-ink/70" />
-          <div className="mx-auto max-w-2xl space-y-6 text-center">
-            <Eyebrow tone="light">Start Today</Eyebrow>
-            <h2 id="cta-heading" className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-              Start Earning Monthly Returns
-            </h2>
-            <p className="text-base leading-relaxed text-on-ink/85">
-              Pick your plan, choose your term, and earn returns credited to your wallet {credit}.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <LinkButton href="/register">Register</LinkButton>
-              <a href="#contact" className="inline-flex h-11 items-center px-2 text-sm text-on-ink/90 underline-offset-4 hover:underline">
-                Talk to us first
-              </a>
-            </div>
-          </div>
-        </section>
-
         {/* -------------------------------------------------------------------- faq */}
-        <section id="faq" className="scroll-mt-24 px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
-          <div className="mx-auto max-w-3xl">
-            <Eyebrow>FAQ</Eyebrow>
-            <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Questions Investors Ask Us</h2>
-            <div className="mt-10 divide-y divide-border border-y border-border">
-              {faqs(plans, credit).map((faq) => (
-                <details key={faq.question} className="group py-5">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-base font-semibold [&::-webkit-details-marker]:hidden">
-                    {faq.question}
-                    <span aria-hidden="true" className="text-xl text-gold-text transition-transform group-open:rotate-45">+</span>
-                  </summary>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">{faq.answer}</p>
-                </details>
-              ))}
-            </div>
+        <section id="faq" className={`grid scroll-mt-24 gap-10 py-20 lg:grid-cols-[1fr_1.6fr] lg:gap-14 lg:py-28 ${sectionX}`}>
+          <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+            <Pill>FAQ</Pill>
+            <Heading lead="Questions" soft="Investors Ask Us" />
+            <p className="max-w-sm text-sm leading-relaxed text-muted">
+              Can&apos;t find your answer? <a href="#contact" className="font-medium text-gold-text underline-offset-4 hover:underline">Talk to us</a> and
+              an investment specialist will get back to you.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {faqs(plans, credit).map((faq) => (
+              <details key={faq.question} className={`group rounded-2xl px-6 py-5 transition duration-300 hover:border-gold/30 hover:bg-glass-strong open:border-gold/30 open:bg-glass-strong open:shadow-[0_24px_50px_-30px_rgb(31_98_201/0.5)] ${glass}`}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-base font-semibold transition-colors group-hover:text-gold-text group-open:text-gold-text [&::-webkit-details-marker]:hidden">
+                  {faq.question}
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-lg leading-none text-on-ink transition duration-300 group-hover:scale-110 group-hover:bg-gold group-hover:text-on-gold group-open:rotate-45 group-open:bg-gold group-open:text-on-gold dark:bg-gold dark:text-on-gold">+</span>
+                </summary>
+                <p className="mt-3 pr-10 text-sm leading-relaxed text-muted">{faq.answer}</p>
+              </details>
+            ))}
           </div>
         </section>
 
         {/* ---------------------------------------------------------------- contact */}
-        <section id="contact" className="relative grid scroll-mt-24 gap-10 border-t border-border px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:px-14 lg:py-28">
-          <div className="space-y-5">
-            <Eyebrow>Talk To Us</Eyebrow>
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>
-            <p className="max-w-md text-sm leading-relaxed text-muted">
-              Tell us a little about what you are looking for and an investment specialist will get back to you,
-              whether you are making your first investment or adding to it.
-            </p>
+        <section id="contact" className={`scroll-mt-24 pb-20 lg:pb-28 ${sectionX}`}>
+          <div className={`grid gap-10 rounded-[2rem] p-6 sm:p-10 lg:grid-cols-[1fr_1.4fr] lg:p-14 ${glass}`}>
+            <div className="space-y-5">
+              <Pill>Talk To Us</Pill>
+              <Heading lead="Not Sure" soft="Where To Start?" />
+              <p className="max-w-md text-sm leading-relaxed text-muted">
+                Tell us a little about what you are looking for and an investment specialist will get back to you,
+                whether you are making your first investment or adding to it.
+              </p>
+            </div>
+            <InterestForm countries={phoneCountries} />
           </div>
-          <InterestForm countries={phoneCountries} />
         </section>
 
         {/* ----------------------------------------------------------------- footer */}
-        <footer className="flex flex-wrap items-center justify-between gap-6 border-t border-border px-5 py-8 sm:px-10 lg:px-14">
-          <Logo />
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted">
-            <Link href="/terms" className="inline-flex min-h-6 items-center underline-offset-4 hover:text-foreground hover:underline">Terms & conditions</Link>
-            <p className="flex items-center gap-3">
-              Platform status <StatusBadge tone={stateTone[backend]}>{backend}</StatusBadge>
-            </p>
-          </div>
-          <p className="w-full text-xs text-muted">
+        <footer className={`border-t border-glass-border py-6 ${sectionX}`}>
+          <p className="text-xs text-muted">
             © {new Date().getFullYear()} Leasefleet Solutions Pvt. Ltd. All rights reserved.
           </p>
         </footer>

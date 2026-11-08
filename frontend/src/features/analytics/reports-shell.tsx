@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { loadCatalog } from "./catalog";
 
-const item = "block rounded-lg px-3 py-1.5 text-sm";
+const item = "relative block rounded-lg px-3 py-1.5 text-sm transition-colors duration-200";
 const idle = `${item} text-muted hover:bg-background hover:text-foreground`;
-const current = `${item} bg-background font-medium text-foreground`;
+const current = `${item} bg-gold/10 font-medium text-gold-text before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-gold`;
 
 /**
  * The reporting area: the categories and reports this viewer may open beside the page. Categories are collapsible;
@@ -45,11 +45,11 @@ export async function ReportsShell({ active, children }: { active: string; child
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
       <aside className="lg:sticky lg:top-4 lg:self-start">
-        <details className="rounded-xl border border-border bg-surface p-2 shadow-sm lg:hidden">
+        <details className="rounded-2xl border border-border bg-surface p-2 shadow-sm lg:hidden">
           <summary className="cursor-pointer px-3 py-1.5 text-sm font-medium">All reports</summary>
           <div className="mt-2">{links}</div>
         </details>
-        <div className="hidden max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-sm lg:block">
+        <div className="hidden max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-border bg-surface p-2 shadow-sm lg:block">
           {links}
         </div>
       </aside>

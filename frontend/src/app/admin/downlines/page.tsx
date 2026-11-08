@@ -10,6 +10,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { AdminDownline } from "@/types/referral";
 import type { AdminUserSummary } from "@/types/user";
+import { ArrowLeftRight, GitBranch, Hand, RotateCcw, UserMinus, X } from "lucide-react";
 
 export const metadata: Metadata = { title: "Downlines" };
 
@@ -42,9 +43,22 @@ export default async function DownlinesPage({ searchParams }: PageProps<"/admin/
       <PageHeader title="Downlines"
         description="Arrange investors' downlines: drag a member onto their new referrer, into the other downline, or onto “Remove from downline”. Everyone below a member moves with them. Only super administrators can open this page." />
       {!left ? (
-        <div className="max-w-xl">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]">
           <InvestorPicker title="Open a downline" description="Find the investor whose downline you want to arrange."
             find={find} found={found} hrefFor={(id) => `${HERE}?investor=${id}`} />
+          <ul className="grid gap-3 self-start sm:grid-cols-2">
+            {TIPS.map((tip) => (
+              <li key={tip.title} className="flex gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gold/10 text-gold-text">
+                  <tip.icon className="size-4" />
+                </span>
+                <span className="min-w-0 text-sm">
+                  <span className="block font-medium">{tip.title}</span>
+                  <span className="block text-xs text-muted">{tip.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : (
         <>
@@ -53,13 +67,17 @@ export default async function DownlinesPage({ searchParams }: PageProps<"/admin/
               {d.investor.name}&apos;s downline is very large: only the first {d.members.length} members are shown.
             </Notice>
           ))}
-          <p className="text-sm">
-            <Link href={HERE} className="inline-flex min-h-6 items-center text-gold-text hover:underline">Choose a different investor</Link>
+          <p>
+            <Link href={HERE}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium shadow-sm transition-colors hover:border-gold hover:text-gold-text">
+              <RotateCcw aria-hidden="true" className="size-4" /> Choose a different investor
+            </Link>
           </p>
           <DownlineEditor panes={right ? [left, right] : [left]}
             side={right ? (
-              <Link href={`${HERE}?investor=${left.investor.userId}`} className="inline-flex min-h-6 items-center text-sm text-gold-text hover:underline">
-                Close {right.investor.name}&apos;s downline
+              <Link href={`${HERE}?investor=${left.investor.userId}`}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium shadow-sm transition-colors hover:border-gold hover:text-gold-text">
+                <X aria-hidden="true" className="size-4" /> Close {right.investor.name}&apos;s downline
               </Link>
             ) : (
               <InvestorPicker title="Open another downline alongside"
@@ -72,6 +90,13 @@ export default async function DownlinesPage({ searchParams }: PageProps<"/admin/
     </div>
   );
 }
+
+const TIPS = [
+  { icon: Hand, title: "Drag to move", text: "Drop a member onto their new referrer. Everyone below them moves too." },
+  { icon: ArrowLeftRight, title: "Two side by side", text: "Open a second investor to move members between downlines." },
+  { icon: UserMinus, title: "Remove", text: "Drop onto “Remove from downline” so nobody refers them." },
+  { icon: GitBranch, title: "No mouse?", text: "Use Move on any row to choose the new referrer from a list." },
+];
 
 async function downlineOf(userId: string): Promise<AdminDownline | null> {
   try {

@@ -80,13 +80,13 @@ export function NavLinks({ sections, rail = false, roomy = false, onNavigate }: 
                   if (!next.delete(name)) next.add(name);
                   return next;
                 })}
-                className={`flex w-full items-center justify-between px-5 text-[11px] uppercase tracking-[0.1em] text-muted hover:text-foreground ${roomy ? "min-h-11" : "py-1.5"}`}>
+                className={`mt-2 flex w-full items-center justify-between px-5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted/80 transition-colors hover:text-foreground ${roomy ? "min-h-11" : "py-1.5"}`}>
                 {section.label}
                 <ChevronDown aria-hidden="true" className={`size-3.5 transition-transform ${open ? "" : "-rotate-90"}`} />
               </button>
             )}
             {open && (
-              <ul>
+              <ul className="space-y-0.5">
                 {section.links.map((link) => {
                   const isActive = link === active;
                   const Icon = link.icon ? (ICONS[link.icon] ?? Circle) : rail ? Circle : null;
@@ -94,10 +94,11 @@ export function NavLinks({ sections, rail = false, roomy = false, onNavigate }: 
                     <li key={`${link.href}-${link.label}`}>
                       <Link href={link.href} aria-current={isActive ? "page" : undefined} onClick={onNavigate}
                         aria-label={rail ? link.label : undefined} title={rail ? link.label : undefined}
-                        className={`flex items-center gap-2.5 border-l-2 ${rail ? "justify-center py-2.5" : `px-5 ${roomy ? "min-h-11" : "py-1.5"}`} ${isActive
-                          ? "border-gold bg-background font-medium text-foreground"
-                          : "border-transparent text-muted hover:bg-background hover:text-foreground"}`}>
-                        {Icon && <Icon aria-hidden="true" className="size-4 shrink-0" />}
+                        className={`group relative mx-2 flex items-center gap-2.5 rounded-lg transition-colors duration-200 ${rail ? "justify-center py-2.5" : `px-3 ${roomy ? "min-h-11" : "py-2"}`} ${isActive
+                          ? "bg-gold/10 font-medium text-gold-text"
+                          : "text-muted hover:bg-background hover:text-foreground"}`}>
+                        {isActive && <span aria-hidden="true" className="absolute inset-y-1.5 -left-2 w-[3px] rounded-r-full bg-gold" />}
+                        {Icon && <Icon aria-hidden="true" className={`size-4 shrink-0 transition-transform duration-200 ${isActive ? "" : "group-hover:scale-110"}`} />}
                         {!rail && link.label}
                       </Link>
                     </li>

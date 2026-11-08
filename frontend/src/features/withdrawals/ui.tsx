@@ -34,8 +34,9 @@ export function MetricCard({ icon: Icon, label, value, note, accent = "text-gold
   accent?: string;
 }) {
   return (
-    <div className="flex items-start gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${accent}`}>
+    <div className="group relative flex items-start gap-4 overflow-hidden rounded-2xl border border-border bg-surface p-5 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-lg hover:shadow-gold/10">
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gold transition-transform duration-500 group-hover:scale-x-100" />
+      <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-105 ${accent}`}>
         <Icon className="size-5" aria-hidden="true" />
       </span>
       <div className="min-w-0 space-y-0.5">

@@ -1,5 +1,6 @@
 "use client";
 
+import { KeepValues } from "@/components/ui/keep-values";
 import { useActionState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -13,6 +14,7 @@ export function ResetPasswordForm({ email }: { email?: string }) {
   const e = state.fieldErrors ?? {};
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
       {email ? (
         <input type="hidden" name="email" value={email} />

@@ -19,6 +19,8 @@ import { BackendError } from "@/lib/server/backend-client";
 import { authFetch, requireStaff } from "@/lib/server/auth/session";
 import type { CatalogEntry, ReportColumn, ReportResult } from "@/types/analytics";
 import { formatDate, formatDateTime, humanize } from "@/utils/format";
+import { DownloadLink, PagerLinks, pill } from "@/features/analytics/report-ui";
+import { Check, ChevronDown, Columns3, Filter, FolderOpen, RefreshCw, Rows3, X } from "lucide-react";
 
 export async function generateMetadata({ params }: PageProps<"/admin/reports/[key]">): Promise<Metadata> {
   const { key } = await params;
@@ -27,7 +29,7 @@ export async function generateMetadata({ params }: PageProps<"/admin/reports/[ke
 }
 
 const LINKS: Record<string, string> = { user: "/admin/users/", order: "/admin/orders/" };
-const chip = "inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs";
+const chip = "inline-flex items-center gap-1.5 rounded-full bg-gold/10 py-1 pr-1 pl-3 text-xs font-medium text-gold-text ring-1 ring-gold/25";
 
 export default async function ReportPage({ params, searchParams }: PageProps<"/admin/reports/[key]">) {
   const denied = await deniedUnlessInMenu("/admin/reports");
@@ -72,18 +74,26 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/a
     <ReportsShell active={key}>
       <PageHeader title={report.title} description={report.description}
         actions={
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Link href={href({})} className="rounded-full border border-border px-3 py-1.5 text-muted hover:text-foreground">Refresh</Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={href({})} aria-label="Refresh" title="Refresh"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted transition-colors hover:border-gold hover:text-gold-text">
+              <RefreshCw aria-hidden="true" className="size-4" />
+            </Link>
             {canDownload && result && (
               <>
-                <a href={exportHref("xlsx")} className="rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface">Excel</a>
-                <a href={exportHref("pdf")} className="rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface">PDF</a>
-                <a href={exportHref("csv")} className="rounded-full border border-border px-4 py-1.5 text-muted hover:text-foreground">CSV</a>
+                <DownloadLink href={exportHref("xlsx")} format="xlsx" primary />
+                <DownloadLink href={exportHref("pdf")} format="pdf" />
+                <DownloadLink href={exportHref("csv")} format="csv" />
               </>
             )}
           </div>
         } />
-      <p className="-mt-3 text-xs text-muted">{category.label}{!canDownload && " · Downloading needs the REPORT_GENERATE or REPORT_EXPORT permission."}</p>
+      <p className="-mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-background px-2.5 py-1 font-medium ring-1 ring-border">
+          <FolderOpen aria-hidden="true" className="size-3.5 text-gold-text" /> {category.label}
+        </span>
+        {!canDownload && <span>Downloading needs the REPORT_GENERATE or REPORT_EXPORT permission.</span>}
+      </p>
 
       <Filters report={report} state={state} base={base} />
       <Chips report={report} state={state} href={href} />
@@ -92,8 +102,11 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/a
       {result && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <p className="text-muted">
-              {new Intl.NumberFormat("en-IN").format(result.totalRows)} {result.totalRows === 1 ? "row" : "rows"}
+            <p className="flex flex-wrap items-center gap-x-2 text-muted">
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                <Rows3 aria-hidden="true" className="size-4 text-gold-text" />
+                {new Intl.NumberFormat("en-IN").format(result.totalRows)} {result.totalRows === 1 ? "row" : "rows"}
+              </span>
               {state.from && state.to && <> · {formatDate(state.from)} – {formatDate(state.to)}{report.dateLabel && ` by ${report.dateLabel.toLowerCase()}`}</>}
               {!report.usesPeriod && " · as things stand"}
             </p>
@@ -102,9 +115,9 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/a
           {result.rows.length === 0 ? (
             <EmptyState title="Nothing matches" description="Try a longer period or fewer filters." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-border text-xs text-muted">
+                <thead className="border-b border-border bg-background/70 text-[11px] tracking-[0.06em] text-muted uppercase">
                   <tr>
                     {columns.map((c) => (
                       <th key={c.key} scope="col" className={`whitespace-nowrap px-3 py-3 font-medium ${numeric(c.type) ? "text-right" : ""}`}
@@ -116,7 +129,7 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/a
                 </thead>
                 <tbody className="divide-y divide-border">
                   {result.rows.map((row, r) => (
-                    <tr key={r} className="hover:bg-background/60">
+                    <tr key={r} className="transition-colors hover:bg-background/60">
                       {columns.map((c) => (
                         <td key={c.key} className={`whitespace-nowrap px-3 py-2 ${numeric(c.type) ? "text-right tabular-nums" : ""}`}>
                           <Value column={c} value={row[c.index] ?? null} target={result.links[r]?.[c.key]} currency={currency} />
@@ -126,7 +139,7 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/a
                   ))}
                 </tbody>
                 {result.totals.length > 0 && (
-                  <tfoot className="border-t-2 border-border font-semibold">
+                  <tfoot className="border-t-2 border-border bg-gold/5 font-semibold">
                     {result.totals.map((t) => (
                       <tr key={t.currency}>
                         {columns.map((c, i) => (
@@ -168,9 +181,9 @@ function SortHeader({ column, report, state, href }: {
   const desc = descending(report, state);
   return (
     <Link href={href({ sort: column.key, desc: active ? !desc : numeric(column.type), page: 0 })}
-      className={`inline-flex items-center gap-1 hover:text-foreground ${active ? "text-foreground" : ""}`}>
+      className={`group inline-flex items-center gap-1 hover:text-foreground ${active ? "text-gold-text" : ""}`}>
       {column.label}
-      <span aria-hidden className={active ? "" : "opacity-0"}>{active && desc ? "↓" : "↑"}</span>
+      <span aria-hidden className={active ? "" : "opacity-0 group-hover:opacity-50"}>{active && desc ? "↓" : "↑"}</span>
     </Link>
   );
 }
@@ -202,21 +215,21 @@ function Value({ column, value, target, currency }: {
 function Filters({ report, state, base }: { report: CatalogEntry; state: ReportState; base: string }) {
   const presetQuery = (from: string, to: string) => toQuery(state, { from, to, page: 0 }).toString();
   return (
-    <section aria-label="Filters" className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-sm">
+    <section aria-label="Filters" className="space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
       {report.usesPeriod && (
-        <div className="flex flex-wrap gap-2 text-sm">
+        <nav aria-label="Period" className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-border bg-background/60 p-1 text-sm">
           {periodPresets().map((p) => {
             const active = p.from === state.from && p.to === state.to;
             return (
               <Link key={p.label} href={`${base}?${presetQuery(p.from, p.to)}`} aria-current={active ? "page" : undefined}
-                className={`rounded-full border px-3 py-1 ${active ? "border-foreground text-foreground" : "border-border text-muted"}`}>{p.label}</Link>
+                className={pill(active)}>{p.label}</Link>
             );
           })}
-          <Link href={`${base}?${toQuery(state, { from: undefined, to: undefined, page: 0 })}`}
-            className={`rounded-full border px-3 py-1 ${!state.from ? "border-foreground text-foreground" : "border-border text-muted"}`}>All dates</Link>
-        </div>
+          <Link href={`${base}?${toQuery(state, { from: undefined, to: undefined, page: 0 })}`} aria-current={!state.from ? "page" : undefined}
+            className={pill(!state.from)}>All dates</Link>
+        </nav>
       )}
-      <form action={base} className="flex flex-wrap items-end gap-3">
+      <form action={base} className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
         {state.sort && <input type="hidden" name="sort" value={state.sort} />}
         {state.desc !== undefined && <input type="hidden" name="desc" value={String(state.desc)} />}
         {state.hidden.length > 0 && <input type="hidden" name="hide" value={state.hidden.join(",")} />}
@@ -231,14 +244,17 @@ function Filters({ report, state, base }: { report: CatalogEntry; state: ReportS
         )}
         {report.choices.map((choice) => (
           <details key={choice.key} className="relative">
-            <summary className="cursor-pointer list-none rounded-lg border border-border bg-surface px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
-              {choice.label}{state.choices[choice.key]?.length ? ` (${state.choices[choice.key]!.length})` : ""} <span aria-hidden className="text-muted">▾</span>
+            <summary className={`flex h-11 cursor-pointer list-none items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors hover:border-gold [&::-webkit-details-marker]:hidden ${state.choices[choice.key]?.length
+              ? "border-gold/50 bg-gold/5 text-gold-text" : "border-border bg-surface"}`}>
+              {choice.label}
+              {state.choices[choice.key]?.length ? <span className="rounded-full bg-gold px-1.5 text-[10px] font-semibold text-on-gold">{state.choices[choice.key]!.length}</span> : null}
+              <ChevronDown aria-hidden="true" className="size-4 text-muted" />
             </summary>
-            <fieldset className="absolute z-20 mt-1 max-h-72 w-64 space-y-1 overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-lg">
+            <fieldset className="absolute z-20 mt-1 max-h-72 w-64 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-xl">
               <legend className="sr-only">{choice.label}</legend>
               {choice.values.map((v) => (
-                <label key={v} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name={`f.${choice.key}`} value={v} defaultChecked={state.choices[choice.key]?.includes(v)} />
+                <label key={v} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-background">
+                  <input type="checkbox" name={`f.${choice.key}`} value={v} defaultChecked={state.choices[choice.key]?.includes(v)} className="size-4 accent-[var(--gold)]" />
                   {humanize(v)}
                 </label>
               ))}
@@ -253,12 +269,14 @@ function Filters({ report, state, base }: { report: CatalogEntry; state: ReportS
         )}
         <label className="text-sm">
           <span className="block font-medium">Rows per page</span>
-          <select name="size" defaultValue={String(state.size)} className="mt-1 rounded-lg border border-border bg-surface px-2 py-2">
+          <select name="size" defaultValue={String(state.size)} className="mt-1 h-11 rounded-lg border border-border bg-surface px-2 outline-none focus:border-gold">
             {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        <Button type="submit">Apply</Button>
-        <Link href={base} className="px-2 py-2 text-sm text-muted hover:text-foreground">Clear all</Link>
+        <Button type="submit" className="gap-2"><Filter aria-hidden="true" className="size-4" /> Apply</Button>
+        <Link href={base} className="inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-muted transition-colors hover:bg-background hover:text-foreground">
+          <X aria-hidden="true" className="size-4" /> Clear all
+        </Link>
       </form>
     </section>
   );
@@ -281,7 +299,10 @@ function Chips({ report, state, href }: { report: CatalogEntry; state: ReportSta
       {chips.map((c) => (
         <li key={c.label} className={chip}>
           {c.label}
-          <Link href={c.remove} aria-label={`Remove ${c.label}`} className="text-muted hover:text-foreground">✕</Link>
+          <Link href={c.remove} aria-label={`Remove ${c.label}`}
+            className="flex size-5 items-center justify-center rounded-full transition-colors hover:bg-gold hover:text-on-gold">
+            <X aria-hidden="true" className="size-3" />
+          </Link>
         </li>
       ))}
     </ul>
@@ -291,17 +312,21 @@ function Chips({ report, state, href }: { report: CatalogEntry; state: ReportSta
 function ColumnPicker({ columns, state, href }: { columns: ReportColumn[]; state: ReportState; href: (o: Partial<ReportState>) => string }) {
   return (
     <details className="relative">
-      <summary className="cursor-pointer list-none rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-muted transition-colors hover:border-gold hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <Columns3 aria-hidden="true" className="size-3.5" />
         Columns{state.hidden.length ? ` (${state.hidden.length} hidden)` : ""}
       </summary>
-      <ul className="absolute right-0 z-20 mt-1 max-h-80 w-60 space-y-0.5 overflow-y-auto rounded-lg border border-border bg-surface p-2 text-sm shadow-lg">
+      <ul className="absolute right-0 z-20 mt-1 max-h-80 w-60 space-y-0.5 overflow-y-auto rounded-xl border border-border bg-surface p-2 text-sm shadow-xl">
         {columns.map((c) => {
           const hidden = state.hidden.includes(c.key);
           const next = hidden ? state.hidden.filter((k) => k !== c.key) : [...state.hidden, c.key];
           return (
             <li key={c.key}>
-              <Link href={href({ hidden: next })} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-background" aria-pressed={!hidden}>
-                <span aria-hidden className="w-3">{hidden ? "" : "✓"}</span>{c.label}
+              <Link href={href({ hidden: next })} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-background ${hidden ? "text-muted" : ""}`} aria-pressed={!hidden}>
+                <span aria-hidden className={`flex size-4 items-center justify-center rounded ${hidden ? "ring-1 ring-border" : "bg-gold text-on-gold"}`}>
+                  {!hidden && <Check className="size-3" />}
+                </span>
+                {c.label}
               </Link>
             </li>
           );
@@ -313,15 +338,9 @@ function ColumnPicker({ columns, state, href }: { columns: ReportColumn[]; state
 
 function Pager({ result, href }: { result: ReportResult; href: (o: Partial<ReportState>) => string }) {
   const pages = Math.max(1, Math.ceil(result.totalRows / result.size));
-  if (pages <= 1) return null;
-  const linkClass = "rounded-full border border-foreground/70 px-4 py-1.5 hover:bg-foreground hover:text-surface";
   return (
-    <nav aria-label="Pagination" className="flex items-center justify-between gap-3 text-sm">
-      <span className="text-muted">Page {result.page + 1} of {pages}</span>
-      <span className="flex gap-2">
-        {result.page > 0 && <Link className={linkClass} href={href({ page: result.page - 1 })}>Previous</Link>}
-        {result.page + 1 < pages && <Link className={linkClass} href={href({ page: result.page + 1 })}>Next</Link>}
-      </span>
-    </nav>
+    <PagerLinks page={result.page} pages={pages}
+      prev={result.page > 0 ? href({ page: result.page - 1 }) : null}
+      next={result.page + 1 < pages ? href({ page: result.page + 1 }) : null} />
   );
 }

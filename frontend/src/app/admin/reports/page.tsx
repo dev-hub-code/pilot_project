@@ -12,6 +12,7 @@ import { authFetch } from "@/lib/server/auth/session";
 import type { Kpi, Overview } from "@/types/analytics";
 import { formatDate, formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
+import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronRight, Minus, type LucideIcon } from "lucide-react";
 
 export const metadata: Metadata = { title: "Reports & Analytics" };
 
@@ -37,13 +38,17 @@ function Change({ kpi, currency }: { kpi: Kpi; currency: string }) {
   if (kpi.previous === null) return null;
   const change = kpi.change === null ? null : Number(kpi.change);
   const direction = change === null ? null : change > 0 ? "up" : change < 0 ? "down" : "flat";
+  if (direction === null) return <p className="text-xs text-muted">Nothing in the previous period</p>;
+  // Up or down only, not good or bad: more withdrawals paid is neither.
+  const Icon = direction === "up" ? ArrowUpRight : direction === "down" ? ArrowDownRight : Minus;
   return (
-    <p className="text-xs text-muted">
-      {direction === null ? "Nothing in the previous period"
-        : <>
-          {direction === "flat" ? "Unchanged" : <><span aria-hidden>{direction === "up" ? "▲" : "▼"}</span> {direction === "up" ? "Up" : "Down"} {Math.abs(change!).toFixed(1)}%</>}
-          {" "}· previously {value(kpi, currency, kpi.previous)}
-        </>}
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+      <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold tabular-nums ${direction === "flat"
+        ? "bg-background ring-1 ring-border" : "bg-gold/10 text-gold-text"}`}>
+        <Icon aria-hidden="true" className="size-3" />
+        {direction === "flat" ? "Unchanged" : `${direction === "up" ? "Up" : "Down"} ${Math.abs(change!).toFixed(1)}%`}
+      </span>
+      <span>previously {value(kpi, currency, kpi.previous)}</span>
     </p>
   );
 }
@@ -51,15 +56,20 @@ function Change({ kpi, currency }: { kpi: Kpi; currency: string }) {
 function KpiCard({ kpi, currency, href }: { kpi: Kpi; currency: string; href: string | null }) {
   const body = (
     <>
-      <p className="text-sm text-muted">{kpi.label}</p>
-      <p className="font-display text-2xl font-semibold tracking-tight tabular-nums">{value(kpi, currency)}</p>
+      {href && <span aria-hidden="true" className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gold transition-transform duration-500 group-hover:scale-x-100" />}
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-muted">{kpi.label}</p>
+        {href && <ArrowUpRight aria-hidden="true" className="size-4 shrink-0 text-muted transition duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-gold-text" />}
+      </div>
+      <p className={`font-display text-2xl font-semibold tracking-tight tabular-nums ${kpi.value === null || Number(kpi.value) === 0 ? "text-muted" : ""}`}>{value(kpi, currency)}</p>
       <Change kpi={kpi} currency={currency} />
       {kpi.hint && <p className="text-xs text-muted">{kpi.hint}</p>}
     </>
   );
-  const box = "block space-y-1.5 rounded-xl border border-border bg-surface p-4 shadow-sm";
+  const box = "group relative block space-y-2 overflow-hidden rounded-2xl border border-border bg-surface p-5 shadow-sm";
   return href
-    ? <Link href={href} className={`${box} hover:border-foreground/40`} title={`Open the report behind ${kpi.label.toLowerCase()}`}>{body}</Link>
+    ? <Link href={href} className={`${box} transition duration-300 hover:-translate-y-0.5 hover:border-gold/40 hover:shadow-lg hover:shadow-gold/10`}
+      title={`Open the report behind ${kpi.label.toLowerCase()}`}>{body}</Link>
     : <div className={box}>{body}</div>;
 }
 
@@ -95,9 +105,11 @@ export default async function ReportsOverviewPage({ searchParams }: PageProps<"/
       <PeriodForm action="/admin/reports" from={from} to={to} />
 
       <section aria-labelledby="period-heading" className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="period-heading" className="text-lg font-semibold tracking-tight">{formatDate(from)} – {formatDate(to)}</h2>
-          <p className="text-xs text-muted">Compared with {formatDate(overview.previousFrom)} – {formatDate(overview.previousTo)}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle id="period-heading" icon={CalendarDays}>{formatDate(from)} – {formatDate(to)}</SectionTitle>
+          <p className="rounded-full bg-background px-3 py-1 text-xs text-muted ring-1 ring-border">
+            Compared with {formatDate(overview.previousFrom)} – {formatDate(overview.previousTo)}
+          </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {overview.period.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} currency={currency} href={link(kpi, true)} />)}
@@ -105,14 +117,14 @@ export default async function ReportsOverviewPage({ searchParams }: PageProps<"/
       </section>
 
       <section aria-labelledby="now-heading" className="space-y-3">
-        <h2 id="now-heading" className="text-lg font-semibold tracking-tight">As things stand</h2>
+        <SectionTitle id="now-heading" icon={Activity}>As things stand</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {overview.now.map((kpi) => <KpiCard key={kpi.key} kpi={kpi} currency={currency} href={link(kpi, false)} />)}
         </div>
       </section>
 
       <section aria-labelledby="trends-heading" className="space-y-3">
-        <h2 id="trends-heading" className="text-lg font-semibold tracking-tight">Last 12 months</h2>
+        <SectionTitle id="trends-heading" icon={BarChart3}>Last 12 months</SectionTitle>
         <p className="text-sm text-muted">One chart per figure, each on its own scale: capital invested is client money, not revenue.</p>
         <div className="grid gap-4 xl:grid-cols-2">
           {TRENDS.map((trend) => (
@@ -124,7 +136,21 @@ export default async function ReportsOverviewPage({ searchParams }: PageProps<"/
           ))}
         </div>
       </section>
-      <p className="text-xs text-muted">Figures as of {formatDateTime(overview.generatedAt)}. Select a figure to open the rows behind it.</p>
+      <p className="flex items-center gap-1.5 text-xs text-muted">
+        <ChevronRight aria-hidden="true" className="size-3.5" />
+        Figures as of {formatDateTime(overview.generatedAt)}. Select a figure to open the rows behind it.
+      </p>
     </ReportsShell>
+  );
+}
+
+function SectionTitle({ id, icon: Icon, children }: { id: string; icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <h2 id={id} className="flex items-center gap-3 text-lg font-semibold tracking-tight">
+      <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold">
+        <Icon className="size-[18px]" />
+      </span>
+      {children}
+    </h2>
   );
 }

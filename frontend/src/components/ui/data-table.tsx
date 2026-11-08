@@ -6,16 +6,16 @@ import { Children, Fragment, cloneElement, isValidElement, type ReactElement, ty
  */
 export function DataTable({ columns, children, className = "" }: { columns: readonly string[]; children: ReactNode; className?: string }) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-border bg-surface shadow-sm ${className}`}>
+    <div className={`overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm ${className}`}>
       <table className="data-table w-full text-left text-sm">
-        <thead className="border-b border-border text-xs text-muted">
+        <thead className="border-b border-border bg-background/60 text-[11px] tracking-[0.06em] text-muted uppercase">
           <tr>
             {columns.map((column) => (
-              <th key={column} scope="col" className="whitespace-nowrap px-4 py-3 font-medium">{column}</th>
+              <th key={column} scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">{column}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">{labelRows(children, columns)}</tbody>
+        <tbody className="divide-y divide-border [&>tr]:transition-colors [&>tr:hover]:bg-background/70">{labelRows(children, columns)}</tbody>
       </table>
     </div>
   );
