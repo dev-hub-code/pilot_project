@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { PlanCard } from "@/features/plans/plan-card";
+import { PlanCard, highestReturnCode } from "@/features/plans/plan-card";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PageResponse } from "@/types/api";
 import type { PaymentMethods } from "@/types/order";
@@ -49,7 +49,8 @@ export default async function PlansPage({ searchParams }: PageProps<"/invest">) 
       ) : (
         <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {plans.content.map((plan) => (
-            <li key={plan.id} className="flex"><PlanCard plan={plan} href={`/invest/${plan.id}`} action="Invest" /></li>
+            <li key={plan.id} className="flex"><PlanCard plan={plan} href={`/invest/${plan.id}`} action="Invest"
+              highlight={!closed && plan.code === highestReturnCode(plans.content)} /></li>
           ))}
         </ul>
       )}

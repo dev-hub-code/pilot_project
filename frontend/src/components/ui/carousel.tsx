@@ -11,13 +11,17 @@ const MAX_DOTS = 8;
  * natively (scroll snap), or use the arrows and dots; it pages a full view at a time. With `autoplay` it advances
  * every few seconds, pausing while the pointer or keyboard focus is on it, while the tab is hidden, and never for
  * reduced motion.
+ *
+ * `variant`: "tiles" (default) joins the cards edge to edge with hairlines between; "cards" spaces them apart with
+ * room above and below, for cards that have their own border, shadow and hover lift.
  */
-export function Carousel({ label, itemsName, autoplay = false, itemClassName = "", children }: {
+export function Carousel({ label, itemsName, autoplay = false, variant = "tiles", itemClassName = "", children }: {
   /** Names the carousel for assistive technology, e.g. "Investor reviews". */
   label: string;
   /** What the cards are, in the plural, for button labels: "reviews", "plans". */
   itemsName: string;
   autoplay?: boolean;
+  variant?: "tiles" | "cards";
   /** Layout of each card's box (padding, flex); the carousel sets its width and background. */
   itemClassName?: string;
   children: readonly React.ReactNode[];
@@ -35,7 +39,7 @@ export function Carousel({ label, itemsName, autoplay = false, itemClassName = "
     const el = track.current;
     const card = el?.firstElementChild as HTMLElement | null;
     if (!el || !card) return;
-    const step = card.offsetWidth + 1;
+    const step = stepOf(el, card);
     setPerView(Math.max(1, Math.round(el.clientWidth / step)));
     // At the far end the last page may be partly the previous one; count it as the last.
     const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
@@ -59,7 +63,7 @@ export function Carousel({ label, itemsName, autoplay = false, itemClassName = "
     const el = track.current;
     const card = el?.firstElementChild as HTMLElement | null;
     if (!el || !card) return;
-    const left = Math.min(target * perView * (card.offsetWidth + 1), el.scrollWidth - el.clientWidth);
+    const left = Math.min(target * perView * stepOf(el, card), el.scrollWidth - el.clientWidth);
     el.scrollTo({ left, behavior: "smooth" });
   }, [perView]);
 
@@ -85,10 +89,13 @@ export function Carousel({ label, itemsName, autoplay = false, itemClassName = "
       }}>
       {/* relative: absolutely positioned content in a card (e.g. an sr-only caption) stays clipped to the track. */}
       <ul ref={track}
-        className="relative flex snap-x snap-mandatory gap-px overflow-x-auto overscroll-x-contain bg-border text-left [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        className={`relative flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain text-left [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+          variant === "cards" ? "-my-3 gap-6 py-3" : "gap-px bg-border"}`}>
         {children.map((child, index) => (
           <li key={index} aria-roledescription="slide" aria-label={`${index + 1} of ${count}`}
-            className={`w-full shrink-0 snap-start bg-surface sm:w-[calc((100%-1px)/2)] lg:w-[calc((100%-2px)/3)] ${itemClassName}`}>
+            className={`w-full shrink-0 snap-start ${variant === "cards"
+              ? "sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)]"
+              : "bg-surface sm:w-[calc((100%-1px)/2)] lg:w-[calc((100%-2px)/3)]"} ${itemClassName}`}>
             {child}
           </li>
         ))}
@@ -120,6 +127,11 @@ export function Carousel({ label, itemsName, autoplay = false, itemClassName = "
       </p>
     </div>
   );
+}
+
+/** How far one card moves the track: its width plus the gap after it. */
+function stepOf(track: HTMLElement, card: HTMLElement): number {
+  return card.offsetWidth + (parseFloat(getComputedStyle(track).columnGap) || 0);
 }
 
 function ArrowButton({ label, direction, onClick }: { label: string; direction: "previous" | "next"; onClick: () => void }) {

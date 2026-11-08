@@ -7,13 +7,14 @@ import { LandingHeader } from "@/components/layout/landing-header";
 import { LandingMenu } from "@/components/layout/landing-menu";
 import { LinkButton } from "@/components/ui/link-button";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { ChoosePlanVisual, EarnReturnsVisual, OnboardingVisual } from "@/features/landing/how-it-works-visuals";
 import { ReviewCarousel, type Review } from "@/features/landing/review-carousel";
 import { InterestForm } from "@/features/leads/interest-form";
 import { getPlatformStats, type PlatformStats } from "@/lib/server/platform-stats";
 import { getPhoneCountries } from "@/lib/server/phone-countries";
 import { creditLabel, getRentCredit } from "@/lib/server/rent-credit";
 import { getPublicPlans } from "@/lib/server/public-plans";
-import { PlanCard } from "@/features/plans/plan-card";
+import { PlanCarousel } from "@/features/plans/plan-carousel";
 import { yearsLabel } from "@/features/orders/lease-years";
 import type { PublicPlan as Plan } from "@/types/plan";
 import { getBackendStatus, type ServiceState } from "@/lib/server/system-status";
@@ -282,23 +283,76 @@ function trackRecord(stats: PlatformStats | null, useSamples: boolean) {
   return Object.values(figures).every(Boolean) ? (figures as Record<keyof typeof figures, string>) : null;
 }
 
-const STEPS = (credit: string): { title: string; body: string; photo: PortPhotoName; alt: string }[] => [
+/**
+ * The photo strip: a large lead photo, then four smaller ones, all at Indian ports. These photos are CC BY-SA / GODL-India
+ * (Wikimedia Commons), credited on the /credits page: their licences require it.
+ */
+const PORT_GALLERY: { photo: PortPhotoName; alt: string; caption: string }[] = [
+  {
+    photo: "jnpt-cfs", caption: "Nhava Sheva (JNPT), Navi Mumbai",
+    alt: "Containers stacked high under a gantry crane at a container freight station at JNPT, Navi Mumbai",
+  },
+  {
+    photo: "chennai-cfs", caption: "Chennai",
+    alt: "Rows of shipping containers stacked several high in a container yard in Chennai",
+  },
+  {
+    photo: "kolkata-port", caption: "Kolkata Port",
+    alt: "Aerial view of container stacks and a container ship at Netaji Subhas Dock, Kolkata Port",
+  },
+  {
+    photo: "tuticorin-terminal", caption: "V.O. Chidambaranar Port, Tuticorin",
+    alt: "Stacked containers on the quay beside a container ship under cranes at the Dakshin Bharat Gateway Terminal, Tuticorin",
+  },
+  {
+    photo: "kochi-terminal", caption: "Vallarpadam terminal, Kochi",
+    alt: "A container ship loaded with containers at the quay of the International Container Transshipment Terminal, Kochi",
+  },
+];
+
+/**
+ * Some of the world's largest container lines, shown for reference: SeaLease is not affiliated with them, so the
+ * section's text must not present them as partners. Logos are the public-domain files on Wikimedia Commons, loaded
+ * from Wikimedia's CDN (upload.wikimedia.org): each path is the file's place there.
+ */
+const COMMONS_FILES = "https://upload.wikimedia.org/wikipedia/commons";
+
+/**
+ * `small`: a solid or very bold logo, drawn a little smaller so it does not outweigh the others.
+ * `crop`: the file has wide empty margins; the logo is cut to this aspect ratio around its centre.
+ */
+const SHIPPING_LINES: { name: string; logo: string; small?: boolean; crop?: string }[] = [
+  { name: "MSC", logo: "b/b3/Mediterranean_Shipping_Company_logo.svg" },
+  { name: "Maersk", logo: "e/e6/Maersk_Group_Logo.svg" },
+  { name: "CMA CGM", logo: "d/d1/CMA_CGM_logo.svg" },
+  { name: "COSCO Shipping", logo: "f/f6/COSCOCS-ver1.svg" },
+  { name: "Hapag-Lloyd", logo: "6/6a/Hapag-Lloyd.svg" },
+  { name: "Ocean Network Express", logo: "4/45/Ocean_Network_Express_logo.svg" },
+  { name: "Evergreen Line", logo: "c/c9/Evergreen_Line_Logo.svg" },
+  { name: "HMM", logo: "5/56/HMM_Logo_Basic_Form.svg", small: true },
+  { name: "ZIM", logo: "6/69/ZIM_Logo.svg" },
+  { name: "PIL", logo: "3/30/PIL_logo.png", small: true, crop: "aspect-[360/105]" },
+  { name: "SITC", logo: "4/43/SITC_logo.svg", small: true },
+  { name: "NYK Line", logo: "c/c6/Nippon_Yusen_text_logo.svg" },
+  { name: "Mitsui O.S.K. Lines", logo: "2/22/Mitsui_O.S.K._Lines_logo.svg" },
+  { name: "K Line", logo: "thumb/6/6d/Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png/500px-Kawasaki_Kisen_Kaisha%2C_Ltd._logo.png" },
+  { name: "Crowley", logo: "f/f6/Crowley_Maritime_logo.svg" },
+];
+
+const STEPS = (credit: string): { title: string; body: string; visual: "onboarding" | "plan" | "returns" }[] => [
   {
     title: "Complete onboarding",
-    photo: "miami-port",
-    alt: "Aerial view of a container port on an island, with ships moored at the quay",
+    visual: "onboarding",
     body: "Create your free account, add your personal details, verify your identity with Aadhaar and PAN, and add the bank account your earnings are paid into.",
   },
   {
     title: "Choose a plan",
-    photo: "yard-stacks",
-    alt: "Rows of shipping containers stacked in a port yard beside a harbour crane",
+    visual: "plan",
     body: "Pick a plan by its tenure, enter how many units to buy to see your returns, then invest and pay by bank or in cash at our office.",
   },
   {
     title: "Earn returns",
-    photo: "container-lift",
-    alt: "A shipping container lifted by a ship-to-shore crane onto a truck at the quay",
+    visual: "returns",
     body: `Once your payment is confirmed, accept your investment agreement and returns are credited to your wallet ${credit}, then paid out as your account allows.`,
   },
 ];
@@ -454,6 +508,67 @@ export default async function Home() {
           )}
         </section>
 
+        {/* ---------------------------------------------------------------- ports */}
+        <section aria-labelledby="ports-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+          <div className="space-y-5">
+            <Eyebrow>At The Ports</Eyebrow>
+            <h2 id="ports-heading" className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              Where The Containers Work
+            </h2>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted">
+              Containers are stacked, loaded and moved through India&apos;s container terminals every day, carrying the
+              goods of the businesses that lease them.
+            </p>
+          </div>
+          <ul className="mt-12 grid grid-cols-2 gap-2 md:grid-cols-4 md:grid-rows-2">
+            {PORT_GALLERY.map((item, index) => (
+              <li key={item.photo}
+                className={`group relative overflow-hidden bg-ink ${index === 0
+                  ? "col-span-2 aspect-[4/3] md:row-span-2 md:aspect-auto"
+                  : "aspect-square md:aspect-[4/3]"}`}>
+                <figure className="size-full">
+                  <PortPhoto name={item.photo} alt={item.alt}
+                    sizes={index === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
+                    className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/85 to-transparent px-4 pt-10 pb-3 text-xs text-on-ink sm:text-sm">
+                    {item.caption}
+                  </figcaption>
+                </figure>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs text-muted">
+            Photos from Wikimedia Commons. <Link href="/credits" className="underline underline-offset-2 hover:text-foreground">Photo credits</Link>
+          </p>
+        </section>
+
+        {/* --------------------------------------------------------- shipping lines */}
+        <section aria-labelledby="lines-heading" className="border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
+          <div className="grid gap-6 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-14">
+            <div className="space-y-5">
+              <Eyebrow>The Global Network</Eyebrow>
+              <h2 id="lines-heading" className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">
+                The Lines That Move The World&apos;s Cargo
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm leading-relaxed text-muted">
+              Most of the world&apos;s container trade, including the ships calling at Nhava Sheva, Mundra, Chennai and
+              Kochi, is carried by a handful of large lines. The businesses that lease containers ship their goods on
+              services like theirs, which is what keeps containers in demand and earning.
+            </p>
+          </div>
+          <ul className="mt-12 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
+            {SHIPPING_LINES.map((line) => (
+              // Always a white tile: the logos are drawn for a light background, in dark mode too.
+              <li key={line.name} className="group flex h-24 items-center justify-center bg-white px-5 last:col-span-2 sm:h-28 sm:px-7 sm:last:col-span-1">
+                {/* eslint-disable-next-line @next/next/no-img-element -- next/image adds inline styles blocked by our CSP */}
+                <img src={`${COMMONS_FILES}/${line.logo}`} alt={line.name} title={line.name} loading="lazy" decoding="async"
+                  className={`w-auto max-w-full object-contain opacity-60 grayscale transition duration-300 group-hover:opacity-100 group-hover:grayscale-0 ${line.crop ? `${line.crop} h-7 object-cover sm:h-9` : line.small ? "max-h-7 sm:max-h-9" : "max-h-10 sm:max-h-12"}`} />
+              </li>
+            ))}
+          </ul>
+        </section>
+
         {/* ----------------------------------------------------------- how it works */}
         <section id="how-it-works" className="scroll-mt-24 border-t border-border px-5 py-20 sm:px-10 lg:px-14 lg:py-28">
           <div className="flex flex-wrap items-end justify-between gap-6">
@@ -468,10 +583,9 @@ export default async function Home() {
           <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
             {STEPS(credit).map((step, index) => (
               <li key={step.title} className="space-y-4 bg-surface p-8">
-                <div className="-mx-8 -mt-8 mb-8 aspect-[16/10] overflow-hidden bg-ink">
-                  <PortPhoto name={step.photo} alt={step.alt} sizes="(min-width: 768px) 33vw, 100vw"
-                    className="size-full object-cover" />
-                </div>
+                {step.visual === "onboarding" && <OnboardingVisual />}
+                {step.visual === "plan" && <ChoosePlanVisual plans={plans} />}
+                {step.visual === "returns" && <EarnReturnsVisual plans={plans} />}
                 <span className="font-display text-4xl font-semibold text-gold-text">0{index + 1}</span>
                 <h3 className="text-xl font-semibold tracking-tight">{step.title}</h3>
                 <p className="text-sm leading-relaxed text-muted">{step.body}</p>
@@ -563,11 +677,9 @@ export default async function Home() {
           <section aria-labelledby="plans-heading" className="mt-20 px-5 sm:px-10 lg:mt-28 lg:px-14">
             <Eyebrow>Plans</Eyebrow>
             <h2 id="plans-heading" className="mt-4 text-3xl leading-tight font-normal tracking-tight sm:text-4xl">Choose Your Tenure</h2>
-            <ul className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {plans.slice(0, 6).map((plan) => (
-                <li key={plan.code} className="flex"><PlanCard plan={plan} href="/invest" action="Invest" /></li>
-              ))}
-            </ul>
+            <div className="mt-8">
+              <PlanCarousel plans={plans} href="/invest" action="Invest" />
+            </div>
           </section>
         )}
 
