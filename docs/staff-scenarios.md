@@ -512,7 +512,182 @@ bulk actions to reassign or close several tickets at once.
 
 ---
 
-## 14. Coverage: page → scenario
+## 14. Investor self-service (any day)
+
+### S10.1 Onboarding and email (Zoya)
+
+1. Right after sign-up, Zoya's dashboard shows a "confirm your email" reminder. She closes it, and it does not come
+   back for the rest of that session.
+2. **Profile → Email**: she confirms her email address with the emailed code, and the page shows it verified.
+   She asks for the code to be sent again once, and the new code works. (Check and note whether the earlier code
+   still works.)
+3. She clicks **Complete onboarding** on the dashboard. It takes her to the first step still to do, in this order:
+   email, personal details, identity verification, then a bank account. With all four done, it opens her verification
+   status instead.
+
+### S10.2 Notifications (Zoya, Kabir)
+
+1. As S2 to S5 happen (KYC decided, payment confirmed, agreement issued, withdrawal paid, ticket replied to), the bell
+   shows an unread count, and the list under it shows the latest items.
+2. **Notifications** lists them all. Opening one marks it read, and the count goes down.
+3. **Settings → Notifications**: Kabir turns email notifications off. The next event still shows in his bell, but no
+   email arrives in Mailpit. He turns them back on, and emails arrive again. Save the SMS switch too, and check that
+   it is kept (only the setting is tested: this setup sends no SMS).
+4. **Settings → Password**: Kabir changes his password, and then signs in with the new one.
+
+### S10.3 My referrals (Zoya, Suresh)
+
+1. **Referrals**: Zoya copies her referral link and sees Kabir under level 1, with the commission she earned for him.
+2. Suresh (network) opens each level (1 to 4). Asha is on level 1, and Ravi is on level 1 or 2 depending on S4.2.
+3. He opens a member's page and sees that member's investment and the commission it earned him.
+4. Before anyone has joined through her link, Kabir's referrals page shows "No referrals yet".
+
+### S10.4 Statements and downloads (Zoya)
+
+1. **Statements**: Zoya picks a period of up to a year. The page lists her withdrawals, where each was paid and its
+   status. She views the statement, then downloads it. A period longer than a year is refused.
+2. From **Orders → an order** she downloads the invoice PDF.
+3. From **Portfolio → a holding** she opens and downloads the agreement she accepted.
+4. From **Withdrawals → a paid withdrawal** she downloads the receipt. An unpaid withdrawal has no receipt.
+
+### S10.5 Help articles (Kabir)
+
+1. **Support → Articles**: Kabir browses the published customer articles from S7.2 and opens one.
+2. While typing a new ticket's subject ("withdrawal not received"), matching articles are suggested before he
+   submits. Internal articles never appear.
+3. He rates an article once. A second rating of the same article is refused.
+
+---
+
+## 15. More staff pages (any day)
+
+### S11.1 Staff dashboard (Arjun, Amit, Tanvi)
+
+1. Each employee's **Dashboard** shows only the sections their permissions allow. Arjun sees all of them, Amit sees
+   finance, and Tanvi sees support.
+2. Each figure links to the page behind it (for example pending KYC → the verification queue). The numbers match
+   those pages.
+
+### S11.2 Ticket for a customer (Tanvi)
+
+1. A customer phones in. Tanvi opens **Support → New ticket**, searches for the customer by email or ID, and opens a
+   ticket for them with a category and priority.
+2. The ticket shows on the customer's own **Support** page, and they can reply to it.
+
+### S11.3 Escalations record (Imran)
+
+1. After S7.1, **Support → Escalations** lists every escalation: who or what raised it (a person, or an automatic
+   rule such as an SLA breach), why, and to which level.
+2. Escalating a ticket a second time to the same level is refused: escalation only goes up.
+
+### S11.4 One ledger account (Rajesh)
+
+1. From **Financial Ledger**, Rajesh opens one account (for example an investor's returns wallet). The page lists
+   every entry with its date, its transaction and the running balance.
+2. Rajesh's adjustment from S6.1 appears on both accounts it touched. An account with no entries shows "No entries".
+
+### S11.5 Withdrawal files and one withdrawal (Amit, Manish)
+
+1. **Withdrawals → Withdrawal files → a batch**: Amit sees the batch's withdrawals and totals, and downloads its
+   Excel sheet and any files attached to it.
+2. **Withdrawals → one withdrawal**: Manish sees the whole history of that withdrawal (each status, who changed it
+   and when, notes), and downloads the receipt once it is paid.
+
+### S11.6 Staff document downloads (Anjali, Lakshmi, Deepak, Tanvi)
+
+1. Anjali downloads an order's invoice PDF and the agreement for one of its holdings.
+2. Lakshmi opens a KYC document, Deepak opens a bank proof, and Tanvi opens a ticket attachment.
+3. Every one of these opens appears on **Security → Staff access to personal data** under that person.
+
+---
+
+## 16. Public website (no sign-in)
+
+### S12.1 Pages anyone can open
+
+1. The landing page shows live figures (from the public stats) and the open online plans in the carousel.
+2. `/plans` lists the online plans, and each plan page shows its terms. Network plans never appear here.
+3. `/terms` shows the terms in force from S0.2, and `/credits` lists the photo credits.
+
+### S12.2 Website enquiry becomes a lead (visitor, Shreya)
+
+1. A visitor fills in the enquiry form on the landing page. A **New** lead with source **Website** appears on
+   **CRM & Leads**, with the visitor's details.
+2. The form always gives the same reply, so it never reveals whether an email is known. Sending it with a
+   registered investor's email creates no lead (they are already a customer). A bot that fills the hidden honeypot
+   field is dropped silently.
+3. Sending the form many times in a row from one address is stopped by the rate limit.
+
+### S12.3 Open plans API
+
+1. `GET /api/open/v1/plans` returns the open online plans as JSON without signing in. `?status=CLOSED` returns the
+   closed ones. `GET /api/open/v1/plans/{code}` returns one plan.
+2. Nothing about investors, and no way to buy or change anything, is available here.
+3. Calling it many times a minute from one address is limited.
+
+### S12.4 Address pickers (Zoya)
+
+1. On the profile form, choosing a country loads its states, and choosing a state loads its cities.
+
+---
+
+## 17. Background jobs
+
+These run on their own. Locally you can shorten the intervals with the settings named below; on the server they use
+the defaults.
+
+| Job | Default timing | Scenario |
+|---|---|---|
+| Order expiry | every 60 s | S3.4: an unpaid order expires when its hold ends |
+| Returns crediting | hourly sweep | S4.1: returns for every ended hour are credited |
+| SLA monitor | every minute | S12.5 below |
+| Ticket auto-close | every 15 min, after 24 h resolved (`APP_SUPPORT_AUTO_CLOSE_AFTER`) | S12.6 below |
+| KYC follow-up | every 15 min, 24 h after sign-up (`APP_KYC_FOLLOW_UP_AFTER`) | S12.7 below |
+| Reconciliation | daily at 06:00 IST | S12.8 below |
+| Event and email sender | every second | S12.9 below |
+
+### S12.5 SLA breach (Tanvi, Imran)
+
+1. Leave an **Urgent** ticket unassigned and unanswered past its first-response target.
+2. Within a minute the ticket shows the target as breached, the SLA bar turns red, and the escalation and automation
+   rules from S7.2 run once (for example notifying Imran). Waiting longer does not repeat them.
+
+### S12.6 Resolved ticket closes by itself (Kabir)
+
+1. Tanvi resolves a ticket and Kabir does nothing. After the auto-close time, the ticket becomes **Closed** on its own.
+2. If Kabir replies before then, the ticket is reopened instead and is not closed.
+
+### S12.7 KYC follow-up (Kabir)
+
+1. Register an investor and leave KYC undone. After a day (or the shortened setting), the system opens one support
+   ticket for them about verifying their identity. Support can follow up on it, and the investor can reply.
+2. Running the job again opens no second ticket. When the investor submits their documents, the ticket is resolved
+   on its own.
+
+### S12.8 Daily reconciliation (Amit)
+
+1. The next morning, **Reconciliation** shows that day's result. Anything that needs attention appears there with its
+   action links, and is written to the server log as a warning.
+
+### S12.9 Emails arrive (everyone)
+
+1. Locally, open Mailpit (http://localhost:8025) while running S1 to S7. Check that each of these arrives once, to
+   the right person: invitation, email code, password reset, temporary staff password, KYC decision, payment
+   confirmed, agreement issued, withdrawal status changes, ticket replies, and announcements.
+2. Stop Kafka briefly while placing an order, then start it again. The emails for that order still arrive, once each.
+
+---
+
+## 18. Sessions
+
+1. Leave a signed-in tab idle until the session runs out. The next click opens the "session expired" page, then
+   sign-in, and after signing in you return to the page you were on.
+2. **Sign out** ends the session. Reloading a signed-in page afterwards goes to sign-in.
+3. Sign in on two browsers, and sign out everywhere from one (section 13). The other is signed out on its next click.
+
+---
+
+## 19. Coverage: page → scenario
 
 | Page | Scenarios |
 |---|---|
@@ -539,10 +714,15 @@ bulk actions to reassign or close several tickets at once.
 | Platform config (all tabs, Terms, Agreement) | S0.2, S5.2 |
 | Security Dashboard, Audit Logs | S9.1, S9.2 |
 | Investor pages (dashboard, invest, portfolio, earnings, orders, profile, verification, support) | S1.3, S2.1, S3.1, S4.1, S4.4, S5.1, S7.1 |
+| Investor: onboarding, email, notifications, settings, referrals, statements, help articles, downloads | S10.1 to S10.5 |
+| Staff dashboard, new ticket for a customer, escalations, ledger account, withdrawal files, document downloads | S11.1 to S11.6 |
+| Public: landing, `/plans`, `/terms`, `/credits`, enquiry form, open plans API, address pickers | S12.1 to S12.4 |
+| Background jobs and emails | S12.5 to S12.9 (and S3.4, S4.1) |
+| Sessions: expiry, sign out, sign out everywhere | section 18 |
 
 ---
 
-## 15. Gaps to know before testing
+## 20. Gaps to know before testing
 
 - **Demo accounts** are the super admin's alone, on purpose.
 - **Access added in migration V28:** support settings, knowledge base and support analytics (Support manager),
