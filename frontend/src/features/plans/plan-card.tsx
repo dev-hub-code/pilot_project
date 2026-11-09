@@ -5,6 +5,7 @@ import { yearsLabel } from "@/features/orders/lease-years";
 import type { PublicPlan } from "@/types/plan";
 import { formatMoney, formatPercent } from "@/utils/money";
 import { PRODUCT_STATUS_LABEL } from "./labels";
+import { minimumAmount, planReturns } from "./returns";
 
 /** Grid columns for a list of plan cards: four to a row when that fills the rows evenly, otherwise three. */
 export function planGridClass(count: number): string {
@@ -20,18 +21,18 @@ export function highestReturnCode(plans: Pick<PublicPlan, "code" | "annualReturn
 }
 
 /** A plan's terms: the return first, then the price, then what the smallest investment pays. */
-export function PlanCard({ plan, href, action, highlight = false }: {
+export function PlanCard({ plan, href, action, highlight = false, headingLevel: Title = "h2" }: {
   plan: PublicPlan;
   href: string;
   action: string;
   /** Marks the plan with the highest return. */
   highlight?: boolean;
+  /** h3 where the cards sit under a section's h2. */
+  headingLevel?: "h2" | "h3";
 }) {
-  const money = (amount: number) => ({ amount: amount.toFixed(2), currency: plan.unitPrice.currency });
-  const minimum = Number(plan.unitPrice.amount) * plan.minUnits;
-  // Rounded the way the backend rounds it, so this matches what the order will pay.
-  const monthly = Math.round((minimum * plan.annualReturnPercent) / 12) / 100;
-  const total = monthly * plan.tenureYears * 12;
+  const minimum = minimumAmount(plan);
+  // Worked out the way the backend does, so this matches what the order will pay.
+  const returns = planReturns(plan, minimum);
   return (
     <article className={`group relative flex w-full flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl focus-within:ring-2 focus-within:ring-gold ${
       highlight ? "border-gold/60 ring-1 ring-gold/30" : "border-border hover:border-gold/40"}`}>
@@ -52,9 +53,9 @@ export function PlanCard({ plan, href, action, highlight = false }: {
             <span className="rounded-full bg-gold-on-ink px-2.5 py-1 text-xs font-semibold text-ink">Highest return</span>
           )}
         </div>
-        <h2 className="mt-4 font-display text-lg font-semibold tracking-wide">
+        <Title className="mt-4 font-display text-lg font-semibold tracking-wide">
           <Link href={href} className="after:absolute after:inset-0 focus-visible:outline-none">{plan.title}</Link>
-        </h2>
+        </Title>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="font-display text-5xl font-semibold tracking-tight text-gold-on-ink tabular-nums">
             {formatPercent(plan.annualReturnPercent)}
@@ -69,14 +70,17 @@ export function PlanCard({ plan, href, action, highlight = false }: {
         <dl className="divide-y divide-border border-y border-border text-sm">
           <Term label="Price per unit" value={formatMoney(plan.unitPrice)} />
           <Term label="Minimum units" value={String(plan.minUnits)} />
-          <Term label="Starts at" value={formatMoney(money(minimum))} />
+          <Term label="Starts at" value={formatMoney(minimum)} />
         </dl>
         <div className="rounded-xl bg-gold/[0.07] p-4">
           <p className="text-xs font-medium tracking-wide text-gold-text uppercase">On the minimum</p>
           <p className="mt-1.5 font-display text-2xl font-semibold tabular-nums">
-            {formatMoney(money(monthly))}<span className="ml-1 text-sm font-normal text-muted">/ month</span>
+            {formatMoney(returns.monthly)}<span className="ml-1 text-sm font-normal text-muted">/ month</span>
           </p>
-          <p className="mt-0.5 text-xs text-muted">{formatMoney(money(total))} over {yearsLabel(plan.tenureYears)}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {formatMoney(returns.overTerm)} over {yearsLabel(plan.tenureYears)}: {returns.overTermPercent}% of the amount
+            invested, which is not paid back
+          </p>
         </div>
         <span className="mt-auto inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-on-gold transition-colors group-hover:bg-gold-hover">
           {action}

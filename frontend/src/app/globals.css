@@ -45,6 +45,10 @@
   --chart-1: #1f62c9;        /* blue: rent */
   --chart-2: #c9731f;        /* orange: capital returned */
   --chart-3: #1f9a78;        /* green: referral commission */
+  /* A quiet true-gold accent for the public website: hairlines, dots and figures, never large fills. */
+  --brass: #b8913f;          /* lines, dots, borders */
+  --brass-text: #85621c;     /* gold as text on light surfaces (AA) */
+  --brass-on-ink: #e2c27a;   /* gold as text on dark panels (AA) */
   color-scheme: light;
 }
 
@@ -71,6 +75,9 @@
   --color-glass-strong: var(--glass-strong);
   --color-glass-border: var(--glass-border);
   --color-heading-soft: var(--heading-soft);
+  --color-brass: var(--brass);
+  --color-brass-text: var(--brass-text);
+  --color-brass-on-ink: var(--brass-on-ink);
   /* Legacy alias: "brand" means the accent. */
   --color-brand: var(--gold-text);
   --font-sans: var(--font-body);
@@ -103,6 +110,9 @@
     --glass-strong: rgb(17 29 49 / 0.85);
     --glass-border: rgb(255 255 255 / 0.09);
     --heading-soft: #8b9cb6;
+    --brass: #d2ad5c;
+    --brass-text: #e2c27a;
+    --brass-on-ink: #e2c27a;
     color-scheme: dark;
   }
 }
@@ -130,6 +140,9 @@
   --glass-strong: rgb(17 29 49 / 0.85);
   --glass-border: rgb(255 255 255 / 0.09);
   --heading-soft: #8b9cb6;
+  --brass: #d2ad5c;
+  --brass-text: #e2c27a;
+  --brass-on-ink: #e2c27a;
   color-scheme: dark;
 }
 

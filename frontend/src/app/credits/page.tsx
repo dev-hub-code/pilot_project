@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Eyebrow } from "@/components/brand/eyebrow";
 import { Logo } from "@/components/brand/logo";
+import { COMMONS_CREDITS, CommonsPhoto } from "@/components/brand/commons-photo";
 import { PHOTO_CREDITS, PortPhoto } from "@/components/brand/port-photo";
 
 export const metadata: Metadata = {
@@ -19,9 +20,9 @@ export default function CreditsPage() {
           <Eyebrow>Photo Credits</Eyebrow>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Photos On This Website</h1>
           <p className="max-w-2xl text-sm leading-relaxed text-muted">
-            These photos of Indian ports are by the photographers and port authorities below, from Wikimedia Commons,
-            and are used under the licences shown. We resize them and save them as WebP. Our other photos are in the
-            public domain.
+            These photos of Indian ports and shipping containers are by the photographers and port authorities below,
+            from Wikimedia Commons, and are used under the licences shown. We resize the port photos and save them as
+            WebP; the container photos are shown as Wikimedia serves them. Our other photos are in the public domain.
           </p>
         </div>
         <ul className="mt-10 divide-y divide-border border-y border-border">
@@ -40,6 +41,24 @@ export default function CreditsPage() {
                     {credit.licence}
                   </a>
                   {credit.changes && <>. {credit.changes} by SeaLease</>}
+                </p>
+              </div>
+            </li>
+          ))}
+          {COMMONS_CREDITS.map((credit) => (
+            <li key={credit.path} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+              <CommonsPhoto file={credit} alt="" sizes="160px" className="aspect-[4/3] w-40 shrink-0 object-cover" />
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold">
+                  <a href={credit.source} target="_blank" rel="noopener noreferrer" className="underline-offset-4 hover:underline">
+                    {credit.title}
+                  </a>
+                </p>
+                <p className="text-muted">
+                  By {credit.author}, licensed under{" "}
+                  <a href={credit.licenceUrl} target="_blank" rel="noopener noreferrer license" className="underline underline-offset-4">
+                    {credit.licence}
+                  </a>
                 </p>
               </div>
             </li>

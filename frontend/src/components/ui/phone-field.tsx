@@ -79,8 +79,8 @@ export function PhoneField({ label, countries, defaultNumber, defaultCountry, er
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium text-foreground">{label}</label>
-      <div className="flex">
-        <div className="relative flex h-11 w-24 shrink-0 items-center justify-between gap-1 border border-r-0 border-border bg-surface px-3 text-sm has-focus-visible:border-gold has-focus-visible:ring-1 has-focus-visible:ring-gold">
+      <div className="flex gap-2">
+        <div className="relative flex h-11 w-24 shrink-0 items-center justify-between gap-1 rounded-lg border border-border bg-surface px-3 text-sm transition-colors hover:border-muted has-focus-visible:border-gold has-focus-visible:ring-1 has-focus-visible:ring-gold">
           <span aria-hidden="true">
             <span className="text-xs font-medium text-muted">{country}</span> +{dialCode}
           </span>
