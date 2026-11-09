@@ -78,8 +78,9 @@ terraform -chdir=infra/lightsail output       # point GoDaddy's @ and www A reco
 infra/lightsail/deploy.sh
 ```
 
-Every later deployment is `infra/lightsail/deploy.sh` from the commit to run. It builds the images locally, copies
-them over SSH (no registry), and restarts the containers. SSH in with the command in `terraform output ssh`; logs:
+Every later deployment is `infra/lightsail/deploy.sh`. It always deploys `main` as pushed to GitHub (`origin/main`),
+whatever branch is checked out: it builds the images locally from a clean temporary copy of that commit, copies them
+over SSH (no registry), and restarts the containers. SSH in with the command in `terraform output ssh`; logs:
 `cd /opt/sealease && docker compose logs -f backend`.
 
 To stop all charges: `terraform -chdir=infra/lightsail destroy` (empty the two buckets first; it keeps a final database
