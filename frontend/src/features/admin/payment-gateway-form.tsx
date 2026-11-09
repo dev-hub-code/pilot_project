@@ -8,7 +8,7 @@ import type { PaymentGatewaySettings } from "@/types/payment-gateway";
 import type { FormState } from "@/validators/form-state";
 import { savePaymentGatewaySettingsAction } from "./payment-gateway-actions";
 
-/** The switches, the checkout limit and the payment windows. The API keys are not settable here. */
+/** The switches, the checkout limit and the payment windows. The API keys have their own form. */
 export function PaymentGatewayForm({ settings }: { settings: PaymentGatewaySettings }) {
   const [state, action] = useActionState<FormState, FormData>(savePaymentGatewaySettingsAction, {});
   const e = state.fieldErrors ?? {};

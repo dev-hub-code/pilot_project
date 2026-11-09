@@ -37,7 +37,8 @@ import com.sealease.backend.payment.dto.CheckoutInstructions;
 import com.sealease.backend.payment.dto.VirtualAccountInstructions;
 import com.sealease.backend.payment.gateway.Paise;
 import com.sealease.backend.payment.gateway.RazorpayClient.RazorpayException;
-import com.sealease.backend.payment.gateway.RazorpayProperties;
+import com.sealease.backend.payment.gateway.RazorpayCredentials;
+import com.sealease.backend.payment.gateway.RazorpayKeys;
 import com.sealease.backend.payment.provider.BankTransferProperties;
 import com.sealease.backend.payment.provider.OfficeProperties;
 import com.sealease.backend.payment.provider.PaymentProvider;
@@ -98,7 +99,7 @@ public class PaymentService {
 	private final OutboxPublisher outbox;
 	private final AuditService audit;
 	private final UserAccountService users;
-	private final RazorpayProperties razorpay;
+	private final RazorpayCredentials razorpay;
 	private final ReferralSchemeService schemes;
 	private final UnmatchedGatewayReceipts unmatched;
 	private final TransactionTemplate transactions;
@@ -109,7 +110,7 @@ public class PaymentService {
 
 	public PaymentService(PaymentRepository payments, OrderService orders, List<PaymentProvider> providers,
 			CompanyBankAccountService companyAccounts, BankTransferProperties bankTransfer, OfficeProperties office,
-			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayProperties razorpay,
+			OutboxPublisher outbox, AuditService audit, UserAccountService users, RazorpayCredentials razorpay,
 			ReferralSchemeService schemes, UnmatchedGatewayReceipts unmatched, TransactionTemplate transactions,
 			DepositLedger depositLedger, ReinvestmentLedger reinvestment, PaymentGatewaySettingsService gatewaySettings,
 			Clock clock) {
@@ -840,8 +841,9 @@ public class PaymentService {
 		CheckoutInstructions checkout = null;
 		if (pending && payment.getMethod() == PaymentMethod.GATEWAY) {
 			UserAccount investor = users.getAccount(payment.getUserId());
-			checkout = new CheckoutInstructions(razorpay.keyId(), payment.getProviderReference(),
-					Paise.of(payment.amount()), payment.amount().currency().getCurrencyCode(), razorpay.merchantName(),
+			RazorpayKeys keys = razorpay.current();
+			checkout = new CheckoutInstructions(keys.keyId(), payment.getProviderReference(),
+					Paise.of(payment.amount()), payment.amount().currency().getCurrencyCode(), keys.merchantName(),
 					"Order " + orderNumber, (investor.firstName() + " " + investor.lastName()).strip(), investor.email());
 		}
 		VirtualAccountInstructions virtualAccount = null;

@@ -10,3 +10,11 @@ export const paymentGatewaySettingsSchema = z.object({
   virtualAccountWindowHours: z.coerce.number({ message: "Enter hours" }).int("Enter whole hours")
     .min(1, "At least 1 hour").max(720, "Up to 720 hours (30 days)"),
 });
+
+/** The Razorpay credentials an admin enters; a secret left blank keeps the one saved. */
+export const paymentGatewayKeysSchema = z.object({
+  keyId: z.string().trim().regex(/^rzp_(test|live)_[A-Za-z0-9]{6,40}$/, "Enter the key id from Razorpay (rzp_test_… or rzp_live_…)"),
+  keySecret: z.string().trim().regex(/^(\S{8,100})?$/, "Enter the key secret as Razorpay shows it"),
+  webhookSecret: z.string().trim().regex(/^(\S{8,200})?$/, "At least 8 characters, without spaces"),
+  merchantName: z.string().trim().max(60, "Up to 60 characters"),
+});

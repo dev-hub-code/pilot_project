@@ -6,13 +6,17 @@ interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   name: string;
   error?: string;
+  /** A short note under the field, shown while there is no error. */
+  hint?: string;
   /** Passed on to the input. */
   ref?: Ref<HTMLInputElement>;
 }
 
-export function TextField({ label, name, error, id, type, "aria-describedby": describedBy, ...props }: TextFieldProps) {
+export function TextField({ label, name, error, hint, id, type, "aria-describedby": describedBy, ...props }: TextFieldProps) {
   const inputId = id ?? name;
   const errorId = `${inputId}-error`;
+  const hintId = `${inputId}-hint`;
+  const showHint = Boolean(hint) && !error;
   const isPassword = type === "password";
   const [revealed, setRevealed] = useState(false);
   return (
@@ -26,7 +30,7 @@ export function TextField({ label, name, error, id, type, "aria-describedby": de
           name={name}
           type={isPassword && revealed ? "text" : type}
           aria-invalid={error ? true : undefined}
-          aria-describedby={[error ? errorId : null, describedBy].filter(Boolean).join(" ") || undefined}
+          aria-describedby={[error ? errorId : null, showHint ? hintId : null, describedBy].filter(Boolean).join(" ") || undefined}
           className={`h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none transition-colors focus:border-gold focus:ring-1 focus:ring-gold aria-invalid:border-rose-600 read-only:bg-background read-only:text-muted${isPassword ? " pr-11" : ""}`}
           {...props}
         />
@@ -48,6 +52,11 @@ export function TextField({ label, name, error, id, type, "aria-describedby": de
           </button>
         )}
       </div>
+      {showHint && (
+        <p id={hintId} className="text-xs text-muted">
+          {hint}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="text-xs text-rose-600 dark:text-rose-400">
           {error}
