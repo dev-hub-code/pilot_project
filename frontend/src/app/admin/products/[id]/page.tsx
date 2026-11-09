@@ -34,7 +34,8 @@ export default async function ProductPage({ params }: PageProps<"/admin/products
     throw error;
   }
   const credit = creditLabel(await getRentCredit());
-  const decisions = can(Permission.INVESTMENT_APPROVE) && (p.status === "DRAFT" || p.status === "OPEN");
+  // Drafts are published or cancelled, open plans closed, closed plans reopened; cancelled plans have nothing left.
+  const decisions = can(Permission.INVESTMENT_APPROVE) && p.status !== "CANCELLED";
 
   return (
     <div className="space-y-6">
