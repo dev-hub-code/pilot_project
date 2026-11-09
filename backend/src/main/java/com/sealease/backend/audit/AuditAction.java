@@ -190,6 +190,8 @@ public enum AuditAction {
 	TEMPORARY_PASSWORD_ISSUED,
 
 	REPORT_GENERATED,
-	AUDIT_LOG_EXPORTED
+	AUDIT_LOG_EXPORTED,
+	/** Sign-in events past their retention period were deleted (how many, and up to when). */
+	AUDIT_LOG_PURGED
 
 }

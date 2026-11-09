@@ -149,6 +149,12 @@ springdoc:
     enabled: false
 
 app:
+  audit:
+    # Sign-in events (logins, logouts, failed logins, lockouts, password resets and changes, email verification) are
+    # deleted once older than this. Every other audit record is kept.
+    sign-in-retention: ${APP_AUDIT_SIGN_IN_RETENTION:30d}
+    # When the deletion runs each day (in app.display.time-zone).
+    purge-cron: ${APP_AUDIT_PURGE_CRON:0 30 3 * * *}
   approvals:
     # Operations that need a second person. Changed per deployment, never from the admin panel.
     required: ${APP_APPROVALS_REQUIRED:LEDGER_ADJUSTMENT,PAYMENT_REFUND}
