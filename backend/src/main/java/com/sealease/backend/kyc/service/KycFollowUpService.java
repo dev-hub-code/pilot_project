@@ -86,10 +86,13 @@ public class KycFollowUpService {
 		return true;
 	}
 
-	/** The investor submitted their documents: resolves their follow-up ticket, if they have one. Caller's transaction. */
+	/**
+	 * The investor submitted their documents: resolves their follow-up ticket, if they have one and it is still open (a
+	 * resubmission after a rejection does not thank them again). Caller's transaction.
+	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void documentsSubmitted(UUID userId) {
-		followUps.findById(userId).ifPresent(f -> support.resolveWithNote(null, f.getTicketId(),
+		followUps.findById(userId).ifPresent(f -> support.resolveIfOpen(null, f.getTicketId(),
 				"Thank you, we have your identity documents and are reviewing them. We will let you know once they are verified."));
 	}
 

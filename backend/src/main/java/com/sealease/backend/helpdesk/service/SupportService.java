@@ -401,6 +401,18 @@ public class SupportService {
 				"/support/" + ticket.getId());
 	}
 
+	/**
+	 * As {@link #resolveWithNote}, but only while the ticket is still open: for a note with nothing new to say once the
+	 * ticket is resolved (an investor submitting their documents again after a rejection). Caller's transaction.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void resolveIfOpen(UUID actorId, UUID ticketId, String note) {
+		TicketStatus status = lock(ticketId).getStatus();
+		if (status != TicketStatus.RESOLVED && status != TicketStatus.CLOSED) {
+			resolveWithNote(actorId, ticketId, note);
+		}
+	}
+
 	/** A public reply puts the ticket in the customer's court and notifies them; an internal note changes nothing. */
 	@Transactional
 	public TicketDetail staffReply(UUID actorId, boolean financeOnly, UUID ticketId, String body, boolean internal,

@@ -118,14 +118,16 @@ Every person and email below is made up. Use your own test addresses (Mailpit lo
    department tab. Copy or email the temporary password shown on the credentials card.
 6. Sign in once as each employee. Each one must change the temporary password, and the menu shows only their pages.
 
-7. **Staff → an employee** (Neha, `USER_ROLE_ASSIGN`): change Tanvi's roles from Support executive to Senior support
-   executive. Her menu changes the next time she signs in, and the audit log has "Roles changed". Neha cannot change
-   her own roles.
-8. **Investor Management → an employee → Password** (Neha): issue a new temporary password for an employee who forgot
+   Staff can give roles to, reset the password of, or suspend only staff whose permissions they hold all of. With
+   the seeded roles that leaves only the super admin able to do it for most employees, so steps 7 and 8 are Arjun's.
+7. **Staff → an employee** (Arjun): change Tanvi's roles from Support executive to Senior support executive. Her menu
+   changes the next time she signs in, and the audit log has "Roles changed". Neha (`USER_ROLE_ASSIGN`) is refused,
+   because she lacks Senior support's permissions, and nobody can change their own roles.
+8. **Investor Management → an employee → Password** (Arjun): issue a new temporary password for an employee who forgot
    theirs. It is emailed to them, and they must change it at their next sign-in.
 9. **Departments → Finance** (Neha, `DEPARTMENT_MANAGE`):
    - **Assign an employee** to the department, then check they appear under its employees.
-   - Set **Sunita** as **Department head**.
+   - Assign **Sunita** to Finance first (only a member can be head), then set her as **Department head**.
    - Edit the department's **Details**, then check the change in the department's history.
    - Check the department's roles list shows the six finance roles.
 
@@ -211,15 +213,17 @@ returns interval but not change it.
 
 ### S2.1 KYC (Zoya, Lakshmi, Farhan)
 
-1. Zoya opens **Profile → Verification**. She uploads her signature first and leaves. The submission is saved as a
-   **Draft** (a draft may start with just the signature). She comes back, fills in her personal details, uploads PAN
-   and Aadhaar ("3 of 3 uploaded"), and submits (**Pending**).
+1. Zoya fills in her personal details first (date of birth, nationality, address): no document can be uploaded
+   before they are complete. She opens **Profile → Verification**, uploads her signature and leaves. The submission is
+   saved as a **Draft** (a draft may start with just the signature). She comes back, uploads PAN and Aadhaar
+   ("3 of 3 uploaded"), and submits (**Pending**).
    - Try a 3 MB image first: the upload is refused with the 2 MB limit, and **everything she typed and picked stays
      filled in**.
 2. Lakshmi opens **KYC & Bank Verification** and **takes** the submission from the Pending tab, so nobody else works
    on it at the same time ("KYC review taken" in the audit log). She opens each document and **rejects** it:
    "Aadhaar photo is blurred".
-3. Zoya sees the rejection reason, replaces the Aadhaar image, and resubmits.
+3. Zoya sees the rejection reason, uploads all three documents again (a rejected submission is not reused; the page
+   says so), and resubmits.
 4. Lakshmi approves. If the name on the documents does not match the account name, a mismatch card warns her first.
 5. Farhan checks the Approved tab and returns one of his own taken reviews to the queue.
 
@@ -231,8 +235,8 @@ returns interval but not change it.
 1. Zoya adds a bank account with a passbook or cheque photo as proof.
 2. Deepak opens it from the bank-to-verify chip on the verification page, checks the holder name, number and IFSC
    against the proof, and **verifies** it.
-3. Zoya adds a second account, and Deepak **rejects** it with a reason. Zoya then requests a change of her primary
-   account. It goes back to Deepak, who verifies the new account.
+3. Zoya adds a second account, and Deepak **rejects** it with a reason. Zoya adds a third account; once Deepak
+   verifies it, she makes it her **primary** account herself (only a verified account can be primary).
 
 **Negative check:** Lakshmi (KYC only) cannot open bank verification, and Deepak cannot decide KYC.
 
@@ -272,19 +276,25 @@ on in Platform config → Payment gateway.
    unmatched received" in the audit log).
 2. Pooja traces it and resolves it: matched to an order, or marked for refund.
 
-### S3.2 Bank transfer (Kabir, Pooja)
+### S3.2 Bank transfer (Suresh, Pooja)
 
-1. Kabir orders and chooses bank transfer. He picks one of the active company accounts and enters his transaction ID.
-2. Pooja searches for the order number in **Payments**. She can find it only by an exact search, not by browsing.
-   She compares the amount with the bank statement and **confirms** the payment.
-3. Kabir places a second order and enters a wrong transaction ID. Pooja **rejects** that payment with a reason.
+Bank transfer and office cash are for network investors. Online investors pay through the gateway (or a virtual
+account); they are offered bank transfer and wallet only while online payments are switched off.
+
+1. Suresh orders and chooses bank transfer. He picks one of the active company accounts and enters his transaction ID.
+2. Pooja (`PAYMENT_CONFIRM`) sees it in the pending queue on **Payments**, **takes** it so nobody else works on it,
+   compares the amount with the bank statement and **confirms** the payment. Staff who may only search payments
+   (Nikhil) see nothing until they search for the exact reference.
+3. Suresh places a second order and enters a wrong transaction ID. Pooja takes and **rejects** that payment with a
+   reason.
 
 **Negative checks** when Pooja confirms a transfer:
 - She enters an amount received that differs from the amount due. It is refused: partial or excess transfers must
   be returned to the investor.
 - She enters a bank reference already recorded for another payment. It is refused, naming the other payment.
 - Rahul (no `PAYMENT_CONFIRM`) cannot open Payments at all.
-4. Zoya's first order earns her the one-time online referral commission for Kabir (**Referral Commissions**).
+4. Kabir pays his first order online, and Zoya earns the one-time online referral commission for him (**Referral
+   Commissions**).
 
 ### S3.3 Cash at the office (Suresh, Asha, Ravi)
 
@@ -342,8 +352,9 @@ on in Platform config → Payment gateway.
 
 Use a plan with a one-year tenure, or a demo account, to reach the end of a term.
 
-1. At the end of the term, the last payout falls due, including the capital (the Capital column shows on **Investor
-   Payouts** only when a payout includes capital).
+1. At the end of the term, the last payout falls due. Capital is paid back only on holdings whose plan returns it
+   (holdings sold before capital returns ended); the Capital column shows on **Investor Payouts** only when a payout
+   includes capital. Under the current agreement ("the investment amount is not repaid") the last payout is rent only.
 2. Divya pays it. The holding becomes **Matured** ("Holding matured" in the audit log).
 3. Suresh's **Portfolio** shows the holding as matured, with no more returns to come.
 
@@ -359,22 +370,25 @@ Use a plan with a one-year tenure, or a demo account, to reach the end of a term
 
 1. Zoya requests a withdrawal of her returns. Charges and TDS are shown before she confirms.
    - Try an amount below the minimum: it is refused.
-2. Manish opens **Withdrawals → Submitted**, starts a review (**Under review**), puts it **On hold**, and asks Zoya
-   for information.
-3. Zoya provides the information, and Manish resumes the review.
+   - Only one withdrawal per wallet can be open at a time: a second request waits until the first is settled.
+2. Sunita (`WITHDRAWAL_APPROVE`) opens **Withdrawals → Submitted**, starts a review (**Under review**), puts it
+   **On hold**, and asks Zoya for information. Manish (`WITHDRAWAL_PROCESS`) cannot review.
+3. Zoya provides the information, and the withdrawal goes back to review by itself. (**Resume** is for a hold made
+   without asking the investor anything.)
 4. Sunita **approves** it. If the amount is above the second-approver threshold, it waits as **Pending approval**
-   until a second, different approver also approves.
-5. Manish batches it. The withdrawal becomes **Batched** and appears on **Finance Tasks**.
-6. Manish initiates the payment (**Processing**), then marks it **Paid**. A second test withdrawal is marked
-   **Failed** with a reason, and a third is marked **Returned** by the bank.
+   until a second, different approver (another finance approver, or the super admin) also approves.
+5. Manish **initiates the payment**. It is batched and goes straight to **Processing**, and appears on **Finance
+   Tasks**. Sunita cannot initiate payments.
+6. Manish takes the task and marks it **Paid** with the bank reference. A second test withdrawal is marked
+   **Failed** with a reason; Manish then resolves it as **Returned**, and the money is back in Zoya's wallet.
 7. Zoya sees each status change and downloads her receipt.
 
 **Negative checks:** Sunita rejects one request with a reason, and Zoya cancels another while it is still Submitted.
 
 ### S5.1b How a network investor is paid (Suresh, Asha, Manish)
 
-1. Asha has no verified bank account and has not chosen a payout method, so by default she is paid **in cash** at the
-   office. Suresh, who has a verified primary account, is paid **by bank** by default.
+1. An investor with no verified bank account who has not chosen a payout method is paid **in cash** at the office by
+   default (Asha, if she has not added a bank account by now). Suresh, who has a verified primary account, is paid **by bank** by default.
 2. Suresh opens **Withdrawals** on his account and chooses cash at the office ("Referral payout mode chosen" in the
    audit log). The choice applies to withdrawals made from then on.
 3. Manish (`WITHDRAWAL_PROCESS`) opens Asha in **Investor Management → Withdrawals** and sets her to bank on her
@@ -425,12 +439,14 @@ Use a plan with a one-year tenure, or a demo account, to reach the end of a term
 ### S7.1 Ticket life cycle (Kabir, Tanvi, Nikhil, Imran)
 
 1. Kabir opens a ticket, **Payments → Payment pending**, with a screenshot attached.
-2. Tanvi takes it (**Open → In progress**), replies, and asks for the transaction ID (**Waiting on customer**).
-3. Kabir replies, and the ticket goes back to In progress. Tanvi adds an internal note that Kabir cannot see.
+2. Tanvi takes it (**Open → In progress**) and replies asking for the transaction ID. A public reply puts the ticket
+   in **Waiting on customer** by itself.
+3. Kabir replies, and the ticket goes back to **Open**. Tanvi adds an internal note that Kabir cannot see.
 4. Tanvi escalates it to Nikhil (**Escalated**). Nikhil finds the payment by exact search and hands the ticket to the
    finance team (**Waiting on internal**). Amit, who holds `FINANCE_TICKET_HANDLE`, picks it up.
 5. The ticket is **Resolved**. Kabir rates it, and the star rating shows on the ticket.
-6. Kabir reopens it (**Reopened**), and Tanvi resolves it again and then **closes** it.
+6. Kabir reopens it: it is **Open** again, with "Reopened" in its history. Tanvi resolves it again and then
+   **closes** it.
 
 **Check:** the SLA bar on the ticket shows the time left. Imran uses the queue tabs, search, "More filters" and the
 bulk actions to reassign or close several tickets at once.
@@ -461,7 +477,7 @@ bulk actions to reassign or close several tickets at once.
 2. Under **Documents**, she downloads an investor's statement.
 3. **History** lists every download, with who made it and when.
 4. Rakesh and Pallavi can view reports. Pallavi cannot download (no `REPORT_GENERATE`).
-5. Ritu (auditor) can view reports and the audit log, and nothing else.
+5. Ritu (auditor) can view reports, the audit log and the security dashboard (`AUDIT_VIEW`), and nothing else.
 
 **Check:** each download counts under **Security → Staff access to personal data → Reports**.
 
@@ -476,7 +492,8 @@ bulk actions to reassign or close several tickets at once.
    alerts (red).
 3. He opens the failed sign-ins by account and by IP, the locked accounts, the staff access to personal data, the
    access and settings changes, and the security events.
-4. He suspends a staff account that should not be signing in, then Neha reactivates it.
+4. He suspends a staff account that should not be signing in (only staff whose permissions he holds all of), then
+   reactivates it. Reactivating needs `USER_SUSPEND`, so Neha cannot.
 
 ### S9.2 Audit log (Farhan, Ritu)
 
@@ -527,7 +544,7 @@ bulk actions to reassign or close several tickets at once.
 
 ### S10.2 Notifications (Zoya, Kabir)
 
-1. As S2 to S5 happen (KYC decided, payment confirmed, agreement issued, withdrawal paid, ticket replied to), the bell
+1. As S2 to S5 happen (KYC decided, payment confirmed with the agreement to accept, withdrawal paid, ticket replied to), the bell
    shows an unread count, and the list under it shows the latest items.
 2. **Notifications** lists them all. Opening one marks it read, and the count goes down.
 3. **Settings → Notifications**: Kabir turns email notifications off. The next event still shows in his bell, but no
@@ -673,7 +690,8 @@ the defaults.
 
 1. Locally, open Mailpit (http://localhost:8025) while running S1 to S7. Check that each of these arrives once, to
    the right person: invitation, email code, password reset, temporary staff password, KYC decision, payment
-   confirmed, agreement issued, withdrawal status changes, ticket replies, and announcements.
+   confirmed (it carries the agreement to accept), withdrawal status changes and ticket replies. Announcements are
+   shown in the app only and are not emailed.
 2. Stop Kafka briefly while placing an order, then start it again. The emails for that order still arrive, once each.
 
 ---

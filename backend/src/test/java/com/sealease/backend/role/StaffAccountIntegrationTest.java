@@ -115,6 +115,17 @@ class StaffAccountIntegrationTest {
 	}
 
 	@Test
+	void theSuperAdminCanCreateAnEmployeeOfEveryJobRole() throws Exception {
+		// Staff grant only permissions they hold, so a permission given to a job role but not to the super admin
+		// would leave nobody able to create that role's employees.
+		for (String role : jdbc.queryForList("""
+				SELECT r.name FROM roles r JOIN departments d ON d.id = r.department_id
+				WHERE r.name NOT IN ('SUPER_ADMIN', 'INVESTOR') ORDER BY r.name""", String.class)) {
+			create(admin, email(), role).andExpect(status().isCreated());
+		}
+	}
+
+	@Test
 	void aResetIssuesANewTemporaryPasswordAndEndsEverySession() throws Exception {
 		String email = email();
 		String first = JsonPath.read(create(admin, email, "SALES").andReturn().getResponse().getContentAsString(),

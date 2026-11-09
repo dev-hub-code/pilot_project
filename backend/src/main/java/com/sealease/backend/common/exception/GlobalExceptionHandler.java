@@ -7,16 +7,20 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.util.unit.DataSize;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -44,8 +49,12 @@ public class GlobalExceptionHandler {
 
 	private final ApiErrorFactory errors;
 
-	public GlobalExceptionHandler(ApiErrorFactory errors) {
+	private final DataSize maxFileSize;
+
+	public GlobalExceptionHandler(ApiErrorFactory errors,
+			@Value("${spring.servlet.multipart.max-file-size:2MB}") DataSize maxFileSize) {
 		this.errors = errors;
+		this.maxFileSize = maxFileSize;
 	}
 
 	@ExceptionHandler(BusinessException.class)
@@ -58,6 +67,7 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ApiError> handleRateLimit(RateLimitExceededException ex, HttpServletRequest request) {
 		long retryAfterSeconds = Math.max(1, ex.retryAfter().toSeconds());
 		return ResponseEntity.status(ex.errorCode().status())
+			.contentType(MediaType.APPLICATION_JSON)
 			.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds))
 			.body(errors.create(ex.errorCode(), ex.getMessage(), request));
 	}
@@ -130,6 +140,18 @@ public class GlobalExceptionHandler {
 		return respond(ErrorCode.METHOD_NOT_ALLOWED, "HTTP method not supported: " + ex.getMethod(), request);
 	}
 
+	/** A file over the upload limit is refused before it reaches the code that checks it, so it is answered here. */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	ResponseEntity<ApiError> handleUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+		return respond(ErrorCode.VALIDATION_FAILED,
+				"File exceeds the maximum size of " + maxFileSize.toMegabytes() + " MB", request);
+	}
+
+	@ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+	ResponseEntity<ApiError> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex, HttpServletRequest request) {
+		return respond(ErrorCode.NOT_ACCEPTABLE, "The response is not available in the requested format", request);
+	}
+
 	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
 	ResponseEntity<ApiError> handleMediaType(HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
 		return respond(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "Content type not supported", request);
@@ -176,7 +198,9 @@ public class GlobalExceptionHandler {
 
 	private ResponseEntity<ApiError> respond(ErrorCode code, String message, HttpServletRequest request,
 			List<ApiError.FieldError> fieldErrors) {
-		return ResponseEntity.status(code.status()).body(errors.create(code, message, request, fieldErrors));
+		// Always JSON, even when the request accepts only a file type (a PDF or image download that fails).
+		return ResponseEntity.status(code.status()).contentType(MediaType.APPLICATION_JSON)
+			.body(errors.create(code, message, request, fieldErrors));
 	}
 
 }

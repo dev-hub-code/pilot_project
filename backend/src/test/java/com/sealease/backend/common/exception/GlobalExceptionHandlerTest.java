@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.math.BigDecimal;
 
@@ -106,6 +107,28 @@ class GlobalExceptionHandlerTest {
 	}
 
 	@Test
+	void aFailedFileDownloadStillAnswersWithItsErrorAsJson() throws Exception {
+		mvc.perform(get("/api/v1/probe/missing").accept(MediaType.APPLICATION_PDF))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void askingForAFormatAnEndpointDoesNotProduceIsNotAServerError() throws Exception {
+		mvc.perform(get("/api/v1/probe/json").accept(MediaType.APPLICATION_PDF))
+			.andExpect(status().isNotAcceptable())
+			.andExpect(jsonPath("$.code").value("NOT_ACCEPTABLE"));
+	}
+
+	@Test
+	void anUploadOverTheLimitIsAClientErrorNamingTheLimit() throws Exception {
+		mvc.perform(get("/api/v1/probe/too-large"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+			.andExpect(jsonPath("$.message").value("File exceeds the maximum size of 2 MB"));
+	}
+
+	@Test
 	void unsupportedMethodAndUnknownPath() throws Exception {
 		mvc.perform(post("/api/v1/probe/missing"))
 			.andExpect(status().isMethodNotAllowed())
@@ -148,6 +171,17 @@ class GlobalExceptionHandlerTest {
 		@PreAuthorize("hasAuthority('WITHDRAWAL_APPROVE')")
 		String approve() {
 			return "approved";
+		}
+
+		@GetMapping(path = "/json", produces = MediaType.APPLICATION_JSON_VALUE)
+		ProbeRequest json() {
+			return new ProbeRequest("probe", BigDecimal.ONE);
+		}
+
+		@GetMapping("/too-large")
+		String tooLarge() {
+			// What the servlet container raises for a file over spring.servlet.multipart.max-file-size.
+			throw new MaxUploadSizeExceededException(2 * 1024 * 1024);
 		}
 
 		@GetMapping("/boom")
