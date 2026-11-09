@@ -88,14 +88,12 @@ resource "aws_db_subnet_group" "rds" {
   subnet_ids = data.aws_subnets.default.ids
 }
 
-# Connections must use TLS, as the backend's sslmode=require does.
+# The database's own settings. Connections must use TLS: RDS PostgreSQL 15 and later already sets rds.force_ssl = 1 by
+# default (setting it here again only makes Terraform report a change on every plan), as the backend's sslmode=require
+# expects.
 resource "aws_db_parameter_group" "rds" {
   name   = "${local.name}-dev-postgres18"
   family = "postgres18"
-  parameter {
-    name  = "rds.force_ssl"
-    value = "1"
-  }
 }
 
 resource "random_password" "rds" {
