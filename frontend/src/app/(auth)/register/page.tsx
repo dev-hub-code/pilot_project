@@ -9,9 +9,9 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
   const referralCode = typeof ref === "string" ? ref.slice(0, 8).toUpperCase() : undefined;
   const countries = await getPhoneCountries();
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-semibold tracking-tight">Create your account</h1>
+    <div className="space-y-5">
+      <div className="space-y-1.5">
+        <h1 className="text-3xl font-semibold tracking-tight">Create your account</h1>
         <p className="text-sm text-muted">Start investing with SeaLease.</p>
       </div>
       <RegisterForm referralCode={referralCode} countries={countries} />
