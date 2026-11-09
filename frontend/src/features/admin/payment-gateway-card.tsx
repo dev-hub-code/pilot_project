@@ -6,6 +6,7 @@ import { formatDateTime } from "@/utils/format";
 import { formatMoney } from "@/utils/money";
 import { ChangedNote, ConfigPanel, ConfigStat, HowItWorks } from "./config-ui";
 import { PaymentGatewayForm } from "./payment-gateway-form";
+import { PaymentGatewayKeysForm } from "./payment-gateway-keys-form";
 
 type Tone = "good" | "warn" | "bad";
 
@@ -29,11 +30,13 @@ export async function PaymentGatewayCard({ permissions }: { permissions: readonl
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-6">
         <ConfigPanel icon={Server} title="Razorpay connection"
-          description="The API keys and webhook secret are set on the server (environment variables), never here.">
+          description={s.keys.source === "ADMIN"
+            ? "Using the keys saved here. Secrets are stored encrypted and never shown again."
+            : s.keysConfigured ? "Using the server's keys until you save your own below." : "No keys yet: save them below to take online payments."}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Status icon={KeyRound} label="API keys"
               tone={!s.keysConfigured ? "bad" : s.mode === "live" ? "good" : "warn"}
-              value={!s.keysConfigured ? "Not set" : s.mode === "live" ? "Live keys" : "Test keys"} />
+              value={!s.keysConfigured ? "Not set" : `${s.mode === "live" ? "Live" : "Test"} keys${s.keys.keyId ? ` · ${s.keys.keyId}` : ""}`} />
             <Status icon={Webhook} label="Webhook secret" tone={s.webhookConfigured ? "good" : "warn"}
               value={s.webhookConfigured ? "Set" : "Not set"} />
           </div>
@@ -41,6 +44,7 @@ export async function PaymentGatewayCard({ permissions }: { permissions: readonl
             <Wallet aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-gold-text" />
             <p><span className="text-muted">Online investors pay: </span><span className="font-medium">{pays}</span></p>
           </div>
+          {canEdit ? <PaymentGatewayKeysForm keys={s.keys} /> : null}
           {!s.keysConfigured && (
             <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
               Until the keys are set, the settings below are kept but have no effect.
@@ -68,9 +72,9 @@ export async function PaymentGatewayCard({ permissions }: { permissions: readonl
       </div>
 
       <HowItWorks points={[
-        { icon: Server, text: "Keys and the webhook secret live on the server. Ask whoever runs it to change them." },
+        { icon: Server, text: "Keys saved here replace the server's. Secrets are encrypted and only their last four characters are shown." },
         { icon: Clock, text: "Changes apply to payments started from now on; ones already started still complete." },
-        { icon: KeyRound, text: "Test keys take no real money. Switch the server to live keys before going live." },
+        { icon: KeyRound, text: "Test keys take no real money. Save live keys here when you are ready to go live." },
       ]} />
     </div>
   );

@@ -30,14 +30,14 @@ public class GatewayPayments {
 
 	private final PaymentService payments;
 	private final RazorpayClient razorpay;
-	private final RazorpayProperties properties;
+	private final RazorpayCredentials credentials;
 	private final JsonMapper json;
 
-	public GatewayPayments(PaymentService payments, RazorpayClient razorpay, RazorpayProperties properties,
+	public GatewayPayments(PaymentService payments, RazorpayClient razorpay, RazorpayCredentials credentials,
 			JsonMapper json) {
 		this.payments = payments;
 		this.razorpay = razorpay;
-		this.properties = properties;
+		this.credentials = credentials;
 		this.json = json;
 	}
 
@@ -47,7 +47,7 @@ public class GatewayPayments {
 		if (!payment.getProviderReference().equals(request.gatewayOrderId())) {
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "This checkout is for another payment");
 		}
-		if (!RazorpaySignatures.checkoutValid(properties.keySecret(), request.gatewayOrderId(),
+		if (!RazorpaySignatures.checkoutValid(credentials.current().keySecret(), request.gatewayOrderId(),
 				request.gatewayPaymentId(), request.signature())) {
 			log.warn("Checkout result for payment {} has a bad signature", paymentId);
 			throw new BusinessException(ErrorCode.INVALID_REQUEST, "The payment could not be verified");
@@ -68,7 +68,7 @@ public class GatewayPayments {
 	 * @throws BusinessException UNAUTHORIZED for a delivery that is not signed with the webhook secret
 	 */
 	public void onWebhook(String body, String signature) {
-		if (!RazorpaySignatures.webhookValid(properties.webhookSecret(), body, signature)) {
+		if (!RazorpaySignatures.webhookValid(credentials.current().webhookSecret(), body, signature)) {
 			throw new BusinessException(ErrorCode.UNAUTHORIZED, "Invalid webhook signature");
 		}
 		JsonNode event = json.readTree(body);

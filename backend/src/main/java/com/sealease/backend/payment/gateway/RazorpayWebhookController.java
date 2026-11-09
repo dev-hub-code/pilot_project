@@ -17,17 +17,17 @@ public class RazorpayWebhookController {
 	public static final String PATH = "/api/v1/webhooks/razorpay";
 
 	private final GatewayPayments gateway;
-	private final RazorpayProperties properties;
+	private final RazorpayCredentials credentials;
 
-	public RazorpayWebhookController(GatewayPayments gateway, RazorpayProperties properties) {
+	public RazorpayWebhookController(GatewayPayments gateway, RazorpayCredentials credentials) {
 		this.gateway = gateway;
-		this.properties = properties;
+		this.credentials = credentials;
 	}
 
 	@PostMapping(PATH)
 	public ResponseEntity<Void> receive(@RequestBody String body,
 			@RequestHeader(name = "X-Razorpay-Signature", required = false) String signature) {
-		if (properties.webhookSecret().isBlank()) {
+		if (!credentials.current().webhookEnabled()) {
 			return ResponseEntity.notFound().build();
 		}
 		gateway.onWebhook(body, signature);

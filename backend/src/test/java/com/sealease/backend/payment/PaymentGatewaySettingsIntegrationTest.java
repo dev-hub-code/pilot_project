@@ -33,10 +33,12 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import com.sealease.backend.payment.gateway.RazorpaySignatures;
 
 /**
  * Admins set how online payments run (Platform config → Payment gateway): the switches, the checkout limit and the
- * payment windows apply to payments started from then on. The API keys are never shown or settable.
+ * payment windows apply to payments started from then on. They may also set the Razorpay keys, which are stored
+ * encrypted and never shown again.
  */
 @IntegrationTest
 @TestPropertySource(properties = {
@@ -68,7 +70,71 @@ class PaymentGatewaySettingsIntegrationTest {
 		jdbc.update("""
 				UPDATE payment_gateway_settings SET online_payments_enabled = NULL, virtual_accounts_enabled = NULL,
 				       max_amount = NULL, checkout_window_minutes = NULL, virtual_account_window_hours = NULL,
-				       updated_at = NULL, updated_by = NULL WHERE id = 1""");
+				       updated_at = NULL, updated_by = NULL, key_id = NULL, key_secret_encrypted = NULL,
+				       webhook_secret_encrypted = NULL, merchant_name = NULL, keys_updated_at = NULL,
+				       keys_updated_by = NULL WHERE id = 1""");
+	}
+
+	@Test
+	void adminsSetTheKeysWhichApplyAtOnceAndAreNeverShownOrStoredPlain() throws Exception {
+		Account admin = api.admin();
+		mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, admin.bearer()))
+			.andExpect(jsonPath("$.keys.source").value("SERVER"))
+			.andExpect(jsonPath("$.keys.keyId").value("rzp_test_key"))
+			.andExpect(jsonPath("$.keys.keySecretHint").value("cret"));
+
+		// Only those who manage system settings; a new key id needs its secret; the id must look like Razorpay's.
+		saveKeys(api.staff("FINANCE_MANAGER"), "rzp_live_AbCdEf123456", "live-secret-9876", null, null)
+			.andExpect(status().isForbidden());
+		saveKeys(admin, "rzp_live_AbCdEf123456", null, null, null).andExpect(status().isBadRequest());
+		saveKeys(admin, "pk_live_123", "live-secret-9876", null, null).andExpect(status().isBadRequest());
+
+		String body = saveKeys(admin, "rzp_live_AbCdEf123456", "live-secret-9876", "new-webhook-5432", "SeaLease Pvt")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("live"))
+			.andExpect(jsonPath("$.keys.source").value("ADMIN"))
+			.andExpect(jsonPath("$.keys.webhookSource").value("ADMIN"))
+			.andExpect(jsonPath("$.keys.keyId").value("rzp_live_AbCdEf123456"))
+			.andExpect(jsonPath("$.keys.keySecretHint").value("9876"))
+			.andExpect(jsonPath("$.keys.webhookSecretHint").value("5432"))
+			.andExpect(jsonPath("$.keys.merchantName").value("SeaLease Pvt"))
+			.andExpect(jsonPath("$.keys.updatedAt").exists())
+			.andReturn().getResponse().getContentAsString();
+		assertThat(body).doesNotContain("live-secret-9876").doesNotContain("new-webhook-5432");
+		assertThat(jdbc.queryForObject("SELECT key_secret_encrypted || webhook_secret_encrypted FROM payment_gateway_settings",
+				String.class)).doesNotContain("live-secret-9876").doesNotContain("new-webhook-5432");
+		assertThat(jdbc.queryForObject("""
+				SELECT string_agg(coalesce(old_value::text, '') || coalesce(new_value::text, ''), ' ') FROM audit_logs
+				WHERE action = 'PAYMENT_GATEWAY_KEYS_CHANGED'""", String.class))
+			.contains("rzp_live_AbCdEf123456").doesNotContain("live-secret-9876").doesNotContain("new-webhook-5432");
+
+		// The new webhook secret applies at once: the server's no longer signs a delivery.
+		String event = "{\"event\":\"account.updated\",\"payload\":{}}";
+		webhook(event, RazorpaySignatures.sign("test-webhook-secret", event)).andExpect(status().isUnauthorized());
+		webhook(event, RazorpaySignatures.sign("new-webhook-5432", event)).andExpect(status().isOk());
+
+		// Saving again with the secrets blank keeps them.
+		saveKeys(admin, "rzp_live_AbCdEf123456", "", "", "SeaLease").andExpect(status().isOk())
+			.andExpect(jsonPath("$.keys.keySecretHint").value("9876"))
+			.andExpect(jsonPath("$.keys.webhookSecretHint").value("5432"))
+			.andExpect(jsonPath("$.keys.merchantName").value("SeaLease"));
+	}
+
+	private ResultActions saveKeys(Account actor, String keyId, String keySecret, String webhookSecret, String merchant)
+			throws Exception {
+		return mvc.perform(put(PATH + "/keys").header(HttpHeaders.AUTHORIZATION, actor.bearer())
+			.contentType(MediaType.APPLICATION_JSON).content("""
+					{"keyId":%s,"keySecret":%s,"webhookSecret":%s,"merchantName":%s}""".formatted(
+					quote(keyId), quote(keySecret), quote(webhookSecret), quote(merchant))));
+	}
+
+	private static String quote(String value) {
+		return value == null ? "null" : "\"" + value + "\"";
+	}
+
+	private ResultActions webhook(String body, String signature) throws Exception {
+		return mvc.perform(post("/api/v1/webhooks/razorpay").contentType(MediaType.APPLICATION_JSON).content(body)
+			.header("X-Razorpay-Signature", signature));
 	}
 
 	@Test

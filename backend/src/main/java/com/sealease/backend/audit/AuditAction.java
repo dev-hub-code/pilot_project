@@ -100,6 +100,8 @@ public enum AuditAction {
 	PAYMENT_UNMATCHED_RECEIVED,
 	PAYMENT_UNMATCHED_RESOLVED,
 	PAYMENT_GATEWAY_SETTINGS_CHANGED,
+	/** An admin set or cleared the Razorpay API keys, webhook secret or merchant name (never with the secrets). */
+	PAYMENT_GATEWAY_KEYS_CHANGED,
 
 	INVOICE_ISSUED,
 

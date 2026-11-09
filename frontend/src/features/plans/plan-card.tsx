@@ -36,6 +36,10 @@ export function PlanCard({ plan, href, action, highlight = false, headingLevel: 
   return (
     <article className={`group relative flex w-full flex-col overflow-hidden rounded-2xl border bg-surface shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl focus-within:ring-2 focus-within:ring-gold ${
       highlight ? "border-gold/60 ring-1 ring-gold/30" : "border-border hover:border-gold/40"}`}>
+      {/* The whole card opens the plan, its button included. The title below is the link keyboards and screen readers
+          use; this one is for the pointer only. It sits on the card itself because the header is positioned, which
+          would keep a stretched link on the title inside the header. */}
+      <Link href={href} aria-hidden="true" tabIndex={-1} className="absolute inset-0 z-10" />
       {/* ---- header: tenure, name and the return */}
       <header className="relative isolate overflow-hidden bg-ink px-6 pt-5 pb-6 text-on-ink">
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_100%_0%,var(--gold)_0%,transparent_60%)] opacity-35" />
@@ -54,7 +58,7 @@ export function PlanCard({ plan, href, action, highlight = false, headingLevel: 
           )}
         </div>
         <Title className="mt-4 font-display text-lg font-semibold tracking-wide">
-          <Link href={href} className="after:absolute after:inset-0 focus-visible:outline-none">{plan.title}</Link>
+          <Link href={href} className="focus-visible:outline-none">{plan.title}</Link>
         </Title>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="font-display text-5xl font-semibold tracking-tight text-gold-on-ink tabular-nums">

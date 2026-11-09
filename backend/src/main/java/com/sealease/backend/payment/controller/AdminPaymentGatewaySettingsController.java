@@ -1,6 +1,7 @@
 package com.sealease.backend.payment.controller;
 
 import com.sealease.backend.security.AuthenticatedUser;
+import com.sealease.backend.payment.dto.PaymentGatewayKeysRequest;
 import com.sealease.backend.payment.dto.PaymentGatewaySettingsRequest;
 import com.sealease.backend.payment.dto.PaymentGatewaySettingsResponse;
 import com.sealease.backend.payment.service.PaymentGatewaySettingsService;
@@ -12,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * How online payments through Razorpay run: finance may look, those who manage system settings change them. The API
- * keys and webhook secret are not settable here; they stay in the server's environment.
+ * How online payments through Razorpay run: finance may look, those who manage system settings change them, including
+ * the API keys and webhook secret (stored encrypted, never shown again).
  */
 @RestController
 public class AdminPaymentGatewaySettingsController {
@@ -39,5 +40,14 @@ public class AdminPaymentGatewaySettingsController {
 			@Valid @RequestBody PaymentGatewaySettingsRequest request) {
 		return settings.update(admin.userId(), request);
 	}
+
+	/** Sets the Razorpay API keys, webhook secret and merchant name; applies at once. */
+	@PutMapping(PATH + "/keys")
+	@PreAuthorize("hasAuthority('SYSTEM_SETTINGS_MANAGE')")
+	public PaymentGatewaySettingsResponse updateKeys(AuthenticatedUser admin,
+			@Valid @RequestBody PaymentGatewayKeysRequest request) {
+		return settings.updateKeys(admin.userId(), request);
+	}
+
 
 }

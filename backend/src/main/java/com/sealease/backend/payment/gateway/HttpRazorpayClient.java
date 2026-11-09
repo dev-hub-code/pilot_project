@@ -3,6 +3,7 @@ package com.sealease.backend.payment.gateway;
 import com.sealease.backend.payment.provider.PaymentProvider.VirtualAccountDetails;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -34,16 +35,32 @@ public class HttpRazorpayClient implements RazorpayClient {
 
 	private final RestClient client;
 
+	/** With the credentials in force on each call, so keys an admin changes apply at once. */
+	@Autowired
+	public HttpRazorpayClient(RazorpayProperties properties, RazorpayCredentials credentials) {
+		this(properties, credentials::current);
+	}
+
+	/** With the server's keys only. */
 	public HttpRazorpayClient(RazorpayProperties properties) {
+		this(properties, () -> new RazorpayKeys(properties.keyId(), properties.keySecret(), properties.webhookSecret(),
+				properties.merchantName(), false, false));
+	}
+
+	private HttpRazorpayClient(RazorpayProperties properties, Supplier<RazorpayKeys> keys) {
 		JdkClientHttpRequestFactory requests = new JdkClientHttpRequestFactory(
 				HttpClient.newBuilder().connectTimeout(properties.timeout()).build());
 		requests.setReadTimeout(properties.timeout());
-		String credentials = Base64.getEncoder().encodeToString(
-				(properties.keyId() + ":" + properties.keySecret()).getBytes(StandardCharsets.UTF_8));
 		this.client = RestClient.builder()
 			.baseUrl(properties.baseUrl().toString())
 			.requestFactory(requests)
-			.defaultHeader(HttpHeaders.AUTHORIZATION, "Basic " + credentials)
+			.requestInterceptor((request, body, execution) -> {
+				RazorpayKeys k = keys.get();
+				String basic = Base64.getEncoder().encodeToString(
+						(k.keyId() + ":" + k.keySecret()).getBytes(StandardCharsets.UTF_8));
+				request.getHeaders().set(HttpHeaders.AUTHORIZATION, "Basic " + basic);
+				return execution.execute(request, body);
+			})
 			.build();
 	}
 
