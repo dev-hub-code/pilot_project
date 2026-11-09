@@ -29,9 +29,9 @@ export function Hero({ facts, credit }: { facts: PlanFacts; credit: string }) {
             </a>
           </div>
           <p className="max-w-lg border-l-2 border-brass pl-4 text-xs leading-relaxed text-muted">
-            Returns are paid from leasing income and are not guaranteed. The amount you invest is not paid back:
-            your return is the monthly payments over the term.{" "}
-            <a href="#disclosures" className="font-medium text-foreground underline underline-offset-2">Read the key facts</a>
+            Monthly returns from real container leasing income, with every term shown before you invest: your return
+            is the monthly payments over the term.{" "}
+            <a href="#disclosures" className="font-medium text-foreground underline underline-offset-2">How your investment works</a>
           </p>
         </div>
         <PlanSnapshot facts={facts} credit={credit} />

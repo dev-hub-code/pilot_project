@@ -45,7 +45,7 @@ const FOOTER_LINKS: { heading: string; links: { href: string; label: string }[] 
     heading: "Legal",
     links: [
       { href: "/terms", label: "Terms" },
-      { href: "#disclosures", label: "Key facts and risks" },
+      { href: "#disclosures", label: "Invest with confidence" },
       { href: "/credits", label: "Photo credits" },
     ],
   },

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CONTAINER_PHOTOS, CommonsPhoto, type CommonsFile } from "@/components/brand/commons-photo";
 import { Section, SectionHeader, glass, glassHover } from "./landing-ui";
 
@@ -69,10 +68,6 @@ export function ContainerCategories() {
           </li>
         ))}
       </ul>
-      <p className="mt-6 text-xs text-muted">
-        Sizes and loads are typical figures for each type; they vary by manufacturer. Photos from Wikimedia Commons,
-        shown for illustration: see <Link href="/credits" className="underline underline-offset-2 hover:text-foreground">photo credits</Link>.
-      </p>
     </Section>
   );
 }
