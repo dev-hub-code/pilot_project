@@ -28,7 +28,7 @@ public enum AuditCategory {
 	/** Staff opening personal documents or taking data out of the platform. */
 	SENSITIVE_DATA(EnumSet.of(AuditAction.KYC_DOCUMENT_VIEWED, AuditAction.KYC_SUBMISSION_VIEWED,
 			AuditAction.BANK_ACCOUNT_PROOF_VIEWED, AuditAction.TICKET_ATTACHMENT_VIEWED, AuditAction.REPORT_GENERATED,
-			AuditAction.AUDIT_LOG_EXPORTED)),
+			AuditAction.AUDIT_LOG_EXPORTED, AuditAction.AUDIT_LOG_PURGED)),
 
 	/** Identity and bank-account verification. */
 	VERIFICATION(EnumSet.of(AuditAction.KYC_SUBMITTED, AuditAction.KYC_DOCUMENT_UPLOADED, AuditAction.KYC_APPROVED,
