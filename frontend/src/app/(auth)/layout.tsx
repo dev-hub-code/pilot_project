@@ -17,7 +17,7 @@ const POINTS = [
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex flex-1 bg-frame p-2 sm:p-5 lg:p-8">
-      <div className="relative isolate mx-auto grid w-full max-w-[1440px] overflow-hidden rounded-[1.5rem] border border-glass-border bg-[linear-gradient(160deg,var(--sheen-top)_0%,var(--sheen-bottom)_100%)] p-2 shadow-2xl shadow-ink/15 sm:rounded-[2rem] sm:p-3 lg:grid-cols-[1.1fr_1fr]">
+      <div className="relative isolate mx-auto grid w-full max-w-[1440px] overflow-hidden rounded-[1.5rem] border border-glass-border bg-[linear-gradient(160deg,var(--sheen-top)_0%,var(--sheen-bottom)_100%)] p-2 shadow-2xl shadow-ink/15 sm:rounded-[2rem] sm:p-3 lg:grid-cols-[1.1fr_1fr] lg:gap-3">
         {/* --------------------------------------------------------------- photo panel (lg+) */}
         <aside className="relative isolate hidden min-h-[40rem] flex-col justify-between overflow-hidden rounded-[1.25rem] bg-ink p-10 text-on-ink sm:rounded-[1.5rem] lg:flex xl:p-12">
           <PortPhoto name="container-wall" alt="" eager sizes="(min-width: 1440px) 760px, 55vw"
@@ -63,7 +63,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         </aside>
 
         {/* ---------------------------------------------------------------------- form side */}
-        <main className="flex flex-col">
+        <main className="flex flex-col gap-2 sm:gap-3">
           {/* Photo banner below lg. */}
           <div className="relative isolate flex h-40 items-end justify-between overflow-hidden rounded-[1.25rem] bg-ink p-5 text-on-ink sm:h-48 sm:rounded-[1.5rem] sm:p-7 lg:hidden">
             <PortPhoto name="container-wall" alt="" eager sizes="100vw" className="absolute inset-0 -z-20 size-full object-cover saturate-[0.8]" />
@@ -74,8 +74,10 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
             </Link>
           </div>
 
-          <div className="flex flex-1 items-start justify-center px-3 py-8 sm:py-10 lg:items-center sm:px-10 lg:py-12">
-            <div className={`w-full max-w-md rounded-[1.75rem] p-6 sm:p-9 ${glass} bg-glass-strong`}>
+          {/* A panel the same size and shape as the photo panel beside it, with the form centred in it. */}
+          <div className={`flex flex-1 flex-col justify-center rounded-[1.25rem] px-5 py-8 sm:rounded-[1.5rem] sm:px-10 sm:py-10 ${glass} bg-glass-strong`}>
+            {/* Longer forms mark themselves data-wide-form to get a wider column, so their fields can sit in pairs. */}
+            <div className="mx-auto w-full max-w-md has-[[data-wide-form]]:max-w-xl">
               {children}
             </div>
           </div>

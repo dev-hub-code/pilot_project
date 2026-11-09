@@ -19,11 +19,14 @@ export function NewPasswordFields({ errors }: { errors: { password?: string; con
 
   return (
     <div className="space-y-4">
-      <TextField label="Password" name="password" type="password" autoComplete="new-password"
-        minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required error={errors.password}
-        aria-describedby="password-checklist" onChange={(event) => setPassword(event.currentTarget.value)} />
-      <TextField label="Confirm password" name="confirmPassword" type="password" autoComplete="new-password" required
-        error={errors.confirmPassword} onChange={(event) => setConfirm(event.currentTarget.value)} />
+      {/* Side by side when an @container ancestor (the register form) is wide enough. */}
+      <div className="grid gap-4 @md:grid-cols-2">
+        <TextField label="Password" name="password" type="password" autoComplete="new-password"
+          minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required error={errors.password}
+          aria-describedby="password-checklist" onChange={(event) => setPassword(event.currentTarget.value)} />
+        <TextField label="Confirm password" name="confirmPassword" type="password" autoComplete="new-password" required
+          error={errors.confirmPassword} onChange={(event) => setConfirm(event.currentTarget.value)} />
+      </div>
       <div id="password-checklist" className="space-y-1.5">
         <p className="sr-only" aria-live="polite">{met} of {checks.length} password requirements met</p>
         <ul className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">

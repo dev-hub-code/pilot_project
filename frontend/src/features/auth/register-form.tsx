@@ -19,10 +19,11 @@ export function RegisterForm({ referralCode, countries }: { referralCode?: strin
   const errors = state.fieldErrors ?? {};
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    // A container: from 28rem wide, fields sit in pairs (the auth card widens for data-wide-form).
+    <form action={formAction} data-wide-form className="@container space-y-4" noValidate>
       <KeepValues state={state} />
       {state.error && <Alert>{state.error}</Alert>}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 @md:grid-cols-2">
         <TextField
           label="First name"
           name="firstName"
@@ -40,40 +41,48 @@ export function RegisterForm({ referralCode, countries }: { referralCode?: strin
           error={errors.lastName}
         />
       </div>
-      <TextField
-        label="Email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        defaultValue={state.values?.email}
-        error={errors.email}
-      />
-      <PhoneField
-        label="Mobile number"
-        countries={countries}
-        placeholder="98765 43210"
-        required
-        defaultNumber={state.values?.phone}
-        defaultCountry={state.values?.phoneCountry || DEFAULT_PHONE_COUNTRY}
-        error={errors.phone ?? errors.phoneCountry}
-      />
+      <div className="grid gap-4 @md:grid-cols-2">
+        <TextField
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          defaultValue={state.values?.email}
+          error={errors.email}
+        />
+        <PhoneField
+          label="Mobile number"
+          countries={countries}
+          placeholder="98765 43210"
+          required
+          defaultNumber={state.values?.phone}
+          defaultCountry={state.values?.phoneCountry || DEFAULT_PHONE_COUNTRY}
+          error={errors.phone ?? errors.phoneCountry}
+        />
+      </div>
       <NewPasswordFields errors={errors} />
-      <TextField
-        label="Referral code (optional)"
-        name="referralCode"
-        autoComplete="off"
-        autoCapitalize="characters"
-        maxLength={8}
-        onInput={(event) => {
-          const input = event.currentTarget;
-          const caret = input.selectionStart;
-          input.value = input.value.toUpperCase();
-          input.setSelectionRange(caret, caret);
-        }}
-        defaultValue={state.values?.referralCode ?? referralCode}
-        error={errors.referralCode}
-      />
+      {/* Optional, so folded away unless a referral link filled it in or it needs fixing. Closed, it still posts. */}
+      <details open={Boolean(referralCode || state.values?.referralCode || errors.referralCode)} className="group">
+        <summary className="w-fit cursor-pointer list-none rounded text-sm font-medium text-gold-text underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-gold focus-visible:outline-none group-open:mb-3 [&::-webkit-details-marker]:hidden">
+          Have a referral code?
+        </summary>
+        <TextField
+          label="Referral code (optional)"
+          name="referralCode"
+          autoComplete="off"
+          autoCapitalize="characters"
+          maxLength={8}
+          onInput={(event) => {
+            const input = event.currentTarget;
+            const caret = input.selectionStart;
+            input.value = input.value.toUpperCase();
+            input.setSelectionRange(caret, caret);
+          }}
+          defaultValue={state.values?.referralCode ?? referralCode}
+          error={errors.referralCode}
+        />
+      </details>
       <div className="space-y-1">
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" name="acceptTerms" className="mt-1 size-4 accent-gold"
