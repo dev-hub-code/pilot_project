@@ -82,10 +82,6 @@ export function Footer() {
         </nav>
       </div>
       <div className="mt-12 space-y-3 border-t border-on-ink/10 pt-6 text-xs leading-relaxed text-on-ink/60">
-        <p>
-          Investing with SeaLease carries risk. Returns are paid from leasing income and are not guaranteed, and the
-          amount you invest is not paid back. Read the key facts and your investment agreement before you invest.
-        </p>
         <p>© {new Date().getFullYear()} Leasefleet Solutions Pvt. Ltd. All rights reserved.</p>
       </div>
     </footer>
