@@ -1,7 +1,8 @@
 # The low-cost development setup in Mumbai: one Lightsail server running the site with Docker Compose
-# (infra/lightsail/compose.yaml: Caddy for HTTPS, the web app, the API and Kafka) and a managed Lightsail PostgreSQL
-# (database.tf). About $74 a month: the 8 GB server ($44), the 80 GB database ($30) and cents of S3 and SES; a budget
-# alert (budget.tf) watches $80. The server keeps no data of its own (the database and documents live elsewhere), so if it
+# (infra/lightsail/compose.yaml: Caddy for HTTPS, the web app, the API and Kafka) and a managed PostgreSQL: first the
+# Lightsail database (database.tf), being replaced by RDS (rds.tf, whose disk grows by itself). About $77 a month on
+# RDS: the 8 GB server ($44), the database (about $33 for db.t4g.small and 20 GB) and cents of S3 and SES; while both
+# databases run, about $107. A budget alert (budget.tf) watches $80. The server keeps no data of its own (the database and documents live elsewhere), so if it
 # fails it is simply rebuilt and redeployed. For the high-availability setup see infra/ecs.
 #   terraform -chdir=infra/lightsail apply     then infra/lightsail/env.sh, then infra/lightsail/deploy.sh
 terraform {
