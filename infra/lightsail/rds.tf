@@ -1,21 +1,9 @@
-# Amazon RDS PostgreSQL, replacing the Lightsail database (database.tf). Its disk grows by itself (up to
-# rds_max_storage_gb) and can be resized or moved to a bigger instance without rebuilding the database.
+# The app's database: Amazon RDS PostgreSQL. Its disk grows by itself (up to rds_max_storage_gb) and can be resized or
+# moved to a bigger instance without rebuilding the database. (It replaced a Lightsail database in November 2026; that
+# database's final snapshot is sealease-dev-db-final.)
 #
 # The Lightsail server reaches it through Lightsail's VPC peering with the region's default VPC, so the database sits
 # in the default VPC and accepts connections only from the Lightsail network, never from the internet.
-#
-# Which database the app uses is var.database: it stays "lightsail" until migrate-to-rds.sh has copied the data across,
-# which then sets it to "rds" (database.auto.tfvars).
-
-variable "database" {
-  description = "Which database the app uses: lightsail (database.tf) or rds (this file). Switched by migrate-to-rds.sh."
-  type        = string
-  default     = "lightsail"
-  validation {
-    condition     = contains(["lightsail", "rds"], var.database)
-    error_message = "database must be lightsail or rds."
-  }
-}
 
 variable "rds_instance_class" {
   description = "db.t4g.small: 2 GB RAM, 2 vCPU (burstable). db.t4g.medium has 4 GB. Changing it restarts the database (a few minutes)."
@@ -133,11 +121,12 @@ resource "aws_db_instance" "main" {
   depends_on = [terraform_data.lightsail_peering]
 }
 
-output "rds_database_url" {
+# env.sh writes these into the API's settings.
+output "database_url" {
   value = "jdbc:postgresql://${aws_db_instance.main.address}:${aws_db_instance.main.port}/sealease?sslmode=require"
 }
 
-output "rds_database_password" {
+output "database_password" {
   value     = random_password.rds.result
   sensitive = true
 }
