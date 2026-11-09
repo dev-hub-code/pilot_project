@@ -8,7 +8,7 @@ export function PlanCarousel({ plans, href, action }: { plans: readonly PublicPl
   return (
     <Carousel label="Investment plans" itemsName="plans" variant="cards" itemClassName="flex">
       {plans.map((plan) => (
-        <PlanCard key={plan.code} plan={plan} href={href} action={action} highlight={plan.code === top} />
+        <PlanCard key={plan.code} plan={plan} href={href} action={action} highlight={plan.code === top} headingLevel="h3" />
       ))}
     </Carousel>
   );
