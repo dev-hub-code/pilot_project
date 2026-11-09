@@ -11,10 +11,11 @@ import {
 } from "@/lib/server/auth/cookies";
 import { forwardedClientHeaders } from "@/lib/server/request-context";
 import { safeRedirectPath } from "@/utils/redirect";
-import { hasStaffAccess } from "@/lib/permissions";
+import { hasStaffAccess, isInvestor } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import { verifyAccessToken } from "@/lib/server/auth/tokens";
 import { getOnboarding } from "@/lib/server/onboarding";
+import { STAFF_ONLY_MESSAGE } from "./portals";
 import {
   acceptInvitationSchema,
   changePasswordSchema,
@@ -38,26 +39,48 @@ const MESSAGES: Record<string, string> = {
   TOO_MANY_REQUESTS: "Too many attempts. Please wait a moment and try again.",
 };
 
+/**
+ * Investors sign in at /login and staff at /platform/login. Each page refuses the other kind of account: the session the
+ * backend just issued is revoked at once, and no cookie is set. /login gives no hint that the staff sign-in exists.
+ */
 export async function loginAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const input = { email: formData.get("email"), password: formData.get("password") };
   const values = { email: String(input.email ?? "") };
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
+  const staffPortal = formData.get("portal") === "staff";
 
   let home = "/dashboard";
   try {
+    const clientHeaders = forwardedClientHeaders(await headers());
     const tokens = await backendFetch<AuthTokens>("/api/v1/auth/login", {
       method: "POST",
       json: parsed.data,
-      headers: forwardedClientHeaders(await headers()),
+      headers: clientHeaders,
     });
-    writeSessionCookies(await cookies(), tokens);
     const claims = await verifyAccessToken(tokens.accessToken);
-    if (claims && hasStaffAccess(claims.permissions)) home = "/admin";
+    const staff = claims != null && hasStaffAccess(claims.permissions) && !isInvestor(claims.permissions);
+    if (staff !== staffPortal) {
+      await backendFetch<void>("/api/v1/auth/logout", { method: "POST", json: { refreshToken: tokens.refreshToken }, headers: clientHeaders })
+        .catch((error: unknown) => console.error("Could not revoke a refused sign-in", error));
+      return {
+        // The investor page answers a staff account as it would a wrong password, so it reveals nothing about staff.
+        error: staffPortal ? STAFF_ONLY_MESSAGE : MESSAGES.INVALID_CREDENTIALS,
+        values,
+      };
+    }
+    writeSessionCookies(await cookies(), tokens);
+    if (staff) home = "/platform";
   } catch (error) {
     return { error: describe(error), values };
   }
-  redirect(safeRedirectPath(formData.get("next"), home));
+  const next = safeRedirectPath(formData.get("next"), home);
+  // A staff sign-in only returns to the staff area, an investor one only to the investor pages.
+  redirect(staffPortal === isStaffPath(next) ? next : home);
+}
+
+function isStaffPath(path: string): boolean {
+  return path === "/platform" || path.startsWith("/platform/");
 }
 
 export async function registerAction(_previous: FormState, formData: FormData): Promise<FormState> {
@@ -350,7 +373,7 @@ export async function changePasswordAction(_previous: FormState, formData: FormD
       });
       writeSessionCookies(jar, tokens);
       const claims = await verifyAccessToken(tokens.accessToken);
-      if (claims && hasStaffAccess(claims.permissions)) destination = "/admin";
+      if (claims && hasStaffAccess(claims.permissions)) destination = "/platform";
       // Only a path in Settings: never an open redirect.
       const returnTo = String(formData.get("returnTo") ?? "");
       if (returnTo.startsWith("/settings/")) destination = returnTo;

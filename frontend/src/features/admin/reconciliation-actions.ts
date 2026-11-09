@@ -17,7 +17,7 @@ export async function resolveUnmatchedAction(receiptId: string, _p: FormState, f
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/payments/unmatched");
-  revalidatePath("/admin/reconciliation");
+  revalidatePath("/platform/payments/unmatched");
+  revalidatePath("/platform/reconciliation");
   return { success: "Resolved." };
 }

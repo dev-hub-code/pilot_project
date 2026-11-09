@@ -19,8 +19,8 @@ export async function createDepartmentAction(_p: FormState, formData: FormData):
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/departments");
-  redirect(`/admin/departments/${created.id}`);
+  revalidatePath("/platform/departments");
+  redirect(`/platform/departments/${created.id}`);
 }
 
 async function changeDepartment(id: string, success: string, call: () => Promise<unknown>): Promise<FormState> {
@@ -29,9 +29,9 @@ async function changeDepartment(id: string, success: string, call: () => Promise
   } catch (error) {
     return failureState(error, {});
   }
-  revalidatePath(`/admin/departments/${id}`);
-  revalidatePath("/admin/departments");
-  revalidatePath("/admin/staff", "layout");
+  revalidatePath(`/platform/departments/${id}`);
+  revalidatePath("/platform/departments");
+  revalidatePath("/platform/staff", "layout");
   return { success };
 }
 
@@ -75,8 +75,8 @@ export async function saveRoleAction(id: string | null, version: number, input: 
   } catch (error) {
     return failureState(error, {});
   }
-  revalidatePath("/admin/roles", "layout");
-  if (!id) redirect(`/admin/roles/${saved.id}`);
+  revalidatePath("/platform/roles", "layout");
+  if (!id) redirect(`/platform/roles/${saved.id}`);
   return { success: "Role saved. If its permissions changed, everyone holding it has been signed out." };
 }
 
@@ -86,7 +86,7 @@ export async function approveRequestAction(id: string): Promise<FormState> {
   } catch (error) {
     return failureState(error, {});
   }
-  revalidatePath("/admin/approvals");
+  revalidatePath("/platform/approvals");
   return { success: "Approved and carried out." };
 }
 
@@ -98,6 +98,6 @@ export async function rejectRequestAction(id: string, _p: FormState, formData: F
   } catch (error) {
     return failureState(error, {});
   }
-  revalidatePath("/admin/approvals");
+  revalidatePath("/platform/approvals");
   return { success: "Rejected." };
 }

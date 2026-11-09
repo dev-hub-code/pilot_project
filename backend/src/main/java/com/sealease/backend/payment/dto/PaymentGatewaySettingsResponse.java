@@ -17,8 +17,8 @@ import java.time.Instant;
  * @param keys                  the Razorpay credentials in force, without the secrets
  */
 public record PaymentGatewaySettingsResponse(boolean keysConfigured, String mode, boolean webhookConfigured,
-		boolean onlinePayments, boolean virtualAccounts, MoneyResponse maxAmount, int checkoutWindowMinutes,
-		int virtualAccountWindowHours, Defaults defaults, Instant updatedAt, String updatedByName, Keys keys) {
+		boolean onlinePayments, MoneyResponse maxAmount, int checkoutWindowMinutes, Defaults defaults, Instant updatedAt,
+		String updatedByName, Keys keys) {
 
 	/**
 	 * @param keyId              the API key id (public: the checkout needs it); null when not set
@@ -31,8 +31,7 @@ public record PaymentGatewaySettingsResponse(boolean keysConfigured, String mode
 			String webhookSource, Instant updatedAt, String updatedByName) {
 	}
 
-	public record Defaults(boolean onlinePayments, boolean virtualAccounts, MoneyResponse maxAmount,
-			int checkoutWindowMinutes, int virtualAccountWindowHours) {
+	public record Defaults(boolean onlinePayments, MoneyResponse maxAmount, int checkoutWindowMinutes) {
 	}
 
 }

@@ -26,7 +26,7 @@ export async function staffReplyAction(ticketId: string, _p: FormState, formData
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: internal ? "Internal note added." : "Reply sent; the customer has been notified." };
 }
 
@@ -37,7 +37,7 @@ export async function ticketTeamAction(ticketId: string, team: "SUPPORT" | "FINA
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: team === "FINANCE" ? "Handed to the finance team." : "Handed back to the support team." };
 }
 
@@ -48,7 +48,7 @@ export async function ticketTakeAction(ticketId: string, assigneeId: string | nu
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: assigneeId ? "Assigned to you." : "Returned to the finance queue." };
 }
 
@@ -61,7 +61,7 @@ export async function ticketSettingAction(ticketId: string, setting: "status" | 
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: "Updated." };
 }
 
@@ -80,7 +80,7 @@ export async function bulkAssignAction(_p: FormState, formData: FormData): Promi
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   const done = results.filter((r) => r.assigned).length;
   const failed = results.filter((r) => !r.assigned);
   return failed.length === 0
@@ -95,7 +95,7 @@ export async function ticketCategoryAction(ticketId: string, _p: FormState, form
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: "Category updated; SLA targets follow it." };
 }
 
@@ -111,7 +111,7 @@ export async function escalateAction(ticketId: string, _p: FormState, formData: 
   } catch (error) {
     return failureState(error, { reason, level, ownerId });
   }
-  revalidatePath("/admin/support", "layout");
+  revalidatePath("/platform/support", "layout");
   return { success: "Escalated; the level's contacts have been notified." };
 }
 
@@ -144,6 +144,6 @@ export async function staffOpenTicketAction(_p: FormState, formData: FormData): 
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/support", "layout");
-  redirect(`/admin/support/${detail.ticket.id}`);
+  revalidatePath("/platform/support", "layout");
+  redirect(`/platform/support/${detail.ticket.id}`);
 }

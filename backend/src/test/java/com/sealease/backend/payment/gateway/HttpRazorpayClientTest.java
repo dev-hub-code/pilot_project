@@ -28,25 +28,6 @@ class HttpRazorpayClientTest {
 	}
 
 	@Test
-	void smartCollectNotActivatedIsExplainedPlainly() throws IOException {
-		HttpRazorpayClient client = clientAnswering(400, """
-				{"error":{"code":"BAD_REQUEST_ERROR","description":"The requested URL was not found on the server.",
-				"source":"internal","step":"NA","reason":"NA","metadata":{}}}""");
-
-		assertThatThrownBy(() -> client.createVirtualAccount(5_000_000, "Order", Instant.now().plusSeconds(3600), Map.of()))
-			.isInstanceOf(RazorpayClient.RazorpayException.class)
-			.hasMessage("Bank transfer isn't available right now; please pay online");
-	}
-
-	@Test
-	void otherVirtualAccountFailuresGetTheSameMessage() throws IOException {
-		HttpRazorpayClient client = clientAnswering(500, "{}");
-
-		assertThatThrownBy(() -> client.createVirtualAccount(5_000_000, "Order", Instant.now().plusSeconds(3600), Map.of()))
-			.hasMessage("Bank transfer isn't available right now; please pay online");
-	}
-
-	@Test
 	void checkoutRefusalsStillCarryRazorpaysReason() throws IOException {
 		HttpRazorpayClient client = clientAnswering(400, """
 				{"error":{"code":"BAD_REQUEST_ERROR","description":"Amount exceeds maximum amount allowed."}}""");
@@ -67,8 +48,7 @@ class HttpRazorpayClientTest {
 		server.start();
 		URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
 		RazorpayProperties properties = new RazorpayProperties("rzp_test_key", "secret", "", base, "SeaLease",
-				Duration.ofMinutes(30), Duration.ofDays(3), Duration.ofSeconds(5), true, new java.math.BigDecimal("500000"));
-		assertThat(properties.virtualAccountsEnabled()).isTrue();
+				Duration.ofMinutes(30), Duration.ofSeconds(5), new java.math.BigDecimal("500000"));
 		return new HttpRazorpayClient(properties);
 	}
 

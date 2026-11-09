@@ -20,7 +20,7 @@ async function send(path: string, method: "POST" | "PUT", json: unknown, f: Form
   } catch (error) {
     return failureState(error, values(f));
   }
-  revalidatePath("/admin/support/settings");
+  revalidatePath("/platform/support/settings");
   return { success: done };
 }
 

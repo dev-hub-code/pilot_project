@@ -101,17 +101,17 @@ export const PERIODS = [
 export function entityHref(entityType: string, entityId: string | null): string | null {
   if (!entityId) return null;
   // Bank accounts have no page of their own; they are reviewed in a list.
-  if (entityType === "BANK_ACCOUNT") return "/admin/verification";
+  if (entityType === "BANK_ACCOUNT") return "/platform/verification";
   const base: Record<string, string> = {
-    USER: "/admin/users",
-    KYC_SUBMISSION: "/admin/kyc",
-    INVESTMENT_PRODUCT: "/admin/products",
-    ORDER: "/admin/orders",
-    SUPPORT_TICKET: "/admin/support",
-    LEAD: "/admin/leads",
-    LEDGER_TRANSACTION: "/admin/ledger",
-    WITHDRAWAL: "/admin/withdrawals",
-    WITHDRAWAL_BATCH: "/admin/withdrawals/batches",
+    USER: "/platform/users",
+    KYC_SUBMISSION: "/platform/kyc",
+    INVESTMENT_PRODUCT: "/platform/products",
+    ORDER: "/platform/orders",
+    SUPPORT_TICKET: "/platform/support",
+    LEAD: "/platform/leads",
+    LEDGER_TRANSACTION: "/platform/ledger",
+    WITHDRAWAL: "/platform/withdrawals",
+    WITHDRAWAL_BATCH: "/platform/withdrawals/batches",
   };
   return base[entityType] ? `${base[entityType]}/${encodeURIComponent(entityId)}` : null;
 }

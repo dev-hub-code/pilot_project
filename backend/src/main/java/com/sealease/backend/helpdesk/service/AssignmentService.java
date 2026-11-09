@@ -160,7 +160,7 @@ public class AssignmentService {
 			audit.record(AuditRecord.of(null, AuditAction.TICKET_ASSIGNED, ENTITY, ticket.getId())
 				.withNewValue(Map.of("assigneeId", id.toString(), "automatic", true)));
 			notifications.notify(id, "TICKET_ASSIGNED", ticket.getReference() + " was assigned to you", ticket.getSubject(),
-					"/admin/support/" + ticket.getId());
+					"/platform/support/" + ticket.getId());
 		});
 		return agent;
 	}

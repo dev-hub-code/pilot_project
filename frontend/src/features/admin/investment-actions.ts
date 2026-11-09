@@ -34,8 +34,8 @@ export async function saveProductAction(productId: string | null, _p: FormState,
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/products", "layout");
-  redirect(`/admin/products/${saved.id}`);
+  revalidatePath("/platform/products", "layout");
+  redirect(`/platform/products/${saved.id}`);
 }
 
 export async function publishProductAction(productId: string): Promise<FormState> {
@@ -44,7 +44,7 @@ export async function publishProductAction(productId: string): Promise<FormState
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/products", "layout");
+  revalidatePath("/platform/products", "layout");
   return { success: "Published. Investors can now invest in this plan." };
 }
 
@@ -54,7 +54,7 @@ export async function closeProductAction(productId: string): Promise<FormState> 
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/products", "layout");
+  revalidatePath("/platform/products", "layout");
   return { success: "Plan closed. Investments already made keep their term and payouts." };
 }
 
@@ -64,7 +64,7 @@ export async function reopenProductAction(productId: string): Promise<FormState>
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/products", "layout");
+  revalidatePath("/platform/products", "layout");
   return { success: "Plan reopened. Investors can invest in it again." };
 }
 
@@ -76,6 +76,6 @@ export async function cancelProductAction(productId: string, _p: FormState, form
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/products", "layout");
+  revalidatePath("/platform/products", "layout");
   return { success: "Plan cancelled." };
 }

@@ -78,7 +78,7 @@ public class FeedbackService {
 			.withNewValue(Map.of("rating", rating)));
 		if (rating <= 2 && ticket.getAssigneeId() != null) {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_LOW_RATING", ticket.getReference() + " was rated " + rating + "/5",
-					text == null ? ticket.getSubject() : text, "/admin/support/" + ticketId);
+					text == null ? ticket.getSubject() : text, "/platform/support/" + ticketId);
 		}
 		return new Feedback(ticketId, rating, text, now);
 	}

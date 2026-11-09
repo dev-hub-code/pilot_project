@@ -9,7 +9,17 @@ import { TextField } from "@/components/ui/text-field";
 import type { FormState } from "@/validators/auth";
 import { loginAction } from "./actions";
 
-export function LoginForm({ next }: { next?: string }) {
+/**
+ * The sign-in form, shared by the investor and staff sign-in pages. Anything that differs comes from the page (rendered
+ * on the server), so this script holds nothing about either page that the other could show.
+ */
+export function LoginForm({ next, portal, emailLabel = "Email", footer }: {
+  next?: string;
+  /** Sent with the sign-in, so the server knows which page it came from; none for investors. */
+  portal?: string;
+  emailLabel?: string;
+  footer?: React.ReactNode;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(loginAction, {});
 
   return (
@@ -19,8 +29,9 @@ export function LoginForm({ next }: { next?: string }) {
         <Alert>{state.error}</Alert>
       )}
       {next && <input type="hidden" name="next" value={next} />}
+      {portal && <input type="hidden" name="portal" value={portal} />}
       <TextField
-        label="Email"
+        label={emailLabel}
         name="email"
         type="email"
         autoComplete="username"
@@ -44,12 +55,7 @@ export function LoginForm({ next }: { next?: string }) {
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </Button>
-      <p className="text-center text-sm text-muted">
-        New to SeaLease?{" "}
-        <Link href="/register" className="font-medium text-foreground underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-text">
-          Create an account
-        </Link>
-      </p>
+      {footer}
     </form>
   );
 }

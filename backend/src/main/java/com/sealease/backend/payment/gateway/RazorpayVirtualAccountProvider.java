@@ -6,12 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
 /**
- * Razorpay Smart Collect: a virtual bank account (and UPI ID) opened for one payment, which the investor pays by NEFT,
- * RTGS, IMPS or UPI from their own bank. It closes when the order is paid, cancelled or lapses. The provider reference
- * is the virtual account id.
+ * Razorpay Smart Collect: a virtual bank account opened for one payment. No longer offered, so none is opened; this only
+ * closes any opened before, when its order is paid, cancelled or lapses. Money that still arrives in one is recorded
+ * from Razorpay's webhook (virtual_account.credited).
  */
 @Component
 public class RazorpayVirtualAccountProvider implements PaymentProvider {
@@ -36,9 +34,7 @@ public class RazorpayVirtualAccountProvider implements PaymentProvider {
 
 	@Override
 	public Opened open(OpenRequest request) {
-		RazorpayClient.VirtualAccount account = razorpay.createVirtualAccount(Paise.of(request.amount()),
-				"Order " + request.orderNumber(), request.payBy(), Map.of("order", request.orderNumber()));
-		return new Opened(account.id(), account.details());
+		throw new UnsupportedOperationException("Bank transfer into a virtual account is no longer offered");
 	}
 
 	@Override

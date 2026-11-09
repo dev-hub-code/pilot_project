@@ -170,7 +170,7 @@ public class SlaMonitor {
 			told.addAll(escalations.contactIds(1));
 		}
 		told.remove(t.getUserId());
-		told.forEach(id -> notifications.notify(id, "TICKET_SLA_BREACHED", title, t.getSubject(), "/admin/support/" + t.getId()));
+		told.forEach(id -> notifications.notify(id, "TICKET_SLA_BREACHED", title, t.getSubject(), "/platform/support/" + t.getId()));
 		tickets.flush();
 		return due;
 	}

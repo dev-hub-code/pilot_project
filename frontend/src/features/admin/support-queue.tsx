@@ -81,7 +81,7 @@ export function RecentSearches({ current }: { current: string }) {
     <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
       Recent:
       {recent.map((q) => (
-        <Link key={q} href={`/admin/support?${new URLSearchParams({ view: "all", q })}`} className="inline-flex min-h-7 items-center rounded-full border border-border bg-background/60 px-2.5 transition-colors hover:border-gold/40 hover:text-foreground">{q}</Link>
+        <Link key={q} href={`/platform/support?${new URLSearchParams({ view: "all", q })}`} className="inline-flex min-h-7 items-center rounded-full border border-border bg-background/60 px-2.5 transition-colors hover:border-gold/40 hover:text-foreground">{q}</Link>
       ))}
     </p>
   );

@@ -17,7 +17,7 @@ const ICONS: Record<string, LucideIcon> = {
   target: Target, tasks: ClipboardList, user: User, users: Users, wallet: Wallet,
 };
 
-/** The link a path belongs to: the longest match, so "/admin" does not claim every admin page. */
+/** The link a path belongs to: the longest match, so "/platform" does not claim every admin page. */
 function activeLink(sections: readonly MenuSection[], pathname: string): MenuLink | undefined {
   return sections.flatMap((section) => section.links)
     .filter((link) => pathname === link.href || pathname.startsWith(`${link.href}/`))

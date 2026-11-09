@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Notice } from "@/components/ui/notice";
 import { LoginForm } from "@/features/auth/login-form";
 import { safeRedirectPath } from "@/utils/redirect";
@@ -24,7 +25,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       </div>
       {verified && <Notice tone="success">Your email address is confirmed. Sign in to continue.</Notice>}
       {reset && <Notice tone="success">Your password is changed. Sign in with your new password.</Notice>}
-      <LoginForm next={next} />
+      <LoginForm next={next} footer={
+        <p className="text-center text-sm text-muted">
+          New to SeaLease?{" "}
+          <Link href="/register" className="font-medium text-foreground underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-text">
+            Create an account
+          </Link>
+        </p>
+      } />
     </div>
   );
 }

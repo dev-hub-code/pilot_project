@@ -23,22 +23,22 @@ async function withReason(path: string, formData: FormData, revalidate: string[]
 }
 
 export async function suspendUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  return withReason(`/api/v1/admin/users/${id(userId)}/suspend`, formData, [`/admin/users/${userId}`],
+  return withReason(`/api/v1/admin/users/${id(userId)}/suspend`, formData, [`/platform/users/${userId}`],
     "Account suspended; all sessions were signed out.");
 }
 
 export async function reactivateUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  return withReason(`/api/v1/admin/users/${id(userId)}/reactivate`, formData, [`/admin/users/${userId}`],
+  return withReason(`/api/v1/admin/users/${id(userId)}/reactivate`, formData, [`/platform/users/${userId}`],
     "Account reactivated.");
 }
 
 export async function disableUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  return withReason(`/api/v1/admin/users/${id(userId)}/disable`, formData, [`/admin/users/${userId}`],
+  return withReason(`/api/v1/admin/users/${id(userId)}/disable`, formData, [`/platform/users/${userId}`],
     "Account disabled; all sessions were signed out and its earnings are held back.");
 }
 
 export async function enableUserAction(userId: string, _p: FormState, formData: FormData): Promise<FormState> {
-  return withReason(`/api/v1/admin/users/${id(userId)}/enable`, formData, [`/admin/users/${userId}`],
+  return withReason(`/api/v1/admin/users/${id(userId)}/enable`, formData, [`/platform/users/${userId}`],
     "Account enabled. Returns held back while it was disabled is credited at the next run.");
 }
 
@@ -54,19 +54,19 @@ async function assignment(path: string, success: string, revalidate: string): Pr
 }
 
 export async function assignKycAction(submissionId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/assign`, "Assigned to you.", "/admin/kyc");
+  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/assign`, "Assigned to you.", "/platform/kyc");
 }
 
 export async function unassignKycAction(submissionId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/unassign`, "Returned to the queue.", "/admin/kyc");
+  return assignment(`/api/v1/admin/kyc/${id(submissionId)}/unassign`, "Returned to the queue.", "/platform/kyc");
 }
 
 export async function assignBankAccountAction(accountId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/assign`, "Assigned to you.", "/admin");
+  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/assign`, "Assigned to you.", "/platform");
 }
 
 export async function unassignBankAccountAction(accountId: string): Promise<FormState> {
-  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/unassign`, "Returned to the queue.", "/admin");
+  return assignment(`/api/v1/admin/bank-accounts/${id(accountId)}/unassign`, "Returned to the queue.", "/platform");
 }
 
 /** Takes or gives back a KYC review and bank accounts together, in one step; anything already done stays done. */
@@ -74,10 +74,10 @@ async function assignAll(paths: string[], success: string): Promise<FormState> {
   try {
     for (const path of paths) await authFetch(path, { method: "POST" });
   } catch (error) {
-    revalidatePath("/admin", "layout");
+    revalidatePath("/platform", "layout");
     return failureState(error);
   }
-  revalidatePath("/admin", "layout");
+  revalidatePath("/platform", "layout");
   return { success };
 }
 
@@ -100,15 +100,15 @@ export async function approveKycAction(submissionId: string): Promise<FormState>
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/kyc", "layout");
-  revalidatePath("/admin/verification");
+  revalidatePath("/platform/kyc", "layout");
+  revalidatePath("/platform/verification");
   return { success: "Verification approved." };
 }
 
 export async function rejectKycAction(submissionId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const result = await withReason(`/api/v1/admin/kyc/${id(submissionId)}/reject`, formData, [], "Verification rejected.");
-  revalidatePath("/admin/kyc", "layout");
-  revalidatePath("/admin/verification");
+  revalidatePath("/platform/kyc", "layout");
+  revalidatePath("/platform/verification");
   return result;
 }
 
@@ -118,14 +118,14 @@ export async function verifyBankAccountAction(accountId: string): Promise<FormSt
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin", "layout");
+  revalidatePath("/platform", "layout");
   return { success: "Bank account verified." };
 }
 
 export async function rejectBankAccountAction(accountId: string, _p: FormState, formData: FormData): Promise<FormState> {
   const result = await withReason(`/api/v1/admin/bank-accounts/${id(accountId)}/reject`, formData, [],
     "Bank account rejected.");
-  revalidatePath("/admin", "layout");
+  revalidatePath("/platform", "layout");
   return result;
 }
 

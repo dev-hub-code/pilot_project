@@ -1,4 +1,4 @@
-import { Clock, CreditCard, KeyRound, Landmark, type LucideIcon, Server, Settings2, Timer, Wallet, Webhook } from "lucide-react";
+import { Clock, CreditCard, KeyRound, type LucideIcon, Server, Settings2, Timer, Wallet, Webhook } from "lucide-react";
 import { Permission, hasPermission } from "@/lib/permissions";
 import { authFetch } from "@/lib/server/auth/session";
 import type { PaymentGatewaySettings } from "@/types/payment-gateway";
@@ -24,7 +24,7 @@ export async function PaymentGatewayCard({ permissions }: { permissions: readonl
   const d = s.defaults;
   const pays = !s.keysConfigured || !s.onlinePayments
     ? "By bank transfer to a company account, or from their balance"
-    : `Online checkout${s.virtualAccounts ? " or bank transfer" : ""}, or from their balance`;
+    : "Online checkout, bank transfer to a company account, or from their balance";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -57,16 +57,14 @@ export async function PaymentGatewayCard({ permissions }: { permissions: readonl
           {canEdit ? <PaymentGatewayForm settings={s} /> : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               <ConfigStat icon={CreditCard} label="Online payments" value={s.onlinePayments ? "On" : "Off"} />
-              <ConfigStat icon={Landmark} label="Bank transfer" value={s.virtualAccounts ? "On" : "Off"} />
               <ConfigStat icon={Wallet} label="Checkout limit" value={limit} />
-              <ConfigStat icon={Timer} label="Checkout hold" value={`${s.checkoutWindowMinutes} min`} />
-              <ConfigStat icon={Clock} label="Bank transfer hold" value={`${s.virtualAccountWindowHours} h`} hint="Only admins change these." />
+              <ConfigStat icon={Timer} label="Checkout hold" value={`${s.checkoutWindowMinutes} min`} hint="Only admins change these." />
             </div>
           )}
           <ChangedNote>
             {s.updatedAt
               ? `Last changed ${formatDateTime(s.updatedAt)}${s.updatedByName ? ` by ${s.updatedByName}` : ""}.`
-              : `The server's defaults apply until saved here: online payments ${d.onlinePayments ? "on" : "off"}, bank transfer ${d.virtualAccounts ? "on" : "off"}, checkout limit ${Number(d.maxAmount.amount) > 0 ? formatMoney(d.maxAmount) : "none"}, holds of ${d.checkoutWindowMinutes} minutes and ${d.virtualAccountWindowHours} hours.`}
+              : `The server's defaults apply until saved here: online payments ${d.onlinePayments ? "on" : "off"}, checkout limit ${Number(d.maxAmount.amount) > 0 ? formatMoney(d.maxAmount) : "none"}, checkout hold of ${d.checkoutWindowMinutes} minutes.`}
           </ChangedNote>
         </ConfigPanel>
       </div>

@@ -62,7 +62,7 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
         <DetailTile icon={Clock} label="Added">{formatDateTime(account.createdAt)}</DetailTile>
         <DetailTile icon={FileText} label="Proof of account">
           {account.proofType ? (
-            <a href={`/admin/bank-accounts/${account.id}/proof`} target="_blank" rel="noopener noreferrer"
+            <a href={`/platform/bank-accounts/${account.id}/proof`} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-gold-text hover:underline">
               Open {BANK_PROOF_LABEL[account.proofType].toLowerCase()} <ExternalLink aria-hidden="true" className="size-3.5" />
             </a>
@@ -89,7 +89,7 @@ export function BankAccountReview({ item, viewerId, canVerify = true, sharedAssi
         </p>
       )}
       {!sharedAssignment && (
-        <Link href={`/admin/users/${userId}?from=bank-verification`}
+        <Link href={`/platform/users/${userId}?from=bank-verification`}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium transition-colors hover:border-gold hover:text-gold-text">
           <UserRound aria-hidden="true" className="size-3.5" /> View account owner
         </Link>

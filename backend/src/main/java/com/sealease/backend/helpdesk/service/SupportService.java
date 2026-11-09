@@ -270,7 +270,7 @@ public class SupportService {
 		}
 		if (ticket.getAssigneeId() != null) {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_CUSTOMER_REPLY", "New reply on " + ticket.getReference(),
-					ticket.getSubject(), "/admin/support/" + ticket.getId());
+					ticket.getSubject(), "/platform/support/" + ticket.getId());
 		}
 		return customerDetail(userId, ticketId);
 	}
@@ -311,7 +311,7 @@ public class SupportService {
 			.withOldValue(Map.of("status", previous)).withNewValue(Map.of("status", TicketStatus.OPEN)));
 		if (ticket.getAssigneeId() != null) {
 			notifications.notify(ticket.getAssigneeId(), "TICKET_REOPENED", ticket.getReference() + " was reopened",
-					ticket.getSubject(), "/admin/support/" + ticket.getId());
+					ticket.getSubject(), "/platform/support/" + ticket.getId());
 		}
 		automation.fire(AutomationTrigger.TICKET_REOPENED, ticketId, "reopen:" + ticket.getReopenCount());
 		return customerDetail(userId, ticketId);
@@ -548,7 +548,7 @@ public class SupportService {
 			.withNewValue(assigneeId == null ? null : Map.of("assigneeId", assigneeId.toString())));
 		if (assigneeId != null && !assigneeId.equals(actorId)) {
 			notifications.notify(assigneeId, "TICKET_ASSIGNED", ticket.getReference() + " was assigned to you",
-					ticket.getSubject(), "/admin/support/" + ticket.getId());
+					ticket.getSubject(), "/platform/support/" + ticket.getId());
 		}
 		return staffDetail(ticketId);
 	}
@@ -569,7 +569,7 @@ public class SupportService {
 			.withNewValue(Map.of("assigneeId", assigneeId.toString())));
 		if (!assigneeId.equals(actorId)) {
 			notifications.notify(assigneeId, "TICKET_ASSIGNED", ticket.getReference() + " was assigned to you",
-					ticket.getSubject(), "/admin/support/" + ticket.getId());
+					ticket.getSubject(), "/platform/support/" + ticket.getId());
 		}
 	}
 
@@ -752,7 +752,7 @@ public class SupportService {
 			handlers(SupportTeam.FINANCE).stream()
 				.filter(id -> !id.equals(actorId) && !id.equals(ticket.getUserId()))
 				.forEach(id -> notifications.notify(id, "TICKET_HANDED_TO_FINANCE",
-						ticket.getReference() + " was handed to finance", ticket.getSubject(), "/admin/support/" + ticket.getId()));
+						ticket.getReference() + " was handed to finance", ticket.getSubject(), "/platform/support/" + ticket.getId()));
 		}
 		return staffDetail(ticketId);
 	}

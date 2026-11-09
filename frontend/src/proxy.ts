@@ -8,20 +8,24 @@ import { forwardedClientHeaders } from "@/lib/server/request-context";
 /** Refresh this long before expiry so bursts of requests rarely race on an expired token. */
 const REFRESH_AHEAD_MS = 60_000;
 
-const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/invest", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/settings", "/admin"];
-const STAFF_PREFIXES = ["/admin"];
+const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/invest", "/orders", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/notifications", "/statements", "/settings", "/platform"];
+const STAFF_PREFIXES = ["/platform"];
 /** The investor portal; staff accounts are never investors and are sent to the admin area instead. */
 const INVESTOR_PREFIXES = ["/dashboard", "/portfolio", "/earnings", "/referrals", "/withdrawals", "/support", "/orders", "/statements", "/profile/verification", "/profile/bank-accounts"];
-const GUEST_ONLY = ["/login", "/register"];
+/** The staff sign-in; it sits inside the staff area but is open to everyone signed out. */
+const STAFF_LOGIN = "/platform/login";
+const GUEST_ONLY = ["/login", "/register", STAFF_LOGIN];
 const RETIRED = ["/marketplace", "/cart"];
+/** The staff console moved from /admin to /platform: old links and bookmarks still work. */
+const OLD_STAFF_AREA = "/admin";
 /** Route handlers that send their own, stricter CSP (sandboxed file downloads). */
 const OWN_CSP = [
-  /^\/admin\/kyc\/[^/]+\/documents\/[^/]+$/,
-  /^\/admin\/bank-accounts\/[^/]+\/proof$/,
-  /^\/admin\/withdrawals\/batches\/[^/]+\/file$/,
-  /^\/(?:admin\/)?support\/[^/]+\/attachments\/[^/]+$/,
-  /^\/(?:admin\/reports|statements)\/download$/,
-  /^\/(?:admin\/)?orders\/[^/]+\/invoice\/pdf$/,
+  /^\/platform\/kyc\/[^/]+\/documents\/[^/]+$/,
+  /^\/platform\/bank-accounts\/[^/]+\/proof$/,
+  /^\/platform\/withdrawals\/batches\/[^/]+\/file$/,
+  /^\/(?:platform\/)?support\/[^/]+\/attachments\/[^/]+$/,
+  /^\/(?:platform\/reports|statements)\/download$/,
+  /^\/(?:platform\/)?orders\/[^/]+\/invoice\/pdf$/,
 ];
 
 /**
@@ -53,8 +57,14 @@ export async function proxy(request: NextRequest) {
   const effectiveAccess = renewed?.accessToken ?? access;
   const session = effectiveAccess ? await verifyAccessToken(effectiveAccess) : null;
 
+  const staffLogin = pathname === STAFF_LOGIN;
+
   let response: NextResponse;
-  if (matches(pathname, RETIRED)) {
+  if (matches(pathname, [OLD_STAFF_AREA])) {
+    const moved = new URL("/platform" + pathname.slice(OLD_STAFF_AREA.length), request.url);
+    moved.search = search;
+    response = NextResponse.redirect(moved, 308);
+  } else if (matches(pathname, RETIRED)) {
     // The marketplace and cart are gone: old links and bookmarks land on the plans.
     response = NextResponse.redirect(new URL("/invest", request.url));
   } else if (!session && pathname === "/invest") {
@@ -65,22 +75,23 @@ export async function proxy(request: NextRequest) {
     const full = new URL("/invest", request.url);
     full.search = search;
     response = NextResponse.redirect(full);
-  } else if (!session && matches(pathname, PROTECTED_PREFIXES)) {
-    const login = new URL("/login", request.url);
+  } else if (!session && !staffLogin && matches(pathname, PROTECTED_PREFIXES)) {
+    // Staff sign in on their own page.
+    const login = new URL(matches(pathname, STAFF_PREFIXES) ? STAFF_LOGIN : "/login", request.url);
     login.searchParams.set("next", pathname + search);
     response = NextResponse.redirect(login);
-  } else if (session?.passwordChangeRequired && matches(pathname, PROTECTED_PREFIXES)) {
+  } else if (session?.passwordChangeRequired && !staffLogin && matches(pathname, PROTECTED_PREFIXES)) {
     // UX only: the API itself refuses everything but the password change for such a session.
     response = NextResponse.redirect(new URL("/change-password", request.url));
   } else if (!session && pathname === "/change-password") {
     response = NextResponse.redirect(new URL("/login", request.url));
+  } else if (session && matches(pathname, GUEST_ONLY)) {
+    response = NextResponse.redirect(new URL(isInvestor(session.permissions) ? "/dashboard" : "/platform", request.url));
   } else if (session && matches(pathname, STAFF_PREFIXES) && !hasStaffAccess(session.permissions)) {
     response = NextResponse.redirect(new URL("/dashboard", request.url));
   } else if (session && !isInvestor(session.permissions) && hasStaffAccess(session.permissions)
     && matches(pathname, INVESTOR_PREFIXES)) {
-    response = NextResponse.redirect(new URL("/admin", request.url));
-  } else if (session && matches(pathname, GUEST_ONLY)) {
-    response = NextResponse.redirect(new URL(isInvestor(session.permissions) ? "/dashboard" : "/admin", request.url));
+    response = NextResponse.redirect(new URL("/platform", request.url));
   } else if (OWN_CSP.some((pattern) => pattern.test(pathname))) {
     response = NextResponse.next({ request: { headers: new Headers(request.headers) } });
   } else {
@@ -95,7 +106,7 @@ export async function proxy(request: NextRequest) {
 
   if (renewed) writeSessionCookies(response.cookies, renewed);
   // Signed-in pages are never kept by the browser or a proxy, so none can be shown again after signing out.
-  if (session || matches(pathname, PROTECTED_PREFIXES)) {
+  if (session || (matches(pathname, PROTECTED_PREFIXES) && !staffLogin)) {
     response.headers.set("Cache-Control", "private, no-store, max-age=0");
   }
   return response;

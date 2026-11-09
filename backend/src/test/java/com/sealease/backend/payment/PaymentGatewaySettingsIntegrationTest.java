@@ -1,5 +1,8 @@
 package com.sealease.backend.payment;
 
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
@@ -68,8 +71,8 @@ class PaymentGatewaySettingsIntegrationTest {
 	@AfterEach
 	void backToDefaults() {
 		jdbc.update("""
-				UPDATE payment_gateway_settings SET online_payments_enabled = NULL, virtual_accounts_enabled = NULL,
-				       max_amount = NULL, checkout_window_minutes = NULL, virtual_account_window_hours = NULL,
+				UPDATE payment_gateway_settings SET online_payments_enabled = NULL,
+				       max_amount = NULL, checkout_window_minutes = NULL,
 				       updated_at = NULL, updated_by = NULL, key_id = NULL, key_secret_encrypted = NULL,
 				       webhook_secret_encrypted = NULL, merchant_name = NULL, keys_updated_at = NULL,
 				       keys_updated_by = NULL WHERE id = 1""");
@@ -145,10 +148,8 @@ class PaymentGatewaySettingsIntegrationTest {
 			.andExpect(jsonPath("$.mode").value("test"))
 			.andExpect(jsonPath("$.webhookConfigured").value(true))
 			.andExpect(jsonPath("$.onlinePayments").value(true))
-			.andExpect(jsonPath("$.virtualAccounts").value(true))
 			.andExpect(jsonPath("$.maxAmount.amount").value("500000.00"))
 			.andExpect(jsonPath("$.checkoutWindowMinutes").value(30))
-			.andExpect(jsonPath("$.virtualAccountWindowHours").value(72))
 			.andExpect(jsonPath("$.updatedAt").doesNotExist())
 			.andReturn().getResponse().getContentAsString();
 		assertThat(body).doesNotContain("test-key-secret").doesNotContain("test-webhook-secret");
@@ -160,9 +161,9 @@ class PaymentGatewaySettingsIntegrationTest {
 		Account financeManager = api.staff("FINANCE_MANAGER");
 		mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, investor.bearer())).andExpect(status().isForbidden());
 		mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, financeManager.bearer())).andExpect(status().isOk());
-		save(financeManager, true, true, "500000", 30, 72).andExpect(status().isForbidden());
-		save(api.admin(), true, true, "-1", 30, 72).andExpect(status().isBadRequest());
-		save(api.admin(), true, true, "500000", 2, 72).andExpect(status().isBadRequest());
+		save(financeManager, true, "500000", 30).andExpect(status().isForbidden());
+		save(api.admin(), true, "-1", 30).andExpect(status().isBadRequest());
+		save(api.admin(), true, "500000", 2).andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -171,16 +172,14 @@ class PaymentGatewaySettingsIntegrationTest {
 		Account investor = approvedInvestor();
 		String orderId = new InvestorFixtures(mvc, jdbc, api).placeOrder(investor, new OfferingFixtures(mvc, admin).plan(), 1);
 
-		// Bank transfer off, and checkout limited below this ₹50,000 order.
-		save(admin, true, false, "40000", 15, 24).andExpect(status().isOk())
-			.andExpect(jsonPath("$.virtualAccounts").value(false))
+		// Checkout limited below this ₹50,000 order.
+		save(admin, true, "40000", 15).andExpect(status().isOk())
 			.andExpect(jsonPath("$.maxAmount.amount").value("40000.00"))
 			.andExpect(jsonPath("$.updatedAt").exists());
-		methods(investor).andExpect(jsonPath("$.methods", contains("GATEWAY", "WALLET")))
+		methods(investor).andExpect(jsonPath("$.methods", hasItems("GATEWAY", "WALLET")))
 			.andExpect(jsonPath("$.checkoutLimit.amount").value("40000.00"));
 		start(investor, orderId, "GATEWAY").andExpect(status().isUnprocessableContent())
 			.andExpect(jsonPath("$.message", containsString("limited to ₹40,000.00")));
-		start(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isUnprocessableContent());
 		verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
 
 		assertThat(jdbc.queryForObject("""
@@ -188,18 +187,17 @@ class PaymentGatewaySettingsIntegrationTest {
 				Integer.class, admin.id())).isPositive();
 
 		// Online payments off: online investors pay by bank to a company account, or from their balance.
-		save(admin, false, false, "0", 15, 24).andExpect(status().isOk());
+		save(admin, false, "0", 15).andExpect(status().isOk());
 		methods(investor).andExpect(jsonPath("$.methods", contains("BANK_TRANSFER", "WALLET")))
 			.andExpect(jsonPath("$.checkoutLimit").doesNotExist());
 		start(investor, orderId, "GATEWAY").andExpect(status().isUnprocessableContent());
 	}
 
-	private ResultActions save(Account actor, boolean online, boolean virtualAccounts, String maxAmount, int checkoutMinutes,
-			int vaHours) throws Exception {
+	private ResultActions save(Account actor, boolean online, String maxAmount, int checkoutMinutes) throws Exception {
 		return mvc.perform(put(PATH).header(HttpHeaders.AUTHORIZATION, actor.bearer())
 			.contentType(MediaType.APPLICATION_JSON).content("""
-					{"onlinePayments":%s,"virtualAccounts":%s,"maxAmount":"%s","checkoutWindowMinutes":%d,
-					 "virtualAccountWindowHours":%d}""".formatted(online, virtualAccounts, maxAmount, checkoutMinutes, vaHours)));
+					{"onlinePayments":%s,"maxAmount":"%s","checkoutWindowMinutes":%d}"""
+				.formatted(online, maxAmount, checkoutMinutes)));
 	}
 
 	private ResultActions methods(Account investor) throws Exception {

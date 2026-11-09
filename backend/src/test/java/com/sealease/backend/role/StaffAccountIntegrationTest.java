@@ -74,7 +74,7 @@ class StaffAccountIntegrationTest {
 		// The employee is emailed how to sign in.
 		SentMail sent = SentMail.lastTo(mail, email);
 		assertThat(sent.subject()).isEqualTo("Your SeaLease employee account");
-		assertThat(sent.text()).contains("Email: " + email, "Temporary password: " + temporary, "/login", "SUPPORT");
+		assertThat(sent.text()).contains("Email: " + email, "Temporary password: " + temporary, "/platform/login", "SUPPORT");
 
 		String body = login(email, temporary).getResponse().getContentAsString();
 		String access = JsonPath.read(body, "$.accessToken");

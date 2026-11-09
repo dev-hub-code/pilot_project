@@ -22,7 +22,7 @@ export async function scheduleRatesAction(_p: FormState, formData: FormData): Pr
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/platform-config/referral-rates");
+  revalidatePath("/platform/platform-config/referral-rates");
   return { success: effectiveFrom ? "Rates scheduled." : "New rates are in force." };
 }
 
@@ -32,7 +32,7 @@ export async function cancelRatesAction(versionId: string): Promise<FormState> {
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/platform-config/referral-rates");
+  revalidatePath("/platform/platform-config/referral-rates");
   return { success: "Scheduled rates cancelled." };
 }
 
@@ -53,7 +53,7 @@ export async function moveReferralAction(_p: FormState, formData: FormData): Pro
     return failureState(error, input);
   }
   // The downlines page and every user page showing a downline.
-  revalidatePath("/admin", "layout");
+  revalidatePath("/platform", "layout");
   return {
     success: referrerId === NO_REFERRER
       ? "Removed from the downline. Commission from now on follows the new structure."

@@ -10,21 +10,16 @@ import java.time.Duration;
  *
  * @param keysConfigured  the Razorpay API keys are set (nothing is offered through Razorpay without them)
  * @param onlinePayments  the admin's switch for paying through Razorpay
- * @param virtualAccounts the admin's switch for bank transfer into a virtual account
  * @param maxAmount       the most one checkout payment can be, in rupees; zero for no limit
  */
-public record GatewaySettings(boolean keysConfigured, boolean onlinePayments, boolean virtualAccounts,
-		BigDecimal maxAmount, Duration checkoutWindow, Duration virtualAccountWindow) {
+public record GatewaySettings(boolean keysConfigured, boolean onlinePayments, BigDecimal maxAmount,
+		Duration checkoutWindow) {
 
 	/** Online investors are offered Razorpay's checkout. */
 	public boolean checkoutOffered() {
 		return keysConfigured && onlinePayments;
 	}
 
-	/** Online investors are offered bank transfer into a virtual account. */
-	public boolean virtualAccountsOffered() {
-		return checkoutOffered() && virtualAccounts;
-	}
 
 	public boolean hasCheckoutLimit() {
 		return maxAmount != null && maxAmount.signum() > 0;

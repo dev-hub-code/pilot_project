@@ -207,7 +207,7 @@ function Pane({ root, ...props }: { root: Node } & DragProps) {
           <div className="min-w-0">
             <p className="text-[11px] font-medium tracking-[0.08em] text-muted uppercase">Investor · {referrer}</p>
             <p className="flex flex-wrap items-center gap-2">
-              <a href={`/admin/users/${root.userId}`} className="font-semibold hover:text-gold-text hover:underline" draggable={false}>{root.name}</a>
+              <a href={`/platform/users/${root.userId}`} className="font-semibold hover:text-gold-text hover:underline" draggable={false}>{root.name}</a>
               {root.status !== "ACTIVE" && <StatusBadge tone={toneFor(root.status)}>{humanize(root.status)}</StatusBadge>}
               <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-border">
                 {size} {size === 1 ? "member" : "members"}
@@ -249,7 +249,7 @@ function Member({ node, ...props }: { node: Node } & DragProps) {
           </span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
-              <a href={`/admin/users/${node.userId}`} className="font-medium hover:text-gold-text hover:underline" draggable={false}>{node.name}</a>
+              <a href={`/platform/users/${node.userId}`} className="font-medium hover:text-gold-text hover:underline" draggable={false}>{node.name}</a>
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] uppercase ${node.level > COMMISSION_LEVELS
                 ? "bg-background text-muted ring-1 ring-border" : "bg-gold/10 text-gold-text"}`}>
                 Level {node.level}{node.level > COMMISSION_LEVELS ? " · no commission" : ""}

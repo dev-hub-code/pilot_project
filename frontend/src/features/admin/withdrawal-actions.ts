@@ -10,10 +10,10 @@ import { financeTaskSchema, referralModeSchema, resolveSchema, withdrawalReasonS
 const id = (value: string) => encodeURIComponent(value);
 
 function refresh() {
-  revalidatePath("/admin/withdrawals", "layout");
-  revalidatePath("/admin/platform-config/withdrawals");
-  revalidatePath("/admin/finance-tasks");
-  revalidatePath("/admin/ledger", "layout");
+  revalidatePath("/platform/withdrawals", "layout");
+  revalidatePath("/platform/platform-config/withdrawals");
+  revalidatePath("/platform/finance-tasks");
+  revalidatePath("/platform/ledger", "layout");
 }
 
 /** Finance's update of a task: paid (with the bank reference or cash receipt), or failed (with the reason). */
@@ -25,7 +25,7 @@ export async function financeTaskAssignmentAction(withdrawalId: string, take: bo
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/finance-tasks");
+  revalidatePath("/platform/finance-tasks");
   return { success: take ? "Assigned to you." : "Returned to the queue." };
 }
 
@@ -99,7 +99,7 @@ export async function setReferralModeAction(userId: string, _p: FormState, formD
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath(`/admin/users/${userId}`);
+  revalidatePath(`/platform/users/${userId}`);
   return { success: "Referral payout mode saved for this year." };
 }
 

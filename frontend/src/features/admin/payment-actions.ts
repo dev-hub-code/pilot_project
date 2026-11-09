@@ -26,8 +26,8 @@ export async function confirmTransferAction(paymentId: string, _p: FormState, fo
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/orders", "layout");
+  revalidatePath("/platform/payments");
+  revalidatePath("/platform/orders", "layout");
   return { success: "Transfer recorded." };
 }
 
@@ -38,8 +38,8 @@ export async function paymentTaskAction(paymentId: string, take: boolean): Promi
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/orders", "layout");
+  revalidatePath("/platform/payments");
+  revalidatePath("/platform/orders", "layout");
   return { success: take ? "Assigned to you." : "Returned to the queue." };
 }
 
@@ -52,8 +52,8 @@ export async function rejectPaymentAction(paymentId: string, _p: FormState, form
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/payments");
-  revalidatePath("/admin/orders", "layout");
+  revalidatePath("/platform/payments");
+  revalidatePath("/platform/orders", "layout");
   return { success: "Payment rejected. The investor can pay again while the order is open." };
 }
 
@@ -69,7 +69,7 @@ export async function recordRefundAction(paymentId: string, _p: FormState, formD
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/approvals");
+  revalidatePath("/platform/approvals");
   return { success: "Sent for approval: a second person must approve this refund." };
 }
 
@@ -97,7 +97,7 @@ export async function saveCompanyBankAccountAction(accountId: string | null, _p:
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/platform-config/company-accounts");
+  revalidatePath("/platform/platform-config/company-accounts");
   return accountId ? { success: "Account updated.", values: input } : { success: "Account added. Investors can now pay into it." };
 }
 
@@ -107,6 +107,6 @@ export async function setCompanyBankAccountActiveAction(accountId: string, activ
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/platform-config/company-accounts");
+  revalidatePath("/platform/platform-config/company-accounts");
   return { success: active ? "Account activated." : "Account deactivated." };
 }

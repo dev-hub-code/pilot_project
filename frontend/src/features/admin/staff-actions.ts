@@ -21,7 +21,7 @@ export async function createStaffAction(_p: CredentialsState, formData: FormData
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
     const credentials = await authFetch<StaffCredentials>("/api/v1/admin/staff", { method: "POST", json: parsed.data });
-    revalidatePath("/admin/staff", "layout");
+    revalidatePath("/platform/staff", "layout");
     return {
       success: credentials.emailed ? "Employee account created and sign-in details emailed." : "Employee account created.",
       credentials,
@@ -35,7 +35,7 @@ export async function resetStaffPasswordAction(userId: string): Promise<Credenti
   try {
     const credentials = await authFetch<StaffCredentials>(
       `/api/v1/admin/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" });
-    revalidatePath(`/admin/users/${userId}`);
+    revalidatePath(`/platform/users/${userId}`);
     return {
       success: `New temporary password issued${credentials.emailed ? " and emailed" : ""}. They have been signed out everywhere.`,
       credentials,
@@ -52,6 +52,6 @@ export async function updateRolesAction(userId: string, _p: FormState, formData:
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath(`/admin/users/${userId}`);
+  revalidatePath(`/platform/users/${userId}`);
   return { success: "Roles updated. The user's sessions have been refreshed." };
 }

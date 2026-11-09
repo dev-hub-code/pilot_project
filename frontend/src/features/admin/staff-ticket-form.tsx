@@ -68,7 +68,7 @@ function CustomerPicker({ error }: { error?: string }) {
     if (chosen || term.length < 2) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetch(`/admin/support/new/customers?${new URLSearchParams({ q: term })}`, { signal: controller.signal })
+      fetch(`/platform/support/new/customers?${new URLSearchParams({ q: term })}`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : []))
         .then((list: CustomerOption[]) => setFound(list))
         .catch(() => undefined);

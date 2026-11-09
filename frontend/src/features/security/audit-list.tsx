@@ -55,13 +55,13 @@ export function AuditList({ entries, showIp = true }: { entries: readonly AuditL
                     </span>
                     <div className="min-w-0">
                       <p className={`font-medium ${tone.label}`}>
-                        <Link href={`/admin/audit/${entry.id}`} className="card-link hover:underline">{actionLabel(entry.action)}</Link>
+                        <Link href={`/platform/audit/${entry.id}`} className="card-link hover:underline">{actionLabel(entry.action)}</Link>
                         <span className="ml-2 text-xs font-normal text-muted tabular-nums sm:hidden">{time.format(new Date(entry.createdAt))}</span>
                       </p>
                       <p className="flex min-w-0 items-center gap-1 text-xs whitespace-nowrap text-muted">
                         <span className="min-w-0 shrink truncate [&_wbr]:hidden">
                           {entry.actor ? (
-                            <Link href={`/admin/users/${entry.actor.id}`} className="font-medium text-foreground hover:text-gold-text" title={personLabel(entry.actor)}>
+                            <Link href={`/platform/users/${entry.actor.id}`} className="font-medium text-foreground hover:text-gold-text" title={personLabel(entry.actor)}>
                               {entry.actor.email ? <EmailText>{entry.actor.email}</EmailText> : "Deleted account"}
                             </Link>
                           ) : (

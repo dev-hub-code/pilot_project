@@ -187,7 +187,7 @@ public class AutomationEngine {
 		}
 		AutomationConditions.Parameters p = AutomationConditions.parseParameters(json, rule.getParameters());
 		Instant now = clock.instant();
-		String link = "/admin/support/" + ticket.getId();
+		String link = "/platform/support/" + ticket.getId();
 		String title = ticket.getReference() + ": " + rule.getName();
 		boolean done = switch (rule.getAction()) {
 			case NOTIFY_ASSIGNEE -> {
