@@ -41,7 +41,7 @@ function Branch({ nodes, nested = false }: { nodes: Node[]; nested?: boolean }) 
               <span className="rounded-full border border-border px-2 py-0.5 text-[11px] tracking-[0.08em] text-muted uppercase">
                 Level {node.level}{node.level > COMMISSION_LEVELS ? " · no commission" : ""}
               </span>
-              <Link href={`/admin/users/${node.userId}`} className="font-medium text-gold-text hover:underline">{node.name}</Link>
+              <Link href={`/platform/users/${node.userId}`} className="font-medium text-gold-text hover:underline">{node.name}</Link>
               {node.status !== "ACTIVE" && <StatusBadge tone={toneFor(node.status)}>{humanize(node.status)}</StatusBadge>}
             </span>
             <span className="block text-xs text-muted wrap-anywhere">

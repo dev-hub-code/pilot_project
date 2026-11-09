@@ -14,7 +14,7 @@ export async function ReportsShell({ active, children }: { active: string; child
   const categories = await loadCatalog();
   const links = (
     <nav aria-label="Reports" className="space-y-1">
-      <Link href="/admin/reports" className={active === "overview" ? current : idle} aria-current={active === "overview" ? "page" : undefined}>
+      <Link href="/platform/reports" className={active === "overview" ? current : idle} aria-current={active === "overview" ? "page" : undefined}>
         Overview
       </Link>
       {categories.map((category) => {
@@ -28,7 +28,7 @@ export async function ReportsShell({ active, children }: { active: string; child
             <ul className="ml-3 mt-1 space-y-0.5 border-l border-border pl-2">
               {category.reports.map((r) => (
                 <li key={r.key}>
-                  <Link href={`/admin/reports/${r.key}`} className={r.key === active ? current : idle}
+                  <Link href={`/platform/reports/${r.key}`} className={r.key === active ? current : idle}
                     aria-current={r.key === active ? "page" : undefined}>{r.title}</Link>
                 </li>
               ))}
@@ -37,8 +37,8 @@ export async function ReportsShell({ active, children }: { active: string; child
         );
       })}
       <div className="mt-3 space-y-1 border-t border-border pt-3">
-        <Link href="/admin/reports/documents" className={active === "documents" ? current : idle}>Statements &amp; summaries</Link>
-        <Link href="/admin/reports/history" className={active === "history" ? current : idle}>Download history</Link>
+        <Link href="/platform/reports/documents" className={active === "documents" ? current : idle}>Statements &amp; summaries</Link>
+        <Link href="/platform/reports/history" className={active === "history" ? current : idle}>Download history</Link>
       </div>
     </nav>
   );

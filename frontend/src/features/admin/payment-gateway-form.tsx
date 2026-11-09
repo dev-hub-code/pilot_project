@@ -8,7 +8,7 @@ import type { PaymentGatewaySettings } from "@/types/payment-gateway";
 import type { FormState } from "@/validators/form-state";
 import { savePaymentGatewaySettingsAction } from "./payment-gateway-actions";
 
-/** The switches, the checkout limit and the payment windows. The API keys have their own form. */
+/** The online payments switch, the checkout limit and the checkout hold. The API keys have their own form. */
 export function PaymentGatewayForm({ settings }: { settings: PaymentGatewaySettings }) {
   const [state, action] = useActionState<FormState, FormData>(savePaymentGatewaySettingsAction, {});
   const e = state.fieldErrors ?? {};
@@ -22,20 +22,16 @@ export function PaymentGatewayForm({ settings }: { settings: PaymentGatewaySetti
         <legend className="mb-2 text-sm font-medium">Ways online investors pay</legend>
         <Switch name="onlinePayments" defaultChecked={settings.onlinePayments} title="Online payments through Razorpay"
           hint="Off: online investors pay by bank transfer to a company account, or from their available balance." />
-        <Switch name="virtualAccounts" defaultChecked={settings.virtualAccounts} title="Bank transfer into a Razorpay virtual account"
-          hint="Needs Smart Collect activated on the Razorpay account. Leave off until Razorpay confirms it." />
       </fieldset>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <TextField label="Checkout limit per payment (₹)" name="maxAmount" inputMode="decimal" autoComplete="off"
           defaultValue={v.maxAmount ?? (max > 0 ? String(max) : "0")} error={e.maxAmount} />
         <TextField label="Checkout hold (minutes)" name="checkoutWindowMinutes" inputMode="numeric" autoComplete="off"
           defaultValue={v.checkoutWindowMinutes ?? String(settings.checkoutWindowMinutes)} error={e.checkoutWindowMinutes} />
-        <TextField label="Bank transfer hold (hours)" name="virtualAccountWindowHours" inputMode="numeric" autoComplete="off"
-          defaultValue={v.virtualAccountWindowHours ?? String(settings.virtualAccountWindowHours)} error={e.virtualAccountWindowHours} />
       </div>
       <p className="text-xs text-muted">
         Set the checkout limit to what Razorpay allows on your account (0 for no limit); larger orders are paid another
-        way. The holds are how long an order stays reserved while the investor pays.
+        way. The checkout hold is how long an order stays reserved while the investor pays online.
       </p>
       <SubmitButton
         confirm="Change how online investors pay? Payments already started are not affected.">Save</SubmitButton>

@@ -64,7 +64,7 @@ export function CreateStaffForm({ roles, departments }: { roles: Role[]; departm
         <FormFeedback state={state} />
         <IssuedCredentials credentials={state.credentials} />
         <div className="flex flex-wrap gap-2">
-          <Link href={`/admin/staff/${state.credentials.userId}`}
+          <Link href={`/platform/staff/${state.credentials.userId}`}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-ink px-4 text-sm font-medium text-on-ink transition-opacity hover:opacity-90 dark:bg-gold dark:text-on-gold">
             <UserRound aria-hidden="true" className="size-4" /> Open their account
           </Link>

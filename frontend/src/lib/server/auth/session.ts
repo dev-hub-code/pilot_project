@@ -24,7 +24,8 @@ export async function requireSession(): Promise<Session> {
 
 /** UX guard for staff areas. The backend enforces the real permission on every API call. */
 export async function requireStaff(): Promise<Session> {
-  const session = await requireSession();
+  const session = await getSession();
+  if (!session) redirect("/platform/login");
   if (!hasStaffAccess(session.permissions)) redirect("/dashboard");
   return session;
 }
@@ -39,7 +40,7 @@ export async function authFetch<T>(path: string, init: BackendRequestInit = {}):
   try {
     return await backendFetch<T>(path, { ...init, headers: headersWithAuth });
   } catch (error) {
-    if (sessionEnded(error)) redirect("/session-expired");
+    if (sessionEnded(error)) redirect(await expiredPath());
     throw error;
   }
 }
@@ -50,9 +51,15 @@ export async function authRequest(path: string, init: BackendRequestInit = {}): 
   try {
     return await backendRequest(path, { ...init, headers: headersWithAuth });
   } catch (error) {
-    if (sessionEnded(error)) redirect("/session-expired");
+    if (sessionEnded(error)) redirect(await expiredPath());
     throw error;
   }
+}
+
+/** Staff are sent back to their own sign-in page. The revoked token still says whose it was. */
+async function expiredPath(): Promise<string> {
+  const session = await getSession();
+  return session && hasStaffAccess(session.permissions) ? "/session-expired?portal=staff" : "/session-expired";
 }
 
 function sessionEnded(error: unknown): boolean {

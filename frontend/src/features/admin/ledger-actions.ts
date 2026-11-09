@@ -30,8 +30,8 @@ export async function adjustBalanceAction(idempotencyKey: string, _p: FormState,
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/approvals");
-  redirect("/admin/approvals");
+  revalidatePath("/platform/approvals");
+  redirect("/platform/approvals");
 }
 
 /** Credits every day of rent that has ended now, instead of waiting for the next automatic run. */
@@ -42,7 +42,7 @@ export async function runPayoutsAction(): Promise<FormState> {
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/payouts");
-  revalidatePath("/admin/ledger", "layout");
+  revalidatePath("/platform/payouts");
+  revalidatePath("/platform/ledger", "layout");
   return { success: result.credited === 0 ? "Nothing was due." : `Credited ${result.credited} day(s) of returns to investors' wallets.` };
 }

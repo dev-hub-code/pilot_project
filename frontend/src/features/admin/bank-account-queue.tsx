@@ -36,7 +36,7 @@ export async function BankAccountQueue({ page }: { page: number }) {
           ))}
         </ul>
       )}
-      <Pagination page={queue} basePath="/admin/verification" params={{}} />
+      <Pagination page={queue} basePath="/platform/verification" params={{}} />
     </div>
   );
 }

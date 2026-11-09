@@ -31,8 +31,8 @@ export async function saveLeadAction(leadId: string | null, _p: FormState, formD
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/leads", "layout");
-  if (!leadId) redirect(`/admin/leads/${saved.lead.id}`);
+  revalidatePath("/platform/leads", "layout");
+  if (!leadId) redirect(`/platform/leads/${saved.lead.id}`);
   return { success: "Lead saved." };
 }
 
@@ -45,7 +45,7 @@ export async function changeStageAction(leadId: string, _p: FormState, formData:
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/leads", "layout");
+  revalidatePath("/platform/leads", "layout");
   return { success: "Stage updated." };
 }
 
@@ -58,7 +58,7 @@ export async function logActivityAction(leadId: string, _p: FormState, formData:
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath(`/platform/leads/${leadId}`);
   return { success: "Logged." };
 }
 
@@ -68,7 +68,7 @@ export async function claimLeadAction(leadId: string): Promise<FormState> {
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/leads", "layout");
+  revalidatePath("/platform/leads", "layout");
   return { success: "The lead is yours." };
 }
 
@@ -79,6 +79,6 @@ export async function assignLeadAction(leadId: string, _p: FormState, formData: 
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/leads", "layout");
+  revalidatePath("/platform/leads", "layout");
   return { success: ownerId ? "Lead assigned." : "Returned to the unassigned pool." };
 }

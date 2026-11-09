@@ -22,7 +22,7 @@ export async function createInvestorAction(_p: CredentialsState, formData: FormD
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values: input };
   try {
     const credentials = await authFetch<StaffCredentials>("/api/v1/admin/investors", { method: "POST", json: parsed.data });
-    revalidatePath("/admin/users", "layout");
+    revalidatePath("/platform/users", "layout");
     return {
       success: credentials.emailed ? "Investor account created and sign-in details emailed." : "Investor account created.",
       credentials,

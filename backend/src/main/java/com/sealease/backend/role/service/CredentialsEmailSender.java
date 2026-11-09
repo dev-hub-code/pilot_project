@@ -27,6 +27,10 @@ public class CredentialsEmailSender {
 	private static final DateTimeFormatter EXPIRY = DateTimeFormatter.ofPattern("d MMMM yyyy, HH:mm 'IST'", Locale.ENGLISH)
 		.withZone(ZoneId.of("Asia/Kolkata"));
 
+	/** Staff sign in on their own page; investors on the public one. */
+	private static final String STAFF_SIGN_IN = "/platform/login";
+	private static final String INVESTOR_SIGN_IN = "/login";
+
 	private final JavaMailSender mail;
 	private final String from;
 	private final String appUrl;
@@ -48,17 +52,17 @@ public class CredentialsEmailSender {
 						+ (credentials.roles().isEmpty() ? "" : " (" + String.join(", ", credentials.roles()) + ")") + ".";
 		return send(credentials, reset ? "Your new SeaLease temporary password" : "Your SeaLease employee account",
 				reset ? "An administrator issued you a new temporary password."
-						: "An administrator created a SeaLease employee account for you.", paragraph, reset);
+						: "An administrator created a SeaLease employee account for you.", paragraph, reset, STAFF_SIGN_IN);
 	}
 
 	/** A network investor's sign-in details, when an administrator makes their account. */
 	public boolean sendNewInvestor(StaffCredentialsResponse credentials) {
 		String text = "We created a SeaLease investor account for you.";
-		return send(credentials, "Your SeaLease investor account", text, text, false);
+		return send(credentials, "Your SeaLease investor account", text, text, false, INVESTOR_SIGN_IN);
 	}
 
 	private boolean send(StaffCredentialsResponse credentials, String subject, String preheader, String paragraph,
-			boolean reset) {
+			boolean reset, String signInPath) {
 		Map<String, String> signIn = new LinkedHashMap<>();
 		signIn.put("Email", credentials.email());
 		signIn.put("Temporary password", credentials.temporaryPassword());
@@ -67,7 +71,7 @@ public class CredentialsEmailSender {
 			.greeting(credentials.firstName())
 			.paragraph(paragraph)
 			.details(signIn)
-			.button("Sign in", appUrl + "/login")
+			.button("Sign in", appUrl + signInPath)
 			.paragraph("You will be asked to choose your own password when you sign in. The temporary password stops"
 					+ " working on " + EXPIRY.format(credentials.expiresAt()) + "; after that, ask an administrator for a"
 					+ " new one.")

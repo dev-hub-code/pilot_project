@@ -23,7 +23,7 @@ export async function AppHeader({ session }: { session: Session }) {
       <div className="flex h-20 w-full items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           <MobileNav sections={navSections(session.permissions)} />
-          <Logo href={investor ? "/dashboard" : "/admin"} compact />
+          <Logo href={investor ? "/dashboard" : "/platform"} compact />
         </div>
         <div className="flex items-center gap-4">
           <NotificationBell initial={unread} />

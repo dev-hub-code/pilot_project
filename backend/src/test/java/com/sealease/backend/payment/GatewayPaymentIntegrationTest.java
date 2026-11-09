@@ -3,12 +3,11 @@ package com.sealease.backend.payment;
 import com.jayway.jsonpath.JsonPath;
 import com.sealease.backend.payment.gateway.RazorpayClient;
 import com.sealease.backend.payment.gateway.RazorpayClient.GatewayPayment;
-import com.sealease.backend.payment.gateway.RazorpayClient.VirtualAccount;
 import com.sealease.backend.payment.gateway.RazorpaySignatures;
-import com.sealease.backend.payment.provider.PaymentProvider.VirtualAccountDetails;
 import com.sealease.backend.support.IntegrationTest;
 import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
+import com.sealease.backend.support.OldVirtualAccounts;
 import com.sealease.backend.support.TestApi;
 import com.sealease.backend.support.TestApi.Account;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +26,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.mockito.ArgumentMatchers.any;
@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Online investors pay through Razorpay (checkout or virtual account) and their orders confirm without finance; network
+ * Online investors pay through Razorpay checkout and their orders confirm without finance; network
  * investors keep paying by bank or at the office. Razorpay's API is mocked; signatures are real.
  */
 @IntegrationTest
@@ -68,6 +68,8 @@ class GatewayPaymentIntegrationTest {
 	@MockitoBean
 	private RazorpayClient razorpay;
 
+	private UUID companyAccount;
+
 	private TestApi api;
 	private OfferingFixtures offerings;
 
@@ -75,7 +77,7 @@ class GatewayPaymentIntegrationTest {
 	void setUp() throws Exception {
 		api = new TestApi(mvc, jdbc);
 		offerings = new OfferingFixtures(mvc, api.admin());
-		api.companyBankAccount();
+		companyAccount = api.companyBankAccount();
 	}
 
 	@Test
@@ -83,11 +85,11 @@ class GatewayPaymentIntegrationTest {
 		Account online = approvedInvestor();
 		Account network = network(approvedInvestor());
 
-		methods(online).andExpect(jsonPath("$.methods", contains("GATEWAY", "VIRTUAL_ACCOUNT", "WALLET")));
+		// Beside the gateway, online investors may pay by bank transfer to a company account.
+		methods(online).andExpect(jsonPath("$.methods", contains("GATEWAY", "BANK_TRANSFER", "WALLET")));
 		methods(network).andExpect(jsonPath("$.methods", contains("BANK_TRANSFER", "OFFICE_CASH")));
 
 		String onlineOrder = placeOrder(online, offerings.plan());
-		startPayment(online, onlineOrder, "BANK_TRANSFER").andExpect(status().isUnprocessableContent());
 		startPayment(online, onlineOrder, "OFFICE_CASH").andExpect(status().isUnprocessableContent());
 
 		String networkOrder = placeOrder(network, offerings.networkPlan());
@@ -95,6 +97,38 @@ class GatewayPaymentIntegrationTest {
 		startPayment(network, networkOrder, "VIRTUAL_ACCOUNT").andExpect(status().isUnprocessableContent());
 		startPayment(network, networkOrder, "BANK_TRANSFER").andExpect(status().isCreated())
 			.andExpect(jsonPath("$.bankTransfer.reference").isNotEmpty());
+	}
+
+	@Test
+	void onlineInvestorsMayPayByBankTransferToACompanyAccountAndNotSwitchOnceTheySayTheyPaid() throws Exception {
+		Account investor = approvedInvestor();
+		String orderId = placeOrder(investor, offerings.plan());
+		when(razorpay.createOrder(anyLong(), anyString(), anyString(), anyMap())).thenReturn("order_" + suffix());
+
+		// Started online, then changed to bank transfer: the checkout is replaced.
+		startPayment(investor, orderId, "GATEWAY").andExpect(status().isCreated());
+		String transfer = paymentId(startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isCreated())
+			.andExpect(jsonPath("$.method").value("BANK_TRANSFER"))
+			.andExpect(jsonPath("$.bankTransfer.reference").isNotEmpty()));
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid AND status = 'PENDING'",
+				Integer.class, orderId)).isEqualTo(1);
+
+		// Once they say they paid, that money is verified first: no switching to another way meanwhile.
+		mvc.perform(post("/api/v1/payments/{id}/deposit", transfer).header(HttpHeaders.AUTHORIZATION, investor.bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("""
+						{"companyBankAccountId":"%s","mode":"ONLINE","reference":"UTR%s"}""".formatted(companyAccount, suffix())))
+			.andExpect(status().isOk());
+		startPayment(investor, orderId, "GATEWAY").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.message", containsString("Wait for it to be verified")));
+	}
+
+	@Test
+	void bankTransferIntoAnAccountForTheOrderIsNoLongerOffered() throws Exception {
+		Account investor = approvedInvestor();
+		String orderId = placeOrder(investor, offerings.plan());
+		startPayment(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.message", containsString("no longer offered")));
+		assertThat(paymentsOf(orderId)).isZero();
 	}
 
 	@Test
@@ -167,29 +201,17 @@ class GatewayPaymentIntegrationTest {
 					+ "is ₹5,50,000.00. Please pay by bank transfer instead."));
 		verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString(), anyMap());
 
-		when(razorpay.createVirtualAccount(eq(55_000_000L), anyString(), any(Instant.class), anyMap()))
-			.thenReturn(new VirtualAccount("va_" + suffix(),
-					new VirtualAccountDetails("2223330012345679", "RATN0VAAPIS", "SeaLease", "RBL Bank", null)));
-		startPayment(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isCreated())
-			.andExpect(jsonPath("$.virtualAccount.amount.amount").value("550000.00"));
+		startPayment(investor, orderId, "BANK_TRANSFER").andExpect(status().isCreated())
+			.andExpect(jsonPath("$.bankTransfer.reference").isNotEmpty());
 	}
 
 	@Test
-	void aVirtualAccountTakesABankTransferAndOnlyTheRightAmountPaysTheOrder() throws Exception {
+	void anAccountOpenedBeforeTheyWereWithdrawnStillTakesATransferAndOnlyTheRightAmountPaysTheOrder() throws Exception {
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, offerings.plan());
-		String account = "va_" + suffix();
-		when(razorpay.createVirtualAccount(eq(ORDER_PAISE), anyString(), any(Instant.class), anyMap()))
-			.thenReturn(new VirtualAccount(account,
-					new VirtualAccountDetails("2223330012345678", "RATN0VAAPIS", "SeaLease", "RBL Bank", "rpy.sl123@icici")));
-
-		String payment = paymentId(startPayment(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isCreated())
-			.andExpect(jsonPath("$.virtualAccount.accountNumber").value("2223330012345678"))
-			.andExpect(jsonPath("$.virtualAccount.ifsc").value("RATN0VAAPIS"))
-			.andExpect(jsonPath("$.virtualAccount.upiId").value("rpy.sl123@icici"))
-			.andExpect(jsonPath("$.virtualAccount.amount.amount").value("50000.00")));
-		// The order stays pending while the transfer is on its way.
-		assertThat(expiresAt(orderId)).isAfter(Instant.now().plus(Duration.ofDays(2)));
+		String account = OldVirtualAccounts.open(jdbc, investor.id(), orderId, ORDER_PAISE);
+		String payment = jdbc.queryForObject("SELECT id::text FROM payments WHERE provider_reference = ?", String.class,
+				account);
 
 		// Too little: kept aside for refund, and the order still waits.
 		String short1 = "pay_" + suffix();
@@ -213,15 +235,14 @@ class GatewayPaymentIntegrationTest {
 	}
 
 	@Test
-	void choosingTheCheckoutInsteadClosesTheVirtualAccount() throws Exception {
+	void choosingTheCheckoutInsteadClosesAnOldVirtualAccount() throws Exception {
 		Account investor = approvedInvestor();
 		String orderId = placeOrder(investor, offerings.plan());
-		String account = "va_" + suffix();
-		when(razorpay.createVirtualAccount(anyLong(), anyString(), any(Instant.class), anyMap()))
-			.thenReturn(new VirtualAccount(account, new VirtualAccountDetails("2223330087654321", "RATN0VAAPIS", null, null, null)));
+		String account = OldVirtualAccounts.open(jdbc, investor.id(), orderId, ORDER_PAISE);
+		String transfer = jdbc.queryForObject("SELECT id::text FROM payments WHERE provider_reference = ?", String.class,
+				account);
 		when(razorpay.createOrder(anyLong(), anyString(), anyString(), anyMap())).thenReturn("order_" + suffix());
 
-		String transfer = paymentId(startPayment(investor, orderId, "VIRTUAL_ACCOUNT").andExpect(status().isCreated()));
 		startPayment(investor, orderId, "GATEWAY").andExpect(status().isCreated());
 
 		assertThat(statusOf(transfer)).isEqualTo("CANCELLED");

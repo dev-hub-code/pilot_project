@@ -11,12 +11,10 @@ export async function savePaymentGatewaySettingsAction(_p: FormState, formData: 
   const values = {
     maxAmount: String(formData.get("maxAmount") ?? ""),
     checkoutWindowMinutes: String(formData.get("checkoutWindowMinutes") ?? ""),
-    virtualAccountWindowHours: String(formData.get("virtualAccountWindowHours") ?? ""),
   };
   const parsed = paymentGatewaySettingsSchema.safeParse({
     ...values,
     onlinePayments: formData.get("onlinePayments") === "on",
-    virtualAccounts: formData.get("virtualAccounts") === "on",
   });
   if (!parsed.success) return { fieldErrors: firstErrors(parsed.error), values };
   try {

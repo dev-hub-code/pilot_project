@@ -281,7 +281,7 @@ Browser ──cookies──▶ Next.js (BFF) ──Bearer JWT──▶ Spring Bo
   themselves and can never change their own roles.
 - **Investors or staff, never both.** Only the `INVESTOR` role grants `INVESTOR_PORTAL` (not even
   `SUPER_ADMIN` holds it). A user's roles, and a role's permissions, cannot combine it with staff
-  permissions. Staff see only their profile and the admin area; investor pages redirect them to `/admin`.
+  permissions. Staff sign in at `/platform/login` and work in the staff console at `/platform`; investor pages redirect them there.
 - **Browser.** Tokens live only in `HttpOnly`, `SameSite=Lax` cookies (`__Host-` prefixed and
   `Secure` in production). The API is cookie-free and therefore CSRF-immune; Next.js Server Actions
   reject cross-origin posts. Every page gets a nonce-based Content-Security-Policy.

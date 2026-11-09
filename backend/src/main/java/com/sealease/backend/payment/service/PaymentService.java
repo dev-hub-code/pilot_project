@@ -64,6 +64,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -87,6 +88,8 @@ import java.util.UUID;
 @Service
 public class PaymentService {
 
+	/** How long a virtual account opened before they were withdrawn stayed open (for showing one still pending). */
+	private static final Duration OLD_VIRTUAL_ACCOUNT_WINDOW = Duration.ofDays(3);
 	private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 	private static final String ENTITY = "PAYMENT";
 
@@ -140,10 +143,10 @@ public class PaymentService {
 	// --------------------------------------------------------------------------- investor
 
 	/**
-	 * How this investor pays. Online investors pay through the gateway (its checkout, or a virtual account for a bank
-	 * transfer), confirmed automatically, or from their available balance; network investors pay by bank transfer or in
-	 * cash at the office, confirmed by finance. Online investors never pay in cash: until the gateway is set up, they pay
-	 * by bank transfer (or from their balance).
+	 * How this investor pays. Online investors pay through the gateway's checkout (confirmed automatically), by bank
+	 * transfer to a company account (confirmed by finance), or from their available balance; network investors pay by bank transfer or in cash at the office, confirmed by finance. Online
+	 * investors never pay in cash. With the gateway switched off (or not set up), online investors pay by bank transfer
+	 * to a company account or from their balance.
 	 */
 	@Transactional(readOnly = true)
 	public List<PaymentMethod> methodsFor(UUID userId) {
@@ -152,10 +155,14 @@ public class PaymentService {
 			if (!gateway.checkoutOffered()) {
 				return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.WALLET);
 			}
-			// Bank transfer into a virtual account needs Smart Collect; without it, the checkout only.
-			return gateway.virtualAccountsOffered()
-					? List.of(PaymentMethod.GATEWAY, PaymentMethod.VIRTUAL_ACCOUNT, PaymentMethod.WALLET)
-					: List.of(PaymentMethod.GATEWAY, PaymentMethod.WALLET);
+			List<PaymentMethod> methods = new ArrayList<>();
+			methods.add(PaymentMethod.GATEWAY);
+			// Beside the gateway, bank transfer to a company account once finance has one to offer.
+			if (companyAccounts.anyActive()) {
+				methods.add(PaymentMethod.BANK_TRANSFER);
+			}
+			methods.add(PaymentMethod.WALLET);
+			return List.copyOf(methods);
 		}
 		return List.of(PaymentMethod.BANK_TRANSFER, PaymentMethod.OFFICE_CASH);
 	}
@@ -298,11 +305,13 @@ public class PaymentService {
 		boolean cashAllowed = allowed.contains(PaymentMethod.OFFICE_CASH);
 		if (!allowed.contains(method)) {
 			String reason;
-			if (method == PaymentMethod.VIRTUAL_ACCOUNT && allowed.contains(PaymentMethod.GATEWAY)) {
-				reason = "Bank transfer isn't available right now; please pay online";
+			if (method == PaymentMethod.VIRTUAL_ACCOUNT) {
+				// No longer offered: payments into a Razorpay account opened for the order.
+				reason = "Bank transfer to an account for this order is no longer offered. Please pay "
+						+ (allowed.contains(PaymentMethod.GATEWAY) ? "online or " : "") + "by bank transfer to our account";
 			}
 			else if (allowed.contains(PaymentMethod.GATEWAY)) {
-				reason = "Please pay online, through the checkout or by bank transfer to your payment's own account";
+				reason = "Please pay online, or by bank transfer";
 			}
 			else if (method == PaymentMethod.OFFICE_CASH) {
 				reason = "Cash payment is not available for your account; please pay by bank transfer";
@@ -318,7 +327,7 @@ public class PaymentService {
 			Money limit = Money.of(gateway.maxAmount(), order.total().currency());
 			throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION, "Online payment is limited to "
 					+ limit.display() + " per payment, and this order is " + order.total().display() + ". "
-					+ (allowed.contains(PaymentMethod.VIRTUAL_ACCOUNT) ? "Please pay by bank transfer instead."
+					+ (allowed.contains(PaymentMethod.BANK_TRANSFER) ? "Please pay by bank transfer instead."
 							: allowed.contains(PaymentMethod.WALLET)
 									? "Please pay from your available balance if it covers the order, or cancel it and "
 											+ "place orders of up to " + limit.display() + " each."
@@ -344,6 +353,13 @@ public class PaymentService {
 			if (inFlight.getMethod() == method) {
 				return Optional.of(view(inFlight, order.orderNumber()));
 			}
+			// The investor told us they already paid another way: that money is verified first, never left to arrive
+			// for an order paid twice.
+			if (inFlight.hasDepositDetails() || inFlight.getReceiptNumber() != null) {
+				throw new BusinessException(ErrorCode.CONFLICT, "You told us you paid this order by "
+						+ humanize(inFlight.getMethod()).toLowerCase(Locale.ROOT)
+						+ ". Wait for it to be verified, or cancel the order and place it again.");
+			}
 		}
 		return Optional.empty();
 	}
@@ -353,7 +369,6 @@ public class PaymentService {
 		return switch (method) {
 			case OFFICE_CASH -> now.plus(office.holdWindow());
 			case GATEWAY -> now.plus(gatewaySettings.current().checkoutWindow());
-			case VIRTUAL_ACCOUNT -> now.plus(gatewaySettings.current().virtualAccountWindow());
 			default -> null;
 		};
 	}
@@ -851,7 +866,7 @@ public class PaymentService {
 			PaymentProvider.VirtualAccountDetails va = payment.virtualAccount();
 			virtualAccount = new VirtualAccountInstructions(MoneyResponse.from(payment.amount()), va.accountNumber(),
 					va.ifsc(), va.accountName(), va.bankName(), va.upiId(),
-					payment.getCreatedAt().plus(gatewaySettings.current().virtualAccountWindow()));
+					payment.getCreatedAt().plus(OLD_VIRTUAL_ACCOUNT_WINDOW));
 		}
 		return PaymentResponse.from(payment, orderNumber, instructions, deposit, officeCash, checkout, virtualAccount);
 	}

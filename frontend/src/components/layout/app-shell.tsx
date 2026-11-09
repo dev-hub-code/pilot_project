@@ -19,7 +19,7 @@ export function AppShell({ session, home, mainClassName = "", children }: {
       <div className="flex flex-1">
         <SideNav sections={navSections(session.permissions)} />
         <div className="flex min-w-0 flex-1 flex-col">
-          {home === "/admin" ? <Breadcrumbs sections={navSections(session.permissions)} /> : <BackButton home={home} />}
+          {home === "/platform" ? <Breadcrumbs sections={navSections(session.permissions)} /> : <BackButton home={home} />}
           <main className={`mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-10 sm:px-6 ${mainClassName}`}>{children}</main>
         </div>
       </div>

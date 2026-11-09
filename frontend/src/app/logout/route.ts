@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { backendFetch } from "@/lib/server/backend-client";
+import { hasStaffAccess } from "@/lib/permissions";
 import { clearSessionCookies, cookieNames } from "@/lib/server/auth/cookies";
+import { verifyAccessToken } from "@/lib/server/auth/tokens";
 
 /**
  * Sign out, as a full page request (a plain form POST) rather than a Server Action: the browser leaves the page, so
@@ -14,6 +16,10 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 403 });
   }
 
+  const access = request.cookies.get(cookieNames().access)?.value;
+  const claims = access ? await verifyAccessToken(access) : null;
+  // Staff go back to their own sign-in page.
+  const signIn = claims && hasStaffAccess(claims.permissions) ? "/platform/login" : "/login";
   const refreshToken = request.cookies.get(cookieNames().refresh)?.value;
   if (refreshToken) {
     try {
@@ -24,11 +30,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 303: the browser follows with a GET to /login, not a repeat of this POST. A relative location keeps the
+  // 303: the browser follows with a GET to the sign-in page, not a repeat of this POST. A relative location keeps the
   // scheme and host the browser used (https behind the proxy).
   const response = new NextResponse(null, {
     status: 303,
-    headers: { Location: "/login", "Clear-Site-Data": '"cache", "storage"', "Cache-Control": "no-store" },
+    headers: { Location: signIn, "Clear-Site-Data": '"cache", "storage"', "Cache-Control": "no-store" },
   });
   clearSessionCookies(response.cookies);
   return response;

@@ -39,7 +39,7 @@ export async function KycQueue({ statusParam, page }: { statusParam: unknown; pa
           {STATUSES.map((s) => {
             const { label, icon: Icon } = STATUS_TAB[s];
             return (
-              <Link key={s} href={`/admin/verification?status=${s}`} aria-current={s === status ? "page" : undefined}
+              <Link key={s} href={`/platform/verification?status=${s}`} aria-current={s === status ? "page" : undefined}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 font-medium whitespace-nowrap transition-colors duration-200 ${s === status
                   ? "bg-ink text-on-ink shadow-sm dark:bg-gold dark:text-on-gold"
                   : "text-muted hover:bg-background hover:text-foreground"}`}>
@@ -77,7 +77,7 @@ export async function KycQueue({ statusParam, page }: { statusParam: unknown; pa
                   {(s.legalFirstName.charAt(0) + s.legalLastName.charAt(0)).toUpperCase() || "?"}
                 </span>
                 <div className="min-w-0">
-                  <Link href={`/admin/kyc/${s.id}`} className="card-link block truncate font-medium text-foreground group-hover:text-gold-text">
+                  <Link href={`/platform/kyc/${s.id}`} className="card-link block truncate font-medium text-foreground group-hover:text-gold-text">
                     {s.legalFirstName} {s.legalLastName}
                   </Link>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
@@ -106,7 +106,7 @@ export async function KycQueue({ statusParam, page }: { statusParam: unknown; pa
           ))}
         </ul>
       )}
-      <Pagination page={queue} basePath="/admin/verification" params={{ status }} />
+      <Pagination page={queue} basePath="/platform/verification" params={{ status }} />
     </div>
   );
 }

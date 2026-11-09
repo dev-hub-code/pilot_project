@@ -35,7 +35,7 @@ export function PaymentGatewayKeysForm({ keys }: { keys: PaymentGatewayKeys }) {
       </div>
       <p className="text-xs text-muted">
         From the Razorpay Dashboard: Account &amp; Settings → API keys. Webhook URL: <span className="font-mono">/api/v1/webhooks/razorpay</span>{" "}
-        on this site, with payment.authorized, payment.captured and virtual_account.credited. Changes apply at once.
+        on this site, with payment.authorized and payment.captured. Changes apply at once.
       </p>
       <SubmitButton confirm="Change the Razorpay keys? Every payment from now on uses them. Wrong keys stop online payments.">
         Save keys

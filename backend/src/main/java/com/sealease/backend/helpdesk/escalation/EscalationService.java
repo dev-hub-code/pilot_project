@@ -119,7 +119,7 @@ public class EscalationService {
 		told.remove(actorId);
 		told.remove(ticket.getUserId());
 		String title = ticket.getReference() + " escalated to level " + target + " (" + levelName(target) + ")";
-		told.forEach(id -> notifications.notify(id, "TICKET_ESCALATED", title, text, "/admin/support/" + ticket.getId()));
+		told.forEach(id -> notifications.notify(id, "TICKET_ESCALATED", title, text, "/platform/support/" + ticket.getId()));
 		return true;
 	}
 

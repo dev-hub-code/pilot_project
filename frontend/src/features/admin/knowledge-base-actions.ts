@@ -50,8 +50,8 @@ export async function saveArticleAction(articleId: string | null, version: numbe
   } catch (error) {
     return failureState(error, values);
   }
-  revalidatePath("/admin/support/knowledge-base", "layout");
-  if (!articleId) redirect(`/admin/support/knowledge-base/${saved.summary.id}`);
+  revalidatePath("/platform/support/knowledge-base", "layout");
+  if (!articleId) redirect(`/platform/support/knowledge-base/${saved.summary.id}`);
   return { success: `Saved as version ${saved.currentVersion}.` };
 }
 
@@ -61,6 +61,6 @@ export async function articleStateAction(articleId: string, step: "publish" | "u
   } catch (error) {
     return failureState(error);
   }
-  revalidatePath("/admin/support/knowledge-base", "layout");
+  revalidatePath("/platform/support/knowledge-base", "layout");
   return { success: step === "publish" ? "Published." : step === "unpublish" ? "Back to draft." : "Archived." };
 }

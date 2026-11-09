@@ -7,13 +7,13 @@ const P = Permission;
 
 /** The support area's sections; each shows only for the permissions its API needs. */
 const TABS = [
-  { key: "queue", label: "Tickets", href: "/admin/support", requires: [P.SUPPORT_TICKET_VIEW, P.FINANCE_TICKET_HANDLE] },
-  { key: "dashboard", label: "Dashboard", href: "/admin/support/dashboard", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW, P.REPORT_VIEW] },
-  { key: "escalations", label: "Escalations", href: "/admin/support/escalations", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW] },
-  { key: "feedback", label: "Feedback", href: "/admin/support/feedback", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW, P.REPORT_VIEW] },
-  { key: "knowledge-base", label: "Knowledge base", href: "/admin/support/knowledge-base",
+  { key: "queue", label: "Tickets", href: "/platform/support", requires: [P.SUPPORT_TICKET_VIEW, P.FINANCE_TICKET_HANDLE] },
+  { key: "dashboard", label: "Dashboard", href: "/platform/support/dashboard", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW, P.REPORT_VIEW] },
+  { key: "escalations", label: "Escalations", href: "/platform/support/escalations", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW] },
+  { key: "feedback", label: "Feedback", href: "/platform/support/feedback", requires: [P.SUPPORT_TICKET_VIEW, P.SUPPORT_ANALYTICS_VIEW, P.REPORT_VIEW] },
+  { key: "knowledge-base", label: "Knowledge base", href: "/platform/support/knowledge-base",
     requires: [P.KNOWLEDGE_BASE_MANAGE, P.SYSTEM_SETTINGS_MANAGE, P.SUPPORT_TICKET_VIEW, P.FINANCE_TICKET_HANDLE] },
-  { key: "settings", label: "Settings", href: "/admin/support/settings",
+  { key: "settings", label: "Settings", href: "/platform/support/settings",
     requires: [P.SUPPORT_CONFIG_MANAGE, P.SYSTEM_SETTINGS_MANAGE, P.SUPPORT_TICKET_VIEW] },
 ] as const;
 
@@ -35,7 +35,7 @@ export async function SupportShell({ active, children }: { active: SupportTab; c
             </Link>
           ))}
           {reports && (
-            <Link href="/admin/reports/ticket-agent-performance" className="whitespace-nowrap rounded-lg px-4 py-2 font-medium transition-colors duration-200 text-muted hover:bg-background hover:text-foreground">
+            <Link href="/platform/reports/ticket-agent-performance" className="whitespace-nowrap rounded-lg px-4 py-2 font-medium transition-colors duration-200 text-muted hover:bg-background hover:text-foreground">
               Reports
             </Link>
           )}

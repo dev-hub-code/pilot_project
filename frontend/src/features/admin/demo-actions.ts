@@ -7,7 +7,7 @@ import { failureState } from "@/lib/server/action-errors";
 import { demoAccountSchema, demoFrameSchema, demoMemberSchema, demoOrderSchema } from "@/validators/demo";
 import { type FormState, firstErrors } from "@/validators/form-state";
 
-const HERE = "/admin/demo-accounts";
+const HERE = "/platform/demo-accounts";
 const api = (userId: string) => `/api/v1/admin/demo-accounts/${encodeURIComponent(userId)}`;
 
 function inputOf(formData: FormData): Record<string, string> {

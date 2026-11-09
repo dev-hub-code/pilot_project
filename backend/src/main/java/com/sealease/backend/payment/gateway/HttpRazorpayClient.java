@@ -1,6 +1,5 @@
 package com.sealease.backend.payment.gateway;
 
-import com.sealease.backend.payment.provider.PaymentProvider.VirtualAccountDetails;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +14,8 @@ import tools.jackson.databind.JsonNode;
 
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -28,10 +25,6 @@ public class HttpRazorpayClient implements RazorpayClient {
 
 	private static final Logger log = LoggerFactory.getLogger(HttpRazorpayClient.class);
 
-	/** What investors are told when a virtual account cannot be opened, whatever the reason. */
-	static final String BANK_TRANSFER_UNAVAILABLE = "Bank transfer isn't available right now; please pay online";
-	/** Razorpay's description when an API is not activated on the account. */
-	private static final String NOT_FOUND = "The requested URL was not found on the server.";
 
 	private final RestClient client;
 
@@ -74,47 +67,6 @@ public class HttpRazorpayClient implements RazorpayClient {
 		return call("create an order", () -> post("/v1/orders", body)).path("id").asString();
 	}
 
-	@Override
-	public VirtualAccount createVirtualAccount(long amountExpectedPaise, String description, Instant closeBy,
-			Map<String, String> notes) {
-		Map<String, Object> body = new LinkedHashMap<>();
-		body.put("receivers", Map.of("types", List.of("bank_account", "vpa")));
-		body.put("description", description);
-		body.put("amount_expected", amountExpectedPaise);
-		body.put("close_by", closeBy.getEpochSecond());
-		body.put("notes", notes);
-		JsonNode account;
-		try {
-			account = call("open a virtual account", () -> post("/v1/virtual_accounts", body));
-		}
-		catch (RazorpayException e) {
-			if (e.getCause() instanceof RestClientResponseException refused && refused.getStatusCode().is4xxClientError()
-					&& NOT_FOUND.equals(describe(refused))) {
-				// Razorpay answers this way when Smart Collect is not activated on the account.
-				log.error("Razorpay virtual accounts are not available on this account: activate Smart Collect, or set "
-						+ "RAZORPAY_VIRTUAL_ACCOUNTS=false to hide bank transfer");
-			}
-			throw new RazorpayException(BANK_TRANSFER_UNAVAILABLE, e);
-		}
-		String number = null, ifsc = null, name = null, bank = null, upi = null;
-		for (JsonNode receiver : account.path("receivers")) {
-			switch (receiver.path("entity").asString()) {
-				case "bank_account" -> {
-					number = receiver.path("account_number").asString();
-					ifsc = receiver.path("ifsc").asString();
-					name = text(receiver, "name");
-					bank = text(receiver, "bank_name");
-				}
-				case "vpa" -> upi = text(receiver, "address");
-				default -> {
-				}
-			}
-		}
-		if (number == null || number.isBlank()) {
-			throw new RazorpayException(BANK_TRANSFER_UNAVAILABLE, null);
-		}
-		return new VirtualAccount(account.path("id").asString(), new VirtualAccountDetails(number, ifsc, name, bank, upi));
-	}
 
 	@Override
 	public void closeVirtualAccount(String virtualAccountId) {

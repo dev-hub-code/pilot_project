@@ -23,7 +23,7 @@ export async function publishAnnouncementAction(_p: FormState, formData: FormDat
   } catch (error) {
     return failureState(error, input);
   }
-  revalidatePath("/admin/announcements");
+  revalidatePath("/platform/announcements");
   revalidatePath("/", "layout");
   return { success: `Sent to ${sent.recipients.toLocaleString("en-IN")} account${sent.recipients === 1 ? "" : "s"}.` };
 }

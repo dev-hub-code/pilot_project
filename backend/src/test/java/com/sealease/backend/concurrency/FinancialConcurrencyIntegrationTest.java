@@ -5,10 +5,9 @@ import com.sealease.backend.earning.service.PayoutService;
 import com.sealease.backend.order.service.OrderService;
 import com.sealease.backend.payment.gateway.RazorpayClient;
 import com.sealease.backend.payment.gateway.RazorpayClient.RazorpayException;
-import com.sealease.backend.payment.gateway.RazorpayClient.VirtualAccount;
 import com.sealease.backend.payment.gateway.RazorpaySignatures;
-import com.sealease.backend.payment.provider.PaymentProvider.VirtualAccountDetails;
 import com.sealease.backend.support.IntegrationTest;
+import com.sealease.backend.support.OldVirtualAccounts;
 import com.sealease.backend.support.InvestorFixtures;
 import com.sealease.backend.support.OfferingFixtures;
 import com.sealease.backend.support.TestApi;
@@ -459,20 +458,18 @@ class FinancialConcurrencyIntegrationTest {
 	void aTimedOutPaymentStartIsRetriedSafely() throws Exception {
 		Account investor = approvedOnline();
 		String orderId = gatewayOrder(investor);
-		String account = "va_" + suffix();
-		when(razorpay.createVirtualAccount(eq(ORDER_PAISE), anyString(), any(Instant.class), anyMap()))
+		when(razorpay.createOrder(eq(ORDER_PAISE), anyString(), anyString(), anyMap()))
 			.thenThrow(new RazorpayException("Read timed out", null))
-			.thenReturn(new VirtualAccount(account,
-					new VirtualAccountDetails("2223330012345678", "RATN0VAAPIS", "SeaLease", "RBL Bank", "rpy.sl@icici")));
+			.thenReturn("order_" + suffix());
 		String key = key();
 
-		startPayment(investor, orderId, "VIRTUAL_ACCOUNT", key).andExpect(status().isUnprocessableContent());
+		startPayment(investor, orderId, "GATEWAY", key).andExpect(status().isUnprocessableContent());
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM payments WHERE order_id = ?::uuid", Integer.class, orderId))
 			.as("the timed-out attempt left nothing behind").isZero();
 
 		List<String> ids = Collections.synchronizedList(new ArrayList<>());
 		race("10 retries of one payment start (same key)", 10, i -> {
-			var response = startPayment(investor, orderId, "VIRTUAL_ACCOUNT", key).andReturn().getResponse();
+			var response = startPayment(investor, orderId, "GATEWAY", key).andReturn().getResponse();
 			if (response.getStatus() / 100 == 2) {
 				ids.add(JsonPath.read(response.getContentAsString(), "$.id"));
 			}
@@ -487,18 +484,15 @@ class FinancialConcurrencyIntegrationTest {
 	void aSlowGatewayCallDoesNotHoldTheOrderLock() throws Exception {
 		Account investor = approvedOnline();
 		String orderId = gatewayOrder(investor);
-		java.util.concurrent.atomic.AtomicReference<String> opened = new java.util.concurrent.atomic.AtomicReference<>();
-		when(razorpay.createVirtualAccount(eq(ORDER_PAISE), anyString(), any(Instant.class), anyMap())).thenAnswer(call -> {
+		when(razorpay.createOrder(eq(ORDER_PAISE), anyString(), anyString(), anyMap())).thenAnswer(call -> {
 			Thread.sleep(1500); // a slow Razorpay answer
-			opened.set("va_" + suffix());
-			return new VirtualAccount(opened.get(),
-					new VirtualAccountDetails("2223330012345678", "RATN0VAAPIS", "SeaLease", "RBL Bank", "rpy.sl@icici"));
+			return "order_" + suffix();
 		});
 
 		long[] cancelWaitedMs = new long[1];
 		Race race = race("payment start (slow gateway) vs order cancel", 2, i -> {
 			if (i == 0) {
-				return startPayment(investor, orderId, "VIRTUAL_ACCOUNT", key()).andReturn().getResponse().getStatus();
+				return startPayment(investor, orderId, "GATEWAY", key()).andReturn().getResponse().getStatus();
 			}
 			Thread.sleep(200); // the start is waiting for Razorpay by now
 			long t0 = System.nanoTime();
@@ -514,7 +508,6 @@ class FinancialConcurrencyIntegrationTest {
 		assertThat(race.count(200)).as("the cancel").isEqualTo(1);
 		assertThat(race.count(422)).as("the start finds the order cancelled").isEqualTo(1);
 		assertThat(paymentsOf(orderId, "PENDING")).as("no payment recorded for a cancelled order").isZero();
-		verify(razorpay, timeout(2000)).closeVirtualAccount(opened.get());
 	}
 
 	@Test
@@ -867,14 +860,9 @@ class FinancialConcurrencyIntegrationTest {
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 
-	/** Opens a virtual account for the order; returns Razorpay's id for it. */
-	private String virtualAccountFor(Account investor, String orderId) throws Exception {
-		String account = "va_" + suffix();
-		when(razorpay.createVirtualAccount(eq(ORDER_PAISE), anyString(), any(Instant.class), anyMap()))
-			.thenReturn(new VirtualAccount(account,
-					new VirtualAccountDetails("2223330012345678", "RATN0VAAPIS", "SeaLease", "RBL Bank", "rpy.sl@icici")));
-		startPayment(investor, orderId, "VIRTUAL_ACCOUNT", key()).andExpect(status().isCreated());
-		return account;
+	/** A virtual account opened for the order before they were withdrawn; returns Razorpay's id for it. */
+	private String virtualAccountFor(Account investor, String orderId) {
+		return OldVirtualAccounts.open(jdbc, investor.id(), orderId, ORDER_PAISE);
 	}
 
 	private ResultActions startPayment(Account investor, String orderId, String method, String key) throws Exception {
