@@ -35,9 +35,9 @@ export const ADMIN_NAV: readonly NavItem[] = [
 
   { id: "leads", label: "CRM & Leads", href: "/admin/leads", icon: "target", category: "Customer Operations", requires: [P.LEAD_VIEW] },
   { id: "support", label: "Support Tickets", href: "/admin/support", icon: "life", category: "Customer Operations", requires: [P.SUPPORT_TICKET_VIEW, P.FINANCE_TICKET_HANDLE] },
-  // Reached from the support area too; listed for holders of the new (unassigned by default) permissions alone.
-  { id: "knowledge-base", label: "Knowledge Base", href: "/admin/support/knowledge-base", icon: "book", category: "Customer Operations", requires: [P.KNOWLEDGE_BASE_MANAGE] },
-  { id: "support-settings", label: "Support Settings", href: "/admin/support/settings", icon: "settings", category: "Customer Operations", requires: [P.SUPPORT_CONFIG_MANAGE] },
+  // Reached from the support area too. System settings managers may use both pages as well.
+  { id: "knowledge-base", label: "Knowledge Base", href: "/admin/support/knowledge-base", icon: "book", category: "Customer Operations", requires: [P.KNOWLEDGE_BASE_MANAGE, P.SYSTEM_SETTINGS_MANAGE] },
+  { id: "support-settings", label: "Support Settings", href: "/admin/support/settings", icon: "settings", category: "Customer Operations", requires: [P.SUPPORT_CONFIG_MANAGE, P.SYSTEM_SETTINGS_MANAGE] },
   { id: "announcements", label: "Announcements", href: "/admin/announcements", icon: "megaphone", category: "Customer Operations", requires: [P.ANNOUNCEMENT_MANAGE] },
 
   { id: "referrals", label: "Referral Management", href: "/admin/downlines", icon: "network", category: "Partner Management", requires: [P.REFERRAL_TREE_MANAGE] },

@@ -383,10 +383,12 @@ class SupportManagementIntegrationTest {
 		mvc.perform(get("/api/v1/admin/support/config/calendar").header(HttpHeaders.AUTHORIZATION, admin.bearer()))
 			.andExpect(status().isOk()).andExpect(jsonPath("$.hours.length()").value(5));
 
-		// The new permissions are catalogue entries only: no role holds them.
-		assertThat(jdbc.queryForObject("""
-				SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
-				WHERE p.code IN ('SUPPORT_CONFIG_MANAGE', 'KNOWLEDGE_BASE_MANAGE', 'SUPPORT_ANALYTICS_VIEW')""", Integer.class)).isZero();
+		// Only the super admin and the support and BI job roles hold the support management permissions.
+		assertThat(jdbc.queryForList("""
+				SELECT DISTINCT r.name FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
+				JOIN roles r ON r.id = rp.role_id
+				WHERE p.code IN ('SUPPORT_CONFIG_MANAGE', 'KNOWLEDGE_BASE_MANAGE', 'SUPPORT_ANALYTICS_VIEW')""", String.class))
+			.containsExactlyInAnyOrder("SUPER_ADMIN", "SUPPORT_MANAGER", "SENIOR_SUPPORT_EXECUTIVE", "BI_MANAGER");
 	}
 
 	// ------------------------------------------------------------------------------------------------ helpers

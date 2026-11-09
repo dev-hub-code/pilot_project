@@ -338,9 +338,23 @@ class UserManagementIntegrationTest {
 		}
 
 		// Submitting the documents resolves it.
-		submitValidKyc(late).andExpect(status().isCreated());
+		String submission = JsonPath.read(submitValidKyc(late).andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString(), "$.id");
 		mvc.perform(get("/api/v1/support/tickets/{id}", ticketId).header(HttpHeaders.AUTHORIZATION, late.bearer()))
-			.andExpect(jsonPath("$.ticket.status").value("RESOLVED"));
+			.andExpect(jsonPath("$.ticket.status").value("RESOLVED"))
+			.andExpect(jsonPath("$.messages.length()").value(2));
+
+		// Submitting again after a rejection does not post the thank-you (or send "resolved") a second time.
+		api.assignReview("kyc", submission, api.admin());
+		mvc.perform(post("/api/v1/admin/kyc/{id}/reject", submission).header(HttpHeaders.AUTHORIZATION, api.admin().bearer())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"PAN card is blurred\"}"))
+			.andExpect(status().isOk());
+		submitKyc(late, validKycFiles()).andExpect(status().isCreated());
+		mvc.perform(get("/api/v1/support/tickets/{id}", ticketId).header(HttpHeaders.AUTHORIZATION, late.bearer()))
+			.andExpect(jsonPath("$.ticket.status").value("RESOLVED"))
+			.andExpect(jsonPath("$.messages.length()").value(2));
+		assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? AND title LIKE '% was resolved'",
+				Integer.class, late.id())).isEqualTo(1);
 	}
 
 	@Test

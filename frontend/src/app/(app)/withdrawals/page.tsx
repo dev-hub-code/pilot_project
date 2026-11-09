@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EARNINGS_BALANCE_LABEL, nextCreditNote } from "@/features/earnings/labels";
 import { investorStatusLabel, WITHDRAWAL_TONE } from "@/features/withdrawals/labels";
@@ -210,9 +211,7 @@ export default async function WithdrawalsPage({ searchParams }: PageProps<"/with
                     <div className="flex justify-between text-xs text-muted">
                       <span>Earned so far</span><span>{earnedShare.toFixed(1)}% of {formatMoney(i.invested)}</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-border">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${earnedShare}%` }} />
-                    </div>
+                    <ProgressBar percent={earnedShare} label="Earned so far" fill="fill-emerald-500" />
                   </div>
                   <p className="text-xs leading-relaxed text-muted">
                     {i.lockReason}{i.nextUnlock ? ` Next on ${formatDate(i.nextUnlock)}.` : ""}
