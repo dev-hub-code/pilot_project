@@ -83,10 +83,9 @@ whatever branch is checked out: it builds the images locally from a clean tempor
 over SSH (no registry), and restarts the containers. SSH in with the command in `terraform output ssh`; logs:
 `cd /opt/sealease && docker compose logs -f backend`.
 
-**Database on RDS.** `rds.tf` adds an Amazon RDS PostgreSQL whose disk grows by itself (20 GB up to 200 GB). Moving to
-it is two steps: `terraform -chdir=infra/lightsail apply` creates it (the app keeps using the Lightsail database), then
-`infra/lightsail/migrate-to-rds.sh` stops the API for a few minutes, copies the data, checks every table's row count and
-switches the app over. Commit the `database.auto.tfvars` it writes; delete the Lightsail database a few days later.
+**Database.** The app's database is an Amazon RDS PostgreSQL (`rds.tf`) whose disk grows by itself (20 GB up to
+200 GB). It replaced the first Lightsail database in November 2026; that database's final snapshot is
+`sealease-dev-db-final`.
 
 To stop all charges: `terraform -chdir=infra/lightsail destroy` (empty the two buckets first; it keeps a final database
 snapshot, which is billed until you delete it).
