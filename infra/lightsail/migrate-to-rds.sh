@@ -17,7 +17,9 @@ if [[ "$(tf -raw database_url)" != "$(tf -raw lightsail_database_url)" ]]; then
 fi
 host=$(tf -raw static_ip)
 ssh_opts=(-i ~/.ssh/sealease_lightsail -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
-remote() { ssh "${ssh_opts[@]}" "ubuntu@$host" "$@"; }
+# remote reads nothing from this terminal (so the prompt below gets the answer); send_to pipes its input to the server.
+remote() { ssh "${ssh_opts[@]}" "ubuntu@$host" "$@" </dev/null; }
+send_to() { ssh "${ssh_opts[@]}" "ubuntu@$host" "$@"; }
 host_of() { sed -E 's#jdbc:postgresql://([^:/]+).*#\1#' <<<"$1"; }
 src="host=$(host_of "$(tf -raw lightsail_database_url)") dbname=sealease user=sealease sslmode=require"
 dst="host=$(host_of "$(tf -raw rds_database_url)") dbname=sealease user=sealease sslmode=require"
@@ -25,8 +27,8 @@ dst="host=$(host_of "$(tf -raw rds_database_url)") dbname=sealease user=sealease
 # The passwords go to the server in files only the deploy user can read, never on a command line.
 work=/opt/sealease/migrate
 remote "umask 077 && mkdir -p $work"
-echo "PGPASSWORD=$(tf -raw lightsail_database_password)" | remote "umask 077; cat > $work/source.env"
-echo "PGPASSWORD=$(tf -raw rds_database_password)" | remote "umask 077; cat > $work/target.env"
+echo "PGPASSWORD=$(tf -raw lightsail_database_password)" | send_to "umask 077; cat > $work/source.env"
+echo "PGPASSWORD=$(tf -raw rds_database_password)" | send_to "umask 077; cat > $work/target.env"
 psql_on() { remote "docker run --rm --env-file $work/$1.env postgres:18 psql '$2' -v ON_ERROR_STOP=1 -tA -c \"$3\""; }
 
 switched=false
@@ -47,8 +49,11 @@ if [[ "$tables" != "0" ]]; then
   exit 1
 fi
 
-read -r -p "This stops the API for a few minutes while the data is copied. Continue? [y/N] " answer
-[[ "$answer" == [yY] ]] || { echo "Nothing changed."; exit 1; }
+# CONFIRM=yes skips the question (unattended runs).
+if [[ "${CONFIRM:-}" != "yes" ]]; then
+  read -r -p "This stops the API for a few minutes while the data is copied. Continue? [y/N] " answer
+  [[ "$answer" == [yY] ]] || { echo "Nothing changed."; exit 1; }
+fi
 
 echo "Stopping the API…"
 remote "cd /opt/sealease && docker compose stop backend"
@@ -74,7 +79,7 @@ echo "Switching the app to RDS…"
 printf '# Set by migrate-to-rds.sh: the app uses RDS (rds.tf). Commit this file.\ndatabase = "rds"\n' > $here/database.auto.tfvars
 terraform -chdir=$here apply -refresh-only -auto-approve -compact-warnings >/dev/null
 $here/env.sh >/dev/null
-grep -v '^#' .secrets/lightsail.env | remote 'umask 077; cat > /opt/sealease/backend.env'
+grep -v '^#' .secrets/lightsail.env | send_to 'umask 077; cat > /opt/sealease/backend.env'
 remote "cd /opt/sealease && docker compose up -d --wait backend"
 switched=true
 
