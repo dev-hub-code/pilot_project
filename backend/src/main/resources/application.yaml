@@ -305,14 +305,6 @@ app:
       # The most Razorpay accepts in one checkout payment, in rupees (₹5,00,000 unless Razorpay has raised it for the
       # account; 0 for no limit). A larger order is not offered the checkout and is paid another way.
       max-amount: ${RAZORPAY_MAX_AMOUNT:500000}
-  mail:
-    # A second SMTP server (e.g. Brevo: smtp-relay.brevo.com, port 587) for emails the primary (spring.mail) cannot
-    # send, such as Amazon SES refusing unverified recipients while in its sandbox. Off while MAIL_FALLBACK_HOST is blank.
-    fallback:
-      host: ${MAIL_FALLBACK_HOST:}
-      port: ${MAIL_FALLBACK_PORT:587}
-      username: ${MAIL_FALLBACK_USERNAME:}
-      password: ${MAIL_FALLBACK_PASSWORD:}
   notifications:
     email:
       # Also email each notification to users who keep email notifications on (Settings).
