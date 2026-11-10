@@ -3,8 +3,6 @@
 #   .secrets/lightsail.env         the API's settings: fresh JWT and field-encryption keys (made once and then kept), and
 #                                  the database, SES and S3 settings from Terraform (refreshed each run)
 #   .secrets/lightsail-backup.env  the add-only key for the nightly database backups
-# Lines you add yourself are kept, e.g. a fallback SMTP server (Brevo) for mail SES cannot send:
-#   MAIL_FALLBACK_HOST=smtp-relay.brevo.com  MAIL_FALLBACK_USERNAME=<SMTP login>  MAIL_FALLBACK_PASSWORD=<SMTP key>
 # BACK UP .secrets/lightsail.env (e.g. in a password manager): without its encryption keys the KYC documents, tax ids
 # and bank accounts in the database can never be read again.
 set -euo pipefail
