@@ -57,3 +57,19 @@ output "smtp_password" {
   value     = aws_iam_access_key.ses_smtp.ses_smtp_password_v4
   sensitive = true
 }
+
+# Bounces return to mail.<domain> instead of amazonses.com, so SPF also passes for our own domain (DMARC alignment).
+# Until the mail_from_dns_records exist in GoDaddy, SES falls back to its default MAIL FROM, so sending never stops.
+resource "aws_sesv2_email_identity_mail_from_attributes" "domain" {
+  email_identity         = aws_sesv2_email_identity.domain.email_identity
+  mail_from_domain       = "mail.${var.domain}"
+  behavior_on_mx_failure = "USE_DEFAULT_VALUE"
+}
+
+output "mail_from_dns_records" {
+  description = "Add in GoDaddy (DNS > Manage DNS) for the custom MAIL FROM domain. Names are relative to the domain."
+  value = [
+    { type = "MX", name = "mail", value = "feedback-smtp.${var.region}.amazonses.com", priority = 10 },
+    { type = "TXT", name = "mail", value = "v=spf1 include:amazonses.com ~all" },
+  ]
+}
