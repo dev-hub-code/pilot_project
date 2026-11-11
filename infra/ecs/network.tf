@@ -45,7 +45,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# How the app tasks reach ECR, Secrets Manager, logs and SES:
+# How the app tasks reach ECR, Secrets Manager, logs and SendGrid:
 #   "none"   (cheapest) tasks run in the public subnets with a public IP; their security groups still admit nothing
 #            from the internet (web: only the load balancer; API: only the web tasks).
 #   "single" tasks in private subnets behind one NAT gateway (a single point of failure for outbound traffic).

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Writes the development server's secrets (git-ignored), after `terraform -chdir=infra/lightsail apply`:
 #   .secrets/lightsail.env         the API's settings: fresh JWT and field-encryption keys (made once and then kept), and
-#                                  the database, SES and S3 settings from Terraform (refreshed each run)
+#                                  the database and S3 settings from Terraform (refreshed each run). Email goes through
+#                                  SendGrid: add SENDGRID_API_KEY=SG.… to .secrets/lightsail.env (it is kept between runs)
 #   .secrets/lightsail-backup.env  the add-only key for the nightly database backups
 # BACK UP .secrets/lightsail.env (e.g. in a password manager): without its encryption keys the KYC documents, tax ids
 # and bank accounts in the database can never be read again.
@@ -31,6 +32,10 @@ ENV
 fi
 
 # Everything below is rewritten on each run; the generated keys above are kept.
+sendgrid_key=$(grep -E '^SENDGRID_API_KEY=' "$out" | tail -n1 | cut -d= -f2- || true)
+if [[ -z "$sendgrid_key" ]]; then
+  echo "Warning: no SENDGRID_API_KEY in $out; the API will not be able to send email." >&2
+fi
 managed='DB_URL|DB_USERNAME|DB_PASSWORD|SPRING_PROFILES_ACTIVE|JWT_ISSUER|JWT_AUDIENCE|APP_KAFKA_CREATETOPICS|APP_PUBLIC_URL|APP_CORS_ALLOWED_ORIGINS|APP_NOTIFICATION_EMAIL_ENABLED|APP_NOTIFICATION_EMAIL_FROM|MAIL_HOST|MAIL_PORT|MAIL_USERNAME|MAIL_PASSWORD|MAIL_SMTP_AUTH|MAIL_SMTP_STARTTLS|INVOICE_ISSUER_NAME|INVOICE_ISSUER_ADDRESS|APP_DOCUMENTS_S3_BUCKET|APP_DOCUMENTS_S3_REGION|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|# Set by'
 grep -vE "^($managed)" "$out" > "$out.new" || true
 cat >> "$out.new" <<ENV
@@ -46,10 +51,10 @@ APP_PUBLIC_URL=https://www.sealease.in
 APP_CORS_ALLOWED_ORIGINS=https://www.sealease.in
 APP_NOTIFICATION_EMAIL_ENABLED=true
 APP_NOTIFICATION_EMAIL_FROM=SeaLease <no-reply@sealease.in>
-MAIL_HOST=$(json smtp host)
-MAIL_PORT=$(json smtp port)
-MAIL_USERNAME=$(json smtp username)
-MAIL_PASSWORD=$(tf -raw smtp_password)
+MAIL_HOST=smtp.sendgrid.net
+MAIL_PORT=587
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=${sendgrid_key}
 MAIL_SMTP_AUTH=true
 MAIL_SMTP_STARTTLS=true
 INVOICE_ISSUER_NAME=Leasefleet Solutions Pvt. Ltd.

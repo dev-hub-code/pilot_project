@@ -138,7 +138,7 @@ locals {
     JWT_AUDIENCE                   = local.jwt_audience
     APP_PUBLIC_URL                 = local.site_url
     APP_CORS_ALLOWED_ORIGINS       = local.site_url
-    MAIL_HOST                      = "email-smtp.${var.region}.amazonaws.com"
+    MAIL_HOST                      = "smtp.sendgrid.net"
     MAIL_PORT                      = "587"
     MAIL_SMTP_AUTH                 = "true"
     MAIL_SMTP_STARTTLS             = "true"

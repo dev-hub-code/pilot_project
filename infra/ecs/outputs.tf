@@ -7,12 +7,7 @@ output "godaddy_dns_records" {
       name    = trimsuffix(trimsuffix(o.resource_record_name, "."), ".${var.domain}")
       value   = trimsuffix(o.resource_record_value, ".")
     }],
-    [for token in aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens : {
-      purpose = "Email signing (SES DKIM)"
-      type    = "CNAME"
-      name    = "${token}._domainkey"
-      value   = "${token}.dkim.amazonses.com"
-    }],
+    # Email signing: add the CNAME records SendGrid shows under Settings > Sender Authentication > Domain.
     [
       {
         purpose = "Email policy (DMARC)"
