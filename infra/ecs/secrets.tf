@@ -32,7 +32,6 @@ resource "aws_secretsmanager_secret_version" "backend" {
     APP_CRYPTO_DATA_KEYS       = "${local.data_key_id}:${random_bytes.data_key.base64}"
     APP_CRYPTO_ACTIVE_KEY_ID   = local.data_key_id
     APP_CRYPTO_FINGERPRINT_KEY = random_bytes.fingerprint_key.base64
-    MAIL_USERNAME              = "apikey" # SendGrid SMTP: the user name is literally "apikey"
-    MAIL_PASSWORD              = var.sendgrid_api_key
+    SENDGRID_API_KEY           = var.sendgrid_api_key
   }, local.bootstrap_admin ? { BOOTSTRAP_ADMIN_PASSWORD = var.bootstrap_admin_password } : {}))
 }
