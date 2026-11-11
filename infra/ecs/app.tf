@@ -120,7 +120,7 @@ locals {
   jwt_audience = "sealease-api"
   backend_secrets = concat([for key in [
     "DB_PASSWORD", "JWT_PRIVATE_KEY_LOCATION", "JWT_PUBLIC_KEY_LOCATION", "APP_CRYPTO_DATA_KEYS",
-    "APP_CRYPTO_ACTIVE_KEY_ID", "APP_CRYPTO_FINGERPRINT_KEY", "MAIL_USERNAME", "MAIL_PASSWORD",
+    "APP_CRYPTO_ACTIVE_KEY_ID", "APP_CRYPTO_FINGERPRINT_KEY", "SENDGRID_API_KEY",
     ] : { name = key, valueFrom = "${aws_secretsmanager_secret.backend.arn}:${key}::" }],
     local.bootstrap_admin ? [{
       name      = "BOOTSTRAP_ADMIN_PASSWORD"
@@ -138,11 +138,7 @@ locals {
     JWT_AUDIENCE                   = local.jwt_audience
     APP_PUBLIC_URL                 = local.site_url
     APP_CORS_ALLOWED_ORIGINS       = local.site_url
-    MAIL_HOST                      = "smtp.sendgrid.net"
-    MAIL_PORT                      = "587"
-    MAIL_SMTP_AUTH                 = "true"
-    MAIL_SMTP_STARTTLS             = "true"
-    APP_NOTIFICATION_EMAIL_ENABLED = "true"
+    APP_NOTIFICATION_EMAIL_ENABLED = "false" # notifications are shown in the app only, not emailed
     APP_NOTIFICATION_EMAIL_FROM    = "SeaLease <no-reply@${var.domain}>"
     INVOICE_ISSUER_NAME            = var.invoice_issuer_name
     INVOICE_ISSUER_ADDRESS         = var.invoice_issuer_address

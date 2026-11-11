@@ -72,15 +72,17 @@ First time (AWS credentials configured, Docker running, `~/.ssh/sealease_lightsa
 terraform -chdir=infra/lightsail init
 terraform -chdir=infra/lightsail apply        # the server, its static IP, the database, S3 buckets
 infra/lightsail/env.sh                        # .secrets/lightsail.env: new keys + AWS credentials. BACK IT UP.
-# Email: add SENDGRID_API_KEY=SG.… (a SendGrid key with Mail Send access) to .secrets/lightsail.env and rerun env.sh.
+# Email: add SENDGRID_API_KEY=SG.… (a SendGrid key with Mail Send access) to .secrets/lightsail.env.
 # Online payments: add RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET to .secrets/lightsail.env
 # (env.sh keeps them), and on the Razorpay dashboard add the webhook https://www.sealease.in/api/v1/webhooks/razorpay
 terraform -chdir=infra/lightsail output       # point GoDaddy's @ and www A records at static_ip
 infra/lightsail/deploy.sh
 ```
 
-**Email (SendGrid).** The API sends through SendGrid's SMTP relay (`smtp.sendgrid.net:587`, user `apikey`, the API
-key as password) from `no-reply@sealease.in`. In SendGrid, authenticate the domain (Settings > Sender Authentication >
+**Email (SendGrid).** When `SENDGRID_API_KEY` is set, the API sends every email through SendGrid's Web API
+(`POST /v3/mail/send`, `SendGridMailSender`) from `no-reply@sealease.in`, with click and open tracking off; without it,
+it uses the `MAIL_*` SMTP server (Mailpit locally). On the servers notifications are not emailed
+(`APP_NOTIFICATION_EMAIL_ENABLED=false`); they are shown in the app only. In SendGrid, authenticate the domain (Settings > Sender Authentication >
 Authenticate Your Domain, DNS host GoDaddy) and add the CNAME records it shows in GoDaddy; keep the `_dmarc` record.
 
 Every later deployment is `infra/lightsail/deploy.sh`. It always deploys `main` as pushed to GitHub (`origin/main`),

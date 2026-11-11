@@ -170,7 +170,7 @@ variable "bootstrap_admin_password" {
 }
 
 variable "sendgrid_api_key" {
-  description = "SendGrid API key with the Mail Send permission (SG.…), used as the SMTP password. Pass it as TF_VAR_sendgrid_api_key."
+  description = "SendGrid API key with the Mail Send permission (SG.…); the API sends all email through SendGrid's Web API. Pass it as TF_VAR_sendgrid_api_key."
   type        = string
   sensitive   = true
 }

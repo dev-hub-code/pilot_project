@@ -71,7 +71,7 @@ spring:
     template:
       observation-enabled: true
 
-  # SMTP for notification emails (app.notifications.email).
+  # SMTP for notification emails (app.notifications.email), used when no SendGrid API key is set (app.mail.sendgrid).
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
@@ -305,6 +305,10 @@ app:
       # The most Razorpay accepts in one checkout payment, in rupees (₹5,00,000 unless Razorpay has raised it for the
       # account; 0 for no limit). A larger order is not offered the checkout and is paid another way.
       max-amount: ${RAZORPAY_MAX_AMOUNT:500000}
+  mail:
+    sendgrid:
+      # When set, every email goes through SendGrid's Web API instead of the SMTP server above.
+      api-key: ${SENDGRID_API_KEY:}
   notifications:
     email:
       # Also email each notification to users who keep email notifications on (Settings).
