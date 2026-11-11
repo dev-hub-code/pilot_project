@@ -60,7 +60,7 @@ cd frontend && npm run typecheck && npm run lint
 During development the site runs on Lightsail in Mumbai (`infra/lightsail`): one 8 GB, 2 vCPU server with Caddy
 (HTTPS from Let's Encrypt), the web app, the API and Kafka in Docker Compose, and a managed Lightsail PostgreSQL 18
 (2 GB RAM, 80 GB).
-It costs about $74 a month: $44 for the server, $30 for the database (2 GB RAM, 80 GB), cents for S3 and SES. An AWS
+It costs about $74 a month: $44 for the server, $30 for the database (2 GB RAM, 80 GB), cents for S3. Email goes through SendGrid (free plan: 100 a day). An AWS
 budget emails `budget_email` at 80% of $80 (actual) and when the month's forecast passes $80. There is no redundancy: if the server fails, the site is down until a new one is
 built and redeployed; the server keeps no data of its own. The database has automatic daily backups (7 days, with
 point-in-time restore), uploaded documents are in S3, and every night at 02:00 IST the database is also dumped to an
@@ -70,13 +70,18 @@ First time (AWS credentials configured, Docker running, `~/.ssh/sealease_lightsa
 
 ```bash
 terraform -chdir=infra/lightsail init
-terraform -chdir=infra/lightsail apply        # the server, its static IP, the database, S3 buckets, SES
+terraform -chdir=infra/lightsail apply        # the server, its static IP, the database, S3 buckets
 infra/lightsail/env.sh                        # .secrets/lightsail.env: new keys + AWS credentials. BACK IT UP.
+# Email: add SENDGRID_API_KEY=SG.… (a SendGrid key with Mail Send access) to .secrets/lightsail.env and rerun env.sh.
 # Online payments: add RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET to .secrets/lightsail.env
 # (env.sh keeps them), and on the Razorpay dashboard add the webhook https://www.sealease.in/api/v1/webhooks/razorpay
-terraform -chdir=infra/lightsail output       # point GoDaddy's @ and www A records at static_ip; add email_dns_records
+terraform -chdir=infra/lightsail output       # point GoDaddy's @ and www A records at static_ip
 infra/lightsail/deploy.sh
 ```
+
+**Email (SendGrid).** The API sends through SendGrid's SMTP relay (`smtp.sendgrid.net:587`, user `apikey`, the API
+key as password) from `no-reply@sealease.in`. In SendGrid, authenticate the domain (Settings > Sender Authentication >
+Authenticate Your Domain, DNS host GoDaddy) and add the CNAME records it shows in GoDaddy; keep the `_dmarc` record.
 
 Every later deployment is `infra/lightsail/deploy.sh`. It always deploys `main` as pushed to GitHub (`origin/main`),
 whatever branch is checked out: it builds the images locally from a clean temporary copy of that commit, copies them
@@ -113,13 +118,14 @@ First deployment (AWS credentials configured, Docker running, a clean checkout o
 
 ```bash
 cd infra/ecs && terraform init
-# 1. The image registry, the HTTPS certificate and the email identity first.
-terraform apply -target=aws_ecr_repository.app -target=aws_acm_certificate.site -target=aws_sesv2_email_identity.domain
-terraform output godaddy_dns_records   # add these records in GoDaddy (the "www" one can wait until step 3)
+# 1. The image registry and the HTTPS certificate first.
+terraform apply -target=aws_ecr_repository.app -target=aws_acm_certificate.site
+terraform output godaddy_dns_records   # add these records in GoDaddy (the "www" one can wait until step 3), plus
+                                       # SendGrid's domain-authentication CNAMEs (see the Lightsail section)
 cd ../.. && infra/ecs/deploy.sh --push --skip-checks # 2. build the images and push them to ECR
 # 3. Everything else. Waits until GoDaddy serves the certificate records. The bootstrap variables create the first
-#    super-admin; leave them out of later applies.
-TF_VAR_bootstrap_admin_email=you@example.com TF_VAR_bootstrap_admin_password='…' \
+#    super-admin; leave them out of later applies. TF_VAR_sendgrid_api_key is needed on every apply.
+TF_VAR_sendgrid_api_key='SG.…' TF_VAR_bootstrap_admin_email=you@example.com TF_VAR_bootstrap_admin_password='…' \
   terraform -chdir=infra/ecs apply -var image_tag=$(git rev-parse --short=12 HEAD)
 ```
 
@@ -144,8 +150,7 @@ minutes plus the checks.
 
 Every deployment records the live tag in SSM (`/sealease/image-tag`); `deploy.sh` prints the previous one. To roll
 back, run `infra/ecs/rollout.sh <previous tag>` (its images are still in ECR: the last 20 are kept). Terraform runs the
-recorded tag unless `-var image_tag=…` is given, so infrastructure applies never roll the app back. New SES accounts are in the sandbox (mail
-only to verified addresses) until AWS grants production access.
+recorded tag unless `-var image_tag=…` is given, so infrastructure applies never roll the app back.
 
 ## Backend architecture
 
